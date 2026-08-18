@@ -179,6 +179,7 @@
 
   function topbar(route) {
     var h = '<div class="tb-row">';
+    h += '<button class="menu-btn" data-act="toggle-sidebar" title="' + L('เมนู') + '">☰</button>';
 
     if (route.type === 'project') {
       var p = S.project(route.id);

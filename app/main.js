@@ -36,6 +36,20 @@
     return state.views[projectId];
   }
 
+  var $scrim = document.getElementById('sbScrim');
+
+  /** เมนูข้างบนมือถือ — เลื่อนเข้ามาทับ พร้อมฉากทึบให้แตะปิด */
+  function setSidebar(open) {
+    document.getElementById('sidebar').classList.toggle('open', !!open);
+    if ($scrim) $scrim.classList.toggle('open', !!open);
+  }
+  function closeSidebar() { setSidebar(false); }
+
+  /** จอสัมผัสไม่มี hover — ใช้ตัดสินว่าจะเปิดการลากไหม */
+  function isTouch() {
+    try { return global.matchMedia('(hover: none)').matches; } catch (e) { return false; }
+  }
+
   function selCount() { return Object.keys(state.sel).length; }
   function clearSel() { state.sel = {}; }
 
@@ -288,6 +302,7 @@
   /* ---------- modal ---------- */
 
   function openModal(html, wide) {
+    closeSidebar();
     $modal.className = 'modal' + (wide ? ' wide' : '');
     $modal.innerHTML = html;
     $mdBack.classList.add('open');
@@ -838,6 +853,7 @@
       if (!e.target.closest || !e.target.closest('.pop')) closePops();
     }
 
+    if ($scrim && e.target === $scrim) { closeSidebar(); return; }
     if (e.target === $mdBack) { closeModal(); return; }
     if (e.target === $dwBack) { closeDrawer(); return; }
     if (!el) return;
@@ -850,7 +866,12 @@
     switch (act) {
 
       /* --- navigation --- */
+      case 'toggle-sidebar':
+        setSidebar(!document.getElementById('sidebar').classList.contains('open'));
+        break;
+
       case 'go': {
+        closeSidebar();
         var rt = el.dataset.route;
         if (rt === 'project') { goProject(id); break; }
         state.route = { type: rt };
@@ -1511,6 +1532,7 @@
     if (e.key === 'Escape') {
       if ($mdBack.classList.contains('open')) { closeModal(); return; }
       if (document.querySelector('.pop')) { closePops(); return; }
+      if (document.getElementById('sidebar').classList.contains('open')) { closeSidebar(); return; }
       if (selCount()) { clearSelUI(); return; }
       if (state.openTaskId) closeDrawer();
       return;
@@ -1623,6 +1645,7 @@
 
   document.addEventListener('mousedown', function (e) {
     if (e.button !== 0 || !e.target.closest) return;
+    if (isTouch()) return;   // นิ้วเลื่อนจอ ไม่ใช่เจตนาลากแท่ง
 
     // ลากจากจุดวงกลมปลายแท่ง = สร้างลำดับ ต้องเช็คก่อนการลากแท่ง
     var dot = e.target.closest('.g-dot');
@@ -1769,6 +1792,7 @@
   var drag = { id: null };
 
   document.addEventListener('dragstart', function (e) {
+    if (isTouch()) return;
     var el = e.target.closest ? e.target.closest('[draggable="true"]') : null;
     if (!el || !el.dataset.id) return;
     drag.id = el.dataset.id;

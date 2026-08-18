@@ -16,7 +16,7 @@
     quarter: { w: 2.4, top: 'year',    bottom: 'quarter' }
   };
   var G_ROW = 34;
-  var G_LEFT = 520;
+  function gLeft() { return (global.innerWidth < 860) ? 200 : 520; }
 
   function esc(s) { return R.esc(s); }
 
@@ -119,10 +119,10 @@
     function xEnd(d) { return (S.daysBetween(from, d) + 1) * W; }
 
     var h = '<div class="gantt-scroll" data-from="' + from + '" data-w="' + W +
-      '"><div class="gantt-body" style="width:' + (G_LEFT + chartW) + 'px">';
+      '"><div class="gantt-body" style="width:' + (gLeft() + chartW) + 'px">';
 
     /* ---------------- ฝั่งซ้าย ---------------- */
-    h += '<div class="g-left" style="width:' + G_LEFT + 'px">';
+    h += '<div class="g-left" style="width:' + gLeft() + 'px">';
     h += '<div class="g-lhead"><span class="g-caret"></span>' +
       '<span class="g-c-name">' + L('ชื่องาน') + '</span>' +
       '<span class="g-c-due">' + L('กำหนดส่ง') + '</span>' +
@@ -300,7 +300,7 @@
   R.ganttView = ganttView;
   R.G_ZOOMS = G_ZOOMS;
   R.G_ROW = G_ROW;
-  R.G_LEFT = G_LEFT;
+  R.G_LEFT = gLeft;
   R.depTypeHint = depTypeHint;
   R.taskSpan = span;
 

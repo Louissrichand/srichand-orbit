@@ -997,3 +997,56 @@ button.g-caret:hover { background: var(--bg-inset); color: var(--fg); }
 /* ระหว่างลากสร้างลำดับ ไม่ให้เส้นเดิมมาบังจุดปล่อย */
 .g-rows.g-linking .g-dep-hit { pointer-events: none; }
 .g-rows.g-linking .g-bar { cursor: crosshair; }
+
+/* ---------- มือถือ ---------- */
+
+.menu-btn { display: none; }
+
+.sb-scrim {
+  position: fixed; inset: 0; background: rgba(0,0,0,.42);
+  opacity: 0; pointer-events: none; transition: opacity .16s; z-index: 49;
+}
+.sb-scrim.open { opacity: 1; pointer-events: auto; }
+
+@media (max-width: 860px) {
+  .menu-btn {
+    display: grid; place-items: center; flex: 0 0 38px;
+    width: 38px; height: 38px; border-radius: var(--radius);
+    font-size: 19px; color: var(--fg);
+  }
+  .menu-btn:hover { background: var(--bg-sunk); }
+
+  .topbar { padding: 10px 14px 0; }
+  .tb-title { font-size: 17px; }
+  .tb-desc { display: none; }
+  .search { width: 120px; }
+
+  /* บอร์ด: หนึ่งคอลัมน์เต็มจอ กวาดนิ้วดูทีละคอลัมน์ */
+  .col, .col-new { flex-basis: 84vw; width: 84vw; }
+
+  /* Gantt: ตัดคอลัมน์ "รออะไรอยู่" ออกเพื่อให้เห็นชื่องานเต็ม */
+  .g-lhead, .g-lrow { grid-template-columns: 20px 1fr 76px; }
+  .g-c-dep { display: none; }
+
+  .dash-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .vb-item select { max-width: 120px; }
+  .bulkbar { bottom: 12px; padding: 8px 10px; gap: 6px; }
+}
+
+/* จอสัมผัส: ไม่มี hover จึงต้องโชว์ปุ่มไว้ตลอด และขยายให้กดโดนนิ้ว */
+@media (hover: none) {
+  .sec-head .acts, .col-head .acts, .nrow .acts, .sub-row .x { opacity: 1; }
+
+  .check { width: 24px; height: 24px; flex-basis: 24px; }
+  .selbox { width: 22px; height: 22px; flex-basis: 22px; font-size: 12px; }
+  .btn-sm { padding: 7px 11px; }
+  .chip button { padding: 2px 4px; }
+  .row { padding-top: 12px; padding-bottom: 12px; }
+  .add-row { padding-top: 13px; padding-bottom: 13px; }
+  .sb-item { padding-top: 11px; padding-bottom: 11px; }
+  .tb-tab { padding: 11px 13px; }
+
+  /* การลากยังไม่รองรับนิ้ว — ซ่อนที่จับไว้ไม่ให้เข้าใจผิด */
+  .g-dot, .g-h, .tl-handle { display: none; }
+  .g-bar, .g-ms, .tl-bar, .tl-milestone { cursor: pointer; }
+}
