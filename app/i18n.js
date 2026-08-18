@@ -1,0 +1,456 @@
+/* Orbit — ภาษา / i18n
+ *
+ * ใช้ข้อความภาษาไทยเป็นคีย์ตรง ๆ ไม่ต้องตั้งชื่อ slug
+ * ถ้าคีย์ไหนยังไม่มีคำแปล จะคืนภาษาไทยกลับไป (ไม่มีทางกลายเป็นช่องว่าง)
+ *
+ * ใส่ค่าแทนที่ด้วยปีกกา:  t('ลบ {n} งาน?', { n: 5 })
+ */
+(function (global) {
+  'use strict';
+
+  var EN = {
+    /* --- ทั่วไป --- */
+    'ฉัน': 'Me', 'บันทึก': 'Save', 'ยกเลิก': 'Cancel', 'ปิด': 'Close',
+    'ลบ': 'Delete', 'เพิ่ม': 'Add', 'ใช้': 'Use', 'ส่ง': 'Send',
+    'สร้าง': 'Create', 'ย้อนกลับ': 'Undo', 'ทั้งหมด': 'All', 'ทุกคน': 'Everyone',
+    'เลือก': 'Select', 'ไม่พบงาน': 'No tasks found', 'ยังไม่มี': 'None yet',
+    'เมื่อครู่': 'just now', 'วันนี้': 'Today', 'พรุ่งนี้': 'Tomorrow',
+    'เมื่อวาน': 'Yesterday', 'ไปวันนี้': 'Go to today',
+    '{n} นาทีที่แล้ว': '{n} min ago', '{n} ชม.ที่แล้ว': '{n} hr ago',
+
+    /* --- แถบซ้าย --- */
+    'งานของฉัน': 'My Tasks', 'กล่องข้อความ': 'Inbox', 'ปฏิทินรวม': 'All calendars',
+    'โปรเจกต์': 'Projects', 'เก็บเข้าคลัง': 'Archived', 'คีย์ลัด': 'Shortcuts',
+    'สมาชิกทีม': 'Team members', 'ตั้งค่า / สำรองข้อมูล': 'Settings / Backup',
+    'สร้างโปรเจกต์': 'New project',
+
+    /* --- แท็บมุมมอง --- */
+    'รายการ': 'List', 'บอร์ด': 'Board', 'ไทม์ไลน์': 'Timeline',
+    'ปฏิทิน': 'Calendar', 'สรุปผล': 'Dashboard',
+
+    /* --- แถบบน --- */
+    'ค้นหางาน…  (/)': 'Search tasks…  (/)', '+ เพิ่มงาน': '+ Add task',
+    'เมนูโปรเจกต์': 'Project menu', 'อ่านทั้งหมด': 'Mark all read',
+    'เก็บทั้งหมด': 'Archive all', 'ผลการค้นหา “{q}”': 'Results for “{q}”',
+    'พบ': 'Found', 'ไม่พบงานที่ตรงกับ “{q}”': 'No tasks match “{q}”',
+
+    /* --- ตัวกรอง --- */
+    'ผู้รับผิดชอบ': 'Assignee', 'ความสำคัญ': 'Priority', 'แท็ก': 'Tags',
+    'กำหนดส่ง': 'Due date', 'เรียง': 'Sort', 'จัดกลุ่ม': 'Group',
+    'บันทึกมุมมอง': 'Save view', 'ล้างตัวกรอง': 'Clear filters',
+    'ลบมุมมอง': 'Delete view', 'ตั้งชื่อมุมมองนี้': 'Name this view',
+    'บันทึกมุมมองแล้ว': 'View saved',
+    '☑ แสดงงานที่เสร็จ': '☑ Showing completed', '☐ ซ่อนงานที่เสร็จ': '☐ Hiding completed',
+    'ไม่มีงานที่ตรงกับตัวกรอง': 'No tasks match these filters',
+
+    'ทุกกำหนด': 'Any due date', 'เลยกำหนด': 'Overdue', 'ครบวันนี้': 'Due today',
+    'ภายใน 7 วัน': 'Next 7 days', 'ไม่มีกำหนด': 'No due date',
+    'ลำดับที่จัดเอง': 'Manual order', 'ชื่อ ก-ฮ': 'Name A–Z',
+    'วันที่สร้าง': 'Date created', 'คอลัมน์': 'Section',
+    'ช่วงกำหนดส่ง': 'Due date range', 'ไม่จัดกลุ่ม': 'No grouping',
+    'ยังไม่มอบหมาย': 'Unassigned', 'สัปดาห์นี้': 'This week',
+    'หลังจากนั้น': 'Later', 'ไม่มีงานค้างเลย': 'Nothing due — all clear',
+
+    /* --- ความสำคัญ / ชนิดงาน --- */
+    'ด่วนมาก': 'Urgent', 'สูง': 'High', 'กลาง': 'Medium', 'ต่ำ': 'Low',
+    'ไม่ระบุ': 'None',
+    'งานทั่วไป': 'Task', 'หมุดหมาย': 'Milestone', 'ขออนุมัติ': 'Approval',
+    'รออนุมัติ': 'Pending', 'อนุมัติแล้ว': 'Approved',
+    'ขอแก้ไข': 'Changes requested', 'ไม่อนุมัติ': 'Rejected',
+    'ตามแผน': 'On track', 'เสี่ยง': 'At risk', 'หลุดแผน': 'Off track',
+    'ทุกวัน': 'Daily', 'ทุกสัปดาห์': 'Weekly', 'ทุกเดือน': 'Monthly',
+    'ทุก {n} วัน': 'Every {n} days', 'ทุก {n} สัปดาห์': 'Every {n} weeks',
+    'ทุก {n} เดือน': 'Every {n} months',
+
+    /* --- ชนิดความสัมพันธ์ --- */
+    'จบ → เริ่ม': 'Finish → Start', 'เริ่ม → เริ่ม': 'Start → Start',
+    'จบ → จบ': 'Finish → Finish', 'เริ่ม → จบ': 'Start → Finish',
+    'งานก่อนต้องเสร็จ งานนี้จึงเริ่มได้': 'The earlier task must finish before this one starts',
+    'เริ่มพร้อมกัน หรือหลังงานก่อนเริ่ม': 'Starts together with, or after, the earlier task',
+    'จบพร้อมกัน หรือหลังงานก่อนจบ': 'Finishes together with, or after, the earlier task',
+    'งานก่อนเริ่มแล้ว งานนี้จึงจบได้': 'The earlier task must start before this one finishes',
+
+    /* --- การ์ด / แถวงาน --- */
+    'ทำเสร็จ': 'Mark complete', 'ทำเครื่องหมายว่าเสร็จ': 'Mark complete',
+    'ทำเสร็จแล้ว': 'Completed', 'ถูกบล็อก': 'Blocked',
+    'รองานอื่นให้เสร็จก่อน': 'Waiting on another task', 'ทำซ้ำ': 'Repeats',
+    'เพิ่มคอลัมน์': 'Add section', '+ เพิ่มคอลัมน์': '+ Add section',
+    'เปลี่ยนชื่อ': 'Rename', 'ย้ายขึ้น': 'Move up', 'ย้ายลง': 'Move down',
+    'ย้ายซ้าย': 'Move left', 'ย้ายขวา': 'Move right',
+    'ชื่อคอลัมน์ใหม่': 'New section name', 'เปลี่ยนชื่อคอลัมน์': 'Rename section',
+    'ลบคอลัมน์นี้? งานข้างในจะย้ายไปคอลัมน์แรก':
+      'Delete this section? Its tasks move to the first section',
+    'ต้องเหลืออย่างน้อย 1 คอลัมน์': 'At least one section must remain',
+    'ชื่องาน แล้วกด Enter': 'Task name, then press Enter',
+    'ชื่องานใหม่': 'New task name', 'ชื่องานย่อย': 'Subtask name',
+    'เลือก {n} งาน': '{n} selected', 'มอบหมายให้…': 'Assign to…',
+    'ความสำคัญ…': 'Priority…', 'ตั้งกำหนดส่ง': 'Set due date',
+    'เปิดใหม่': 'Reopen',
+
+    /* --- แผงรายละเอียด --- */
+    'ชนิดงาน': 'Task type', 'การอนุมัติ': 'Approval',
+    'วันเริ่ม': 'Start date', 'เวลา (ไม่บังคับ)': 'Time (optional)',
+    'ไม่ทำซ้ำ': 'Does not repeat', 'ทุกกี่รอบ': 'Every N',
+    'รายละเอียด': 'Description', 'เพิ่มรายละเอียด…': 'Add a description…',
+    'ลำดับก่อนหลัง': 'Dependencies', 'ไฟล์แนบ': 'Attachments',
+    'ผู้ติดตาม': 'Followers', 'งานย่อย': 'Subtasks',
+    'ความเคลื่อนไหว': 'Activity', 'เพิ่มงานย่อย': 'Add subtask',
+    '+ เพิ่มงานย่อย': '+ Add subtask', '+ เพิ่ม': '+ Add', '+ แท็ก': '+ Tag',
+    '+ เพิ่มโปรเจกต์': '+ Add to project',
+    'ยังไม่มีความสัมพันธ์กับงานอื่น': 'No dependencies yet',
+    'ยังไม่มีไฟล์แนบ': 'No attachments yet', 'รอ': 'waits for', 'บล็อก': 'blocks',
+    'ถูกใจ': 'Like', 'ติดตาม': 'Follow', 'เลิกติดตาม': 'Unfollow',
+    'เมนู': 'Menu', 'ลบงาน': 'Delete task',
+    'เขียนความเห็น… พิมพ์ @ชื่อ เพื่อแจ้งเตือน (Ctrl+Enter ส่ง)':
+      'Write a comment… type @name to notify (Ctrl+Enter to send)',
+    'ชื่อแท็ก': 'Tag name',
+    'รออยู่: {list}': 'Waiting on: {list}',
+    'งานต้องอยู่อย่างน้อย 1 โปรเจกต์': 'A task must belong to at least one project',
+
+    /* --- Gantt --- */
+    'ชื่องาน': 'Task name', 'รออะไรอยู่': 'Blocked by',
+    'วัน': 'Day', 'สัปดาห์': 'Week', 'เดือน': 'Month', 'ไตรมาส': 'Quarter',
+    'ขยายทุกกลุ่ม': 'Expand all', 'ย่อทุกกลุ่ม': 'Collapse all',
+    'ย่อ/ขยาย': 'Collapse / expand',
+    'ลากไปงานอื่นเพื่อสร้างลำดับ': 'Drag to another task to create a dependency',
+    'ลากแท่ง = เลื่อนวัน · ลากขอบ = ยืด/หด · ลากจุดวงกลมปลายแท่งไปอีกงาน = สร้างลำดับ · คลิกเส้น = ลบลำดับ':
+      'Drag a bar to move it · drag an edge to resize · drag an end dot onto another task to link · click a line to remove it',
+    'ลากแท่งเพื่อเลื่อนวัน · ลากขอบเพื่อยืด/หด · ◆ = หมุดหมาย · เส้นประ = ลำดับก่อนหลัง':
+      'Drag a bar to move it · drag an edge to resize · ◆ = milestone · dashed line = dependency',
+    'ยังไม่มีงานที่มีวันที่': 'No dated tasks yet',
+    'ใส่วันเริ่มหรือกำหนดส่งให้งาน แล้วจะเห็นแท่งเวลาที่นี่':
+      'Give a task a start or due date and its bar appears here',
+    'สร้างลำดับแบบ {type} แล้ว': 'Created a {type} dependency',
+    'สร้างไม่ได้ — ซ้ำเดิม หรือจะทำให้เกิดการรอวนกัน':
+      'Cannot link — already exists, or it would create a loop',
+    'เพิ่มไม่ได้ — จะทำให้เกิดการรอวนกัน': 'Cannot add — it would create a loop',
+    'เพิ่มลำดับก่อนหลังแล้ว': 'Dependency added',
+    'ลบลำดับ “{a}” → “{b}” ?': 'Remove dependency “{a}” → “{b}”?',
+    'ลบลำดับแล้ว': 'Dependency removed',
+    'งานนี้ต้องรออะไรให้เสร็จก่อน': 'What must finish before this task?',
+    'พิมพ์เพื่อค้นหางาน': 'Type to search tasks',
+    'เสร็จแล้ว': 'Completed', 'ยังไม่เสร็จ': 'Not done',
+    'เลื่อนวันแล้ว': 'Dates moved',
+
+    /* --- สรุปผล --- */
+    'สถานะโปรเจกต์': 'Project status', 'อัปเดตสถานะ': 'Update status',
+    'ยังไม่มีการอัปเดตสถานะ': 'No status update yet',
+    'งานทั้งหมด': 'Total tasks', 'ยังค้าง': 'Open',
+    'ครบใน 7 วัน': 'Due in 7 days', 'ความคืบหน้ารวม {p}%': 'Overall progress {p}%',
+    'ตามผู้รับผิดชอบ': 'By assignee', 'ตามความสำคัญ': 'By priority',
+    'ตามคอลัมน์': 'By section', 'ยังไม่มีข้อมูล': 'No data yet',
+    'แท่ง = สัดส่วนงานที่เสร็จของแต่ละคน': 'Bar = share of that person’s tasks completed',
+    'สรุปให้ทีมอ่าน': 'Summary for the team',
+    'งานเดินถึงไหน ติดอะไร ต้องการอะไร': 'Where things stand, what is blocked, what is needed',
+    'อัปเดตสถานะแล้ว': 'Status updated',
+
+    /* --- กล่องข้อความ --- */
+    'ยังไม่เก็บ': 'Unarchived', 'เก็บแล้ว': 'Archived',
+    'ไม่มีการแจ้งเตือนใหม่': 'No new notifications',
+    'ยังไม่มีรายการที่เก็บไว้': 'Nothing archived yet',
+    '(งานถูกลบแล้ว)': '(task deleted)', 'เก็บ': 'Archive',
+    'เก็บทั้งหมดแล้ว': 'All archived',
+    '{who} พูดถึงคุณในความเห็น': '{who} mentioned you in a comment',
+    '{who} แสดงความเห็น': '{who} commented',
+    '{who} ถูกใจงานนี้': '{who} liked this task',
+    'งาน “{name}” พร้อมทำต่อแล้ว': '“{name}” is unblocked and ready',
+
+    /* --- บันทึกกิจกรรม --- */
+    'ทำงานนี้เสร็จแล้ว': 'completed this task',
+    'เปิดงานนี้อีกครั้ง': 'reopened this task',
+    'มอบหมายให้ {who}': 'assigned it to {who}',
+    'ยกเลิกผู้รับผิดชอบ': 'removed the assignee',
+    'ตั้งกำหนดส่ง {date}': 'set the due date to {date}',
+    'ลบกำหนดส่ง': 'removed the due date',
+    'เปลี่ยนสถานะอนุมัติเป็น “{state}”': 'set approval to “{state}”',
+    'ย้ายไปคอลัมน์ {name}': 'moved it to {name}',
+    'ถูกทำเครื่องหมายเสร็จโดยกฎอัตโนมัติ': 'was completed by an automation rule',
+    'เพิ่มเข้าโปรเจกต์ {name}': 'added it to {name}',
+    'รอ “{name}” ให้เสร็จก่อน': 'now waits for “{name}”',
+    'แนบ “{name}”': 'attached “{name}”',
+
+    /* --- โปรเจกต์ --- */
+    'สร้างโปรเจกต์ใหม่': 'New project', 'แก้ไขโปรเจกต์': 'Edit project',
+    'ชื่อโปรเจกต์': 'Project name', 'คำอธิบาย': 'Description',
+    'ไอคอน': 'Icon', 'สี': 'Colour',
+    'คอลัมน์เริ่มต้น (คั่นด้วยจุลภาค)': 'Starting sections (comma separated)',
+    'เช่น เปิดตัวสินค้าใหม่ 2026': 'e.g. Product launch 2026',
+    '✎ แก้ไขชื่อ / สี / ไอคอน': '✎ Edit name / colour / icon',
+    '◆ อัปเดตสถานะโปรเจกต์': '◆ Update project status',
+    '⊞ จัดการฟิลด์': '⊞ Manage fields', '⚡ กฎอัตโนมัติ': '⚡ Automation rules',
+    '⧉ คัดลอกเป็นเทมเพลต': '⧉ Duplicate as template',
+    '📦 เก็บเข้าคลัง': '📦 Archive', '↩ เอากลับจากคลัง': '↩ Restore from archive',
+    '🗑 ลบโปรเจกต์': '🗑 Delete project',
+    'สร้างโปรเจกต์แล้ว': 'Project created',
+    'เก็บเข้าคลังแล้ว': 'Archived', 'เอากลับจากคลังแล้ว': 'Restored',
+    'คัดลอกโปรเจกต์แล้ว': 'Project duplicated', 'ลบโปรเจกต์แล้ว': 'Project deleted',
+    'เก็บเข้าคลังแล้ว ': 'Archived ',
+    'คัดลอกงานทั้งหมดไปด้วยหรือไม่?\n\nตกลง = คัดลอกงานด้วย\nยกเลิก = เอาแค่โครงคอลัมน์และฟิลด์':
+      'Copy all tasks too?\n\nOK = include tasks\nCancel = structure and fields only',
+    'ลบโปรเจกต์ “{name}” ?\nงานที่อยู่เฉพาะในโปรเจกต์นี้จะถูกลบด้วย':
+      'Delete project “{name}”?\nTasks that live only here will be deleted too',
+
+    /* --- งาน (เมนู) --- */
+    '⧉ คัดลอกงาน': '⧉ Duplicate task',
+    '☆ บันทึกเป็นเทมเพลต': '☆ Save as template',
+    '🔗 คัดลอกลิงก์ของงานนี้': '🔗 Copy link to this task',
+    '🗑 ลบงาน': '🗑 Delete task',
+    'ลบงาน “{name}” ?': 'Delete task “{name}”?',
+    'ลบงานแล้ว': 'Task deleted', 'คัดลอกงานแล้ว': 'Task duplicated',
+    'คัดลอกลิงก์แล้ว': 'Link copied', 'บันทึกเป็นเทมเพลตแล้ว': 'Saved as template',
+    'ชื่อเทมเพลต': 'Template name',
+    'ลบ {n} งาน?': 'Delete {n} tasks?', 'ลบแล้ว': 'Deleted',
+    'เพิ่มเข้าโปรเจกต์แล้ว': 'Added to project',
+    'เพิ่มงานนี้เข้าโปรเจกต์อื่น': 'Add this task to another project',
+    'งานชิ้นเดียวอยู่ได้หลายโปรเจกต์ แก้ที่ไหนก็อัปเดตทุกที่':
+      'One task can live in several projects — edit it anywhere, it updates everywhere',
+    'อยู่ครบทุกโปรเจกต์แล้ว': 'Already in every project',
+    'กำหนดส่งใหม่ (ปปปป-ดด-วว) เว้นว่างเพื่อลบ':
+      'New due date (YYYY-MM-DD), leave blank to clear',
+
+    /* --- ไฟล์แนบ --- */
+    'แนบไฟล์หรือลิงก์': 'Attach a file or link',
+    'ระบบยังไม่เก็บตัวไฟล์จริง ให้ใส่ชื่อไฟล์และวางลิงก์จาก SharePoint / OneDrive / Google Drive':
+      'Files are not stored yet — give it a name and paste a link from SharePoint, OneDrive or Google Drive',
+    'ชื่อไฟล์': 'File name', 'ลิงก์ (ไม่บังคับ)': 'Link (optional)',
+    'เช่น brief.pdf': 'e.g. brief.pdf', 'แนบ': 'Attach',
+    'ใส่ชื่อไฟล์ก่อน': 'Enter a file name first',
+
+    /* --- ฟิลด์ --- */
+    'ฟิลด์ของ {name}': 'Fields in {name}', 'ยังไม่มีฟิลด์': 'No fields yet',
+    'ชื่อฟิลด์ใหม่': 'New field name', 'ชนิด': 'Type',
+    'ตัวเลือก (เฉพาะชนิด “ตัวเลือก” คั่นด้วยจุลภาค)':
+      'Options (dropdown type only, comma separated)',
+    'เพิ่มฟิลด์': 'Add field', 'ใส่ชื่อฟิลด์ก่อน': 'Enter a field name first',
+    'เช่น ช่องทาง, งบประมาณ': 'e.g. Channel, Budget',
+    'ข้อความ': 'Text', 'ตัวเลข': 'Number', 'ตัวเลือก': 'Dropdown',
+    'วันที่': 'Date', 'บุคคล': 'Person',
+
+    /* --- กฎอัตโนมัติ --- */
+    'กฎอัตโนมัติ — {name}': 'Automation rules — {name}',
+    'เมื่อลากงานเข้าคอลัมน์ที่กำหนด ให้ทำสิ่งเหล่านี้อัตโนมัติ':
+      'When a task is dragged into a section, do this automatically',
+    'ยังไม่มีกฎ': 'No rules yet', 'เมื่อย้ายเข้า “{name}”': 'When moved into “{name}”',
+    'ยังไม่ได้ตั้งการกระทำ': 'No actions set',
+    'เมื่อย้ายเข้าคอลัมน์': 'When moved into section',
+    'ให้ทำเครื่องหมายเสร็จ': 'Mark complete', 'ไม่': 'No', 'ใช่': 'Yes',
+    'มอบหมายให้': 'Assign to', 'ไม่เปลี่ยน': 'Leave unchanged',
+    'ตั้งความสำคัญ': 'Set priority', 'ติดแท็ก': 'Add tag',
+    'เว้นว่างถ้าไม่ต้องการ': 'Leave blank to skip', 'เพิ่มกฎ': 'Add rule',
+    'เพิ่มกฎแล้ว': 'Rule added',
+    'ทำเครื่องหมายเสร็จ': 'mark complete',
+    'มอบหมายให้ {who}': 'assign to {who}',
+    'ตั้งความสำคัญเป็น {p}': 'set priority to {p}',
+    'ติดแท็ก {tag}': 'add tag {tag}',
+
+    /* --- เทมเพลต --- */
+    'เทมเพลตงาน': 'Task templates',
+    'ยังไม่มีเทมเพลต — เปิดงานที่ต้องการ กดปุ่ม ⋯ แล้วเลือก “บันทึกเป็นเทมเพลต”':
+      'No templates yet — open a task, click ⋯ and choose “Save as template”',
+    '{n} งานย่อย': '{n} subtasks',
+
+    /* --- สมาชิก --- */
+    'เพิ่มสมาชิก': 'Add member', 'ชื่อ': 'Name', 'อีเมล': 'Email',
+    'ลบสมาชิกคนนี้?': 'Remove this member?', 'สลับผู้ใช้': 'Switch user',
+    'สลับเป็น {who} แล้ว': 'Switched to {who}', 'ใส่ชื่อก่อน': 'Enter a name first',
+
+    /* --- ตั้งค่า --- */
+    'ตั้งค่า': 'Settings', 'ธีม': 'Theme', 'ภาษา': 'Language',
+    'ตามระบบ': 'System', 'สว่าง': 'Light', 'มืด': 'Dark',
+    'ข้อมูลปัจจุบัน': 'Current data',
+    '{p} โปรเจกต์ · {t} งาน · {u} สมาชิก · {n} แจ้งเตือน':
+      '{p} projects · {t} tasks · {u} members · {n} notifications',
+    '⬇ ดาวน์โหลดสำรอง': '⬇ Download backup',
+    '⬆ กู้คืนจากไฟล์': '⬆ Restore from file',
+    '☆ เทมเพลตงาน': '☆ Task templates',
+    '📋 คัดลอกข้อมูล': '📋 Copy data',
+    '📥 วางข้อมูลกู้คืน': '📥 Paste to restore',
+    'ล้างและเริ่มใหม่': 'Reset everything',
+    'ข้อมูลเก็บอยู่ในเบราว์เซอร์เครื่องนี้เท่านั้น ควรกด “ดาวน์โหลดสำรอง” เก็บไว้สม่ำเสมอ ถ้าล้างข้อมูลเบราว์เซอร์ ข้อมูลจะหายทั้งหมด':
+      'Data lives only in this browser. Download a backup regularly — clearing browsing data erases everything.',
+    'โหมดทดลอง': 'Trial mode',
+    'ข้อมูลจะหายเมื่อรีเฟรชหน้า': 'data is lost when the page reloads',
+    'คัดลอกข้อมูลสำรอง': 'Copy backup data',
+    'เลือกทั้งหมดแล้วคัดลอกไปเก็บไว้ในไฟล์ .json หรือโน้ตของคุณ':
+      'Select all and copy it into a .json file or your notes',
+    'คัดลอกทั้งหมด': 'Copy all', 'คัดลอกแล้ว': 'Copied',
+    'คัดลอกอัตโนมัติไม่ได้ — กด Ctrl+C เอง': 'Auto-copy blocked — press Ctrl+C',
+    'วางข้อมูลกู้คืน': 'Paste to restore',
+    'วางข้อมูล JSON ที่สำรองไว้ แล้วกดกู้คืน — ข้อมูลปัจจุบันจะถูกแทนที่ทั้งหมด':
+      'Paste your backup JSON and restore — this replaces everything currently here',
+    'วางข้อมูลที่นี่': 'Paste data here', 'กู้คืน': 'Restore',
+    'ยังไม่ได้วางข้อมูล': 'Nothing pasted yet',
+    'กู้คืนข้อมูลสำเร็จ': 'Data restored',
+    'ข้อมูลไม่ถูกต้อง: {msg}': 'Invalid data: {msg}',
+    'ไฟล์ไม่ถูกต้อง: {msg}': 'Invalid file: {msg}',
+    'ไฟล์ไม่ถูกรูปแบบ': 'Unrecognised file format',
+    'ล้างข้อมูลทั้งหมดและเริ่มใหม่?\nแนะนำให้ดาวน์โหลดสำรองก่อน':
+      'Erase everything and start over?\nDownload a backup first.',
+    'ดาวน์โหลดไฟล์สำรองแล้ว': 'Backup downloaded',
+    'บันทึกไฟล์สำรองแล้ว': 'Backup saved',
+    'ยกเลิกการบันทึก': 'Save cancelled',
+    'กำลังรอการยืนยันอยู่ ลองใหม่อีกครั้ง': 'A prompt is already open — try again',
+    'บันทึกไม่สำเร็จ — ใช้ “คัดลอกข้อมูล” แทนได้':
+      'Save failed — use “Copy data” instead',
+    'บันทึกไม่สำเร็จ — พื้นที่เก็บข้อมูลเต็ม': 'Save failed — storage is full',
+    'ย้อนกลับแล้ว: {what}': 'Undone: {what}',
+    'ไม่มีอะไรให้ย้อนกลับ': 'Nothing to undo',
+    'สลับธีมแล้ว': 'Theme switched',
+    'มอบหมายให้ตัวเองแล้ว': 'Assigned to you',
+    'โหมดทดลอง — ข้อมูลจะหายเมื่อรีเฟรช กด “ดาวน์โหลดสำรอง” เพื่อเก็บงานไว้':
+      'Trial mode — data is lost on reload. Use “Download backup” to keep your work.',
+
+    /* --- คีย์ลัด --- */
+    'ไปที่ช่องค้นหา': 'Jump to search',
+    'ปิดหน้าต่าง / ยกเลิกการเลือก': 'Close dialog / clear selection',
+    'ส่งความเห็น': 'Post comment', 'เปิดหน้าคีย์ลัดนี้': 'Open this shortcut list',
+    'ไปงานของฉัน': 'Go to My Tasks', 'ไปกล่องข้อความ': 'Go to Inbox',
+    'เพิ่มงานด่วน': 'Quick add task',
+    'มอบหมายงานที่เปิดอยู่ให้ตัวเอง': 'Assign the open task to me',
+    'ไปที่ช่องความเห็น': 'Jump to the comment box',
+    'สลับโหมดสว่าง/มืด': 'Toggle light / dark',
+    'Enter ในช่องเพิ่มงาน': 'Enter in the add-task box',
+    'บันทึกแล้วเปิดช่องต่อทันที': 'Saves and reopens the box',
+    'ลบงานที่เลือกไว้': 'Delete selected tasks',
+    'คลิกช่องสี่เหลี่ยม': 'Click a checkbox',
+    'เลือกหลายงานเพื่อแก้พร้อมกัน': 'Select several tasks to edit at once',
+
+    /* --- ข้อมูลตัวอย่าง --- */
+    'สมชาย': 'Somchai', 'มานี': 'Manee', 'ปิติ': 'Piti',
+    'เปิดตัวสินค้าใหม่': 'Product Launch',
+    'ตัวอย่างแผนเปิดตัวสินค้า ทั้งช่องทางออนไลน์และออฟไลน์':
+      'Sample launch plan covering both online and offline channels',
+    'คอนเทนต์รายเดือนทุกช่องทาง': 'Monthly content across every channel',
+    'งานระบบภายใน': 'Internal systems work',
+    'กำลังทำ': 'In progress', 'รอตรวจ': 'In review', 'เสร็จแล้ว ': 'Done ',
+    'ไอเดีย': 'Ideas', 'เขียนบท': 'Scripting', 'ถ่าย/ผลิต': 'Shooting',
+    'ลงแล้ว': 'Published', 'ค้างอยู่': 'To do',
+    'ช่องทาง': 'Channel', 'ออฟไลน์': 'Offline', 'งบ (บาท)': 'Budget (THB)',
+    'รูปแบบ': 'Format',
+    'งานเตรียมเปิดตัวเดินตามแผน รอผลตรวจข้อความโฆษณารอบสุดท้าย':
+      'Launch prep is on track, pending the final copy review',
+    'สรุปแนวทางแบรนด์ให้ทีมดีไซน์': 'Brief the design team on brand direction',
+    'ใช้เอกสารแนวทางแบรนด์เป็นตัวตั้ง': 'Start from the brand guideline document',
+    'เปิดร้านค้าออนไลน์อย่างเป็นทางการ': 'Open the official online store',
+    'เตรียมเอกสารจดทะเบียนให้ครบก่อน': 'Get all registration documents ready first',
+    'ถ่ายภาพสินค้า 12 รายการ': 'Shoot 12 product photos',
+    'ทำอาร์ตเวิร์กแพ็กเกจตัวจริง': 'Produce final packaging artwork',
+    'ตรวจข้อความโฆษณากับฝ่ายกฎหมาย': 'Legal review of advertising copy',
+    'รอยืนยันรอบสุดท้ายก่อนใช้จริง': 'Awaiting final sign-off before going live',
+    'วางงบสื่อรายไตรมาส': 'Plan quarterly media budget',
+    'สรุปราคาขายและโปรโมชันเปิดตัว': 'Finalise pricing and launch promotion',
+    'วันเปิดตัวอย่างเป็นทางการ': 'Official launch day',
+    'คอนเทนต์ให้ความรู้ 8 ตอน': 'Eight-part educational series',
+    'สคริปต์คลิปรีวิวจากผู้ใช้จริง': 'Script for real-user review clips',
+    'ถ่ายคลิปสั้นชุดแรก 4 ตัว': 'Shoot the first four short clips',
+    'ตารางลงคอนเทนต์เดือนหน้า': 'Next month posting schedule',
+    'ตั้งระบบจัดการงานภายใน': 'Set up the internal task system',
+    'ประเมินว่าทีมใช้งานได้จริงไหม': 'Check whether the team can really use it',
+    'ต่อระบบล็อกอินขององค์กร': 'Connect company single sign-on',
+    'สำรองข้อมูลอัตโนมัติรายวัน': 'Daily automatic backup',
+    'จองสตูดิโอ': 'Book the studio',
+    'เตรียม prop และฉาก': 'Prepare props and set',
+    'รีทัชและส่งไฟล์': 'Retouch and deliver files',
+    'ขอไฟล์โลโก้เวอร์ชัน vector ด้วยนะครับ @ฉัน': 'Could you send the vector logo too ',
+
+    /* --- ชิ้นส่วนจากการต่อสตริง --- */
+    'เพิ่มงาน': 'Add task', 'เพิ่มโปรเจกต์': 'Add to project',
+    'โปรเจกต์ใหม่': 'New project', 'ลบโปรเจกต์': 'Delete project',
+    'จัดการฟิลด์': 'Manage fields', 'กฎอัตโนมัติ': 'Automation rules',
+    'กฎอัตโนมัติ —': 'Automation rules —',
+    'คัดลอกงาน': 'Duplicate task', 'คัดลอกเป็นเทมเพลต': 'Duplicate as template',
+    'คัดลอกลิงก์ของงานนี้': 'Copy link to this task',
+    'บันทึกเป็นเทมเพลต': 'Save as template',
+    'แก้ไขชื่อ / สี / ไอคอน': 'Edit name / colour / icon',
+    'อัปเดตสถานะโปรเจกต์': 'Update project status', 'สถานะ': 'Status',
+    'ฟิลด์ของ': 'Fields in', 'เมื่อย้ายเข้า “': 'When moved into “',
+    'ตั้งความสำคัญเป็น': 'set priority to',
+    'ความคืบหน้ารวม': 'Overall progress',
+    'งาน': 'tasks', 'งาน ·': 'tasks ·', 'งาน?': 'tasks?',
+    'โปรเจกต์ ·': 'projects ·', 'สมาชิก ·': 'members ·', 'แจ้งเตือน': 'notifications',
+    'อื่น ๆ': 'more', 'แล้ว': '',
+    'นาทีที่แล้ว': 'min ago', 'ชม.ที่แล้ว': 'hr ago',
+    'ทุก {n} ': 'Every {n} ',
+    'สลับเป็น': 'Switched to', 'ย้อนกลับแล้ว:': 'Undone:',
+    'สร้างลำดับแบบ': 'Created dependency',
+    'ลบลำดับ “': 'Remove dependency “', ') — คลิกเพื่อลบ': ') — click to remove',
+    'ลบงาน “': 'Delete task “', 'ลบโปรเจกต์ “': 'Delete project “',
+    'ผลการค้นหา “': 'Results for “', 'ไม่พบงานที่ตรงกับ “': 'No tasks match “',
+    'ข้อมูลไม่ถูกต้อง:': 'Invalid data:', 'ไฟล์ไม่ถูกต้อง:': 'Invalid file:',
+    'เช่น เปิดตัวสินค้าใหม่': 'e.g. Product launch',
+    'ค้างอยู่, กำลังทำ, รอตรวจ, เสร็จแล้ว': 'To do, In progress, In review, Done',
+    'เวลา (ไม่บังคับ': 'Time (optional',
+    'ปิดหน้าต่าง / แผงรายละเอียด': 'Close dialog / detail panel',
+    'ย้อนกลับการกระทำล่าสุด': 'Undo the last action',
+    '◆ หมุดหมาย': '◆ Milestone', '⛔ ถูกบล็อก': '⛔ Blocked',
+    '⛔ รออยู่:': '⛔ Waiting on:', '✓ งานของฉัน': '✓ My Tasks',
+    '📅 ปฏิทินรวม': '📅 All calendars', '🔔 กล่องข้อความ': '🔔 Inbox',
+    '— ลากเพื่อเลื่อนวัน': '— drag to move',
+    '— ลากเพื่อเลื่อน ลากขอบเพื่อยืด/หด': '— drag to move, drag edges to resize',
+    'ลากแท่ง = เลื่อนวัน · ลากขอบ = ยืด/หด ·':
+      'Drag a bar to move · drag an edge to resize ·',
+    'ลากจุดวงกลมปลายแท่งไปอีกงาน = สร้างลำดับ · คลิกเส้น = ลบลำดับ':
+      'drag an end dot onto another task to link · click a line to remove it',
+    'ข้อมูลเก็บอยู่ในเบราว์เซอร์เครื่องนี้เท่านั้น ควรกด “ดาวน์โหลดสำรอง” เก็บไว้สม่ำเสมอ':
+      'Data lives only in this browser — download a backup regularly.',
+    'ถ้าล้างข้อมูลเบราว์เซอร์ ข้อมูลจะหายทั้งหมด':
+      'Clearing browsing data erases everything.',
+    '— เบราว์เซอร์นี้ไม่อนุญาตให้เก็บข้อมูล': '— this browser will not store data',
+    'ใช้งานได้ครบทุกอย่าง แต่': 'Everything works, but',
+    'ถ้าอยากเก็บงานไว้ ให้กด “ดาวน์โหลดสำรอง” ก่อนปิดหน้า':
+      'To keep your work, use “Download backup” before closing.',
+    'สมชาย พูดถึงคุณในความเห็น': 'Somchai mentioned you in a comment',
+
+    '” ?\nงานที่อยู่เฉพาะในโปรเจกต์นี้จะถูกลบด้วย': '”?\nTasks that live only here will be deleted too',
+
+    /* --- ชื่อเดือน / วัน --- */
+    '__monthsShort': 'Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec',
+    '__monthsFull': 'January,February,March,April,May,June,July,August,September,October,November,December',
+    '__dow': 'Su,Mo,Tu,We,Th,Fr,Sa'
+  };
+
+  var lang = 'th';
+
+  function t(s, p) {
+    var out = s;
+    if (lang === 'en' && Object.prototype.hasOwnProperty.call(EN, s)) out = EN[s];
+    if (p) {
+      Object.keys(p).forEach(function (k) {
+        out = out.split('{' + k + '}').join(p[k]);
+      });
+    }
+    return out;
+  }
+
+  function setLang(l) { lang = (l === 'en') ? 'en' : 'th'; }
+  function getLang() { return lang; }
+
+  /** ภาษาเริ่มต้นเมื่อยังไม่เคยตั้งค่า — เดาจากเบราว์เซอร์ */
+  function detect() {
+    try {
+      var n = (global.navigator.language || '').toLowerCase();
+      return n.indexOf('th') === 0 ? 'th' : 'en';
+    } catch (e) { return 'th'; }
+  }
+
+  var TH_MON = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
+                'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+  var TH_MON_FULL = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+                     'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+  var TH_DOW = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
+
+  function monthsShort() { return lang === 'en' ? EN.__monthsShort.split(',') : TH_MON; }
+  function monthsFull() { return lang === 'en' ? EN.__monthsFull.split(',') : TH_MON_FULL; }
+  function dow() { return lang === 'en' ? EN.__dow.split(',') : TH_DOW; }
+
+  /** ไทยใช้ พ.ศ. อังกฤษใช้ ค.ศ. */
+  function year(y) { return lang === 'en' ? y : y + 543; }
+  function yearShort(y) { return String(year(y)).slice(2); }
+
+  global.I18N = {
+    t: t, setLang: setLang, getLang: getLang, detect: detect,
+    monthsShort: monthsShort, monthsFull: monthsFull, dow: dow,
+    year: year, yearShort: yearShort
+  };
+
+})(window);

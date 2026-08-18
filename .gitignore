@@ -1,0 +1,11 @@
+# ไฟล์ที่ build ขึ้นมาเอง — สร้างใหม่ได้ด้วย build-standalone.ps1 / build-artifact.ps1
+Orbit-standalone.html
+Orbit-artifact.html
+
+# ไฟล์ระบบ Windows / macOS
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# ไฟล์สำรองข้อมูลที่ผู้ใช้ดาวน์โหลดออกมา — เป็นข้อมูลงานจริง ห้ามขึ้น repo
+orbit-backup-*.json
