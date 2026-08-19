@@ -157,9 +157,7 @@
          '<span class="grow">' + L('สมาชิกทีม') + '</span></button>';
     h += '<button class="sb-item" data-act="open-settings">' + I('settings') + '' +
          '<span class="grow">' + L('ตั้งค่า / สำรองข้อมูล') + '</span></button>';
-    h += '<button class="sb-user" data-act="switch-user">' + avatar(me, 'lg') +
-         '<span class="meta"><span class="nm">' + esc(me ? me.name : '-') + '</span>' +
-         '<span class="em">' + esc(me ? me.email : '') + '</span></span></button>';
+    h += accountBlock(me);
     h += '</div>';
 
     return h;
@@ -206,6 +204,7 @@
     }
 
     h += '<div class="tb-spacer"></div>';
+    h += syncChip();
     h += '<div class="search">' + ICON.search +
          '<input id="searchInput" type="search" placeholder="' + L('ค้นหางาน…  (/)') + '" value="' +
          esc(route.type === 'search' ? route.q : '') + '"></div>';
@@ -1300,7 +1299,127 @@
     return h;
   }
 
+  /* ---------- บัญชีบริษัทและการซิงก์ ---------- */
+
+  /** โหมดทีมพร้อมใช้ไหม — ตั้งค่าครบและโหลดไลบรารีได้ */
+  function teamReady() {
+    return !!(global.OrbitAuth && global.OrbitAuth.available());
+  }
+
+  var SYNC_LOOK = {
+    loading:  ['cloud',      'กำลังโหลดข้อมูล…', 'busy'],
+    syncing:  ['cloud',      'กำลังบันทึก…',      'busy'],
+    synced:   ['cloudCheck', 'ซิงก์แล้ว',         'ok'],
+    offline:  ['cloudOff',   'ออฟไลน์',           'warn'],
+    conflict: ['alert',      'ข้อมูลชนกัน',        'bad'],
+    error:    ['alert',      'ซิงก์ไม่สำเร็จ',     'bad']
+  };
+
+  function syncAgo(ts) {
+    return fmtWhen(new Date(ts).toISOString());
+  }
+
+  /** ป้ายสถานะบนแถบบน — ไม่แสดงอะไรเลยเมื่อใช้งานแบบเครื่องเดียว */
+  function syncChip() {
+    var Y = global.OrbitSync;
+    if (!Y || Y.state.mode !== 'team') return '';
+    var s = Y.state;
+    var look = SYNC_LOOK[s.status] || SYNC_LOOK.synced;
+    var tip = (s.error ? L(s.error) : null) || (s.lastSync ? L('ซิงก์ล่าสุด') + ' ' + syncAgo(s.lastSync) : '');
+    return '<button class="sync-chip ' + look[2] + '" data-act="sync-menu" title="' +
+      esc(tip) + '">' + I(look[0], 15) +
+      '<span class="sync-txt">' + L(look[1]) + '</span></button>';
+  }
+
+  /** เนื้อหาเมนูที่เปิดจากป้ายสถานะ */
+  function syncMenu() {
+    var s = global.OrbitSync.state;
+    var h = '<div class="pop-note strong">' + L('ข้อมูลส่วนกลาง') + '</div>';
+    h += '<div class="pop-note">' + esc(global.OrbitCloud.describeTarget()) + '</div>';
+    if (s.error) h += '<div class="pop-note bad">' + esc(L(s.error)) + '</div>';
+
+    if (s.status === 'conflict') {
+      h += '<div class="pop-note bad">' +
+        L('มีคนแก้ข้อมูลชุดเดียวกันพร้อมกับเรา ต้องเลือกว่าจะเก็บชุดไหน') + '</div>';
+      h += '<button data-act="sync-export-mine">' + I('archive') +
+        '<span>' + L('บันทึกงานของฉันเป็นไฟล์ก่อน') + '</span></button>';
+      h += '<button data-act="sync-take-theirs">' + I('cloudCheck') +
+        '<span>' + L('ใช้ข้อมูลส่วนกลาง ทิ้งของฉัน') + '</span></button>';
+      h += '<button class="danger" data-act="sync-keep-mine">' + I('cloud') +
+        '<span>' + L('เขียนทับส่วนกลางด้วยของฉัน') + '</span></button>';
+    } else {
+      if (s.lastSync) {
+        h += '<div class="pop-note">' + L('ซิงก์ล่าสุด') + ' ' + esc(syncAgo(s.lastSync)) + '</div>';
+      }
+      h += '<button data-act="sync-now">' + I('repeat') +
+        '<span>' + L('ดึงข้อมูลล่าสุดเดี๋ยวนี้') + '</span></button>';
+    }
+    return h;
+  }
+
+  /** แถวบัญชีท้ายแถบข้าง — โหมดทีมกดแล้วเป็นเมนูบัญชี ไม่ใช่สลับผู้ใช้ */
+  function accountBlock(me) {
+    var team = global.OrbitSync && global.OrbitSync.state.mode === 'team';
+    var inner = avatar(me, 'lg') +
+      '<span class="meta"><span class="nm">' + esc(me ? me.name : '-') + '</span>' +
+      '<span class="em">' + esc(me ? me.email : '') + '</span></span>';
+    if (team) {
+      return '<button class="sb-user" data-act="account-menu" title="' +
+        L('บัญชีบริษัท') + '">' + inner +
+        '<span class="sb-user-badge">' + I('building', 13) + '</span></button>';
+    }
+    // ตั้งค่าโหมดทีมไว้แล้วแต่ยังไม่ได้ล็อกอิน — ต้องมีทางกลับเข้าไป
+    var signin = teamReady()
+      ? '<button class="sb-item sb-signin" data-act="show-gate">' + I('signIn') +
+        '<span class="grow">' + L('เข้าสู่ระบบด้วยบัญชีบริษัท') + '</span></button>'
+      : '';
+    return signin + '<button class="sb-user" data-act="switch-user">' + inner + '</button>';
+  }
+
+  function accountMenu() {
+    var me = S.me();
+    var h = '<div class="pop-note strong">' + esc(me ? me.name : '') + '</div>';
+    h += '<div class="pop-note">' + esc(me ? me.email : '') + '</div>';
+    h += '<button data-act="sync-now">' + I('repeat') +
+      '<span>' + L('ดึงข้อมูลล่าสุดเดี๋ยวนี้') + '</span></button>';
+    h += '<button data-act="sign-out">' + I('signOut') +
+      '<span>' + L('ออกจากระบบ') + '</span></button>';
+    return h;
+  }
+
+  /** หน้าเข้าสู่ระบบเต็มจอ ใช้เมื่อเปิดโหมดทีมแต่ยังไม่ได้ล็อกอิน */
+  function gateScreen(st) {
+    st = st || {};
+    if (st.checking) {
+      return '<div class="gate-card"><div class="gate-logo">' +
+        global.Icons.logoLockup(30) + '</div><p class="gate-checking">' +
+        L('กำลังตรวจสอบการเข้าสู่ระบบ…') + '</p></div>';
+    }
+    var h = '<div class="gate-card">';
+    h += '<div class="gate-logo">' + global.Icons.logoLockup(30) + '</div>';
+    h += '<h1>' + L('เข้าสู่ระบบด้วยบัญชีบริษัท') + '</h1>';
+    h += '<p>' + L('ใช้บัญชี Microsoft 365 ของบริษัท เพื่อให้ทั้งทีมเห็นงานชุดเดียวกัน') + '</p>';
+
+    if (st.error) h += '<div class="gate-err">' + I('alert', 15) + '<span>' + esc(L(st.error)) + '</span></div>';
+
+    h += '<button class="btn btn-primary gate-btn" data-act="sign-in"' +
+      (st.busy ? ' disabled' : '') + '>' + I('signIn', 17) + '<span>' +
+      (st.busy ? L('กำลังพาไปหน้าเข้าสู่ระบบ…') : L('เข้าสู่ระบบด้วย Microsoft')) +
+      '</span></button>';
+
+    h += '<button class="gate-alt" data-act="use-local">' +
+      L('ลองใช้แบบเครื่องเดียวก่อน (ข้อมูลไม่แชร์กับทีม)') + '</button>';
+
+    h += '<div class="gate-foot">' + I('shield', 14) + '<span>' +
+      L('ข้อมูลเก็บอยู่ใน Microsoft 365 ของบริษัทเท่านั้น ไม่ผ่านเซิร์ฟเวอร์อื่น') +
+      '</span></div>';
+    h += '</div>';
+    return h;
+  }
+
   global.Render = {
+    teamReady: teamReady, syncChip: syncChip, syncMenu: syncMenu,
+    accountBlock: accountBlock, accountMenu: accountMenu, gateScreen: gateScreen,
     esc: esc, avatar: avatar, initials: initials,
     fmtDate: fmtDate, fmtWhen: fmtWhen,
     prio: prio, taskType: taskType, approvalState: approvalState,

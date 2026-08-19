@@ -432,6 +432,25 @@
     return seed();
   }
 
+  /* โหมดทีม: main จะเสียบฟังก์ชันส่งขึ้นส่วนกลางไว้ตรงนี้
+   * localStorage ยังเขียนอยู่เสมอ ใช้เป็นสำเนากันเน็ตหลุด */
+  var remoteSave = null;
+  var suppressRemote = false;
+
+  function setRemoteSave(fn) { remoteSave = fn; }
+
+  /** แทนข้อมูลทั้งก้อนด้วยของจากส่วนกลาง โดยไม่ส่งกลับขึ้นไปอีก */
+  function replaceDb(obj) {
+    suppressRemote = true;
+    db = migrate(obj);
+    commit();
+    suppressRemote = false;
+    // บอกชั้นหน้าจอให้วาดใหม่ ไม่งั้นจอค้างอยู่ที่ข้อมูลชุดเก่า
+    try { window.dispatchEvent(new CustomEvent('orbit:replaced')); } catch (e) {}
+  }
+
+  function snapshotJSON() { return JSON.stringify(db); }
+
   function persist() {
     try {
       storage.set(JSON.stringify(db));
@@ -441,6 +460,7 @@
         global.Orbit.toast('บันทึกไม่สำเร็จ — พื้นที่เก็บข้อมูลเต็ม');
       }
     }
+    if (remoteSave && !suppressRemote) remoteSave();
   }
 
   var listeners = [];
@@ -1531,6 +1551,23 @@
 
   function setCurrentUser(id) { db.currentUserId = id; commit(); }
 
+  /** รับตัวตนจากบัญชีบริษัท เพิ่มถ้ายังไม่มี แล้วตั้งเป็นผู้ใช้ปัจจุบัน */
+  function adoptIdentity(p) {
+    if (!p || !p.id) return null;
+    var u = user(p.id);
+    if (!u) {
+      u = { id: p.id, name: p.name || p.email, email: p.email || '',
+            color: PALETTE[db.users.length % PALETTE.length] };
+      db.users.push(u);
+    } else {
+      if (p.name) u.name = p.name;
+      if (p.email) u.email = p.email;
+    }
+    db.currentUserId = u.id;
+    commit();
+    return u;
+  }
+
   function setSetting(key, value) {
     db.settings = db.settings || {};
     db.settings[key] = value;
@@ -1570,6 +1607,7 @@
 
     get db() { return db; },
     storageKind: storage.kind,
+    setRemoteSave: setRemoteSave, replaceDb: replaceDb, snapshotJSON: snapshotJSON,
     onChange: onChange, commit: commit,
     snapshot: snapshot, undo: undo, canUndo: canUndo,
 
@@ -1613,6 +1651,7 @@
     deleteTaskTemplate: deleteTaskTemplate,
 
     addUser: addUser, removeUser: removeUser, setCurrentUser: setCurrentUser,
+    adoptIdentity: adoptIdentity,
     setSetting: setSetting,
 
     exportJSON: exportJSON, importJSON: importJSON, reset: reset

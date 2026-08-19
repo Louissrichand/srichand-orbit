@@ -422,6 +422,45 @@
     'คืนความกว้างคอลัมน์เดิม': 'Reset column widths',
     'คืนความกว้างคอลัมน์เดิมแล้ว': 'Column widths reset',
     'สลับทิศการเรียง': 'Flip sort direction',
+
+    /* --- บัญชีบริษัทและการซิงก์ --- */
+    'เข้าสู่ระบบด้วยบัญชีบริษัท': 'Sign in with your work account',
+    'ใช้บัญชี Microsoft 365 ของบริษัท เพื่อให้ทั้งทีมเห็นงานชุดเดียวกัน':
+      'Use your company Microsoft 365 account so the whole team sees the same work.',
+    'เข้าสู่ระบบด้วย Microsoft': 'Sign in with Microsoft',
+    'กำลังพาไปหน้าเข้าสู่ระบบ…': 'Taking you to sign in…',
+    'กำลังตรวจสอบการเข้าสู่ระบบ…': 'Checking your sign-in…',
+    'ลองใช้แบบเครื่องเดียวก่อน (ข้อมูลไม่แชร์กับทีม)':
+      'Try it on this device only (not shared with the team)',
+    'ข้อมูลเก็บอยู่ใน Microsoft 365 ของบริษัทเท่านั้น ไม่ผ่านเซิร์ฟเวอร์อื่น':
+      'Data stays in your company Microsoft 365. No other server is involved.',
+    'บัญชีบริษัท': 'Work account', 'ออกจากระบบ': 'Sign out',
+    'ข้อมูลส่วนกลาง': 'Shared data', 'ซิงก์ล่าสุด': 'Last synced',
+    'ดึงข้อมูลล่าสุดเดี๋ยวนี้': 'Sync now',
+    'กำลังโหลดข้อมูล…': 'Loading…', 'กำลังบันทึก…': 'Saving…',
+    'ซิงก์แล้ว': 'Synced', 'ออฟไลน์': 'Offline',
+    'ข้อมูลชนกัน': 'Conflict', 'ซิงก์ไม่สำเร็จ': 'Sync failed',
+    'มีคนแก้ข้อมูลชุดเดียวกันพร้อมกับเรา ต้องเลือกว่าจะเก็บชุดไหน':
+      'Someone edited the same data at the same time. Choose which version to keep.',
+    'บันทึกงานของฉันเป็นไฟล์ก่อน': 'Save my version to a file first',
+    'ใช้ข้อมูลส่วนกลาง ทิ้งของฉัน': 'Use the shared version, discard mine',
+    'เขียนทับส่วนกลางด้วยของฉัน': 'Overwrite shared with mine',
+    'เขียนทับข้อมูลส่วนกลางด้วยงานของคุณแล้ว': 'Shared data overwritten with your version',
+    'ใช้ข้อมูลจากส่วนกลางแล้ว': 'Now using the shared version',
+    'เชื่อมกับข้อมูลส่วนกลางของบริษัทแล้ว': 'Connected to your company data',
+    'ใช้งานแบบเครื่องเดียว ข้อมูลจะอยู่ในเบราว์เซอร์นี้เท่านั้น':
+      'Single-device mode — data stays in this browser only',
+    'เข้าสู่ระบบไม่สำเร็จ': 'Sign-in failed',
+    'เริ่มระบบเข้าสู่ระบบไม่สำเร็จ': 'Could not start sign-in',
+    'เข้าถึงที่เก็บข้อมูลส่วนกลางไม่ได้': 'Could not reach the shared storage',
+    'บัญชีนี้ไม่มีสิทธิ์เข้าถึงที่เก็บข้อมูล': 'This account cannot access the storage location',
+    'ไม่พบไซต์หรือโฟลเดอร์ที่ตั้งค่าไว้': 'The configured site or folder was not found',
+    'สิทธิ์หมดอายุ ลองเข้าสู่ระบบใหม่': 'Your session expired — please sign in again',
+    'ไฟล์ข้อมูลกลางเสียหาย อ่านไม่ออก': 'The shared data file is unreadable',
+    'มีคนอื่นแก้ข้อมูลก่อนหน้านี้': 'Someone else changed the data first',
+    'ยังไม่ได้ตั้งค่าการเข้าสู่ระบบ': 'Sign-in is not configured',
+    'ยังไม่ได้เข้าสู่ระบบ': 'Not signed in',
+    'ไม่ทราบสาเหตุ': 'Unknown error',
     /* --- ชื่อเดือน / วัน --- */
     '__monthsShort': 'Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec',
     '__monthsFull': 'January,February,March,April,May,June,July,August,September,October,November,December',

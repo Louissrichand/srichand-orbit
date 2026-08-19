@@ -1353,3 +1353,107 @@ body.col-resizing .col-resize::after { background: var(--accent); }
 .th-sort.on { opacity: 1; color: var(--accent); }
 .th-field .th-sort { margin-left: auto; }
 .th-field .th-menu { margin-left: 4px; }
+
+/* ===== บัญชีบริษัทและสถานะการซิงก์ ===== */
+
+/* หน้าเข้าสู่ระบบ ทับทุกอย่างจนกว่าจะรู้ว่าเป็นใคร */
+.gate {
+  position: fixed; inset: 0; z-index: 300;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px; background: var(--bg-sunk);
+}
+.gate[hidden] { display: none; }
+body.gated { overflow: hidden; }
+
+.gate-card {
+  width: 100%; max-width: 420px; text-align: center;
+  background: var(--bg-raise); border: 1px solid var(--line);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
+  padding: 40px 32px 28px;
+}
+.gate-logo { display: flex; justify-content: center; margin-bottom: 22px; }
+.gate-card h1 { font-size: 21px; font-weight: 700; margin: 0 0 8px; color: var(--fg); }
+.gate-card p {
+  font-size: 14px; line-height: 1.6; color: var(--fg-soft);
+  margin: 0 auto 24px; max-width: 320px;
+}
+.gate-checking { margin: 8px 0 4px !important; color: var(--fg-faint); }
+
+.gate-err {
+  display: flex; align-items: flex-start; gap: 8px; text-align: left;
+  background: var(--danger-bg); color: var(--danger);
+  border-radius: var(--radius); padding: 10px 12px;
+  font-size: 13px; line-height: 1.5; margin-bottom: 16px;
+}
+.gate-err svg { flex: none; margin-top: 2px; }
+
+.gate-btn {
+  width: 100%; justify-content: center; gap: 9px; height: auto; min-height: 46px;
+  padding: 11px 16px; font-size: 15px; font-weight: 600;
+}
+.gate-btn[disabled] { opacity: .6; cursor: default; }
+
+.gate-alt {
+  display: block; width: 100%; margin-top: 14px;
+  font-size: 13px; color: var(--fg-faint); text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.gate-alt:hover { color: var(--fg-soft); }
+
+.gate-foot {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--line-soft);
+  font-size: 12px; color: var(--fg-faint); line-height: 1.5;
+}
+.gate-foot svg { flex: none; }
+
+/* ป้ายสถานะบนแถบบน */
+.sync-chip {
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  height: 30px; padding: 0 11px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--bg-raise);
+  font-size: 12.5px; font-weight: 600; color: var(--fg-soft);
+}
+.sync-chip:hover { background: var(--bg-sunk); }
+.sync-chip svg { flex: none; }
+.sync-chip.ok    { color: var(--fg-soft); }
+.sync-chip.ok svg { color: var(--ok); }
+.sync-chip.busy  { color: var(--fg-faint); }
+.sync-chip.busy svg { animation: sync-spin 1.4s linear infinite; }
+.sync-chip.warn  { color: var(--warn-fg); background: var(--warn-bg); border-color: transparent; }
+.sync-chip.bad   { color: var(--danger); background: var(--danger-bg); border-color: transparent; }
+@keyframes sync-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .sync-chip.busy svg { animation: none; }
+}
+
+/* ข้อความอธิบายในป๊อปอัป — ไม่ใช่ปุ่ม จึงต้องแยกหน้าตาให้ชัด */
+.pop-note {
+  padding: 6px 9px; font-size: 12.5px; line-height: 1.5; color: var(--fg-faint);
+  word-break: break-word;
+}
+.pop-note.strong { color: var(--fg); font-weight: 700; font-size: 13px; padding-bottom: 2px; }
+.pop-note.bad { color: var(--danger); }
+.pop button.danger { color: var(--danger); }
+.pop button.danger:hover { background: var(--danger-bg); }
+
+/* แถวบัญชีในแถบข้าง */
+.sb-user-badge {
+  margin-left: auto; flex: none; display: flex; align-items: center;
+  color: var(--sidebar-dim);
+}
+.sb-signin {
+  color: var(--sidebar-on) !important;
+  background: var(--sidebar-pill);
+  margin-bottom: 6px;
+}
+.sb-signin:hover { background: var(--sidebar-hl); }
+
+@media (max-width: 860px) {
+  .sync-chip { padding: 0 8px; }
+  .sync-chip .sync-txt { display: none; }
+  .gate-card { padding: 32px 22px 22px; }
+}
+
+/* ป๊อปอัปที่มีข้อความยาว (เช่น ที่อยู่ไฟล์) ต้องไม่ยืดจนเต็มจอ */
+.pop { max-width: 340px; }

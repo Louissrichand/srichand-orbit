@@ -27,9 +27,19 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- หน้าเข้าสู่ระบบ แสดงเฉพาะเมื่อเปิดโหมดทีมแต่ยังไม่ได้ล็อกอิน -->
+<div class="gate" id="gate" hidden></div>
+
+<!-- ไลบรารีเข้าสู่ระบบของ Microsoft ถ้าโหลดไม่ได้ แอปจะทำงานแบบเครื่องเดียวต่อไป -->
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@5.19.0/lib/msal-browser.min.js"></script>
+
+<script src="app/config.js"></script>
 <script src="app/i18n.js"></script>
 <script src="app/icons.js"></script>
+<script src="app/auth.js"></script>
 <script src="app/store.js"></script>
+<script src="app/cloud.js"></script>
+<script src="app/sync.js"></script>
 <script src="app/render.js"></script>
 <script src="app/gantt.js"></script>
 <script src="app/main.js"></script>

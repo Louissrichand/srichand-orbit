@@ -2,33 +2,35 @@
 # ใช้เมื่อแก้โค้ดแล้วอยากได้ไฟล์เดียวจบไว้ส่งต่อ/เปิดที่เครื่องอื่น
 #
 #   powershell -ExecutionPolicy Bypass -File build-standalone.ps1
+#
+# หมายเหตุ: MSAL ยังโหลดจาก CDN เพราะฝังทั้งไลบรารีจะทำให้ไฟล์ใหญ่ขึ้นมาก
+# ถ้าเปิดไฟล์นี้แบบ file:// ระบบจะทำงานโหมดเครื่องเดียวเสมอ (auth.js ตัดให้เอง)
 
 $ErrorActionPreference = 'Stop'
 $base = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 function ReadUtf8($p) { [System.IO.File]::ReadAllText($p, [System.Text.Encoding]::UTF8) }
 
-$html   = ReadUtf8 (Join-Path $base 'index.html')
-$css    = ReadUtf8 (Join-Path $base 'assets\styles.css')
-$i18n   = ReadUtf8 (Join-Path $base 'app\i18n.js')
-$icons  = ReadUtf8 (Join-Path $base 'app\icons.js')
-$store  = ReadUtf8 (Join-Path $base 'app\store.js')
-$render = ReadUtf8 (Join-Path $base 'app\render.js')
-$gantt  = ReadUtf8 (Join-Path $base 'app\gantt.js')
-$main   = ReadUtf8 (Join-Path $base 'app\main.js')
+# ลำดับต้องตรงกับ index.html — ตัวหลังเรียกใช้ตัวหน้า
+$files = @('config.js', 'i18n.js', 'icons.js', 'auth.js', 'store.js',
+           'cloud.js', 'sync.js', 'render.js', 'gantt.js', 'main.js')
+
+$html = ReadUtf8 (Join-Path $base 'index.html')
+$css  = ReadUtf8 (Join-Path $base 'assets/styles.css')
 
 $html = $html.Replace(
   '<link rel="stylesheet" href="assets/styles.css">',
   "<style>`n$css`n</style>")
 
-$html = $html.Replace('<script src="app/i18n.js"></script>',   "<script>`n$i18n`n</script>")
-$html = $html.Replace('<script src="app/icons.js"></script>',  "<script>`n$icons`n</script>")
-$html = $html.Replace('<script src="app/store.js"></script>',  "<script>`n$store`n</script>")
-$html = $html.Replace('<script src="app/render.js"></script>', "<script>`n$render`n</script>")
-$html = $html.Replace('<script src="app/gantt.js"></script>',  "<script>`n$gantt`n</script>")
-$html = $html.Replace('<script src="app/main.js"></script>',   "<script>`n$main`n</script>")
+foreach ($f in $files) {
+  $src = ReadUtf8 (Join-Path $base "app/$f")
+  $tag = '<script src="app/' + $f + '"></script>'
+  if ($html.IndexOf($tag) -lt 0) { throw "ไม่พบ $tag ใน index.html" }
+  $html = $html.Replace($tag, "<script>`n$src`n</script>")
+}
 
-if ($html -match 'script src=') { throw 'ยังมี script src เหลืออยู่ — รวมไฟล์ไม่ครบ' }
+# เหลือได้เฉพาะ CDN ของ MSAL เท่านั้น ถ้ามี app/ หลุดมาแปลว่ารวมไม่ครบ
+if ($html -match 'script src="app/') { throw 'ยังมีสคริปต์ app/ ที่ยังไม่ถูกรวม' }
 
 $out = Join-Path $base 'Orbit-standalone.html'
 [System.IO.File]::WriteAllText($out, $html, (New-Object System.Text.UTF8Encoding($false)))

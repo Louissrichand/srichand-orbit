@@ -2,28 +2,29 @@
 # ต่างจาก standalone ตรงที่ไม่มี <!doctype>/<html>/<head>/<body> เพราะตัว publisher ใส่ให้เอง
 #
 #   powershell -ExecutionPolicy Bypass -File build-artifact.ps1
+#
+# Artifact บล็อกสคริปต์จากภายนอก จึงไม่มี MSAL ในไฟล์นี้
+# ผลคือหน้านี้ทำงานโหมดเครื่องเดียวเสมอ ส่วนโหมดทีมใช้บน GitHub Pages
 
 $ErrorActionPreference = 'Stop'
 $base = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 function ReadUtf8($p) { [System.IO.File]::ReadAllText($p, [System.Text.Encoding]::UTF8) }
 
-$index  = ReadUtf8 (Join-Path $base 'index.html')
-$css    = ReadUtf8 (Join-Path $base 'assets\styles.css')
-$i18n   = ReadUtf8 (Join-Path $base 'app\i18n.js')
-$icons  = ReadUtf8 (Join-Path $base 'app\icons.js')
-$store  = ReadUtf8 (Join-Path $base 'app\store.js')
-$render = ReadUtf8 (Join-Path $base 'app\render.js')
-$gantt  = ReadUtf8 (Join-Path $base 'app\gantt.js')
-$main   = ReadUtf8 (Join-Path $base 'app\main.js')
+# ลำดับต้องตรงกับ index.html — ตัวหลังเรียกใช้ตัวหน้า
+$files = @('config.js', 'i18n.js', 'icons.js', 'auth.js', 'store.js',
+           'cloud.js', 'sync.js', 'render.js', 'gantt.js', 'main.js')
 
-# ดึงเฉพาะ markup ระหว่าง <body> กับ <script src= ตัวแรก
+$index = ReadUtf8 (Join-Path $base 'index.html')
+$css   = ReadUtf8 (Join-Path $base 'assets/styles.css')
+
+# ดึงเฉพาะ markup ระหว่าง <body> กับ <script ตัวแรก
 $startTag = '<body>'
 $s = $index.IndexOf($startTag)
 if ($s -lt 0) { throw 'หา <body> ใน index.html ไม่เจอ' }
 $s += $startTag.Length
-$e = $index.IndexOf('<script src=')
-if ($e -lt 0) { throw 'หา <script src= ใน index.html ไม่เจอ' }
+$e = $index.IndexOf('<script')
+if ($e -lt 0) { throw 'หา <script ใน index.html ไม่เจอ' }
 $markup = $index.Substring($s, $e - $s).Trim()
 
 $sb = New-Object System.Text.StringBuilder
@@ -32,9 +33,9 @@ $sb = New-Object System.Text.StringBuilder
 [void]$sb.AppendLine($css)
 [void]$sb.AppendLine('</style>')
 [void]$sb.AppendLine($markup)
-foreach ($js in @($i18n, $icons, $store, $render, $gantt, $main)) {
+foreach ($f in $files) {
   [void]$sb.AppendLine('<script>')
-  [void]$sb.AppendLine($js)
+  [void]$sb.AppendLine((ReadUtf8 (Join-Path $base "app/$f")))
   [void]$sb.AppendLine('</script>')
 }
 

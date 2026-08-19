@@ -1655,6 +1655,71 @@
         S.removeUser(id);
         openModal(membersModal());
         break;
+      /* --- บัญชีบริษัทและการซิงก์ --- */
+      case 'show-gate':
+        closePops();
+        gate.error = null; gate.busy = false; gate.checking = false;
+        showGate();
+        break;
+      case 'sign-in':
+        gate.busy = true; gate.error = null;
+        showGate();
+        try {
+          global.OrbitAuth.signIn().catch(function (err) {
+            gate.busy = false;
+            gate.error = (err && err.message) || L('เข้าสู่ระบบไม่สำเร็จ');
+            showGate();
+          });
+        } catch (e3) {
+          gate.busy = false;
+          gate.error = (e3 && e3.message) || L('เข้าสู่ระบบไม่สำเร็จ');
+          showGate();
+        }
+        break;
+      case 'use-local':
+        setLocalOnly(true);
+        hideGate();
+        renderAll();
+        toast(L('ใช้งานแบบเครื่องเดียว ข้อมูลจะอยู่ในเบราว์เซอร์นี้เท่านั้น'));
+        break;
+      case 'sign-out':
+        closePops();
+        if (global.OrbitSync) global.OrbitSync.flush();
+        setLocalOnly(false);
+        if (global.OrbitSync) global.OrbitSync.stop();
+        global.OrbitAuth.signOut();
+        renderAll();   // ปกติจะถูกพาออกไปหน้า Microsoft แต่ถ้าไม่ อย่าค้างหน้าตาแบบล็อกอินอยู่
+        break;
+      case 'sync-menu':
+        if (popIsOpenFor(el)) { closePops(); break; }
+        openPop(el, R.syncMenu());
+        break;
+      case 'account-menu':
+        if (popIsOpenFor(el)) { closePops(); break; }
+        openPop(el, R.accountMenu());
+        break;
+      case 'sync-now':
+        closePops();
+        global.OrbitSync.pullNow().then(function () { renderAll(); });
+        break;
+      case 'sync-export-mine':
+        doExport();
+        break;
+      case 'sync-keep-mine':
+        closePops();
+        global.OrbitSync.resolveKeepMine().then(function () {
+          toast(L('เขียนทับข้อมูลส่วนกลางด้วยงานของคุณแล้ว'));
+          renderAll();
+        });
+        break;
+      case 'sync-take-theirs':
+        closePops();
+        global.OrbitSync.resolveTakeTheirs().then(function () {
+          toast(L('ใช้ข้อมูลจากส่วนกลางแล้ว'));
+          renderAll();
+        });
+        break;
+
       case 'switch-user': {
         var uh = '';
         S.db.users.forEach(function (u) {
@@ -2262,6 +2327,94 @@
     S.moveTask(movingId, state.route.id, toSection, beforeId);
   });
 
+  /* ---------- บัญชีบริษัท ---------- */
+
+  var $gate = document.getElementById('gate');
+  var gate = { busy: false, checking: false, error: null };
+  var LOCAL_ONLY = 'orbit.localOnly';
+
+  /** ผู้ใช้เคยเลือก "ใช้แบบเครื่องเดียว" ไว้ไหม */
+  function localOnly() {
+    try { return localStorage.getItem(LOCAL_ONLY) === '1'; } catch (e) { return false; }
+  }
+  function setLocalOnly(v) {
+    try {
+      if (v) localStorage.setItem(LOCAL_ONLY, '1');
+      else localStorage.removeItem(LOCAL_ONLY);
+    } catch (e) { /* โหมดส่วนตัวเขียนไม่ได้ ไม่เป็นไร */ }
+  }
+
+  function showGate() {
+    if (!$gate) return;
+    $gate.innerHTML = R.gateScreen(gate);
+    $gate.hidden = false;
+    document.body.classList.add('gated');
+  }
+  function hideGate() {
+    if (!$gate) return;
+    $gate.hidden = true;
+    $gate.innerHTML = '';
+    document.body.classList.remove('gated');
+  }
+
+  /** ตัดสินว่าจะเข้าโหมดทีมหรือเครื่องเดียว แล้ววาดหน้าจอให้ตรงกัน */
+  function bootAccount() {
+    if (!R.teamReady()) return;      // ยังไม่ได้ตั้งค่า หรือโหลดไลบรารีไม่ได้ = ใช้แบบเดิม
+
+    if (!localOnly()) { gate.checking = true; showGate(); }
+
+    global.OrbitAuth.init().then(function (signedIn) {
+      gate.checking = false;
+
+      if (!signedIn) {
+        if (localOnly()) hideGate();
+        else showGate();
+        renderAll();
+        return;
+      }
+
+      setLocalOnly(false);
+      return global.OrbitSync.start().then(function () {
+        hideGate();
+        renderAll();
+        toast(L('เชื่อมกับข้อมูลส่วนกลางของบริษัทแล้ว'));
+      }, function (err) {
+        // ล็อกอินผ่านแต่แตะที่เก็บข้อมูลไม่ได้ — ต้องบอกให้ชัด ไม่ปล่อยให้เข้าใจว่าซิงก์อยู่
+        gate.error = (err && err.message) || L('เข้าถึงที่เก็บข้อมูลส่วนกลางไม่ได้');
+        showGate();
+      });
+    }, function (err) {
+      gate.checking = false;
+      gate.error = (err && err.message) || L('เริ่มระบบเข้าสู่ระบบไม่สำเร็จ');
+      showGate();
+    });
+  }
+
+  /* เปลี่ยนสถานะซิงก์แล้วขยับแค่ป้ายเดียว ไม่วาดใหม่ทั้งหน้า
+   * ไม่งั้นทุก 15 วินาทีหน้าจะกระตุกและ scroll เด้ง */
+  if (global.OrbitSync) {
+    global.OrbitSync.onChange(function () {
+      var chip = document.querySelector('.sync-chip');
+      var html = R.syncChip();
+      if (!chip || !html) { renderTopbar(); return; }
+      var box = document.createElement('div');
+      box.innerHTML = html;
+      if (box.firstChild) chip.parentNode.replaceChild(box.firstChild, chip);
+    });
+  }
+
+  /* ข้อมูลถูกแทนทั้งก้อนจากส่วนกลาง — ต้องวาดใหม่ ไม่งั้นหน้าจอค้างที่ของเก่า */
+  global.addEventListener('orbit:replaced', function () { renderAll(); });
+
+  /* ปิดหน้าต่างระหว่างที่ยังส่งไม่เสร็จ = งานหาย ต้องรีบส่งก่อน */
+  global.addEventListener('beforeunload', function (e) {
+    if (!global.OrbitSync || global.OrbitSync.state.mode !== 'team') return;
+    if (!global.OrbitSync.state.dirty) return;
+    global.OrbitSync.flush();
+    e.preventDefault();
+    e.returnValue = '';
+  });
+
   /* ---------- boot ---------- */
 
   global.Orbit = { toast: toast, state: state, render: renderAll };
@@ -2275,6 +2428,7 @@
     if (S.task(tid2)) state.openTaskId = tid2;
   }
   renderAll();
+  bootAccount();
 
   if (S.storageKind === 'memory') {
     setTimeout(function () {
