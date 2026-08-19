@@ -259,7 +259,7 @@
 
   function renderTopbar() {
     var html = R.topbar(state.route);
-    if (state.route.type === 'project' &&
+    if (state.route.type === 'project' && S.project(state.route.id) &&
         ['list', 'board', 'timeline'].indexOf(state.route.view) >= 0) {
       html += R.viewbar(state.route.id, viewFor(state.route.id));
     }
@@ -267,6 +267,12 @@
   }
 
   function renderAll(skipHash) {
+    // โปรเจกต์อาจถูกลบไประหว่างนี้ ต้องถอยกลับก่อนวาด ไม่งั้นหน้าจะพัง
+    if (state.route.type === 'project' && !S.project(state.route.id)) {
+      state.route = { type: 'mytasks' };
+      state.openTaskId = null;
+      clearSel();
+    }
     applyLang();
     applyTheme();
     $sidebar.innerHTML = R.sidebar(state.route);

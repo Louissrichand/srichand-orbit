@@ -175,7 +175,7 @@
     var pLaunch = {
       id: 'p_launch', name: L('เปิดตัวสินค้าใหม่'), color: '#796eff', icon: '🚀',
       description: L('ตัวอย่างแผนเปิดตัวสินค้า ทั้งช่องทางออนไลน์และออฟไลน์'),
-      archived: false, defaultView: 'board',
+      archived: false, defaultView: 'list',
       sections: [
         { id: 's_l1', name: 'Backlog' },
         { id: 's_l2', name: L('กำลังทำ') },

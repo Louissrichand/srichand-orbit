@@ -235,6 +235,7 @@
 
   function viewbar(projectId, view) {
     var p = S.project(projectId);
+    if (!p) return '';
     var h = '<div class="viewbar">';
 
     h += '<div class="vb-item"><label>' + L('ผู้รับผิดชอบ') + '</label><select data-act="f-assignee" class="' +
