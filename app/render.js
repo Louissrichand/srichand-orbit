@@ -441,7 +441,9 @@
     var groups = S.viewGroups(projectId, view);
     var fields = p.fields || [];
 
-    var tpl = 'minmax(280px, 1.4fr) 168px 150px' +
+    // ความกว้างคอลัมน์ชื่อมาจาก CSS (--nameW) เพื่อให้ย่อขยายหน้าต่างแล้วปรับตามเอง
+    // ไม่ใช้หน่วย fr เพราะ fr จะยืดจนดันคอลัมน์อื่นไปชิดขวา
+    var tpl = 'var(--nameW) 170px 148px' +
       (fields.length ? ' repeat(' + fields.length + ', ' + COL_W + 'px)' : '') + ' 46px';
 
     var h = '<div class="tbl-wrap"><div class="tbl" style="--tpl:' + tpl + '">';

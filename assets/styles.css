@@ -1287,3 +1287,17 @@ button:focus:not(:focus-visible) { outline: none; }
   padding: 4px 7px; font-size: 13px; outline: none;
   background: var(--bg); color: var(--fg);
 }
+
+/* popover ต้องเกาะใต้ปุ่มที่กด ไม่ใช่ไปโผล่ที่ขอบซ้ายของหัวตาราง */
+.th { position: relative; }
+.th-name { position: sticky; }
+.th-add .pop, .th-field .pop { top: calc(100% + 6px); }
+.th-add .pop { left: auto; right: 0; min-width: 210px; }
+
+/* ตารางไม่ต้องยืดเต็มจอ คอลัมน์เกาะกันอยู่ซ้าย */
+.tbl { width: max-content; min-width: 0; }
+
+/* ความกว้างคอลัมน์ชื่องาน — ปรับตามขนาดจอโดยไม่ต้องวาดใหม่ */
+.tbl { --nameW: 400px; }
+@media (max-width: 1100px) { .tbl { --nameW: 320px; } }
+@media (max-width: 860px)  { .tbl { --nameW: 230px; } }

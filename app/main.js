@@ -444,6 +444,28 @@
     pop.className = 'pop';
     pop.innerHTML = html;
     anchorBtn.parentNode.appendChild(pop);
+    keepInView(pop);
+    return pop;
+  }
+
+  /** ดันกลับเข้าจอถ้าล้นขอบ — ปุ่มที่อยู่ริมขวาหรือใกล้ก้นจอจะเปิดเมนูออกนอกจอได้ */
+  function keepInView(pop) {
+    var r = pop.getBoundingClientRect();
+    var pad = 8;
+    if (r.right > global.innerWidth - pad) {
+      pop.style.left = 'auto';
+      pop.style.right = '0';
+      r = pop.getBoundingClientRect();
+      if (r.left < pad) {
+        pop.style.right = 'auto';
+        pop.style.left = (pad - pop.parentNode.getBoundingClientRect().left) + 'px';
+      }
+    }
+    r = pop.getBoundingClientRect();
+    if (r.bottom > global.innerHeight - pad) {
+      var over = r.bottom - (global.innerHeight - pad);
+      pop.style.maxHeight = Math.max(160, r.height - over) + 'px';
+    }
   }
 
   /* ---------- navigation ---------- */
