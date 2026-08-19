@@ -30,7 +30,7 @@
 
   function avatar(u, size) {
     var cls = 'avatar' + (size ? ' ' + size : '');
-    if (!u) return '<span class="' + cls + ' empty">+</span>';
+    if (!u) return '<span class="' + cls + ' avatar-empty">+</span>';
     return '<span class="' + cls + '" style="background:' + esc(u.color) + '" title="' +
       esc(u.name) + '">' + esc(initials(u.name)) + '</span>';
   }

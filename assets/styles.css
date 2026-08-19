@@ -302,7 +302,7 @@ a { color: var(--accent); }
 }
 .avatar.sm { width: 20px; height: 20px; flex-basis: 20px; font-size: 9px; }
 .avatar.lg { width: 34px; height: 34px; flex-basis: 34px; font-size: 13px; }
-.avatar.empty {
+.avatar.avatar-empty {
   background: none; border: 1.5px dashed var(--line-strong);
   color: var(--fg-faint); font-size: 13px;
 }
