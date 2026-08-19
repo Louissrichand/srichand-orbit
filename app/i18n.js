@@ -223,7 +223,7 @@
       'Options (dropdown type only, comma separated)',
     'เพิ่มฟิลด์': 'Add field', 'ใส่ชื่อฟิลด์ก่อน': 'Enter a field name first',
     'เช่น ช่องทาง, งบประมาณ': 'e.g. Channel, Budget',
-    'ข้อความ': 'Text', 'ตัวเลข': 'Number', 'ตัวเลือก': 'Dropdown',
+    'ข้อความ': 'Text', 'ตัวเลข': 'Number', 'ตัวเลือก': 'Options',
     'วันที่': 'Date', 'บุคคล': 'Person',
 
     /* --- กฎอัตโนมัติ --- */
@@ -404,6 +404,20 @@
     '” ?\nงานที่อยู่เฉพาะในโปรเจกต์นี้จะถูกลบด้วย': '”?\nTasks that live only here will be deleted too',
 
     'เอากลับจากคลัง': 'Restore from archive',
+    /* --- ฟิลด์ในตาราง --- */
+    'ตัวเลือกเดียว': 'Single-select', 'หลายตัวเลือก': 'Multi-select',
+    'ชื่อฟิลด์': 'Field title', 'ชื่อตัวเลือก': 'Option name',
+    'เช่น สถานะ, ผู้อนุมัติ, งบ': 'e.g. Status, Approver, Budget',
+    'เพิ่มตัวเลือก': 'Add an option', 'สร้างฟิลด์': 'Create field',
+    'ต้องมีอย่างน้อย 1 ตัวเลือก': 'At least one option is required',
+    'ใส่ตัวเลือกอย่างน้อย 1 รายการ': 'Add at least one option',
+    'เพิ่มฟิลด์แล้ว': 'Field added', 'เปลี่ยนชื่อฟิลด์': 'Rename field',
+    'ลบฟิลด์นี้? ค่าที่กรอกไว้ทั้งหมดจะหายด้วย':
+      'Delete this field? Every value in it will be lost.',
+    'ลบฟิลด์แล้ว': 'Field deleted',
+
+    'ดาวน์โหลดสำรอง': 'Download backup', 'กู้คืนจากไฟล์': 'Restore from file',
+    'คัดลอกข้อมูล': 'Copy data', 'รออยู่:': 'Waiting on:',
     /* --- ชื่อเดือน / วัน --- */
     '__monthsShort': 'Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec',
     '__monthsFull': 'January,February,March,April,May,June,July,August,September,October,November,December',

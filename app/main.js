@@ -299,6 +299,122 @@
 
   S.onChange(function () { renderAll(); });
 
+  /** style.background คืนเป็น rgb() — แปลงกลับเป็น hex ให้เก็บลงข้อมูล */
+  function rgbToHex(v) {
+    if (!v) return S.OPTION_COLORS[0];
+    if (v.charAt(0) === '#') return v;
+    var m = v.match(/(\d+)\D+(\d+)\D+(\d+)/);
+    if (!m) return S.OPTION_COLORS[0];
+    return '#' + [m[1], m[2], m[3]].map(function (x) {
+      var h = Number(x).toString(16);
+      return h.length < 2 ? '0' + h : h;
+    }).join('');
+  }
+
+  /** แก้ค่าในเซลล์ตาราง — เลือกวิธีตามชนิดของคอลัมน์ */
+  function editCell(cell) {
+    var kind = cell.dataset.cell;
+    var tid = cell.dataset.id;
+    var t = S.task(tid);
+    if (!t) return;
+
+    if (kind === 'assignee') {
+      if (cell.querySelector('.pop')) { closePops(); return; }
+      var ah = '<button data-act="cell-set-assignee" data-id="' + R.esc(tid) +
+        '" data-user="">' + R.avatar(null) + ' ' + L('ยังไม่มอบหมาย') + '</button>';
+      S.db.users.forEach(function (u) {
+        ah += '<button data-act="cell-set-assignee" data-id="' + R.esc(tid) +
+          '" data-user="' + R.esc(u.id) + '">' + R.avatar(u) + ' ' + R.esc(u.name) + '</button>';
+      });
+      cell.style.position = 'relative';
+      openPop(cell, ah);
+      return;
+    }
+
+    if (kind === 'due') { inlineInput(cell, 'date', t.dueOn || '', function (v) {
+      S.updateTask(tid, { dueOn: v || null });
+    }); return; }
+
+    var fid = cell.dataset.field;
+    var p = S.project(state.route.id);
+    var f = p.fields.filter(function (x) { return x.id === fid; })[0];
+    if (!f) return;
+    var cur = S.fieldValue(tid, fid);
+
+    if (f.type === 'select' || f.type === 'multi') {
+      if (cell.querySelector('.pop')) { closePops(); return; }
+      var multi = f.type === 'multi';
+      var chosen = multi ? [].concat(cur || []) : [cur];
+      var oh = '';
+      if (!multi) {
+        oh += '<button data-act="cell-set-option" data-id="' + R.esc(tid) + '" data-field="' +
+          R.esc(fid) + '" data-v="">' + L('ไม่ระบุ') + '</button>';
+      }
+      (f.options || []).forEach(function (o) {
+        var on = chosen.indexOf(o.name) >= 0;
+        oh += '<button data-act="' + (multi ? 'cell-toggle-option' : 'cell-set-option') +
+          '" data-id="' + R.esc(tid) + '" data-field="' + R.esc(fid) +
+          '" data-v="' + R.esc(o.name) + '">' +
+          '<span class="opt-pill" style="background:' + R.esc(o.color) + '22;color:' +
+          R.esc(o.color) + '">' + R.esc(o.name) + '</span>' +
+          (on ? '<span style="margin-left:auto">' + I('check', 13) + '</span>' : '') +
+          '</button>';
+      });
+      cell.style.position = 'relative';
+      openPop(cell, oh);
+      return;
+    }
+
+    if (f.type === 'person') {
+      if (cell.querySelector('.pop')) { closePops(); return; }
+      var ph2 = '<button data-act="cell-set-option" data-id="' + R.esc(tid) + '" data-field="' +
+        R.esc(fid) + '" data-v="">' + L('ไม่ระบุ') + '</button>';
+      S.db.users.forEach(function (u) {
+        ph2 += '<button data-act="cell-set-option" data-id="' + R.esc(tid) + '" data-field="' +
+          R.esc(fid) + '" data-v="' + R.esc(u.id) + '">' + R.avatar(u) + ' ' +
+          R.esc(u.name) + '</button>';
+      });
+      cell.style.position = 'relative';
+      openPop(cell, ph2);
+      return;
+    }
+
+    var itype = f.type === 'number' ? 'number' : (f.type === 'date' ? 'date' : 'text');
+    inlineInput(cell, itype, cur == null ? '' : cur, function (v) {
+      if (f.type === 'number') S.setFieldValue(tid, fid, v === '' ? null : Number(v));
+      else S.setFieldValue(tid, fid, v || null);
+    });
+  }
+
+  /** วางช่องกรอกทับเซลล์ชั่วคราว บันทึกเมื่อกด Enter หรือคลิกที่อื่น */
+  function inlineInput(cell, type, value, onSave) {
+    var old = cell.innerHTML;
+    cell.innerHTML = '';
+    var inp = document.createElement('input');
+    inp.type = type;
+    inp.value = value;
+    inp.className = 'cell-input';
+    cell.appendChild(inp);
+    inp.focus();
+    if (type === 'text') inp.select();
+
+    var done = false;
+    function finish(save) {
+      if (done) return;
+      done = true;
+      var v = inp.value;
+      cell.innerHTML = old;
+      if (save) onSave(v);
+    }
+    inp.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter') { ev.preventDefault(); finish(true); }
+      else if (ev.key === 'Escape') { ev.preventDefault(); finish(false); }
+      ev.stopPropagation();
+    });
+    inp.addEventListener('click', function (ev) { ev.stopPropagation(); });
+    inp.addEventListener('blur', function () { finish(true); });
+  }
+
   /* ---------- modal ---------- */
 
   function openModal(html, wide) {
@@ -397,6 +513,43 @@
   }
 
   /* ---------- modal builders ---------- */
+
+  /** แถวตัวเลือกหนึ่งบรรทัดในหน้าต่างสร้างฟิลด์ */
+  function optionRow(name, color) {
+    return '<div class="opt-row">' +
+      '<button type="button" class="opt-dot" data-act="opt-color" style="background:' +
+      R.esc(color) + '"></button>' +
+      '<input class="opt-name" value="' + R.esc(name || '') +
+      '" placeholder="' + L('ชื่อตัวเลือก') + '">' +
+      '<button type="button" class="btn btn-sm btn-ghost" data-act="remove-option">' +
+      I('close', 13) + '</button></div>';
+  }
+
+  function addFieldModal(type) {
+    var ft = S.FIELD_TYPES.filter(function (x) { return x.id === type; })[0] || S.FIELD_TYPES[0];
+    var h = '<h2>' + L('เพิ่มฟิลด์') + '</h2>';
+
+    h += '<div class="field"><label>' + L('ชื่อฟิลด์') + ' *</label>' +
+      '<input id="nfName" placeholder="' + L('เช่น สถานะ, ผู้อนุมัติ, งบ') + '"></div>';
+
+    h += '<div class="field"><label>' + L('ชนิด') + '</label><select id="nfType" data-act="nf-type">';
+    S.FIELD_TYPES.forEach(function (x) {
+      h += '<option value="' + x.id + '"' + (x.id === ft.id ? ' selected' : '') +
+        '>' + L(x.label) + '</option>';
+    });
+    h += '</select></div>';
+
+    h += '<div class="field" id="nfOptWrap"' + (ft.hasOptions ? '' : ' style="display:none"') + '>' +
+      '<label>' + L('ตัวเลือก') + ' *</label><div id="nfOpts">' +
+      optionRow('', S.OPTION_COLORS[3]) + optionRow('', S.OPTION_COLORS[0]) + '</div>' +
+      '<button type="button" class="btn btn-sm btn-ghost" data-act="add-option">' +
+      I('plus', 13) + ' ' + L('เพิ่มตัวเลือก') + '</button></div>';
+
+    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') +
+      '</button><button class="btn btn-primary" data-act="create-field">' +
+      L('สร้างฟิลด์') + '</button></div>';
+    return h;
+  }
 
   function projectModal(existing) {
     var p = existing || { name: '', icon: '📁', color: S.PALETTE[0], description: '' };
@@ -886,6 +1039,120 @@
         state.tlScrollLeft = null;      // เข้าไทม์ไลน์ใหม่ ให้ไปหยุดที่วันนี้
         renderAll();
         break;
+
+      /* --- ฟิลด์ในตาราง --- */
+      case 'add-field-picker': {
+        if (el.parentNode.querySelector('.pop')) { closePops(); break; }
+        var fh = '<div class="ftype-list">';
+        S.FIELD_TYPES.forEach(function (x) {
+          fh += '<button class="ftype" data-act="pick-ftype" data-v="' + x.id + '">' +
+            I(x.icon, 15) + '<span>' + L(x.label) + '</span></button>';
+        });
+        fh += '</div>';
+        openPop(el, fh);
+        break;
+      }
+      case 'pick-ftype':
+        closePops();
+        openModal(addFieldModal(el.dataset.v));
+        break;
+      case 'add-option': {
+        var wrap = document.getElementById('nfOpts');
+        var n = wrap.children.length;
+        wrap.insertAdjacentHTML('beforeend',
+          optionRow('', S.OPTION_COLORS[n % S.OPTION_COLORS.length]));
+        break;
+      }
+      case 'remove-option': {
+        var row = el.closest('.opt-row');
+        if (row.parentNode.children.length > 1) row.remove();
+        else toast(L('ต้องมีอย่างน้อย 1 ตัวเลือก'));
+        break;
+      }
+      case 'opt-color': {
+        if (el.parentNode.querySelector('.pop')) { closePops(); break; }
+        var cur = el.style.background;
+        var ch = '<div class="opt-swatches">';
+        S.OPTION_COLORS.forEach(function (c) {
+          ch += '<button type="button" data-act="set-opt-color" data-c="' + c +
+            '" style="background:' + c + '"></button>';
+        });
+        ch += '</div>';
+        openPop(el, ch);
+        break;
+      }
+      case 'set-opt-color': {
+        var dot = el.closest('.opt-row').querySelector('.opt-dot');
+        dot.style.background = el.dataset.c;
+        closePops();
+        break;
+      }
+      case 'create-field': {
+        var nm = document.getElementById('nfName').value.trim();
+        if (!nm) { toast(L('ใส่ชื่อฟิลด์ก่อน')); break; }
+        var ty = document.getElementById('nfType').value;
+        var ftd = S.FIELD_TYPES.filter(function (x) { return x.id === ty; })[0];
+        var opts = [];
+        if (ftd && ftd.hasOptions) {
+          Array.prototype.forEach.call(document.querySelectorAll('#nfOpts .opt-row'), function (r) {
+            var v = r.querySelector('.opt-name').value.trim();
+            if (v) opts.push({ name: v, color: rgbToHex(r.querySelector('.opt-dot').style.background) });
+          });
+          if (!opts.length) { toast(L('ใส่ตัวเลือกอย่างน้อย 1 รายการ')); return; }
+        }
+        S.addField(state.route.id, { name: nm, type: ty, options: opts });
+        closeModal();
+        toast(L('เพิ่มฟิลด์แล้ว'));
+        break;
+      }
+      case 'field-menu': {
+        e.stopPropagation();
+        if (el.parentNode.querySelector('.pop')) { closePops(); break; }
+        var fid = el.dataset.field;
+        openPop(el,
+          '<button data-act="rename-field" data-field="' + R.esc(fid) + '">' +
+          I('pencil', 14) + ' ' + L('เปลี่ยนชื่อ') + '</button>' +
+          '<button data-act="drop-field" data-field="' + R.esc(fid) + '">' +
+          I('trash', 14) + ' ' + L('ลบ') + '</button>');
+        break;
+      }
+      case 'rename-field': {
+        closePops();
+        var pf = S.project(state.route.id).fields
+          .filter(function (x) { return x.id === el.dataset.field; })[0];
+        var nn2 = prompt(L('เปลี่ยนชื่อฟิลด์'), pf ? pf.name : '');
+        if (nn2 && nn2.trim()) S.renameField(state.route.id, el.dataset.field, nn2.trim());
+        break;
+      }
+      case 'drop-field': {
+        closePops();
+        if (!confirm(L('ลบฟิลด์นี้? ค่าที่กรอกไว้ทั้งหมดจะหายด้วย'))) break;
+        S.deleteField(state.route.id, el.dataset.field);
+        toast(L('ลบฟิลด์แล้ว'));
+        break;
+      }
+
+      /* --- แก้ค่าในเซลล์ --- */
+      case 'edit-cell':
+        e.stopPropagation();
+        editCell(el);
+        break;
+      case 'cell-set-assignee':
+        closePops();
+        S.updateTask(el.dataset.id, { assigneeId: el.dataset.user || null });
+        break;
+      case 'cell-set-option':
+        closePops();
+        S.setFieldValue(el.dataset.id, el.dataset.field, el.dataset.v || null);
+        break;
+      case 'cell-toggle-option': {
+        var tid2 = el.dataset.id, fid2 = el.dataset.field, ov = el.dataset.v;
+        var curv = [].concat(S.fieldValue(tid2, fid2) || []);
+        var at = curv.indexOf(ov);
+        if (at >= 0) curv.splice(at, 1); else curv.push(ov);
+        S.setFieldValue(tid2, fid2, curv.length ? curv : null);
+        break;
+      }
 
       /* --- gantt --- */
       case 'g-zoom':
@@ -1428,6 +1695,13 @@
       if (act === 'f-sort') v.sort = el.value;
       if (act === 'f-group') v.group = el.value;
       renderAll();
+      return;
+    }
+
+    if (act === 'nf-type') {
+      var ftx = S.FIELD_TYPES.filter(function (x) { return x.id === el.value; })[0];
+      var wrapx = document.getElementById('nfOptWrap');
+      if (wrapx) wrapx.style.display = (ftx && ftx.hasOptions) ? '' : 'none';
       return;
     }
 

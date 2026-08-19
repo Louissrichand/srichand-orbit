@@ -395,51 +395,165 @@
     return h;
   }
 
-  /* ---------- list view ---------- */
+  /* ---------- list view (ตาราง) ----------
+   * ทุกแถวเป็น grid ที่ใช้ template เดียวกัน คอลัมน์จึงตรงกันเสมอ
+   * คอลัมน์ชื่องาน sticky ไว้ซ้าย เลื่อนดูคอลัมน์อื่นแล้วยังเห็นว่าแถวไหน
+   */
+
+  var COL_W = 158;
+
+  function fieldOption(f, name) {
+    var o = (f.options || []).filter(function (x) { return x.name === name; })[0];
+    return o || { name: name, color: 'var(--fg-faint)' };
+  }
+
+  function optionPill(f, name) {
+    var o = fieldOption(f, name);
+    return '<span class="opt-pill" style="background:' + esc(o.color) + '22;color:' +
+      esc(o.color) + '">' + esc(o.name) + '</span>';
+  }
+
+  /** ค่าในเซลล์ตามชนิดฟิลด์ */
+  function fieldCell(t, f) {
+    var v = S.fieldValue(t.id, f.id);
+    if (v === null || v === undefined || v === '') return '<span class="cell-empty">—</span>';
+
+    if (f.type === 'select') return optionPill(f, v);
+    if (f.type === 'multi') {
+      var arr = [].concat(v);
+      return arr.map(function (x) { return optionPill(f, x); }).join('');
+    }
+    if (f.type === 'person') {
+      var u = S.user(v);
+      return u ? avatar(u, 'sm') + '<span class="cell-txt">' + esc(u.name) + '</span>'
+               : '<span class="cell-empty">—</span>';
+    }
+    if (f.type === 'date') return '<span class="cell-txt">' + fmtDate(v) + '</span>';
+    if (f.type === 'number') {
+      return '<span class="cell-txt num">' + esc(Number(v).toLocaleString()) + '</span>';
+    }
+    return '<span class="cell-txt">' + esc(v) + '</span>';
+  }
 
   function listView(projectId, view, sel) {
+    var p = S.project(projectId);
     var groups = S.viewGroups(projectId, view);
-    var h = '<div class="list-wrap">';
-    var total = 0;
+    var fields = p.fields || [];
 
+    var tpl = 'minmax(280px, 1.4fr) 168px 150px' +
+      (fields.length ? ' repeat(' + fields.length + ', ' + COL_W + 'px)' : '') + ' 46px';
+
+    var h = '<div class="tbl-wrap"><div class="tbl" style="--tpl:' + tpl + '">';
+
+    /* ---- หัวตาราง ---- */
+    h += '<div class="tbl-head">';
+    h += '<div class="th th-name">' + L('ชื่องาน') + '</div>';
+    h += '<div class="th">' + L('ผู้รับผิดชอบ') + '</div>';
+    h += '<div class="th">' + L('กำหนดส่ง') + '</div>';
+    fields.forEach(function (f) {
+      var ft = S.FIELD_TYPES.filter(function (x) { return x.id === f.type; })[0];
+      h += '<div class="th th-field" data-field="' + esc(f.id) + '">' +
+        (ft ? I(ft.icon, 13) : '') +
+        '<span class="th-nm">' + esc(f.name) + '</span>' +
+        '<button class="th-menu" data-act="field-menu" data-field="' + esc(f.id) +
+        '" title="' + L('เมนู') + '">' + I('chevronDown', 12) + '</button></div>';
+    });
+    h += '<div class="th th-add"><button class="addcol" data-act="add-field-picker" title="' +
+      L('เพิ่มฟิลด์') + '">' + I('plus', 15) + '</button></div>';
+    h += '</div>';
+
+    /* ---- แถวข้อมูล ---- */
+    var total = 0;
     groups.forEach(function (g) {
       total += g.items.length;
-      h += '<div class="sec"' + (g.isSection ? ' data-section="' + esc(g.key) + '"' : '') + '>';
-      h += '<div class="sec-head"><h3>' + esc(L(g.label)) + '</h3>' +
-           '<span class="n">' + g.items.length + '</span>';
+
+      h += '<div class="tbl-sec"' + (g.isSection ? ' data-section="' + esc(g.key) + '"' : '') + '>' +
+        '<span class="sec-nm">' + esc(L(g.label)) + '</span>' +
+        '<span class="sec-n">' + g.items.length + '</span>';
       if (g.isSection) {
-        h += '<span class="acts">' +
+        h += '<span class="sec-acts">' +
           '<button class="btn btn-sm btn-ghost" data-act="move-section" data-section="' +
-          esc(g.key) + '" data-delta="-1" title="' + L('ย้ายขึ้น') + '">↑' + '</button>' +
+          esc(g.key) + '" data-delta="-1" title="' + L('ย้ายขึ้น') + '">' + I('arrowUp', 14) + '</button>' +
           '<button class="btn btn-sm btn-ghost" data-act="move-section" data-section="' +
-          esc(g.key) + '" data-delta="1" title="' + L('ย้ายลง') + '">↓' + '</button>' +
+          esc(g.key) + '" data-delta="1" title="' + L('ย้ายลง') + '">' + I('arrowDown', 14) + '</button>' +
           '<button class="btn btn-sm btn-ghost" data-act="rename-section" data-section="' +
-          esc(g.key) + '">' + L('เปลี่ยนชื่อ') + '</button>' +
+          esc(g.key) + '" title="' + L('เปลี่ยนชื่อ') + '">' + I('pencil', 14) + '</button>' +
           '<button class="btn btn-sm btn-ghost" data-act="delete-section" data-section="' +
-          esc(g.key) + '">' + L('ลบ') + '</button></span>';
+          esc(g.key) + '" title="' + L('ลบ') + '">' + I('trash', 14) + '</button></span>';
       }
       h += '</div>';
+
       h += '<div class="sec-body"' + (g.isSection ? ' data-section="' + esc(g.key) + '"' : '') + '>';
       g.items.forEach(function (x) {
-        h += taskRow(x.task, {
-          sectionId: g.isSection ? g.key : null,
-          selectable: true, selected: !!sel[x.task.id]
+        var t = x.task;
+        var u = S.user(t.assigneeId);
+        var pr = prio(t.priority);
+        var subs = S.subtasks(t.id);
+        var blocked = !t.completed && S.isBlocked(t.id);
+
+        h += '<div class="tr' + (t.completed ? ' done' : '') + (sel[t.id] ? ' sel' : '') +
+          '" draggable="true" data-act="open-task" data-id="' + esc(t.id) + '"' +
+          (g.isSection ? ' data-section="' + esc(g.key) + '"' : '') + '>';
+
+        /* ชื่องาน */
+        h += '<div class="td td-name">' + selbox(t, !!sel[t.id]) + checkbox(t);
+        if (t.priority !== 'none') {
+          h += '<span class="prio-bar" style="background:' + pr.color + '" title="' +
+            L(pr.label) + '"></span>';
+        }
+        h += '<span class="nm">' + (t.type === 'milestone' ? I('diamond', 11) + ' ' : '') +
+          esc(t.name) + '</span>';
+        if (subs.length) {
+          h += '<span class="cell-mini">' + I('subtask', 11) + ' ' +
+            subs.filter(function (s) { return s.completed; }).length + '/' + subs.length + '</span>';
+        }
+        if (blocked) {
+          h += '<span class="cell-mini danger" title="' + L('รองานอื่นให้เสร็จก่อน') + '">' +
+            I('blocked', 11) + '</span>';
+        }
+        if (t.recur) h += '<span class="cell-mini">' + I('repeat', 11) + '</span>';
+        if (t.attachments.length) h += '<span class="cell-mini">' + I('paperclip', 11) + '</span>';
+        h += '</div>';
+
+        /* ผู้รับผิดชอบ */
+        h += '<div class="td td-edit" data-act="edit-cell" data-cell="assignee" data-id="' + esc(t.id) + '">' +
+          (u ? avatar(u, 'sm') + '<span class="cell-txt">' + esc(u.name) + '</span>'
+             : '<span class="cell-empty">' + L('ยังไม่มอบหมาย') + '</span>') + '</div>';
+
+        /* กำหนดส่ง */
+        h += '<div class="td td-edit' + dueClass(t.dueOn, t.completed) +
+          '" data-act="edit-cell" data-cell="due" data-id="' + esc(t.id) + '">' +
+          (t.dueOn ? '<span class="cell-txt">' + fmtDate(t.dueOn) + '</span>'
+                   : '<span class="cell-empty">—</span>') + '</div>';
+
+        /* ฟิลด์ที่สร้างเอง */
+        fields.forEach(function (f) {
+          h += '<div class="td td-edit" data-act="edit-cell" data-cell="field" data-id="' + esc(t.id) +
+            '" data-field="' + esc(f.id) + '">' + fieldCell(t, f) + '</div>';
         });
+
+        h += '<div class="td td-add"></div>';
+        h += '</div>';
       });
       h += '</div>';
+
       if (g.isSection) {
-        h += '<button class="add-row" data-act="inline-add" data-section="' + esc(g.key) +
-          '">+ ' + L('เพิ่มงาน') + '</button>';
+        h += '<div class="tbl-add"><button class="add-row" data-act="inline-add" data-section="' +
+          esc(g.key) + '">' + I('plus', 14) + ' ' + L('เพิ่มงาน') + '</button></div>';
       }
-      h += '</div>';
     });
 
+    h += '</div>';
+
     if (!total) {
-      h += '<div class="empty"><div class="big">🔍</div>' + L('ไม่มีงานที่ตรงกับตัวกรอง') +
-        '<div style="margin-top:12px"><button class="btn" data-act="reset-view">' + L('ล้างตัวกรอง') + '</button></div></div>';
+      h += '<div class="empty"><div class="big">' + I('search', 32) + '</div>' +
+        L('ไม่มีงานที่ตรงกับตัวกรอง') +
+        '<div style="margin-top:12px"><button class="btn" data-act="reset-view">' +
+        L('ล้างตัวกรอง') + '</button></div></div>';
     }
     if (view.group === 'section') {
-      h += '<button class="add-row" data-act="add-section" style="margin-top:14px">' + L('+ เพิ่มคอลัมน์') + '</button>';
+      h += '<div style="padding:10px 24px 60px"><button class="add-row" data-act="add-section">' +
+        I('plus', 14) + ' ' + L('เพิ่มคอลัมน์') + '</button></div>';
     }
     h += '</div>';
     return h;

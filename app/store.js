@@ -8,9 +8,9 @@
 
   var L = global.I18N.t;
 
-  var KEY = 'orbit.db.v3';
-  var LEGACY_KEYS = ['orbit.db.v2', 'orbit.db.v1', 'taskflow.db.v1'];   // ชื่อ/เวอร์ชันเดิม
-  var SCHEMA = 3;
+  var KEY = 'orbit.db.v4';
+  var LEGACY_KEYS = ['orbit.db.v3', 'orbit.db.v2', 'orbit.db.v1', 'taskflow.db.v1'];   // ชื่อ/เวอร์ชันเดิม
+  var SCHEMA = 4;
 
   /* ---------- utilities ---------- */
 
@@ -83,12 +83,18 @@
   ];
 
   var FIELD_TYPES = [
-    { id: 'text',   label: 'ข้อความ' },
-    { id: 'number', label: 'ตัวเลข' },
-    { id: 'select', label: 'ตัวเลือก' },
-    { id: 'date',   label: 'วันที่' },
-    { id: 'person', label: 'บุคคล' }
+    { id: 'select', label: 'ตัวเลือกเดียว', icon: 'chevronDown', hasOptions: true },
+    { id: 'multi',  label: 'หลายตัวเลือก', icon: 'subtask',      hasOptions: true },
+    { id: 'date',   label: 'วันที่',        icon: 'calendar' },
+    { id: 'person', label: 'บุคคล',         icon: 'users' },
+    { id: 'text',   label: 'ข้อความ',       icon: 'text' },
+    { id: 'number', label: 'ตัวเลข',        icon: 'hash' }
   ];
+
+  /* สีของตัวเลือกในฟิลด์ — อ่อนพอที่ตัวอักษรเข้มยังอ่านออก */
+  var OPTION_COLORS = ['#e8384f', '#fd612c', '#f5a623', '#37c5ab',
+                       '#14aaf5', '#796eff', '#aa62e3', '#e362e3',
+                       '#9ca0a8', '#4186e0'];
 
   var RECUR_FREQ = [
     { id: 'daily',   label: 'ทุกวัน' },
@@ -141,6 +147,16 @@
     return (list || []).map(function (d) {
       return (typeof d === "string") ? { id: d, type: "FS" } : d;
     }).filter(function (d) { return d && d.id; });
+  }
+
+  /** เดิมตัวเลือกเป็นข้อความล้วน ตอนนี้เก็บสีมาด้วย */
+  function normalizeOptions(list) {
+    return (list || []).map(function (o, i) {
+      if (typeof o === 'string') {
+        return { name: o, color: OPTION_COLORS[i % OPTION_COLORS.length] };
+      }
+      return { name: o.name, color: o.color || OPTION_COLORS[i % OPTION_COLORS.length] };
+    }).filter(function (o) { return o.name; });
   }
 
   /* ---------- seed ---------- */
@@ -314,6 +330,9 @@
     fieldValues.push({ taskId: shopTask.id, fieldId: 'f_budget', value: 50000 });
 
     tasks.forEach(function (t) { t.dependsOn = normalizeDeps(t.dependsOn); });
+    projects.forEach(function (p) {
+      p.fields.forEach(function (f) { f.options = normalizeOptions(f.options); });
+    });
 
     return {
       version: SCHEMA,
@@ -352,11 +371,17 @@
       d.version = 2;
     }
     if (!('lang' in (d.settings || {}))) d.settings.lang = null;
+    if (d.version < 4) {
+      d.projects.forEach(function (p) {
+        (p.fields || []).forEach(function (f) { f.options = normalizeOptions(f.options); });
+      });
+    }
     if (d.version < 3) {
       // เดิม dependsOn เก็บแค่ id ตอนนี้เก็บชนิดความสัมพันธ์มาด้วย
       d.tasks.forEach(function (t) { t.dependsOn = normalizeDeps(t.dependsOn); });
       d.version = 3;
     }
+    d.version = SCHEMA;
     return d;
   }
 
@@ -1090,14 +1115,16 @@
   }
 
   function setFieldValue(taskId, fieldId, value) {
+    var empty = (value === null || value === '' ||
+                 (value && value.length === 0 && typeof value !== 'number'));
     var fv = db.fieldValues.filter(function (v) {
       return v.taskId === taskId && v.fieldId === fieldId;
     })[0];
     if (fv) {
-      if (value === null || value === '') {
+      if (empty) {
         db.fieldValues = db.fieldValues.filter(function (v) { return v !== fv; });
       } else { fv.value = value; }
-    } else if (value !== null && value !== '') {
+    } else if (!empty) {
       db.fieldValues.push({ taskId: taskId, fieldId: fieldId, value: value });
     }
     commit();
@@ -1306,9 +1333,15 @@
     var p = project(projectId);
     p.fields.push({
       id: uid('f'), name: field.name || 'ฟิลด์ใหม่',
-      type: field.type || 'text', options: field.options || []
+      type: field.type || 'text', options: normalizeOptions(field.options)
     });
     commit();
+  }
+
+  function renameField(projectId, fieldId, name) {
+    var p = project(projectId);
+    var f = p.fields.filter(function (x) { return x.id === fieldId; })[0];
+    if (f && name) { f.name = name; commit(); }
   }
 
   function deleteField(projectId, fieldId) {
@@ -1482,7 +1515,8 @@
   global.Store = {
     PRIORITIES: PRIORITIES, TASK_TYPES: TASK_TYPES,
     APPROVAL_STATES: APPROVAL_STATES, PROJECT_STATES: PROJECT_STATES,
-    FIELD_TYPES: FIELD_TYPES, RECUR_FREQ: RECUR_FREQ, DEP_TYPES: DEP_TYPES,
+    FIELD_TYPES: FIELD_TYPES, OPTION_COLORS: OPTION_COLORS,
+    RECUR_FREQ: RECUR_FREQ, DEP_TYPES: DEP_TYPES,
     PALETTE: PALETTE,
     DUE_FILTERS: DUE_FILTERS, SORTS: SORTS, GROUPS: GROUPS,
 
@@ -1523,7 +1557,7 @@
     setProjectStatus: setProjectStatus, archiveProject: archiveProject,
     addSection: addSection, renameSection: renameSection,
     deleteSection: deleteSection, moveSection: moveSection,
-    addField: addField, deleteField: deleteField,
+    addField: addField, renameField: renameField, deleteField: deleteField,
     addRule: addRule, deleteRule: deleteRule,
     saveView: saveView, deleteSavedView: deleteSavedView,
     saveTaskTemplate: saveTaskTemplate, applyTaskTemplate: applyTaskTemplate,
