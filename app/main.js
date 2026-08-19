@@ -4,7 +4,7 @@
 (function (global) {
   'use strict';
 
-  var S = global.Store, R = global.Render, L = global.I18N.t;
+  var S = global.Store, R = global.Render, L = global.I18N.t, I = global.Icons.icon;
 
   var $sidebar = document.getElementById('sidebar');
   var $topbar  = document.getElementById('topbar');
@@ -428,14 +428,14 @@
     var p = S.project(projectId);
     var h = '<h2>' + R.esc(p.icon) + ' ' + R.esc(p.name) + '</h2>';
     h += '<div style="display:flex;flex-direction:column;gap:8px">' +
-      '<button class="btn" data-act="edit-project" data-id="' + R.esc(projectId) + '">✎ ' + L('แก้ไขชื่อ / สี / ไอคอน') + '</button>' +
-      '<button class="btn" data-act="update-status" data-id="' + R.esc(projectId) + '">◆ ' + L('อัปเดตสถานะโปรเจกต์') + '</button>' +
-      '<button class="btn" data-act="manage-fields" data-id="' + R.esc(projectId) + '">⊞ ' + L('จัดการฟิลด์') + '</button>' +
-      '<button class="btn" data-act="manage-rules" data-id="' + R.esc(projectId) + '">⚡ ' + L('กฎอัตโนมัติ') + '</button>' +
-      '<button class="btn" data-act="dup-project" data-id="' + R.esc(projectId) + '">⧉ ' + L('คัดลอกเป็นเทมเพลต') + '</button>' +
+      '<button class="btn" data-act="edit-project" data-id="' + R.esc(projectId) + '">' + I('pencil', 14) + ' ' + L('แก้ไขชื่อ / สี / ไอคอน') + '</button>' +
+      '<button class="btn" data-act="update-status" data-id="' + R.esc(projectId) + '">' + I('flag', 14) + ' ' + L('อัปเดตสถานะโปรเจกต์') + '</button>' +
+      '<button class="btn" data-act="manage-fields" data-id="' + R.esc(projectId) + '">' + I('filter', 14) + ' ' + L('จัดการฟิลด์') + '</button>' +
+      '<button class="btn" data-act="manage-rules" data-id="' + R.esc(projectId) + '">' + I('repeat', 14) + ' ' + L('กฎอัตโนมัติ') + '</button>' +
+      '<button class="btn" data-act="dup-project" data-id="' + R.esc(projectId) + '">' + I('copy', 14) + ' ' + L('คัดลอกเป็นเทมเพลต') + '</button>' +
       '<button class="btn" data-act="toggle-archive" data-id="' + R.esc(projectId) + '">' +
-      (p.archived ? L('↩ เอากลับจากคลัง') : L('📦 เก็บเข้าคลัง')) + '</button>' +
-      '<button class="btn btn-danger" data-act="delete-project" data-id="' + R.esc(projectId) + '">🗑 ' + L('ลบโปรเจกต์') + '</button>' +
+      (p.archived ? I('arrowLeft', 14) + ' ' + L('เอากลับจากคลัง') : I('archive', 14) + ' ' + L('เก็บเข้าคลัง')) + '</button>' +
+      '<button class="btn btn-danger" data-act="delete-project" data-id="' + R.esc(projectId) + '">' + I('trash', 14) + ' ' + L('ลบโปรเจกต์') + '</button>' +
       '</div>';
     h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
     return h;
@@ -445,10 +445,10 @@
     var t = S.task(taskId);
     var h = '<h2>' + R.esc(t.name) + '</h2>';
     h += '<div style="display:flex;flex-direction:column;gap:8px">' +
-      '<button class="btn" data-act="dup-task" data-id="' + R.esc(taskId) + '">⧉ ' + L('คัดลอกงาน') + '</button>' +
-      '<button class="btn" data-act="save-template" data-id="' + R.esc(taskId) + '">☆ ' + L('บันทึกเป็นเทมเพลต') + '</button>' +
-      '<button class="btn" data-act="copy-link" data-id="' + R.esc(taskId) + '">🔗 ' + L('คัดลอกลิงก์ของงานนี้') + '</button>' +
-      '<button class="btn btn-danger" data-act="delete-task" data-id="' + R.esc(taskId) + '">🗑 ' + L('ลบงาน') + '</button>' +
+      '<button class="btn" data-act="dup-task" data-id="' + R.esc(taskId) + '">' + I('copy', 14) + ' ' + L('คัดลอกงาน') + '</button>' +
+      '<button class="btn" data-act="save-template" data-id="' + R.esc(taskId) + '">' + I('star', 14) + ' ' + L('บันทึกเป็นเทมเพลต') + '</button>' +
+      '<button class="btn" data-act="copy-link" data-id="' + R.esc(taskId) + '">' + I('link', 14) + ' ' + L('คัดลอกลิงก์ของงานนี้') + '</button>' +
+      '<button class="btn btn-danger" data-act="delete-task" data-id="' + R.esc(taskId) + '">' + I('trash', 14) + ' ' + L('ลบงาน') + '</button>' +
       '</div>';
     h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
     return h;
@@ -711,12 +711,12 @@
     }
 
     h += '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-      '<button class="btn" data-act="export">' + L('⬇ ดาวน์โหลดสำรอง') + '</button>' +
-      '<button class="btn" data-act="import">' + L('⬆ กู้คืนจากไฟล์') + '</button>' +
-      '<button class="btn" data-act="manage-templates">' + L('☆ เทมเพลตงาน') + '</button></div>';
+      '<button class="btn" data-act="export">' + I('arrowDown', 14) + ' ' + L('ดาวน์โหลดสำรอง') + '</button>' +
+      '<button class="btn" data-act="import">' + I('arrowUp', 14) + ' ' + L('กู้คืนจากไฟล์') + '</button>' +
+      '<button class="btn" data-act="manage-templates">' + I('star', 14) + ' ' + L('เทมเพลตงาน') + '</button></div>';
     h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">' +
-      '<button class="btn" data-act="copy-backup">' + L('📋 คัดลอกข้อมูล') + '</button>' +
-      '<button class="btn" data-act="paste-backup">' + L('📥 วางข้อมูลกู้คืน') + '</button>' +
+      '<button class="btn" data-act="copy-backup">' + I('copy', 14) + ' ' + L('คัดลอกข้อมูล') + '</button>' +
+      '<button class="btn" data-act="paste-backup">' + I('paperclip', 14) + ' ' + L('วางข้อมูลกู้คืน') + '</button>' +
       '<button class="btn btn-danger" data-act="reset">' + L('ล้างและเริ่มใหม่') + '</button></div>';
     h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
     return h;

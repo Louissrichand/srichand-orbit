@@ -403,6 +403,7 @@
 
     '” ?\nงานที่อยู่เฉพาะในโปรเจกต์นี้จะถูกลบด้วย': '”?\nTasks that live only here will be deleted too',
 
+    'เอากลับจากคลัง': 'Restore from archive',
     /* --- ชื่อเดือน / วัน --- */
     '__monthsShort': 'Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec',
     '__monthsFull': 'January,February,March,April,May,June,July,August,September,October,November,December',

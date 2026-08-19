@@ -6,7 +6,7 @@
 (function (global) {
   'use strict';
 
-  var S = global.Store, L = global.I18N.t;
+  var S = global.Store, L = global.I18N.t, I = global.Icons.icon;
 
   function MON()  { return global.I18N.monthsShort(); }
   function MONF() { return global.I18N.monthsFull(); }
@@ -114,15 +114,15 @@
 
     h += '<div class="sb-section">';
     h += '<button class="sb-item' + (route.type === 'mytasks' ? ' active' : '') +
-         '" data-act="go" data-route="mytasks"><span class="emoji">✓</span>' +
+         '" data-act="go" data-route="mytasks">' + I('checkCircle') + '' +
          '<span class="grow">' + L('งานของฉัน') + '</span>' +
          (mineCount ? '<span class="count">' + mineCount + '</span>' : '') + '</button>';
     h += '<button class="sb-item' + (route.type === 'inbox' ? ' active' : '') +
-         '" data-act="go" data-route="inbox"><span class="emoji">🔔</span>' +
+         '" data-act="go" data-route="inbox">' + I('bell') + '' +
          '<span class="grow">' + L('กล่องข้อความ') + '</span>' +
          (unread ? '<span class="count alert">' + unread + '</span>' : '') + '</button>';
     h += '<button class="sb-item' + (route.type === 'calendar' ? ' active' : '') +
-         '" data-act="go" data-route="calendar"><span class="emoji">📅</span>' +
+         '" data-act="go" data-route="calendar">' + I('calendar') + '' +
          '<span class="grow">' + L('ปฏิทินรวม') + '</span></button>';
     h += '</div>';
 
@@ -145,17 +145,17 @@
         h += '<button class="sb-item' +
           (route.type === 'project' && route.id === p.id ? ' active' : '') +
           '" data-act="go" data-route="project" data-id="' + esc(p.id) + '">' +
-          '<span class="emoji">📦</span><span class="grow">' + esc(p.name) + '</span></button>';
+          '' + I('archive') + '<span class="grow">' + esc(p.name) + '</span></button>';
       });
     }
     h += '</div>';
 
     h += '<div class="sb-foot">';
-    h += '<button class="sb-item" data-act="show-shortcuts"><span class="emoji">⌨</span>' +
+    h += '<button class="sb-item" data-act="show-shortcuts">' + I('keyboard') + '' +
          '<span class="grow">' + L('คีย์ลัด') + '</span></button>';
-    h += '<button class="sb-item" data-act="manage-members"><span class="emoji">👥</span>' +
+    h += '<button class="sb-item" data-act="manage-members">' + I('users') + '' +
          '<span class="grow">' + L('สมาชิกทีม') + '</span></button>';
-    h += '<button class="sb-item" data-act="open-settings"><span class="emoji">⚙️</span>' +
+    h += '<button class="sb-item" data-act="open-settings">' + I('settings') + '' +
          '<span class="grow">' + L('ตั้งค่า / สำรองข้อมูล') + '</span></button>';
     h += '<button class="sb-user" data-act="switch-user">' + avatar(me, 'lg') +
          '<span class="meta"><span class="nm">' + esc(me ? me.name : '-') + '</span>' +
@@ -179,7 +179,7 @@
 
   function topbar(route) {
     var h = '<div class="tb-row">';
-    h += '<button class="menu-btn" data-act="toggle-sidebar" title="' + L('เมนู') + '">☰</button>';
+    h += '<button class="menu-btn" data-act="toggle-sidebar" title="' + L('เมนู') + '">' + I('menu') + '</button>';
 
     if (route.type === 'project') {
       var p = S.project(route.id);
@@ -196,11 +196,11 @@
         (p.description ? '<div class="tb-desc">' + esc(p.description) + '</div>' : '') +
         '</div>';
     } else if (route.type === 'mytasks') {
-      h += '<div class="tb-title">' + L('✓ งานของฉัน') + '</div>';
+      h += '<div class="tb-title">' + I('checkCircle', 20) + ' ' + L('งานของฉัน') + '</div>';
     } else if (route.type === 'inbox') {
-      h += '<div class="tb-title">' + L('🔔 กล่องข้อความ') + '</div>';
+      h += '<div class="tb-title">' + I('bell', 20) + ' ' + L('กล่องข้อความ') + '</div>';
     } else if (route.type === 'calendar') {
-      h += '<div class="tb-title">' + L('📅 ปฏิทินรวม') + '</div>';
+      h += '<div class="tb-title">' + I('calendar', 20) + ' ' + L('ปฏิทินรวม') + '</div>';
     } else if (route.type === 'search') {
       h += '<div class="tb-title">' + L('ผลการค้นหา “') + esc(route.q) + '”</div>';
     }
@@ -213,7 +213,7 @@
     if (route.type === 'project') {
       h += '<button class="btn btn-primary" data-act="quick-add">' + L('+ เพิ่มงาน') + '</button>';
       h += '<button class="btn btn-ghost" data-act="project-menu" data-id="' +
-           esc(route.id) + '" title="' + L('เมนูโปรเจกต์') + '">⋯' + '</button>';
+           esc(route.id) + '" title="' + L('เมนูโปรเจกต์') + '">' + I('more') + '</button>';
     } else if (route.type === 'inbox') {
       h += '<button class="btn" data-act="inbox-read-all">' + L('อ่านทั้งหมด') + '</button>';
       h += '<button class="btn" data-act="inbox-archive-all">' + L('เก็บทั้งหมด') + '</button>';
@@ -321,24 +321,24 @@
   /** ป้ายสถานะย่อย ๆ ที่ใช้ทั้งในแถวและการ์ด */
   function badges(t, opts) {
     var h = '';
-    if (t.type === 'milestone') h += '<span class="chip">' + L('◆ หมุดหมาย') + '</span>';
+    if (t.type === 'milestone') h += '<span class="chip">' + I('diamond', 11) + ' ' + L('หมุดหมาย') + '</span>';
     if (t.type === 'approval') {
       var a = approvalState(t.approval);
       h += '<span class="approval-pill" style="background:' + a.color + '22;color:' + a.color +
         '">' + esc(L(a.label)) + '</span>';
     }
     if (!t.completed && S.isBlocked(t.id)) {
-      h += '<span class="chip blocked" title="' + L('รองานอื่นให้เสร็จก่อน') + '">' + L('⛔ ถูกบล็อก') + '</span>';
+      h += '<span class="chip blocked" title="' + L('รองานอื่นให้เสร็จก่อน') + '">' + I('blocked', 11) + ' ' + L('ถูกบล็อก') + '</span>';
     }
-    if (t.recur) h += '<span class="chip recur" title="' + L('ทำซ้ำ') + '">↻ ' + esc(recurLabel(t.recur)) + '</span>';
+    if (t.recur) h += '<span class="chip recur" title="' + L('ทำซ้ำ') + '">' + I('repeat', 11) + ' ' + esc(recurLabel(t.recur)) + '</span>';
 
     var subs = S.subtasks(t.id);
     if (subs.length) {
       var doneSubs = subs.filter(function (s) { return s.completed; }).length;
-      h += '<span class="chip">☑ ' + doneSubs + '/' + subs.length + '</span>';
+      h += '<span class="chip">' + I('subtask', 11) + ' ' + doneSubs + '/' + subs.length + '</span>';
     }
-    if (t.attachments.length) h += '<span class="chip">📎 ' + t.attachments.length + '</span>';
-    if (t.likes.length) h += '<span class="chip">♥ ' + t.likes.length + '</span>';
+    if (t.attachments.length) h += '<span class="chip">' + I('paperclip', 11) + ' ' + t.attachments.length + '</span>';
+    if (t.likes.length) h += '<span class="chip">' + I('heart', 11) + ' ' + t.likes.length + '</span>';
     t.tags.forEach(function (tg) { h += '<span class="chip tag">' + esc(tg) + '</span>'; });
 
     if (opts && opts.showProject) {
@@ -462,9 +462,9 @@
           '<button class="btn btn-sm btn-ghost" data-act="move-section" data-section="' +
           esc(g.key) + '" data-delta="1" title="' + L('ย้ายขวา') + '">›' + '</button>' +
           '<button class="btn btn-sm btn-ghost" data-act="rename-section" data-section="' +
-          esc(g.key) + '" title="' + L('เปลี่ยนชื่อ') + '">✎' + '</button>' +
+          esc(g.key) + '" title="' + L('เปลี่ยนชื่อ') + '">' + I('pencil', 14) + '</button>' +
           '<button class="btn btn-sm btn-ghost" data-act="delete-section" data-section="' +
-          esc(g.key) + '" title="' + L('ลบ') + '">🗑' + '</button></span>';
+          esc(g.key) + '" title="' + L('ลบ') + '">' + I('trash', 14) + '</button></span>';
       }
       h += '</div>';
       h += '<div class="col-body"' + (g.isSection ? ' data-section="' + esc(g.key) + '"' : '') + '>';
@@ -579,7 +579,7 @@
           '" data-tid="' + esc(t.id) + '" data-role="move" title="' + esc(t.name) +
           ' ' + L('— ลากเพื่อเลื่อนวัน') + '" style="left:' + (x0 + DAY_W / 2 - 9) + 'px;background:' +
           color + '"></div>';
-        h += '<div class="tl-label" style="left:' + (x0 + DAY_W / 2 + 14) + 'px">◆ ' +
+        h += '<div class="tl-label" style="left:' + (x0 + DAY_W / 2 + 14) + 'px">' + I('diamond', 11) + ' ' +
           esc(t.name) + '</div>';
       } else {
         var blocked = !t.completed && S.isBlocked(t.id);
@@ -806,9 +806,9 @@
 
     var h = '<div class="cal">';
     h += '<div class="cal-head">' +
-      '<button class="btn btn-sm" data-act="cal-prev">‹</button>' +
+      '<button class="btn btn-sm" data-act="cal-prev">' + I('arrowLeft', 14) + '</button>' +
       '<strong style="font-size:15px">' + MONF()[month] + ' ' + YR(year) + '</strong>' +
-      '<button class="btn btn-sm" data-act="cal-next">›</button>' +
+      '<button class="btn btn-sm" data-act="cal-next">' + I('arrowRight', 14) + '</button>' +
       '<button class="btn btn-sm btn-ghost" data-act="cal-today">' + L('วันนี้') + '</button></div>';
 
     h += '<div class="cal-grid">';
@@ -826,7 +826,7 @@
         var over = !task.completed && task.dueOn < t;
         h += '<div class="cal-task' + (task.completed ? ' done' : (over ? ' over' : '')) +
           '" data-act="open-task" data-id="' + esc(task.id) + '" title="' + esc(task.name) + '">' +
-          (task.type === 'milestone' ? '◆ ' : '') + esc(task.name) + '</div>';
+          (task.type === 'milestone' ? I('diamond', 10) + ' ' : '') + esc(task.name) + '</div>';
       });
       var extra = (byDate[key] || []).length - 4;
       if (extra > 0) h += '<div class="d">+' + extra + ' ' + L('อื่น ๆ') + '</div>';
@@ -911,14 +911,14 @@
       (t.completed ? L('ทำเสร็จแล้ว') : L('ทำเครื่องหมายว่าเสร็จ')) + '</span>' +
       '<div style="flex:1"></div>' +
       '<button class="btn btn-sm btn-ghost" data-act="toggle-like" data-id="' + esc(t.id) +
-      '" title="' + L('ถูกใจ') + '" style="' + (liked ? 'color:var(--danger)' : '') + '">♥ ' +
+      '" title="' + L('ถูกใจ') + '" style="' + (liked ? 'color:var(--danger)' : '') + '">' + I('heart') + ' ' +
       (t.likes.length || '') + '</button>' +
       '<button class="btn btn-sm btn-ghost" data-act="toggle-follow" data-id="' + esc(t.id) +
       '" title="' + (following ? L('เลิกติดตาม') : L('ติดตาม')) + '">' +
-      (following ? '🔔' : '🔕') + '</button>' +
+      I('bell') + '</button>' +
       '<button class="btn btn-sm btn-ghost" data-act="task-menu" data-id="' + esc(t.id) +
-      '" title="' + L('เมนู') + '">⋯' + '</button>' +
-      '<button class="btn btn-sm btn-ghost" data-act="close-drawer" title="' + L('ปิด') + '">✕</button></div>';
+      '" title="' + L('เมนู') + '">' + I('more') + '</button>' +
+      '<button class="btn btn-sm btn-ghost" data-act="close-drawer" title="' + L('ปิด') + '">' + I('close', 13) + '</button></div>';
 
     h += '<div class="dw-body">';
 
@@ -927,7 +927,7 @@
 
     var blockers = S.blockers(t.id);
     if (blockers.length && !t.completed) {
-      h += '<div class="dw-banner">' + L('⛔ รออยู่:') + ' ' +
+      h += '<div class="dw-banner">' + I('blocked') + ' ' + L('รออยู่:') + ' ' +
         blockers.map(function (b) { return esc(b.name); }).join(', ') + '</div>';
     }
 
@@ -994,7 +994,7 @@
         esc(x.project.color) + '"></span>' + esc(x.project.name) +
         (sec ? ' · ' + esc(sec.name) : '') +
         (homes.length > 1 ? '<button data-act="unhome" data-id="' + esc(t.id) +
-          '" data-project="' + esc(x.project.id) + '">✕</button>' : '') + '</span>';
+          '" data-project="' + esc(x.project.id) + '">' + I('close', 13) + '</button>' : '') + '</span>';
     });
     h += '<button class="btn btn-sm btn-ghost" data-act="add-home" data-id="' + esc(t.id) +
       '">+ ' + L('เพิ่มโปรเจกต์') + '</button></div></div>';
@@ -1004,7 +1004,7 @@
     t.tags.forEach(function (tg) {
       h += '<span class="chip tag" style="margin:0 5px 5px 0">' + esc(tg) +
         '<button data-act="remove-tag" data-id="' + esc(t.id) + '" data-tag="' + esc(tg) +
-        '">✕</button></span>';
+        '">' + I('close', 13) + '</button></span>';
     });
     h += '<button class="btn btn-sm btn-ghost" data-act="add-tag" data-id="' + esc(t.id) +
       '">+ ' + L('แท็ก') + '</button></div></div>';
@@ -1067,7 +1067,7 @@
             '>' + esc(L(d.label)) + '</option>';
         }).join('') + '</select>' +
         '<button class="btn btn-sm btn-ghost" data-act="remove-dependency" data-id="' + esc(t.id) +
-        '" data-blocker="' + esc(b.id) + '">✕</button></div>';
+        '" data-blocker="' + esc(b.id) + '">' + I('close', 13) + '</button></div>';
     });
     blocks.forEach(function (b) {
       h += '<div class="dep-row"><span class="dot" style="background:var(--fg-faint)"></span>' +
@@ -1084,11 +1084,11 @@
       h += '<div style="font-size:13px;color:var(--fg-faint)">' + L('ยังไม่มีไฟล์แนบ') + '</div>';
     }
     t.attachments.forEach(function (a) {
-      h += '<div class="att-row"><span>📎</span><span class="nm">' +
+      h += '<div class="att-row">' + I('paperclip', 14) + '<span class="nm">' +
         (a.url ? '<a href="' + esc(a.url) + '" target="_blank" rel="noopener">' + esc(a.name) + '</a>'
                : esc(a.name)) + '</span>' +
         '<button class="btn btn-sm btn-ghost" data-act="remove-attachment" data-id="' + esc(t.id) +
-        '" data-att="' + esc(a.id) + '">✕</button></div>';
+        '" data-att="' + esc(a.id) + '">' + I('close', 13) + '</button></div>';
     });
 
     // ผู้ติดตาม
@@ -1101,7 +1101,7 @@
       if (!fu) return;
       h += '<span class="chip">' + avatar(fu, 'sm') + esc(fu.name) +
         '<button data-act="remove-follower" data-id="' + esc(t.id) + '" data-user="' +
-        esc(fid) + '">✕</button></span>';
+        esc(fid) + '">' + I('close', 13) + '</button></span>';
     });
     if (!t.followers.length) h += '<span style="font-size:13px;color:var(--fg-faint)">' + L('ยังไม่มี') + '</span>';
     h += '</div></div>';
@@ -1114,7 +1114,7 @@
         '<span class="nm" data-act="open-task" data-id="' + esc(s.id) +
         '" style="cursor:pointer">' + esc(s.name) + '</span>' +
         avatar(S.user(s.assigneeId), 'sm') +
-        '<button class="x" data-act="delete-task" data-id="' + esc(s.id) + '">✕</button></div>';
+        '<button class="x" data-act="delete-task" data-id="' + esc(s.id) + '">' + I('close', 13) + '</button></div>';
     });
     h += '<button class="add-row" data-act="add-subtask" data-id="' + esc(t.id) +
       '">+ ' + L('เพิ่มงานย่อย') + '</button>';

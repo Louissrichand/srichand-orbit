@@ -7,7 +7,7 @@
 (function (global) {
   'use strict';
 
-  var S = global.Store, R = global.Render, L = global.I18N.t;
+  var S = global.Store, R = global.Render, L = global.I18N.t, I = global.Icons.icon;
 
   var G_ZOOMS = {
     day:     { w: 30,  top: 'month',   bottom: 'day' },
@@ -164,7 +164,7 @@
         '" data-row="' + i + '" data-act="open-task" data-id="' + esc(t.id) + '">' +
         '<span class="g-caret"></span>' +
         '<span class="g-c-name">' + R.checkbox(t) +
-        '<span class="g-nm">' + (t.type === 'milestone' ? '◆ ' : '') + esc(t.name) + '</span>' +
+        '<span class="g-nm">' + (t.type === 'milestone' ? I('diamond', 10) + ' ' : '') + esc(t.name) + '</span>' +
         R.avatar(S.user(t.assigneeId), 'sm') + '</span>' +
         '<span class="g-c-due' + R.dueClass(t.dueOn, t.completed) + '">' + due + '</span>' +
         '<span class="g-c-dep">' + (depHtml || '<span class="g-muted">—</span>') + '</span>' +

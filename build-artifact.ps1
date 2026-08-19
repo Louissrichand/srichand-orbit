@@ -11,6 +11,7 @@ function ReadUtf8($p) { [System.IO.File]::ReadAllText($p, [System.Text.Encoding]
 $index  = ReadUtf8 (Join-Path $base 'index.html')
 $css    = ReadUtf8 (Join-Path $base 'assets\styles.css')
 $i18n   = ReadUtf8 (Join-Path $base 'app\i18n.js')
+$icons  = ReadUtf8 (Join-Path $base 'app\icons.js')
 $store  = ReadUtf8 (Join-Path $base 'app\store.js')
 $render = ReadUtf8 (Join-Path $base 'app\render.js')
 $gantt  = ReadUtf8 (Join-Path $base 'app\gantt.js')
@@ -31,7 +32,7 @@ $sb = New-Object System.Text.StringBuilder
 [void]$sb.AppendLine($css)
 [void]$sb.AppendLine('</style>')
 [void]$sb.AppendLine($markup)
-foreach ($js in @($i18n, $store, $render, $gantt, $main)) {
+foreach ($js in @($i18n, $icons, $store, $render, $gantt, $main)) {
   [void]$sb.AppendLine('<script>')
   [void]$sb.AppendLine($js)
   [void]$sb.AppendLine('</script>')
