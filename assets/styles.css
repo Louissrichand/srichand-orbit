@@ -1328,3 +1328,15 @@ body.col-resizing .col-resize::after { background: var(--accent); }
   width: 2px; background: transparent; transition: background .12s;
 }
 .g-left-grip:hover::after, body.col-resizing .g-left-grip::after { background: var(--accent); }
+
+/* ---------- เมนูลอย ----------
+ * ผูกกับ body และวางด้วยพิกัดจริง จึงไม่ถูก overflow ของตารางตัด
+ */
+.pop {
+  position: fixed; top: auto; left: auto; right: auto;
+  z-index: 200; min-width: 210px; max-height: 340px; overflow-y: auto;
+  background: var(--bg-raise); border: 1px solid var(--line);
+  border-radius: var(--radius); box-shadow: var(--shadow-lg); padding: 5px;
+}
+.th-add .pop, .th-field .pop { top: auto; left: auto; right: auto; }
+.pop button { gap: 9px; }

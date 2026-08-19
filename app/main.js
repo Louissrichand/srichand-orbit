@@ -325,7 +325,7 @@
     if (!t) return;
 
     if (kind === 'assignee') {
-      if (cell.querySelector('.pop')) { closePops(); return; }
+      if (popIsOpenFor(cell)) { closePops(); return; }
       var ah = '<button data-act="cell-set-assignee" data-id="' + R.esc(tid) +
         '" data-user="">' + R.avatar(null) + ' ' + L('ยังไม่มอบหมาย') + '</button>';
       S.db.users.forEach(function (u) {
@@ -348,7 +348,7 @@
     var cur = S.fieldValue(tid, fid);
 
     if (f.type === 'select' || f.type === 'multi') {
-      if (cell.querySelector('.pop')) { closePops(); return; }
+      if (popIsOpenFor(cell)) { closePops(); return; }
       var multi = f.type === 'multi';
       var chosen = multi ? [].concat(cur || []) : [cur];
       var oh = '';
@@ -372,7 +372,7 @@
     }
 
     if (f.type === 'person') {
-      if (cell.querySelector('.pop')) { closePops(); return; }
+      if (popIsOpenFor(cell)) { closePops(); return; }
       var ph2 = '<button data-act="cell-set-option" data-id="' + R.esc(tid) + '" data-field="' +
         R.esc(fid) + '" data-v="">' + L('ไม่ระบุ') + '</button>';
       S.db.users.forEach(function (u) {
@@ -437,34 +437,48 @@
 
   function closePops() {
     Array.prototype.forEach.call(document.querySelectorAll('.pop'), function (p) { p.remove(); });
+    popAnchor = null;
   }
-  function openPop(anchorBtn, html) {
+  /* เมนูลอยผูกไว้กับ body และวางด้วยพิกัดจริง
+   * ถ้าแปะไว้ในตารางจะโดน overflow:hidden ของหัวคอลัมน์และกรอบเลื่อนตัดหายไป */
+  var popAnchor = null;
+
+  function openPop(anchorEl, html) {
+    var same = popAnchor === anchorEl && document.querySelector('.pop');
     closePops();
+    if (same) return null;
+
     var pop = document.createElement('div');
     pop.className = 'pop';
     pop.innerHTML = html;
-    anchorBtn.parentNode.appendChild(pop);
-    keepInView(pop);
+    document.body.appendChild(pop);
+    popAnchor = anchorEl;
+
+    var a = anchorEl.getBoundingClientRect();
+    pop.style.top = (a.bottom + 5) + 'px';
+    pop.style.left = a.left + 'px';
+    keepInView(pop, a);
     return pop;
   }
 
-  /** ดันกลับเข้าจอถ้าล้นขอบ — ปุ่มที่อยู่ริมขวาหรือใกล้ก้นจอจะเปิดเมนูออกนอกจอได้ */
-  function keepInView(pop) {
-    var r = pop.getBoundingClientRect();
+  function popIsOpenFor(el) {
+    return popAnchor === el && !!document.querySelector('.pop');
+  }
+
+  /** ดันกลับเข้าจอถ้าล้นขอบ ปุ่มริมขวาหรือใกล้ก้นจอจะเปิดเมนูออกนอกจอได้ */
+  function keepInView(pop, anchorRect) {
     var pad = 8;
+    var r = pop.getBoundingClientRect();
+
     if (r.right > global.innerWidth - pad) {
-      pop.style.left = 'auto';
-      pop.style.right = '0';
-      r = pop.getBoundingClientRect();
-      if (r.left < pad) {
-        pop.style.right = 'auto';
-        pop.style.left = (pad - pop.parentNode.getBoundingClientRect().left) + 'px';
-      }
+      pop.style.left = Math.max(pad, global.innerWidth - pad - r.width) + 'px';
     }
     r = pop.getBoundingClientRect();
     if (r.bottom > global.innerHeight - pad) {
-      var over = r.bottom - (global.innerHeight - pad);
-      pop.style.maxHeight = Math.max(160, r.height - over) + 'px';
+      // ถ้าใต้ปุ่มไม่พอ ให้พลิกไปอยู่เหนือปุ่มแทน
+      var above = anchorRect ? anchorRect.top - 5 - r.height : 0;
+      if (anchorRect && above > pad) pop.style.top = above + 'px';
+      else pop.style.maxHeight = Math.max(150, global.innerHeight - pad - r.top) + 'px';
     }
   }
 
@@ -1031,7 +1045,8 @@
     }
     var el = e.target.closest ? e.target.closest('[data-act]') : null;
 
-    if (!el || ['pick-assignee', 'pick-priority', 'pick-follower'].indexOf(el.dataset.act) < 0) {
+    if (!el || ['pick-assignee', 'pick-priority', 'pick-follower',
+         'add-field-picker', 'field-menu', 'opt-color', 'edit-cell'].indexOf(el.dataset.act) < 0) {
       if (!e.target.closest || !e.target.closest('.pop')) closePops();
     }
 
@@ -1071,7 +1086,7 @@
 
       /* --- ฟิลด์ในตาราง --- */
       case 'add-field-picker': {
-        if (el.parentNode.querySelector('.pop')) { closePops(); break; }
+        if (popIsOpenFor(el)) { closePops(); break; }
         var fh = '<div class="ftype-list">';
         S.FIELD_TYPES.forEach(function (x) {
           fh += '<button class="ftype" data-act="pick-ftype" data-v="' + x.id + '">' +
@@ -1099,7 +1114,7 @@
         break;
       }
       case 'opt-color': {
-        if (el.parentNode.querySelector('.pop')) { closePops(); break; }
+        if (popIsOpenFor(el)) { closePops(); break; }
         var cur = el.style.background;
         var ch = '<div class="opt-swatches">';
         S.OPTION_COLORS.forEach(function (c) {
@@ -1136,7 +1151,7 @@
       }
       case 'field-menu': {
         e.stopPropagation();
-        if (el.parentNode.querySelector('.pop')) { closePops(); break; }
+        if (popIsOpenFor(el)) { closePops(); break; }
         var fid = el.dataset.field;
         openPop(el,
           '<button data-act="rename-field" data-field="' + R.esc(fid) + '">' +
@@ -1328,7 +1343,7 @@
 
       /* --- pickers --- */
       case 'pick-assignee': {
-        if (el.parentNode.querySelector('.pop')) { closePops(); break; }
+        if (popIsOpenFor(el)) { closePops(); break; }
         var ph = '<button data-act="set-assignee" data-id="' + R.esc(state.openTaskId) +
           '" data-user="">' + R.avatar(null) + ' ' + L('ยังไม่มอบหมาย') + '</button>';
         S.db.users.forEach(function (u) {
@@ -1343,7 +1358,7 @@
         S.updateTask(id, { assigneeId: el.dataset.user || null });
         break;
       case 'pick-priority': {
-        if (el.parentNode.querySelector('.pop')) { closePops(); break; }
+        if (popIsOpenFor(el)) { closePops(); break; }
         var qh = '';
         S.PRIORITIES.forEach(function (p) {
           qh += '<button data-act="set-priority" data-id="' + R.esc(state.openTaskId) +
@@ -1361,7 +1376,7 @@
         S.updateTask(id, { approval: el.dataset.v });
         break;
       case 'pick-follower': {
-        if (el.parentNode.querySelector('.pop')) { closePops(); break; }
+        if (popIsOpenFor(el)) { closePops(); break; }
         var fh = '';
         S.db.users.forEach(function (u) {
           fh += '<button data-act="do-follow" data-id="' + R.esc(id) + '" data-user="' +
