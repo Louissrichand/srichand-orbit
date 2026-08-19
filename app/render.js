@@ -403,6 +403,12 @@
 
   var COL_W = 158;
 
+  /** ที่จับลากปรับความกว้าง วางไว้ท้ายหัวคอลัมน์ */
+  function resizer(key) {
+    return '<span class="col-resize" data-act="col-resize" data-col="' + esc(key) +
+      '" title="' + L('ลากเพื่อปรับความกว้าง') + '"></span>';
+  }
+
   function fieldOption(f, name) {
     var o = (f.options || []).filter(function (x) { return x.name === name; })[0];
     return o || { name: name, color: 'var(--fg-faint)' };
@@ -441,25 +447,34 @@
     var groups = S.viewGroups(projectId, view);
     var fields = p.fields || [];
 
-    // ความกว้างคอลัมน์ชื่อมาจาก CSS (--nameW) เพื่อให้ย่อขยายหน้าต่างแล้วปรับตามเอง
+    // ความกว้างมาจากที่ผู้ใช้ลากไว้ ถ้ายังไม่เคยลากใช้ค่าตั้งต้น
     // ไม่ใช้หน่วย fr เพราะ fr จะยืดจนดันคอลัมน์อื่นไปชิดขวา
-    var tpl = 'var(--nameW) 170px 148px' +
-      (fields.length ? ' repeat(' + fields.length + ', ' + COL_W + 'px)' : '') + ' 46px';
+    var narrow = global.innerWidth < 860;
+    var widths = [
+      ['name',     S.colWidth(projectId, 'name', narrow ? 230 : 400)],
+      ['assignee', S.colWidth(projectId, 'assignee', 170)],
+      ['due',      S.colWidth(projectId, 'due', 148)]
+    ];
+    fields.forEach(function (f) {
+      widths.push([f.id, S.colWidth(projectId, f.id, COL_W)]);
+    });
+    var tpl = widths.map(function (w) { return w[1] + 'px'; }).join(' ') + ' 46px';
 
     var h = '<div class="tbl-wrap"><div class="tbl" style="--tpl:' + tpl + '">';
 
     /* ---- หัวตาราง ---- */
     h += '<div class="tbl-head">';
-    h += '<div class="th th-name">' + L('ชื่องาน') + '</div>';
-    h += '<div class="th">' + L('ผู้รับผิดชอบ') + '</div>';
-    h += '<div class="th">' + L('กำหนดส่ง') + '</div>';
+    h += '<div class="th th-name">' + L('ชื่องาน') + resizer('name') + '</div>';
+    h += '<div class="th">' + L('ผู้รับผิดชอบ') + resizer('assignee') + '</div>';
+    h += '<div class="th">' + L('กำหนดส่ง') + resizer('due') + '</div>';
     fields.forEach(function (f) {
       var ft = S.FIELD_TYPES.filter(function (x) { return x.id === f.type; })[0];
       h += '<div class="th th-field" data-field="' + esc(f.id) + '">' +
         (ft ? I(ft.icon, 13) : '') +
         '<span class="th-nm">' + esc(f.name) + '</span>' +
         '<button class="th-menu" data-act="field-menu" data-field="' + esc(f.id) +
-        '" title="' + L('เมนู') + '">' + I('chevronDown', 12) + '</button></div>';
+        '" title="' + L('เมนู') + '">' + I('chevronDown', 12) + '</button>' +
+        resizer(f.id) + '</div>';
     });
     h += '<div class="th th-add"><button class="addcol" data-act="add-field-picker" title="' +
       L('เพิ่มฟิลด์') + '">' + I('plus', 15) + '</button></div>';

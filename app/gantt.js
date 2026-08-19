@@ -16,7 +16,10 @@
     quarter: { w: 2.4, top: 'year',    bottom: 'quarter' }
   };
   var G_ROW = 34;
-  function gLeft() { return (global.innerWidth < 860) ? 200 : 520; }
+  function gLeft(projectId) {
+    var fallback = (global.innerWidth < 860) ? 200 : 520;
+    return projectId ? S.colWidth(projectId, 'gLeft', fallback) : fallback;
+  }
 
   function esc(s) { return R.esc(s); }
 
@@ -119,10 +122,12 @@
     function xEnd(d) { return (S.daysBetween(from, d) + 1) * W; }
 
     var h = '<div class="gantt-scroll" data-from="' + from + '" data-w="' + W +
-      '"><div class="gantt-body" style="width:' + (gLeft() + chartW) + 'px">';
+      '"><div class="gantt-body" style="width:' + (gLeft(projectId) + chartW) + 'px">';
 
     /* ---------------- ฝั่งซ้าย ---------------- */
-    h += '<div class="g-left" style="width:' + gLeft() + 'px">';
+    h += '<div class="g-left" style="width:' + gLeft(projectId) + 'px">' +
+      '<span class="g-left-grip" data-act="col-resize" data-col="gLeft" title="' +
+      L('ลากเพื่อปรับความกว้าง') + '"></span>';
     h += '<div class="g-lhead"><span class="g-caret"></span>' +
       '<span class="g-c-name">' + L('ชื่องาน') + '</span>' +
       '<span class="g-c-due">' + L('กำหนดส่ง') + '</span>' +

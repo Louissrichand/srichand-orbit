@@ -356,6 +356,7 @@
         if (!('status' in p)) p.status = null;
         p.rules = p.rules || [];
         p.savedViews = p.savedViews || [];
+        p.colWidths = p.colWidths || {};
       });
       d.tasks.forEach(function (t) {
         if (!t.type) t.type = 'task';
@@ -371,6 +372,7 @@
       d.version = 2;
     }
     if (!('lang' in (d.settings || {}))) d.settings.lang = null;
+    d.projects.forEach(function (p) { p.colWidths = p.colWidths || {}; });
     if (d.version < 4) {
       d.projects.forEach(function (p) {
         (p.fields || []).forEach(function (f) { f.options = normalizeOptions(f.options); });
@@ -1190,7 +1192,7 @@
       defaultView: attrs.defaultView || 'list',
       sections: (attrs.sections || ['ค้างอยู่', 'กำลังทำ', 'เสร็จแล้ว'])
         .map(function (n) { return { id: uid('s'), name: n }; }),
-      fields: [], status: null, rules: [], savedViews: []
+      fields: [], status: null, rules: [], savedViews: [], colWidths: {}
     };
     db.projects.push(p);
     commit();
@@ -1326,6 +1328,28 @@
     var tmp = p.sections[i];
     p.sections[i] = p.sections[j];
     p.sections[j] = tmp;
+    commit();
+  }
+
+  /** ความกว้างคอลัมน์ที่ผู้ใช้ลากไว้ จำแยกตามโปรเจกต์ */
+  function colWidth(projectId, key, fallback) {
+    var p = project(projectId);
+    if (!p || !p.colWidths) return fallback;
+    return p.colWidths[key] || fallback;
+  }
+
+  function setColWidth(projectId, key, px) {
+    var p = project(projectId);
+    if (!p) return;
+    p.colWidths = p.colWidths || {};
+    p.colWidths[key] = Math.round(px);
+    commit();
+  }
+
+  function resetColWidths(projectId) {
+    var p = project(projectId);
+    if (!p) return;
+    p.colWidths = {};
     commit();
   }
 
@@ -1558,6 +1582,7 @@
     addSection: addSection, renameSection: renameSection,
     deleteSection: deleteSection, moveSection: moveSection,
     addField: addField, renameField: renameField, deleteField: deleteField,
+    colWidth: colWidth, setColWidth: setColWidth, resetColWidths: resetColWidths,
     addRule: addRule, deleteRule: deleteRule,
     saveView: saveView, deleteSavedView: deleteSavedView,
     saveTaskTemplate: saveTaskTemplate, applyTaskTemplate: applyTaskTemplate,

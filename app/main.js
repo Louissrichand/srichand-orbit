@@ -612,6 +612,7 @@
       '<button class="btn" data-act="edit-project" data-id="' + R.esc(projectId) + '">' + I('pencil', 14) + ' ' + L('แก้ไขชื่อ / สี / ไอคอน') + '</button>' +
       '<button class="btn" data-act="update-status" data-id="' + R.esc(projectId) + '">' + I('flag', 14) + ' ' + L('อัปเดตสถานะโปรเจกต์') + '</button>' +
       '<button class="btn" data-act="manage-fields" data-id="' + R.esc(projectId) + '">' + I('filter', 14) + ' ' + L('จัดการฟิลด์') + '</button>' +
+      '<button class="btn" data-act="reset-cols" data-id="' + R.esc(projectId) + '">' + I('arrowLeft', 14) + ' ' + L('คืนความกว้างคอลัมน์เดิม') + '</button>' +
       '<button class="btn" data-act="manage-rules" data-id="' + R.esc(projectId) + '">' + I('repeat', 14) + ' ' + L('กฎอัตโนมัติ') + '</button>' +
       '<button class="btn" data-act="dup-project" data-id="' + R.esc(projectId) + '">' + I('copy', 14) + ' ' + L('คัดลอกเป็นเทมเพลต') + '</button>' +
       '<button class="btn" data-act="toggle-archive" data-id="' + R.esc(projectId) + '">' +
@@ -1557,6 +1558,11 @@
 
       /* --- fields --- */
       case 'manage-fields': openModal(fieldsModal(id)); break;
+      case 'reset-cols':
+        S.resetColWidths(id);
+        closeModal();
+        toast(L('คืนความกว้างคอลัมน์เดิมแล้ว'));
+        break;
       case 'add-field': {
         var fn = document.getElementById('fName').value.trim();
         if (!fn) { toast(L('ใส่ชื่อฟิลด์ก่อน')); break; }
@@ -1943,10 +1949,51 @@
     return (s ? R.fmtDate(s) + ' → ' : '') + R.fmtDate(u);
   }
 
+  var colDrag = null;   // สถานะระหว่างลากปรับความกว้างคอลัมน์
+
+  var MIN_COL = 90;
+
+  /** อ่าน template ปัจจุบันออกมาเป็นตัวเลข px ทีละคอลัมน์ */
+  function colSizes(tbl) {
+    return getComputedStyle(tbl.querySelector('.tbl-head'))
+      .gridTemplateColumns.split(' ').map(parseFloat);
+  }
+
   var gLink = null;   // สถานะระหว่างลากเส้นสร้างลำดับก่อนหลัง
 
   document.addEventListener('mousedown', function (e) {
     if (e.button !== 0 || !e.target.closest) return;
+
+    // ลากขอบหัวคอลัมน์เพื่อปรับความกว้าง (ใช้ได้ทั้งเมาส์และนิ้ว)
+    var grip = e.target.closest('.col-resize, .g-left-grip');
+    if (grip) {
+      var pane = grip.closest('.g-left');
+      if (pane) {
+        e.preventDefault();
+        e.stopPropagation();
+        colDrag = {
+          pane: pane, key: 'gLeft', startX: e.clientX,
+          w0: pane.getBoundingClientRect().width
+        };
+        document.body.classList.add('col-resizing');
+        return;
+      }
+      var tbl = grip.closest('.tbl');
+      var th = grip.closest('.th');
+      if (!tbl || !th) return;
+      e.preventDefault();
+      e.stopPropagation();
+      var idx = Array.prototype.indexOf.call(th.parentNode.children, th);
+      colDrag = {
+        tbl: tbl, key: grip.dataset.col, idx: idx,
+        startX: e.clientX,
+        sizes: colSizes(tbl),
+        w0: th.getBoundingClientRect().width
+      };
+      document.body.classList.add('col-resizing');
+      return;
+    }
+
     if (isTouch()) return;   // นิ้วเลื่อนจอ ไม่ใช่เจตนาลากแท่ง
 
     // ลากจากจุดวงกลมปลายแท่ง = สร้างลำดับ ต้องเช็คก่อนการลากแท่ง
@@ -2000,6 +2047,23 @@
   });
 
   document.addEventListener('mousemove', function (e) {
+    if (colDrag) {
+      var w = Math.max(MIN_COL, colDrag.w0 + (e.clientX - colDrag.startX));
+      colDrag.last = w;
+      if (colDrag.pane) {
+        colDrag.pane.style.width = w + 'px';
+        var body = colDrag.pane.parentNode;
+        var right = body.querySelector('.g-right');
+        if (right) body.style.width = (w + right.getBoundingClientRect().width) + 'px';
+        return;
+      }
+      var sizes = colDrag.sizes.slice();
+      sizes[colDrag.idx] = w;
+      colDrag.last = w;
+      colDrag.tbl.style.setProperty('--tpl',
+        sizes.map(function (x) { return x + 'px'; }).join(' '));
+      return;
+    }
     if (gLink) {
       var rb = gLink.rows.getBoundingClientRect();
       var x = e.clientX - rb.left, y = e.clientY - rb.top;
@@ -2039,6 +2103,16 @@
   });
 
   document.addEventListener('mouseup', function (e) {
+    if (colDrag) {
+      var d = colDrag;
+      colDrag = null;
+      document.body.classList.remove('col-resizing');
+      if (d.last && Math.abs(d.last - d.w0) > 1) {
+        lastDragEnd = Date.now();
+        S.setColWidth(state.route.id, d.key, d.last);
+      }
+      return;
+    }
     if (gLink) {
       var link = gLink;
       gLink = null;

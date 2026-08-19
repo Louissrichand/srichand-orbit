@@ -418,6 +418,9 @@
 
     'ดาวน์โหลดสำรอง': 'Download backup', 'กู้คืนจากไฟล์': 'Restore from file',
     'คัดลอกข้อมูล': 'Copy data', 'รออยู่:': 'Waiting on:',
+    'ลากเพื่อปรับความกว้าง': 'Drag to resize',
+    'คืนความกว้างคอลัมน์เดิม': 'Reset column widths',
+    'คืนความกว้างคอลัมน์เดิมแล้ว': 'Column widths reset',
     /* --- ชื่อเดือน / วัน --- */
     '__monthsShort': 'Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec',
     '__monthsFull': 'January,February,March,April,May,June,July,August,September,October,November,December',
