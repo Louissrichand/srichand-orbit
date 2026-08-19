@@ -110,7 +110,7 @@
     var unread = S.unreadCount(db.currentUserId);
 
     var h = '';
-    h += '<div class="sb-brand"><span class="dot">◉</span> Orbit</div>';
+    h += '<div class="sb-brand">' + global.Icons.logoLockup(26) + '</div>';
 
     h += '<div class="sb-section">';
     h += '<button class="sb-item' + (route.type === 'mytasks' ? ' active' : '') +

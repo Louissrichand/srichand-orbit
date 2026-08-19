@@ -76,3 +76,47 @@
   global.Icons = { icon: icon, iconFilled: iconFilled, has: function (n) { return !!P[n]; } };
 
 })(window);
+
+/* ---------- โลโก้ ----------
+ * วาดใหม่เป็น SVG จากโลโก้ต้นฉบับ: วงแหวนขาว + วงโคจรพาดเฉียง + ดวงกลมเรืองแสง
+ * บนพื้นแดงไล่เฉด — คมทุกขนาดและไม่ต้องพึ่งไฟล์ภาพภายนอก
+ */
+(function (global) {
+  'use strict';
+
+  /** id ต้องไม่ซ้ำเมื่อวางโลโก้หลายจุดในหน้าเดียว */
+  var seq = 0;
+
+  function logoMark(size) {
+    var s = size || 26;
+    var n = 'ob' + (++seq);
+    return '<svg class="brand-mark" width="' + s + '" height="' + s +
+      '" viewBox="0 0 32 32" aria-hidden="true">' +
+      '<defs>' +
+        '<linearGradient id="' + n + 'bg" x1="0" y1="0" x2="1" y2="1">' +
+          '<stop offset="0" stop-color="#F10B26"/>' +
+          '<stop offset="1" stop-color="#E2176E"/>' +
+        '</linearGradient>' +
+        '<linearGradient id="' + n + 'dot" x1="0.3" y1="0" x2="0.7" y2="1">' +
+          '<stop offset="0" stop-color="#ffffff"/>' +
+          '<stop offset="1" stop-color="#FF93BE"/>' +
+        '</linearGradient>' +
+      '</defs>' +
+      '<rect width="32" height="32" rx="8" fill="url(#' + n + 'bg)"/>' +
+      '<circle cx="16" cy="16.8" r="7.5" fill="none" stroke="#fff" stroke-width="2.9"/>' +
+      '<ellipse cx="16" cy="16.8" rx="11.4" ry="4.3" fill="none" stroke="#fff" ' +
+        'stroke-width="2" transform="rotate(-24 16 16.8)"/>' +
+      '<circle cx="24.6" cy="7.7" r="2.75" fill="url(#' + n + 'dot)"/>' +
+      '</svg>';
+  }
+
+  /** ตราสัญลักษณ์พร้อมชื่อ ใช้บนหัวแถบซ้าย */
+  function logoLockup(size) {
+    return '<span class="brand-lockup">' + logoMark(size) +
+      '<span class="brand-word">ORBIT</span></span>';
+  }
+
+  global.Icons.logoMark = logoMark;
+  global.Icons.logoLockup = logoLockup;
+
+})(window);
