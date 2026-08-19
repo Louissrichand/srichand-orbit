@@ -421,6 +421,7 @@
     'ลากเพื่อปรับความกว้าง': 'Drag to resize',
     'คืนความกว้างคอลัมน์เดิม': 'Reset column widths',
     'คืนความกว้างคอลัมน์เดิมแล้ว': 'Column widths reset',
+    'สลับทิศการเรียง': 'Flip sort direction',
     /* --- ชื่อเดือน / วัน --- */
     '__monthsShort': 'Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec',
     '__monthsFull': 'January,February,March,April,May,June,July,August,September,October,November,December',

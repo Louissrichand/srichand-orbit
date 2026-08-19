@@ -1340,3 +1340,16 @@ body.col-resizing .col-resize::after { background: var(--accent); }
 }
 .th-add .pop, .th-field .pop { top: auto; left: auto; right: auto; }
 .pop button { gap: 9px; }
+
+/* ---------- คลิกหัวคอลัมน์เพื่อเรียง ---------- */
+
+.th-sortable { cursor: pointer; user-select: none; }
+.th-sortable:hover { background: var(--bg-inset); color: var(--fg); }
+.th-sort {
+  display: inline-flex; align-items: center; margin-left: 2px;
+  opacity: 0; color: var(--fg-faint); transition: opacity .12s;
+}
+.th-sortable:hover .th-sort { opacity: .55; }
+.th-sort.on { opacity: 1; color: var(--accent); }
+.th-field .th-sort { margin-left: auto; }
+.th-field .th-menu { margin-left: 4px; }

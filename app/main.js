@@ -1084,6 +1084,22 @@
         renderAll();
         break;
 
+      case 'sort-col': {
+        var key = el.dataset.key;
+        var vw = viewFor(state.route.id);
+        if (vw.sort !== key) { vw.sort = key; vw.sortDir = 'asc'; }
+        else if (vw.sortDir === 'asc') { vw.sortDir = 'desc'; }
+        else { vw.sort = 'manual'; vw.sortDir = 'asc'; }   // กดครบรอบ กลับเป็นลำดับเดิม
+        renderAll();
+        break;
+      }
+      case 'f-sortdir': {
+        var vd = viewFor(state.route.id);
+        vd.sortDir = (vd.sortDir === 'desc') ? 'asc' : 'desc';
+        renderAll();
+        break;
+      }
+
       /* --- ฟิลด์ในตาราง --- */
       case 'add-field-picker': {
         if (popIsOpenFor(el)) { closePops(); break; }
@@ -1741,7 +1757,7 @@
       if (act === 'f-priority') v.priority = el.value;
       if (act === 'f-tag') v.tag = el.value;
       if (act === 'f-due') v.due = el.value;
-      if (act === 'f-sort') v.sort = el.value;
+      if (act === 'f-sort') { v.sort = el.value; v.sortDir = 'asc'; }
       if (act === 'f-group') v.group = el.value;
       renderAll();
       return;

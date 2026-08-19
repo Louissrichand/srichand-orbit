@@ -283,7 +283,18 @@
       h += '<option value="' + x.id + '"' + (view.sort === x.id ? ' selected' : '') +
         '>' + esc(L(x.label)) + '</option>';
     });
-    h += '</select></div>';
+    p.fields.forEach(function (f) {
+      var k = 'field:' + f.id;
+      h += '<option value="' + esc(k) + '"' + (view.sort === k ? ' selected' : '') +
+        '>' + esc(f.name) + '</option>';
+    });
+    h += '</select>';
+    if (view.sort !== 'manual') {
+      h += '<button class="vb-toggle on" data-act="f-sortdir" title="' +
+        L('สลับทิศการเรียง') + '">' +
+        I(view.sortDir === 'desc' ? 'arrowDown' : 'arrowUp', 13) + '</button>';
+    }
+    h += '</div>';
 
     h += '<div class="vb-item"><label>' + L('จัดกลุ่ม') + '</label><select data-act="f-group" class="' +
       (view.group !== 'section' ? 'on' : '') + '">';
@@ -403,6 +414,13 @@
 
   var COL_W = 158;
 
+  /** ลูกศรบอกว่ากำลังเรียงด้วยคอลัมน์ไหน ทิศไหน */
+  function sortMark(view, key) {
+    if (view.sort !== key) return '<span class="th-sort">' + I('arrowDown', 12) + '</span>';
+    return '<span class="th-sort on">' +
+      I(view.sortDir === 'desc' ? 'arrowDown' : 'arrowUp', 12) + '</span>';
+  }
+
   /** ที่จับลากปรับความกว้าง วางไว้ท้ายหัวคอลัมน์ */
   function resizer(key) {
     return '<span class="col-resize" data-act="col-resize" data-col="' + esc(key) +
@@ -464,14 +482,19 @@
 
     /* ---- หัวตาราง ---- */
     h += '<div class="tbl-head">';
-    h += '<div class="th th-name">' + L('ชื่องาน') + resizer('name') + '</div>';
-    h += '<div class="th">' + L('ผู้รับผิดชอบ') + resizer('assignee') + '</div>';
-    h += '<div class="th">' + L('กำหนดส่ง') + resizer('due') + '</div>';
+    h += '<div class="th th-name th-sortable" data-act="sort-col" data-key="name">' +
+      L('ชื่องาน') + sortMark(view, 'name') + resizer('name') + '</div>';
+    h += '<div class="th th-sortable" data-act="sort-col" data-key="assignee">' +
+      L('ผู้รับผิดชอบ') + sortMark(view, 'assignee') + resizer('assignee') + '</div>';
+    h += '<div class="th th-sortable" data-act="sort-col" data-key="due">' +
+      L('กำหนดส่ง') + sortMark(view, 'due') + resizer('due') + '</div>';
     fields.forEach(function (f) {
       var ft = S.FIELD_TYPES.filter(function (x) { return x.id === f.type; })[0];
-      h += '<div class="th th-field" data-field="' + esc(f.id) + '">' +
+      h += '<div class="th th-field th-sortable" data-act="sort-col" data-key="field:' +
+        esc(f.id) + '" data-field="' + esc(f.id) + '">' +
         (ft ? I(ft.icon, 13) : '') +
         '<span class="th-nm">' + esc(f.name) + '</span>' +
+        sortMark(view, 'field:' + f.id) +
         '<button class="th-menu" data-act="field-menu" data-field="' + esc(f.id) +
         '" title="' + L('เมนู') + '">' + I('chevronDown', 12) + '</button>' +
         resizer(f.id) + '</div>';

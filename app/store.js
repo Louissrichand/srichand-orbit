@@ -621,7 +621,7 @@
   function defaultView() {
     return {
       assignee: '', priority: '', tag: '', due: 'any',
-      showCompleted: true, sort: 'manual', group: 'section'
+      showCompleted: true, sort: 'manual', sortDir: 'asc', group: 'section'
     };
   }
 
@@ -645,21 +645,45 @@
     return p ? p.rank : 9;
   }
 
-  function sortItems(items, sort) {
+  /** ค่าที่ใช้เทียบของฟิลด์ที่สร้างเอง แปลงให้เทียบกันได้ตามชนิด */
+  function fieldSortKey(t, fieldId) {
+    var v = null;
+    db.fieldValues.forEach(function (x) {
+      if (x.taskId === t.id && x.fieldId === fieldId) v = x.value;
+    });
+    if (v === null || v === undefined || v === '') return null;
+    if (typeof v === 'number') return v;
+    if (v.length && typeof v !== 'string') return v.join(', ');   // multi-select
+    var u = user(v);
+    return u ? u.name : String(v);
+  }
+
+  function sortItems(items, sort, dir) {
     if (!sort || sort === 'manual') return items;
+    var sign = (dir === 'desc') ? -1 : 1;
+    var fieldId = (sort.indexOf('field:') === 0) ? sort.slice(6) : null;
     var copy = items.slice();
     copy.sort(function (a, b) {
       var ta = a.task, tb = b.task;
-      if (sort === 'due') {
-        return (ta.dueOn || '9999-99-99') < (tb.dueOn || '9999-99-99') ? -1 : 1;
+      if (fieldId) {
+        var va = fieldSortKey(ta, fieldId), vb = fieldSortKey(tb, fieldId);
+        // ช่องว่างไปอยู่ท้ายเสมอ ไม่ว่าจะเรียงทางไหน
+        if (va === null && vb === null) return 0;
+        if (va === null) return 1;
+        if (vb === null) return -1;
+        if (typeof va === 'number' && typeof vb === 'number') return sign * (va - vb);
+        return sign * String(va).localeCompare(String(vb), 'th');
       }
-      if (sort === 'priority') return prioRank(ta.priority) - prioRank(tb.priority);
-      if (sort === 'name') return ta.name.localeCompare(tb.name, 'th');
-      if (sort === 'created') return ta.createdAt < tb.createdAt ? 1 : -1;
+      if (sort === 'due') {
+        return sign * ((ta.dueOn || '9999-99-99') < (tb.dueOn || '9999-99-99') ? -1 : 1);
+      }
+      if (sort === 'priority') return sign * (prioRank(ta.priority) - prioRank(tb.priority));
+      if (sort === 'name') return sign * ta.name.localeCompare(tb.name, 'th');
+      if (sort === 'created') return sign * (ta.createdAt < tb.createdAt ? 1 : -1);
       if (sort === 'assignee') {
         var na = (user(ta.assigneeId) || { name: 'ฮฮฮ' }).name;
         var nb = (user(tb.assigneeId) || { name: 'ฮฮฮ' }).name;
-        return na.localeCompare(nb, 'th');
+        return sign * na.localeCompare(nb, 'th');
       }
       return 0;
     });
@@ -723,7 +747,7 @@
       return matchesFilter(x.task, view);
     });
     var groups = groupItems(projectId, items, view.group);
-    groups.forEach(function (g) { g.items = sortItems(g.items, view.sort); });
+    groups.forEach(function (g) { g.items = sortItems(g.items, view.sort, view.sortDir); });
     return groups;
   }
 
