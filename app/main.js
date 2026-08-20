@@ -1682,14 +1682,30 @@
         renderAll();
         toast(L('ใช้งานแบบเครื่องเดียว ข้อมูลจะอยู่ในเบราว์เซอร์นี้เท่านั้น'));
         break;
-      case 'sign-out':
+      /* ออกจากระบบ: ต้องบันทึกงานที่ค้างให้เสร็จก่อน แล้วจึงล้างสำเนาในเครื่อง
+       * ถ้าไม่ล้าง คนถัดไปที่เปิดแอปบนเครื่องเดียวกันจะเห็นงานทั้งทีมโดยไม่ต้องล็อกอิน
+       * ถ้าบันทึกไม่สำเร็จ ห้ามล้างและห้ามออก ไม่งั้นงานที่เพิ่งพิมพ์หายไปเฉย ๆ */
+      case 'sign-out': {
         closePops();
-        if (global.OrbitSync) global.OrbitSync.flush();
-        setLocalOnly(false);
-        if (global.OrbitSync) global.OrbitSync.stop();
-        global.OrbitAuth.signOut();
-        renderAll();   // ปกติจะถูกพาออกไปหน้า Microsoft แต่ถ้าไม่ อย่าค้างหน้าตาแบบล็อกอินอยู่
+        var leave = function () {
+          if (global.OrbitSync) global.OrbitSync.stop();
+          S.wipeLocal();
+          setLocalOnly(false);
+          renderAll();
+          global.OrbitAuth.signOut();
+        };
+        if (global.OrbitSync && global.OrbitSync.state.mode === 'team' &&
+            global.OrbitSync.state.dirty) {
+          toast(L('กำลังบันทึกงานที่ค้างก่อนออกจากระบบ…'));
+          global.OrbitSync.flush().then(function (ok) {
+            if (ok) leave();
+            else toast(L('บันทึกงานที่ค้างไม่สำเร็จ ยังไม่ออกจากระบบ ลองใหม่อีกครั้ง'));
+          });
+        } else {
+          leave();
+        }
         break;
+      }
       case 'sync-menu':
         if (popIsOpenFor(el)) { closePops(); break; }
         openPop(el, R.syncMenu());

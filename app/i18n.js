@@ -461,6 +461,9 @@
     'ยังไม่ได้ตั้งค่าการเข้าสู่ระบบ': 'Sign-in is not configured',
     'ยังไม่ได้เข้าสู่ระบบ': 'Not signed in',
     'ไม่ทราบสาเหตุ': 'Unknown error',
+    'กำลังบันทึกงานที่ค้างก่อนออกจากระบบ…': 'Saving your pending work before signing out…',
+    'บันทึกงานที่ค้างไม่สำเร็จ ยังไม่ออกจากระบบ ลองใหม่อีกครั้ง':
+      'Could not save your pending work — still signed in. Please try again.',
     /* --- ชื่อเดือน / วัน --- */
     '__monthsShort': 'Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec',
     '__monthsFull': 'January,February,March,April,May,June,July,August,September,October,November,December',

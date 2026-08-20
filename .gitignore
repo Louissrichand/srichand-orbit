@@ -9,3 +9,9 @@ desktop.ini
 
 # ไฟล์สำรองข้อมูลที่ผู้ใช้ดาวน์โหลดออกมา — เป็นข้อมูลงานจริง ห้ามขึ้น repo
 orbit-backup-*.json
+
+# ภาพข้อเสนอสำหรับผู้บริหาร — เอกสารภายใน ห้ามขึ้น repo สาธารณะ
+orbit-proposal.png
+orbit-login-steps.png
+orbit-proposal.jpg
+orbit-login-steps.jpg

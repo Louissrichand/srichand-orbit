@@ -26,6 +26,7 @@
   var pollTimer = null;
   var pushing = false;
   var queued = false;
+  var inflight = null;
 
   function onChange(fn) { listeners.push(fn); }
   function emit() { listeners.forEach(function (f) { f(state); }); }
@@ -85,17 +86,21 @@
     pushTimer = setTimeout(doPush, cfg.pushDelayMs || 1500);
   }
 
+  /* ส่งขึ้นจริง คืนสัญญาที่ได้ true เมื่อสำเร็จ false เมื่อไม่สำเร็จ
+   * ไม่โยน error ออกไป เพราะถูกเรียกจากตัวจับเวลาด้วย
+   * แต่ต้องบอกผลได้ เพราะตอนออกจากระบบต้องรู้ว่าบันทึกทันหรือยัง */
   function doPush() {
-    if (state.mode !== 'team' || state.status === 'conflict') return;
-    if (pushing) { queued = true; return; }
+    if (state.mode !== 'team' || state.status === 'conflict') return Promise.resolve(true);
+    if (pushing) { queued = true; return inflight || Promise.resolve(true); }
     pushing = true;
 
-    C.push(S.snapshotJSON()).then(function () {
+    inflight = C.push(S.snapshotJSON()).then(function () {
       pushing = false;
       state.dirty = false;
       set('synced', { lastSync: Date.now(), error: null });
-      if (queued) { queued = false; schedulePush(); }
-    }).catch(function (e) {
+      if (queued) { queued = false; return doPush(); }
+      return true;
+    }, function (e) {
       pushing = false;
       if (e.conflict) {
         set('conflict');
@@ -104,7 +109,9 @@
       } else {
         set('error', { error: describe(e) });
       }
+      return false;
     });
+    return inflight;
   }
 
   function startPolling() {
@@ -175,7 +182,7 @@
     state: state, onChange: onChange, start: start, stop: stop,
     pullNow: pullNow,
     resolveKeepMine: resolveKeepMine, resolveTakeTheirs: resolveTakeTheirs,
-    flush: function () { clearTimeout(pushTimer); doPush(); }
+    flush: function () { clearTimeout(pushTimer); return doPush(); }
   };
 
 })(window);

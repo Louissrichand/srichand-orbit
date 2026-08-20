@@ -451,6 +451,19 @@
 
   function snapshotJSON() { return JSON.stringify(db); }
 
+  /* ล้างสำเนาในเครื่องทิ้ง ใช้ตอนออกจากระบบในโหมดทีม
+   *
+   * ในโหมดทีม ของจริงอยู่ที่ส่วนกลางแล้ว สำเนาในเบราว์เซอร์เป็นแค่แคช
+   * ถ้าไม่ลบ คนถัดไปที่เปิดแอปบนเครื่องเดียวกันจะเห็นงานทั้งทีมโดยไม่ต้องล็อกอิน
+   * ประวัติย้อนกลับก็ถือข้อมูลชุดเดียวกันไว้ ต้องล้างด้วย */
+  function wipeLocal() {
+    undoStack.length = 0;
+    suppressRemote = true;
+    db = seed();
+    commit();
+    suppressRemote = false;
+  }
+
   function persist() {
     try {
       storage.set(JSON.stringify(db));
@@ -1608,6 +1621,7 @@
     get db() { return db; },
     storageKind: storage.kind,
     setRemoteSave: setRemoteSave, replaceDb: replaceDb, snapshotJSON: snapshotJSON,
+    wipeLocal: wipeLocal,
     onChange: onChange, commit: commit,
     snapshot: snapshot, undo: undo, canUndo: canUndo,
 
