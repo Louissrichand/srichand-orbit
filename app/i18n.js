@@ -464,6 +464,31 @@
     'กำลังบันทึกงานที่ค้างก่อนออกจากระบบ…': 'Saving your pending work before signing out…',
     'บันทึกงานที่ค้างไม่สำเร็จ ยังไม่ออกจากระบบ ลองใหม่อีกครั้ง':
       'Could not save your pending work — still signed in. Please try again.',
+
+    /* --- หน้าผู้ดูแลระบบ --- */
+    'ผู้ดูแลระบบ': 'Admin', 'ผู้ดูแล': 'Admin', 'สมาชิก': 'Member',
+    'บทบาท': 'Role', 'ชื่อ': 'Name', 'เข้าใช้ล่าสุด': 'Last active', 'รายชื่อสมาชิก': 'Members',
+    '(คุณ)': '(you)', 'คนที่เคยล็อกอิน': 'signed in',
+    'ต้องมีผู้ดูแลอย่างน้อยหนึ่งคน': 'There must be at least one admin',
+    'บทบาทที่นี่ใช้จัดระเบียบ ไม่ใช่กำแพงความปลอดภัย':
+      'Roles here organise the team — they are not a security boundary',
+    'Orbit ทำงานในเบราว์เซอร์ จึงบังคับสิทธิ์จริงไม่ได้ ถ้าต้องการให้ใครแก้ไม่ได้จริง ให้ตั้งสิทธิ์บนไซต์ SharePoint เป็น Read แล้ว Microsoft จะปฏิเสธการบันทึกให้เอง':
+      'Orbit runs in the browser, so it cannot enforce permissions. To truly stop someone editing, set their SharePoint site permission to Read — Microsoft will reject their writes.',
+    'ที่เก็บข้อมูล': 'Data storage',
+    'โหมดการทำงาน': 'Mode',
+    'ทีม — ข้อมูลอยู่ส่วนกลาง': 'Team — shared storage',
+    'เครื่องเดียว — ข้อมูลไม่แชร์กับทีม': 'Single device — not shared',
+    'ที่อยู่ไฟล์': 'File location', 'ที่เก็บ': 'Stored in',
+    'เบราว์เซอร์เครื่องนี้': 'This browser',
+    'หน่วยความจำ (หายเมื่อรีเฟรช)': 'Memory (lost on refresh)',
+    'ยังไม่เคย': 'Never', 'สถานะ': 'Status',
+    'ขนาดข้อมูล': 'Data size', 'จำนวนงาน': 'Total tasks',
+    'ยังไม่มีใครล็อกอินด้วยบัญชีบริษัท รายชื่อจะขึ้นเองเมื่อมีคนเข้าใช้งาน':
+      'Nobody has signed in with a work account yet — names appear here automatically.',
+    'มีผู้ใช้ตัวอย่างค้างอยู่ {n} รายการ — เป็นข้อมูลสมมติจากตอนทดลอง ลบทิ้งได้ที่ “สมาชิกทีม”':
+      '{n} sample users left over from the demo data — remove them under “Team members”.',
+    'กิจกรรมล่าสุด': 'Recent activity', 'ยังไม่มีกิจกรรม': 'No activity yet',
+    'แสดงความเห็น': 'commented on',
     /* --- ชื่อเดือน / วัน --- */
     '__monthsShort': 'Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec',
     '__monthsFull': 'January,February,March,April,May,June,July,August,September,October,November,December',

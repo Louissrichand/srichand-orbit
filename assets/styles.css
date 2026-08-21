@@ -1457,3 +1457,79 @@ body.gated { overflow: hidden; }
 
 /* ป๊อปอัปที่มีข้อความยาว (เช่น ที่อยู่ไฟล์) ต้องไม่ยืดจนเต็มจอ */
 .pop { max-width: 340px; }
+
+/* ===== หน้าผู้ดูแลระบบ ===== */
+
+.admin { max-width: 880px; display: flex; flex-direction: column; gap: 26px; padding-bottom: 40px; }
+
+.admin-note {
+  display: flex; gap: 11px; align-items: flex-start;
+  background: var(--accent-bg); border: 1px solid var(--accent);
+  border-radius: var(--radius); padding: 13px 15px;
+  font-size: 13.5px; line-height: 1.65; color: var(--fg);
+}
+.admin-note svg { flex: none; color: var(--accent); margin-top: 2px; }
+
+.admin-sec { display: flex; flex-direction: column; gap: 12px; }
+.admin-sec h3 {
+  font-size: 15px; font-weight: 700; margin: 0;
+  display: flex; align-items: baseline; gap: 10px;
+  padding-bottom: 9px; border-bottom: 1px solid var(--line);
+}
+.admin-count { font-size: 12.5px; font-weight: 500; color: var(--fg-faint); margin-left: auto; }
+
+.admin-grid { display: grid; gap: 1px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.kv { background: var(--bg); padding: 12px 14px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.kv .k { font-size: 12px; color: var(--fg-faint); }
+.kv .v { font-size: 14px; font-weight: 600; word-break: break-word; }
+.kv .v.ok { color: var(--ok); }
+.kv .v.warn { color: var(--warn-fg); }
+.kv .v.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; font-weight: 500; }
+
+.admin-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.admin-tbl { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.admin-tr {
+  display: grid; grid-template-columns: minmax(0, 1fr) 130px 150px;
+  gap: 12px; align-items: center; padding: 10px 14px;
+  border-top: 1px solid var(--line-soft);
+}
+.admin-tr:first-child { border-top: 0; }
+.admin-th { background: var(--bg-sunk); font-size: 12px; color: var(--fg-faint); font-weight: 600; }
+.admin-who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.admin-who > span { display: flex; flex-direction: column; min-width: 0; }
+.admin-who b { font-size: 14px; font-weight: 600; }
+.admin-who i { font-style: normal; color: var(--fg-faint); font-weight: 400; }
+.admin-who em { font-style: normal; font-size: 12px; color: var(--fg-faint); overflow: hidden; text-overflow: ellipsis; }
+.admin-seen { font-size: 12.5px; color: var(--fg-soft); }
+
+.role-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 9px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+  border: 1px solid var(--line-strong); background: var(--bg); color: var(--fg-soft);
+}
+.role-pill:hover { background: var(--bg-sunk); }
+.role-pill.is-admin { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
+
+.admin-empty { padding: 18px; text-align: center; color: var(--fg-faint); font-size: 13.5px; border: 1px dashed var(--line); border-radius: var(--radius); }
+
+.admin-demo {
+  display: flex; gap: 9px; align-items: flex-start;
+  background: var(--warn-bg); color: var(--warn-fg);
+  border-radius: var(--radius); padding: 10px 13px; font-size: 13px; line-height: 1.6;
+}
+.admin-demo svg { flex: none; margin-top: 2px; }
+
+.admin-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.admin-log li { display: flex; gap: 11px; padding: 9px 0; border-top: 1px solid var(--line-soft); font-size: 13.5px; line-height: 1.6; }
+.admin-log li:first-child { border-top: 0; }
+.admin-log .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--line-strong); flex: none; margin-top: 8px; }
+.admin-log b { font-weight: 600; }
+.admin-log a { color: var(--accent); }
+.admin-log em { display: block; font-style: normal; font-size: 12px; color: var(--fg-faint); margin-top: 1px; }
+
+@media (max-width: 720px) {
+  .admin-tr { grid-template-columns: minmax(0, 1fr) 110px; }
+  .admin-tr .admin-seen { display: none; }
+  .admin-th span:last-child { display: none; }
+}

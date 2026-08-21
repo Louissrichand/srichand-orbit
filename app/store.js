@@ -383,6 +383,17 @@
       d.tasks.forEach(function (t) { t.dependsOn = normalizeDeps(t.dependsOn); });
       d.version = 3;
     }
+    /* v5 — บทบาทและเวลาเข้าใช้ล่าสุด สำหรับหน้าผู้ดูแล
+     * ผู้ใช้ตัวอย่างจากข้อมูลตั้งต้นจะไม่มี lastSeenAt เลย
+     * จึงใช้ฟิลด์นี้แยกคนที่ล็อกอินจริงออกจากคนสมมติได้ */
+    d.users.forEach(function (u) {
+      if (!u.role) u.role = 'member';
+      if (!('lastSeenAt' in u)) u.lastSeenAt = null;
+    });
+    if (!d.users.some(function (u) { return u.role === 'admin'; })) {
+      var firstUser = d.users.filter(function (u) { return u.id === d.currentUserId; })[0] || d.users[0];
+      if (firstUser) firstUser.role = 'admin';
+    }
     d.version = SCHEMA;
     return d;
   }
@@ -429,7 +440,7 @@
     } catch (e) {
       console.warn('อ่านข้อมูลเดิมไม่สำเร็จ ใช้ข้อมูลตั้งต้นแทน', e);
     }
-    return seed();
+    return migrate(seed());   // ให้ข้อมูลตั้งต้นผ่านตัวเติมค่าเริ่มต้นชุดเดียวกับข้อมูลเก่า
   }
 
   /* โหมดทีม: main จะเสียบฟังก์ชันส่งขึ้นส่วนกลางไว้ตรงนี้
@@ -459,7 +470,7 @@
   function wipeLocal() {
     undoStack.length = 0;
     suppressRemote = true;
-    db = seed();
+    db = migrate(seed());
     commit();
     suppressRemote = false;
   }
@@ -1570,15 +1581,64 @@
     var u = user(p.id);
     if (!u) {
       u = { id: p.id, name: p.name || p.email, email: p.email || '',
-            color: PALETTE[db.users.length % PALETTE.length] };
+            color: PALETTE[db.users.length % PALETTE.length], role: null, lastSeenAt: null };
       db.users.push(u);
     } else {
       if (p.name) u.name = p.name;
       if (p.email) u.email = p.email;
     }
+    if (!u.role) {
+      /* คนแรกที่ล็อกอินจริงได้เป็นผู้ดูแล ตรงกับขั้นตอนที่ให้ฝ่าย IT เข้าก่อน
+       * นับเฉพาะคนที่เคยล็อกอิน (มี lastSeenAt) ผู้ใช้ตัวอย่างไม่นับ */
+      var hasRealAdmin = db.users.some(function (x) {
+        return x.id !== u.id && x.role === 'admin' && x.lastSeenAt;
+      });
+      u.role = hasRealAdmin ? 'member' : 'admin';
+    }
+    u.lastSeenAt = new Date().toISOString();
     db.currentUserId = u.id;
     commit();
     return u;
+  }
+
+  var ROLES = [
+    { id: 'admin',  label: 'ผู้ดูแล' },
+    { id: 'member', label: 'สมาชิก' }
+  ];
+
+  function isAdmin(userId) {
+    var u = user(userId || db.currentUserId);
+    return !!u && u.role === 'admin';
+  }
+
+  /** เปลี่ยนบทบาท — ห้ามเหลือศูนย์ผู้ดูแล ไม่งั้นไม่มีใครเข้าหน้าผู้ดูแลได้อีก */
+  function setRole(userId, role) {
+    var u = user(userId);
+    if (!u) return false;
+    if (u.role === 'admin' && role !== 'admin') {
+      var others = db.users.filter(function (x) { return x.id !== userId && x.role === 'admin'; });
+      if (!others.length) return false;
+    }
+    snapshot('เปลี่ยนบทบาท');
+    u.role = role;
+    commit();
+    return true;
+  }
+
+  /** คนที่เคยล็อกอินจริง แยกจากผู้ใช้ตัวอย่าง */
+  function signedInUsers() {
+    return db.users.filter(function (u) { return !!u.lastSeenAt; });
+  }
+
+  /** กิจกรรมล่าสุดทั้งระบบ ไว้ให้ผู้ดูแลไล่ดูย้อนหลัง */
+  function recentActivity(limit) {
+    return db.stories.slice()
+      .sort(function (a, b) { return a.createdAt < b.createdAt ? 1 : -1; })
+      .slice(0, limit || 40)
+      .map(function (s) {
+        var t = task(s.taskId);
+        return { story: s, actor: user(s.actorId), taskName: t ? t.name : null };
+      });
   }
 
   function setSetting(key, value) {
@@ -1601,7 +1661,7 @@
 
   function reset() {
     snapshot('ล้างข้อมูล');
-    db = seed();
+    db = migrate(seed());
     commit();
   }
 
@@ -1665,7 +1725,8 @@
     deleteTaskTemplate: deleteTaskTemplate,
 
     addUser: addUser, removeUser: removeUser, setCurrentUser: setCurrentUser,
-    adoptIdentity: adoptIdentity,
+    adoptIdentity: adoptIdentity, ROLES: ROLES, isAdmin: isAdmin, setRole: setRole,
+    signedInUsers: signedInUsers, recentActivity: recentActivity,
     setSetting: setSetting,
 
     exportJSON: exportJSON, importJSON: importJSON, reset: reset

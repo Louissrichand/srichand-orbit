@@ -155,6 +155,11 @@
          '<span class="grow">' + L('คีย์ลัด') + '</span></button>';
     h += '<button class="sb-item" data-act="manage-members">' + I('users') + '' +
          '<span class="grow">' + L('สมาชิกทีม') + '</span></button>';
+    if (S.isAdmin()) {
+      h += '<button class="sb-item' + (route.type === 'admin' ? ' active' : '') +
+           '" data-act="go" data-route="admin">' + I('shield') + '' +
+           '<span class="grow">' + L('ผู้ดูแลระบบ') + '</span></button>';
+    }
     h += '<button class="sb-item" data-act="open-settings">' + I('settings') + '' +
          '<span class="grow">' + L('ตั้งค่า / สำรองข้อมูล') + '</span></button>';
     h += accountBlock(me);
@@ -199,6 +204,8 @@
       h += '<div class="tb-title">' + I('bell', 20) + ' ' + L('กล่องข้อความ') + '</div>';
     } else if (route.type === 'calendar') {
       h += '<div class="tb-title">' + I('calendar', 20) + ' ' + L('ปฏิทินรวม') + '</div>';
+    } else if (route.type === 'admin') {
+      h += '<div class="tb-title">' + I('shield', 20) + ' ' + L('ผู้ดูแลระบบ') + '</div>';
     } else if (route.type === 'search') {
       h += '<div class="tb-title">' + L('ผลการค้นหา “') + esc(route.q) + '”</div>';
     }
@@ -1417,7 +1424,122 @@
     return h;
   }
 
+  /* ---------- หน้าผู้ดูแลระบบ ---------- */
+
+  function roleLabel(id) {
+    var r = S.ROLES.filter(function (x) { return x.id === id; })[0];
+    return r ? L(r.label) : L('สมาชิก');
+  }
+
+  function adminView() {
+    var db = S.db;
+    var team = global.OrbitSync && global.OrbitSync.state.mode === 'team';
+    var signedIn = S.signedInUsers();
+    var h = '<div class="admin">';
+
+    /* ความจริงที่ต้องบอกก่อน ไม่ให้เข้าใจผิดว่าตั้งบทบาทแล้วปลอดภัย */
+    h += '<div class="admin-note">' + I('shield', 16) +
+      '<div><b>' + L('บทบาทที่นี่ใช้จัดระเบียบ ไม่ใช่กำแพงความปลอดภัย') + '</b><br>' +
+      L('Orbit ทำงานในเบราว์เซอร์ จึงบังคับสิทธิ์จริงไม่ได้ ' +
+        'ถ้าต้องการให้ใครแก้ไม่ได้จริง ให้ตั้งสิทธิ์บนไซต์ SharePoint เป็น Read ' +
+        'แล้ว Microsoft จะปฏิเสธการบันทึกให้เอง') + '</div></div>';
+
+    /* ---- ที่เก็บข้อมูล ---- */
+    h += '<section class="admin-sec"><h3>' + L('ที่เก็บข้อมูล') + '</h3>';
+    h += '<div class="admin-grid">';
+    if (team) {
+      var st = global.OrbitSync.state;
+      h += kv(L('โหมดการทำงาน'), L('ทีม — ข้อมูลอยู่ส่วนกลาง'), 'ok');
+      h += kv(L('ที่อยู่ไฟล์'), global.OrbitCloud.describeTarget(), 'mono');
+      h += kv(L('ซิงก์ล่าสุด'), st.lastSync ? syncAgo(st.lastSync) : L('ยังไม่เคย'));
+      h += kv(L('สถานะ'), L((SYNC_LOOK[st.status] || SYNC_LOOK.synced)[1]));
+    } else {
+      h += kv(L('โหมดการทำงาน'), L('เครื่องเดียว — ข้อมูลไม่แชร์กับทีม'), 'warn');
+      h += kv(L('ที่เก็บ'), S.storageKind === 'memory'
+        ? L('หน่วยความจำ (หายเมื่อรีเฟรช)') : L('เบราว์เซอร์เครื่องนี้'));
+    }
+    h += kv(L('ขนาดข้อมูล'), fmtSize(S.snapshotJSON().length));
+    h += kv(L('จำนวนงาน'), String(db.tasks.length));
+    h += '</div>';
+    h += '<div class="admin-acts">' +
+      '<button class="btn" data-act="export">' + I('archive') + ' ' + L('ดาวน์โหลดสำรอง') + '</button>' +
+      (team ? '<button class="btn" data-act="sync-now">' + I('repeat') + ' ' +
+        L('ดึงข้อมูลล่าสุดเดี๋ยวนี้') + '</button>' : '') +
+      '</div>';
+    h += '</section>';
+
+    /* ---- สมาชิก ---- */
+    h += '<section class="admin-sec"><h3>' + L('รายชื่อสมาชิก') +
+      '<span class="admin-count">' + signedIn.length + ' ' + L('คนที่เคยล็อกอิน') + '</span></h3>';
+
+    if (!signedIn.length) {
+      h += '<div class="admin-empty">' +
+        L('ยังไม่มีใครล็อกอินด้วยบัญชีบริษัท รายชื่อจะขึ้นเองเมื่อมีคนเข้าใช้งาน') + '</div>';
+    } else {
+      h += '<div class="admin-tbl">';
+      h += '<div class="admin-tr admin-th"><span>' + L('ชื่อ') + '</span><span>' +
+        L('บทบาท') + '</span><span>' + L('เข้าใช้ล่าสุด') + '</span></div>';
+      signedIn.forEach(function (u) {
+        var isMe = u.id === db.currentUserId;
+        h += '<div class="admin-tr">';
+        h += '<span class="admin-who">' + avatar(u) +
+          '<span><b>' + esc(u.name) + (isMe ? ' <i>' + L('(คุณ)') + '</i>' : '') + '</b>' +
+          '<em>' + esc(u.email) + '</em></span></span>';
+        h += '<span><button class="role-pill' + (u.role === 'admin' ? ' is-admin' : '') +
+          '" data-act="pick-role" data-id="' + esc(u.id) + '">' +
+          roleLabel(u.role) + ' ' + I('chevronDown', 12) + '</button></span>';
+        h += '<span class="admin-seen">' + esc(fmtWhen(u.lastSeenAt)) + '</span>';
+        h += '</div>';
+      });
+      h += '</div>';
+    }
+
+    /* ผู้ใช้ตัวอย่างที่ยังค้างอยู่ — บอกให้รู้ว่าต้องเก็บกวาด */
+    var demo = db.users.filter(function (u) { return !u.lastSeenAt; });
+    if (demo.length) {
+      h += '<div class="admin-demo">' + I('alert', 15) + '<div>' +
+        L('มีผู้ใช้ตัวอย่างค้างอยู่ {n} รายการ — เป็นข้อมูลสมมติจากตอนทดลอง ลบทิ้งได้ที่ “สมาชิกทีม”',
+          { n: demo.length }) + '</div></div>';
+    }
+    h += '</section>';
+
+    /* ---- กิจกรรมล่าสุด ---- */
+    h += '<section class="admin-sec"><h3>' + L('กิจกรรมล่าสุด') + '</h3>';
+    var acts = S.recentActivity(25);
+    if (!acts.length) {
+      h += '<div class="admin-empty">' + L('ยังไม่มีกิจกรรม') + '</div>';
+    } else {
+      h += '<ul class="admin-log">';
+      acts.forEach(function (a) {
+        h += '<li><span class="dot"></span><div>' +
+          '<b>' + esc(a.actor ? a.actor.name : '?') + '</b> ' +
+          esc(a.story.type === 'comment' ? L('แสดงความเห็น') : a.story.text);
+        if (a.taskName) {
+          h += ' <a href="#/task/' + esc(a.story.taskId) + '">' + esc(a.taskName) + '</a>';
+        }
+        h += '<em>' + esc(fmtWhen(a.story.createdAt)) + '</em></div></li>';
+      });
+      h += '</ul>';
+    }
+    h += '</section>';
+
+    h += '</div>';
+    return h;
+  }
+
+  function kv(k, v, cls) {
+    return '<div class="kv"><span class="k">' + esc(k) + '</span>' +
+      '<span class="v ' + (cls || '') + '">' + esc(v) + '</span></div>';
+  }
+
+  function fmtSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB';
+    return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+  }
+
   global.Render = {
+    adminView: adminView, roleLabel: roleLabel,
     teamReady: teamReady, syncChip: syncChip, syncMenu: syncMenu,
     accountBlock: accountBlock, accountMenu: accountMenu, gateScreen: gateScreen,
     esc: esc, avatar: avatar, initials: initials,

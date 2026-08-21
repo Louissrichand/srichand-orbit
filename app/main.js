@@ -151,7 +151,7 @@
     if (type === 'search' && seg[1]) {
       return { route: { type: 'search', q: decodeURIComponent(seg[1]) }, taskId: taskId };
     }
-    if (['mytasks', 'inbox', 'calendar'].indexOf(type) >= 0) {
+    if (['mytasks', 'inbox', 'calendar', 'admin'].indexOf(type) >= 0) {
       return { route: { type: type }, taskId: taskId };
     }
     return null;
@@ -190,6 +190,10 @@
       body = R.inboxView(state.inboxArchived);
     } else if (r.type === 'calendar') {
       body = R.calendarView(null, state.calOffset);
+    } else if (r.type === 'admin') {
+      // ไม่ใช่ผู้ดูแลก็ไม่ต้องเห็น — เป็นเรื่องความเรียบร้อยของเมนู ไม่ใช่การกันสิทธิ์จริง
+      if (!S.isAdmin()) { state.route = { type: 'mytasks' }; return renderAll(); }
+      body = R.adminView();
     } else if (r.type === 'search') {
       body = R.searchView(r.q, state.sel);
     }
@@ -1655,6 +1659,26 @@
         S.removeUser(id);
         openModal(membersModal());
         break;
+      /* --- บทบาทในหน้าผู้ดูแล --- */
+      case 'pick-role': {
+        if (popIsOpenFor(el)) { closePops(); break; }
+        var rh = '';
+        S.ROLES.forEach(function (r) {
+          rh += '<button data-act="set-role" data-id="' + R.esc(id) +
+            '" data-role="' + r.id + '">' + I(r.id === 'admin' ? 'shield' : 'users') +
+            '<span>' + L(r.label) + '</span></button>';
+        });
+        openPop(el, rh);
+        break;
+      }
+      case 'set-role': {
+        closePops();
+        var okRole = S.setRole(id, el.dataset.role);
+        if (!okRole) toast(L('ต้องมีผู้ดูแลอย่างน้อยหนึ่งคน'));
+        renderAll();
+        break;
+      }
+
       /* --- บัญชีบริษัทและการซิงก์ --- */
       case 'show-gate':
         closePops();
