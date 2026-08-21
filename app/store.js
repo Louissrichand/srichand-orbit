@@ -1549,11 +1549,16 @@
 
   /* ---------- users / settings ---------- */
 
+  /** เพิ่มรายชื่อไว้ล่วงหน้า เพื่อมอบหมายงานได้ก่อนเจ้าตัวล็อกอินครั้งแรก
+   *  หมายเหตุ: การเพิ่มที่นี่ไม่ได้ให้สิทธิ์เข้าถึงข้อมูล ต้องเพิ่มเข้าไซต์ SharePoint ด้วย */
   function addUser(attrs) {
     var u = {
       id: uid('u'), name: attrs.name, email: attrs.email || '',
-      color: PALETTE[db.users.length % PALETTE.length]
+      color: PALETTE[db.users.length % PALETTE.length],
+      role: ROLE_CAPS[attrs.role] ? attrs.role : 'member',
+      lastSeenAt: null
     };
+    snapshot('เพิ่มสมาชิก');
     db.users.push(u);
     commit();
     return u;
@@ -1561,6 +1566,9 @@
 
   function removeUser(id) {
     if (id === db.currentUserId) return false;
+    var u = user(id);
+    if (!u) return false;
+    if (u.role === 'admin' && adminCount() <= 1) return false;   // ต้องเหลือผู้ดูแลไว้เสมอ
     snapshot('ลบสมาชิก');
     db.tasks.forEach(function (t) {
       if (t.assigneeId === id) t.assigneeId = null;
@@ -1568,7 +1576,7 @@
       t.likes = t.likes.filter(function (f) { return f !== id; });
     });
     db.notifications = db.notifications.filter(function (n) { return n.userId !== id; });
-    db.users = db.users.filter(function (u) { return u.id !== id; });
+    db.users = db.users.filter(function (x) { return x.id !== id; });
     commit();
     return true;
   }
@@ -1601,26 +1609,66 @@
     return u;
   }
 
+  /* ---------- สิทธิ์ ----------
+   *
+   * ย้ำให้ชัด: นี่คือการจัดระเบียบในหน้าจอ ไม่ใช่การบังคับสิทธิ์จริง
+   * แอปทำงานในเบราว์เซอร์ ใครเปิดเครื่องมือพัฒนาก็แก้บทบาทตัวเองได้
+   * สิ่งที่บังคับได้จริงคือสิทธิ์บนไซต์ SharePoint (Edit เทียบกับ Read)
+   * ซึ่ง Microsoft เป็นคนตรวจให้ ไม่ใช่โค้ดชุดนี้
+   */
   var ROLES = [
-    { id: 'admin',  label: 'ผู้ดูแล' },
-    { id: 'member', label: 'สมาชิก' }
+    { id: 'admin',   label: 'ผู้ดูแล',
+      desc: 'จัดการสมาชิก สิทธิ์ และโปรเจกต์ได้ทั้งหมด' },
+    { id: 'member',  label: 'สมาชิก',
+      desc: 'สร้างและแก้ไขงานได้ทุกงาน' },
+    { id: 'limited', label: 'แก้เฉพาะงานของตัวเอง',
+      desc: 'สร้างงานใหม่ได้ แต่แก้ได้เฉพาะงานที่ตัวเองรับผิดชอบหรือเป็นคนสร้าง' },
+    { id: 'viewer',  label: 'ดูอย่างเดียว',
+      desc: 'เปิดดูได้ทุกอย่าง แก้และแสดงความเห็นไม่ได้' }
   ];
 
-  function isAdmin(userId) {
+  var ROLE_CAPS = {
+    admin:   ['manage', 'structure', 'write', 'comment'],
+    member:  ['structure', 'write', 'comment'],
+    limited: ['writeOwn', 'comment'],
+    viewer:  []
+  };
+
+  function role(userId) {
     var u = user(userId || db.currentUserId);
-    return !!u && u.role === 'admin';
+    return (u && u.role) || 'member';
+  }
+
+  /**
+   * cap: 'manage' | 'structure' | 'write' | 'comment'
+   * taskId: ใส่มาเมื่อเป็นการแก้งานชิ้นใดชิ้นหนึ่ง
+   *         คนระดับ "แก้เฉพาะงานของตัวเอง" จะผ่านเฉพาะงานที่ตัวเองเกี่ยวข้อง
+   */
+  function can(cap, taskId) {
+    var caps = ROLE_CAPS[role()] || [];
+    if (caps.indexOf(cap) >= 0) return true;
+    if (cap === 'write' && caps.indexOf('writeOwn') >= 0) {
+      if (!taskId) return true;             // สร้างงานใหม่ทำได้เสมอ
+      var t = task(taskId);
+      if (!t) return true;
+      return t.assigneeId === db.currentUserId || t.createdBy === db.currentUserId;
+    }
+    return false;
+  }
+
+  function isAdmin(userId) { return role(userId) === 'admin'; }
+
+  function adminCount() {
+    return db.users.filter(function (u) { return u.role === 'admin'; }).length;
   }
 
   /** เปลี่ยนบทบาท — ห้ามเหลือศูนย์ผู้ดูแล ไม่งั้นไม่มีใครเข้าหน้าผู้ดูแลได้อีก */
-  function setRole(userId, role) {
+  function setRole(userId, newRole) {
     var u = user(userId);
-    if (!u) return false;
-    if (u.role === 'admin' && role !== 'admin') {
-      var others = db.users.filter(function (x) { return x.id !== userId && x.role === 'admin'; });
-      if (!others.length) return false;
-    }
+    if (!u || !ROLE_CAPS[newRole]) return false;
+    if (u.role === 'admin' && newRole !== 'admin' && adminCount() <= 1) return false;
     snapshot('เปลี่ยนบทบาท');
-    u.role = role;
+    u.role = newRole;
     commit();
     return true;
   }
@@ -1725,7 +1773,8 @@
     deleteTaskTemplate: deleteTaskTemplate,
 
     addUser: addUser, removeUser: removeUser, setCurrentUser: setCurrentUser,
-    adoptIdentity: adoptIdentity, ROLES: ROLES, isAdmin: isAdmin, setRole: setRole,
+    adoptIdentity: adoptIdentity, ROLES: ROLES, ROLE_CAPS: ROLE_CAPS,
+    isAdmin: isAdmin, setRole: setRole, can: can, role: role, adminCount: adminCount,
     signedInUsers: signedInUsers, recentActivity: recentActivity,
     setSetting: setSetting,
 

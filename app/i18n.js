@@ -467,6 +467,30 @@
 
     /* --- หน้าผู้ดูแลระบบ --- */
     'ผู้ดูแลระบบ': 'Admin', 'ผู้ดูแล': 'Admin', 'สมาชิก': 'Member',
+    'สมาชิกและสิทธิ์': 'Members & permissions', 'คน': 'people',
+    'เพิ่มสมาชิก': 'Add member', 'ยังไม่เคยเข้าใช้': 'Never signed in',
+    'ลบออกจากรายชื่อ': 'Remove from list',
+    'แต่ละระดับทำอะไรได้บ้าง': 'What each level can do',
+    'จัดการสมาชิก สิทธิ์ และโปรเจกต์ได้ทั้งหมด': 'Manage members, permissions and all projects',
+    'สร้างและแก้ไขงานได้ทุกงาน': 'Create and edit any task',
+    'แก้เฉพาะงานของตัวเอง': 'Own tasks only',
+    'สร้างงานใหม่ได้ แต่แก้ได้เฉพาะงานที่ตัวเองรับผิดชอบหรือเป็นคนสร้าง':
+      'Can create tasks, but only edit tasks they are assigned to or created',
+    'ดูอย่างเดียว': 'View only',
+    'เปิดดูได้ทุกอย่าง แก้และแสดงความเห็นไม่ได้': 'Can see everything, but cannot edit or comment',
+    'ระดับ “ดูอย่างเดียว” จะบังคับได้จริงก็ต่อเมื่อตั้งสิทธิ์บนไซต์ SharePoint ของคนนั้นเป็น Read ด้วย':
+      '“View only” is genuinely enforced only if that person’s SharePoint site permission is also set to Read.',
+    'การเพิ่มหรือลบที่นี่ไม่ได้ให้หรือถอนสิทธิ์เข้าถึงข้อมูล ต้องเพิ่มหรือเอาออกจากไซต์ SharePoint ควบคู่กันเสมอ':
+      'Adding or removing here does not grant or revoke access to the data — always do the same on the SharePoint site.',
+    'อย่าลืมเพิ่มคนนี้เข้าไซต์ SharePoint ด้วย ไม่งั้นเขาจะล็อกอินเข้ามาแล้วเปิดข้อมูลไม่ได้':
+      'Remember to add this person to the SharePoint site too, or they will sign in but cannot open the data.',
+    'บทบาทของคุณคือ “{role}” จึงทำสิ่งนี้ไม่ได้': 'Your role is “{role}”, so you cannot do this',
+    'เพิ่ม “{name}” เข้ารายชื่อแล้ว': 'Added “{name}” to the list',
+    'เอา “{name}” ออกจากรายชื่อ?\nงานที่มอบหมายไว้จะกลายเป็นยังไม่มอบหมาย':
+      'Remove “{name}” from the list?\nTheir assigned tasks become unassigned.',
+    'เอาออกจากรายชื่อแล้ว': 'Removed from the list',
+    'ลบคนนี้ไม่ได้': 'Cannot remove this person',
+    'ใส่ชื่อก่อน': 'Enter a name first',
     'บทบาท': 'Role', 'ชื่อ': 'Name', 'เข้าใช้ล่าสุด': 'Last active', 'รายชื่อสมาชิก': 'Members',
     '(คุณ)': '(you)', 'คนที่เคยล็อกอิน': 'signed in',
     'ต้องมีผู้ดูแลอย่างน้อยหนึ่งคน': 'There must be at least one admin',

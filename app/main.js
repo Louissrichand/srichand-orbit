@@ -721,22 +721,26 @@
     return h;
   }
 
-  function membersModal() {
-    var h = '<h2>' + L('สมาชิกทีม') + '</h2>';
-    S.db.users.forEach(function (u) {
-      h += '<div class="mini-row">' + R.avatar(u) +
-        '<div class="grow"><div>' + R.esc(u.name) +
-        (u.id === S.db.currentUserId ? ' <span class="chip">' + L('ฉัน') + '</span>' : '') + '</div>' +
-        '<div class="sub">' + R.esc(u.email) + '</div></div>' +
-        (u.id === S.db.currentUserId ? '' :
-          '<button class="btn btn-sm btn-danger" data-act="remove-user" data-id="' +
-          R.esc(u.id) + '">' + L('ลบ') + '</button>') + '</div>';
+  /** เพิ่มรายชื่อไว้ล่วงหน้า ใช้ตอนอยากมอบหมายงานก่อนเจ้าตัวล็อกอินครั้งแรก */
+  function addMemberModal() {
+    var team = global.OrbitSync && global.OrbitSync.state.mode === 'team';
+    var h = '<h2>' + L('เพิ่มสมาชิก') + '</h2>';
+    h += '<div class="field"><label>' + L('ชื่อ') + '</label>' +
+      '<input id="uName" placeholder="' + L('ชื่อ') + '"></div>';
+    h += '<div class="field"><label>' + L('อีเมล') + '</label>' +
+      '<input id="uEmail" type="email" placeholder="name@srichand.co.th"></div>';
+    h += '<div class="field"><label>' + L('บทบาท') + '</label><select id="uRole">';
+    S.ROLES.forEach(function (r) {
+      h += '<option value="' + r.id + '"' + (r.id === 'member' ? ' selected' : '') + '>' +
+        L(r.label) + ' — ' + L(r.desc) + '</option>';
     });
-    h += '<div class="field" style="margin-top:16px"><label>' + L('เพิ่มสมาชิก') + '</label>' +
-      '<input id="uName" placeholder="' + L('ชื่อ') + '"></div>' +
-      '<div class="field"><input id="uEmail" placeholder="' + L('อีเมล') + '"></div>';
-    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button>' +
-      '<button class="btn btn-primary" data-act="add-user">' + L('เพิ่ม') + '</button></div>';
+    h += '</select></div>';
+    if (team) {
+      h += '<div class="modal-note">' + L('อย่าลืมเพิ่มคนนี้เข้าไซต์ SharePoint ด้วย ' +
+        'ไม่งั้นเขาจะล็อกอินเข้ามาแล้วเปิดข้อมูลไม่ได้') + '</div>';
+    }
+    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="do-add-user">' + L('เพิ่ม') + '</button></div>';
     return h;
   }
 
@@ -1037,6 +1041,77 @@
   /* ---------- click delegation ---------- */
 
   // เวลาที่ลากแท่งไทม์ไลน์เสร็จล่าสุด
+  /* ---------- ด่านตรวจสิทธิ์ ----------
+   *
+   * ทุกคำสั่งในแอปวิ่งผ่านตัวจัดการคลิกตัวเดียว จึงกันได้ที่จุดเดียวจบ
+   * ถ้าเพิ่มคำสั่งใหม่ที่แก้ข้อมูล ต้องมาลงทะเบียนในตารางนี้ด้วย
+   * ไม่มีในตาราง = ใครก็ทำได้ (พวกเปิดดู เปลี่ยนมุมมอง ตัวกรอง ดาวน์โหลดสำรอง)
+   */
+  var NEEDS = (function () {
+    var map = {};
+    function put(cap, list) { list.forEach(function (a) { map[a] = cap; }); }
+
+    put('manage', [
+      'manage-members', 'add-user', 'do-add-user', 'remove-user', 'pick-role', 'set-role',
+      'delete-project', 'reset', 'import', 'paste-backup', 'do-paste-import'
+    ]);
+    put('structure', [
+      'new-project', 'create-project', 'edit-project', 'save-project', 'dup-project',
+      'toggle-archive', 'update-status', 'save-status',
+      'add-section', 'rename-section', 'delete-section', 'move-section',
+      'manage-fields', 'add-field', 'delete-field', 'create-field', 'rename-field',
+      'drop-field', 'add-field-picker', 'pick-ftype', 'add-option', 'remove-option',
+      'opt-color', 'set-opt-color',
+      'manage-rules', 'add-rule', 'delete-rule',
+      'manage-templates', 'delete-template', 'save-template', 'use-template',
+      'save-view', 'delete-view', 'reset-cols'
+    ]);
+    put('write', [
+      'delete-task', 'dup-task', 'bulk-complete', 'bulk-reopen', 'bulk-due',
+      'bulk-delete', 'add-home', 'do-add-home', 'unhome', 'undo'
+    ]);
+    put('create', ['quick-add', 'inline-add']);
+    put('write:task', [
+      'toggle', 'add-subtask',
+      'edit-title', 'edit-notes', 'edit-due', 'edit-start', 'edit-duetime',
+      'edit-type', 'edit-recur', 'edit-recur-n', 'edit-field', 'edit-dep-type',
+      'pick-assignee', 'set-assignee', 'pick-priority', 'set-priority', 'set-approval',
+      'add-dependency', 'do-add-dependency', 'remove-dependency', 'g-del-dep',
+      'add-attachment', 'do-add-attachment', 'remove-attachment',
+      'add-tag', 'remove-tag',
+      'edit-cell', 'cell-set-assignee', 'cell-set-option', 'cell-toggle-option'
+    ]);
+    put('comment', [
+      'send-comment', 'toggle-follow', 'do-follow', 'remove-follower',
+      'pick-follower', 'toggle-like'
+    ]);
+    return map;
+  })();
+
+  /** งานที่คำสั่งนี้กำลังจะแก้ ใช้ตัดสินสิทธิ์ระดับ "แก้เฉพาะงานของตัวเอง" */
+  function actTaskId(el) {
+    var d = el.dataset.id;
+    if (d && d.indexOf('t_') === 0) return d;
+    return state.openTaskId || null;
+  }
+
+  function denyToast() {
+    toast(L('บทบาทของคุณคือ “{role}” จึงทำสิ่งนี้ไม่ได้',
+      { role: R.roleLabel(S.role()) }));
+  }
+
+  /** ผ่านสิทธิ์ไหม ถ้าไม่ผ่านจะเตือนให้ผู้ใช้รู้ว่าทำไม ไม่เงียบหาย */
+  function allowed(act, el) {
+    var need = NEEDS[act];
+    if (!need) return true;
+    var ok;
+    if (need === 'write:task') ok = S.can('write', actTaskId(el));
+    else if (need === 'create') ok = S.can('write');
+    else ok = S.can(need);
+    if (!ok) denyToast();
+    return ok;
+  }
+
   // ใช้เวลาแทนธงบูลีน เพราะบางครั้งเบราว์เซอร์ไม่ยิง click ตามหลัง mouseup
   // (เช่นปล่อยเมาส์นอกตัวแท่ง) ธงจะค้างแล้วไปกลืนคลิกครั้งถัดไป
   var lastDragEnd = 0;
@@ -1063,6 +1138,7 @@
     var id = el.dataset.id;
     var sectionId = el.dataset.section;
     var projectId = el.dataset.project;
+    if (!allowed(act, el)) return;
 
     switch (act) {
 
@@ -1646,35 +1722,48 @@
         break;
 
       /* --- members --- */
-      case 'manage-members': openModal(membersModal()); break;
-      case 'add-user': {
+      case 'manage-members': openModal(addMemberModal()); break;
+      case 'add-user': openModal(addMemberModal()); break;
+      case 'do-add-user': {
         var un = document.getElementById('uName').value.trim();
         if (!un) { toast(L('ใส่ชื่อก่อน')); break; }
-        S.addUser({ name: un, email: document.getElementById('uEmail').value.trim() });
-        openModal(membersModal());
+        S.addUser({
+          name: un,
+          email: document.getElementById('uEmail').value.trim(),
+          role: document.getElementById('uRole').value
+        });
+        closeModal();
+        renderAll();
+        toast(L('เพิ่ม “{name}” เข้ารายชื่อแล้ว', { name: un }));
         break;
       }
-      case 'remove-user':
-        if (!confirm(L('ลบสมาชิกคนนี้?'))) break;
-        S.removeUser(id);
-        openModal(membersModal());
+      case 'remove-user': {
+        var ru = S.user(id);
+        if (!ru) break;
+        if (!confirm(L('เอา “{name}” ออกจากรายชื่อ?\nงานที่มอบหมายไว้จะกลายเป็นยังไม่มอบหมาย',
+          { name: ru.name }))) break;
+        if (!S.removeUser(id)) { toast(L('ลบคนนี้ไม่ได้')); break; }
+        renderAll();
+        toast(L('เอาออกจากรายชื่อแล้ว'), L('ย้อนกลับ'), 'undo');
         break;
+      }
       /* --- บทบาทในหน้าผู้ดูแล --- */
       case 'pick-role': {
         if (popIsOpenFor(el)) { closePops(); break; }
+        var pu = S.user(id);
         var rh = '';
         S.ROLES.forEach(function (r) {
-          rh += '<button data-act="set-role" data-id="' + R.esc(id) +
-            '" data-role="' + r.id + '">' + I(r.id === 'admin' ? 'shield' : 'users') +
-            '<span>' + L(r.label) + '</span></button>';
+          rh += '<button class="role-opt' + (pu && pu.role === r.id ? ' on' : '') +
+            '" data-act="set-role" data-id="' + R.esc(id) + '" data-role="' + r.id + '">' +
+            I(r.id === 'admin' ? 'shield' : r.id === 'viewer' ? 'search' : 'users') +
+            '<span><b>' + L(r.label) + '</b><em>' + L(r.desc) + '</em></span></button>';
         });
         openPop(el, rh);
         break;
       }
       case 'set-role': {
         closePops();
-        var okRole = S.setRole(id, el.dataset.role);
-        if (!okRole) toast(L('ต้องมีผู้ดูแลอย่างน้อยหนึ่งคน'));
+        if (!S.setRole(id, el.dataset.role)) toast(L('ต้องมีผู้ดูแลอย่างน้อยหนึ่งคน'));
         renderAll();
         break;
       }
@@ -1854,6 +1943,7 @@
     var el = e.target.closest ? e.target.closest('[data-act]') : null;
     if (!el) return;
     var act = el.dataset.act;
+    if (!allowed(act, el)) { renderAll(); return; }   // วาดใหม่เพื่อคืนค่าเดิมให้ช่องกรอก
 
     // ตัวกรอง
     if (act.indexOf('f-') === 0 && state.route.type === 'project') {
@@ -1985,6 +2075,7 @@
     if (e.key === 'Enter' && e.ctrlKey) {
       var box = document.getElementById('commentInput');
       if (box && document.activeElement === box && box.value.trim()) {
+        if (!S.can('comment')) { denyToast(); e.preventDefault(); return; }
         S.addComment(state.openTaskId, box.value);
         e.preventDefault();
       }
@@ -1993,6 +2084,7 @@
 
     if (e.ctrlKey && (e.key === 'z' || e.key === 'Z') && !typing) {
       e.preventDefault();
+      if (!S.can('write')) { denyToast(); return; }
       doUndo();
       return;
     }
@@ -2015,11 +2107,13 @@
       else if (k === 'i') { state.route = { type: 'inbox' }; clearSel(); renderAll(); }
       else if (k === 'q' && state.route.type === 'project') {
         var qp2 = S.project(state.route.id);
+        if (!S.can('write')) { denyToast(); return; }
         var qn2 = prompt(L('ชื่องานใหม่'));
         if (qn2 && qn2.trim()) {
           openTask(S.createTask({ name: qn2.trim() }, qp2.id, qp2.sections[0].id).id);
         }
       } else if (k === 'm' && state.openTaskId) {
+        if (!S.can('write', state.openTaskId)) { denyToast(); return; }
         S.updateTask(state.openTaskId, { assigneeId: S.db.currentUserId });
         toast(L('มอบหมายให้ตัวเองแล้ว'));
       } else if (k === 'c' && state.openTaskId) {
@@ -2037,6 +2131,7 @@
 
     if ((e.key === 'Delete' || e.key === 'Backspace') && !typing && selCount()) {
       e.preventDefault();
+      if (!S.can('write')) { denyToast(); return; }
       var ids2 = selectedIds();
       if (confirm(L('ลบ') + ' ' + ids2.length + ' ' + L('งาน?'))) {
         S.deleteTasks(ids2);
@@ -2135,6 +2230,7 @@
     // ลากจากจุดวงกลมปลายแท่ง = สร้างลำดับ ต้องเช็คก่อนการลากแท่ง
     var dot = e.target.closest('.g-dot');
     if (dot) {
+      if (!S.can('write', dot.dataset.tid)) return;   // ลากสร้างลำดับก่อนหลังก็คือการแก้งาน
       var rowsEl = dot.closest('.g-rows');
       if (!rowsEl) return;
       e.preventDefault();
@@ -2161,6 +2257,7 @@
     var tid = (handle && handle.dataset.tid) || bar.dataset.tid;
     var t = S.task(tid);
     if (!t) return;
+    if (!S.can('write', tid)) return;   // ลากแท่งในไทม์ไลน์ก็คือการแก้วันที่
 
     e.preventDefault();
     tlDrag = {
@@ -2307,6 +2404,7 @@
     if (isTouch()) return;
     var el = e.target.closest ? e.target.closest('[draggable="true"]') : null;
     if (!el || !el.dataset.id) return;
+    if (!S.can('write', el.dataset.id)) return;   // ลากย้ายก็คือการแก้งาน
     drag.id = el.dataset.id;
     el.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'move';

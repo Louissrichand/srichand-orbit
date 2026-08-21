@@ -1533,3 +1533,49 @@ body.gated { overflow: hidden; }
   .admin-tr .admin-seen { display: none; }
   .admin-th span:last-child { display: none; }
 }
+
+/* ---- สมาชิกและสิทธิ์ในหน้าผู้ดูแล ---- */
+.admin-sec h3 .btn { margin-left: auto; }
+.admin-sec h3 .admin-count + .btn { margin-left: 10px; }
+.admin-count + .btn { margin-left: auto; }
+
+.admin-tr { grid-template-columns: minmax(0, 1fr) 150px 130px 34px; }
+.admin-rm { display: flex; justify-content: flex-end; }
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 6px; color: var(--fg-faint);
+}
+.icon-btn:hover { background: var(--danger-bg); color: var(--danger); }
+.admin-seen .never { font-style: normal; color: var(--fg-faint); }
+
+/* ตัวเลือกบทบาทในป๊อปอัป — ต้องอ่านคำอธิบายได้ ไม่ใช่เดาจากชื่อ */
+.pop .role-opt { align-items: flex-start; padding: 9px; }
+.pop .role-opt svg { margin-top: 2px; flex: none; }
+.pop .role-opt span { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.pop .role-opt b { font-size: 13.5px; font-weight: 600; }
+.pop .role-opt em { font-style: normal; font-size: 12px; line-height: 1.45; color: var(--fg-faint); white-space: normal; }
+.pop .role-opt.on { background: var(--accent-bg); }
+.pop .role-opt.on b { color: var(--accent); }
+
+.admin-roles { font-size: 13px; }
+.admin-roles summary { cursor: pointer; color: var(--fg-soft); padding: 6px 0; }
+.admin-roles summary:hover { color: var(--fg); }
+.admin-roles ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.admin-roles li { display: flex; gap: 10px; align-items: baseline; line-height: 1.55; }
+.admin-roles li b { flex: none; width: 175px; font-weight: 600; }
+.admin-roles li span { color: var(--fg-soft); }
+.admin-roles li.hint { align-items: flex-start; color: var(--warn-fg); background: var(--warn-bg); padding: 9px 11px; border-radius: var(--radius); margin-top: 4px; }
+.admin-roles li.hint svg { flex: none; margin-top: 2px; }
+.admin-roles li.hint span { color: inherit; }
+
+.modal-note {
+  background: var(--warn-bg); color: var(--warn-fg);
+  border-radius: var(--radius); padding: 10px 12px;
+  font-size: 13px; line-height: 1.6; margin-top: 4px;
+}
+
+@media (max-width: 720px) {
+  .admin-tr { grid-template-columns: minmax(0, 1fr) 120px 34px; }
+  .admin-roles li { flex-direction: column; gap: 2px; }
+  .admin-roles li b { width: auto; }
+}

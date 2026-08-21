@@ -153,8 +153,6 @@
     h += '<div class="sb-foot">';
     h += '<button class="sb-item" data-act="show-shortcuts">' + I('keyboard') + '' +
          '<span class="grow">' + L('คีย์ลัด') + '</span></button>';
-    h += '<button class="sb-item" data-act="manage-members">' + I('users') + '' +
-         '<span class="grow">' + L('สมาชิกทีม') + '</span></button>';
     if (S.isAdmin()) {
       h += '<button class="sb-item' + (route.type === 'admin' ? ' active' : '') +
            '" data-act="go" data-route="admin">' + I('shield') + '' +
@@ -1434,7 +1432,7 @@
   function adminView() {
     var db = S.db;
     var team = global.OrbitSync && global.OrbitSync.state.mode === 'team';
-    var signedIn = S.signedInUsers();
+
     var h = '<div class="admin">';
 
     /* ความจริงที่ต้องบอกก่อน ไม่ให้เข้าใจผิดว่าตั้งบทบาทแล้วปลอดภัย */
@@ -1467,40 +1465,52 @@
         L('ดึงข้อมูลล่าสุดเดี๋ยวนี้') + '</button>' : '') +
       '</div>';
     h += '</section>';
+    /* ---- สมาชิกและสิทธิ์ ---- */
+    h += '<section class="admin-sec"><h3>' + L('สมาชิกและสิทธิ์') +
+      '<span class="admin-count">' + db.users.length + ' ' + L('คน') + '</span>' +
+      '<button class="btn btn-sm btn-primary" data-act="add-user">' + I('plus', 13) + ' ' +
+      L('เพิ่มสมาชิก') + '</button></h3>';
 
-    /* ---- สมาชิก ---- */
-    h += '<section class="admin-sec"><h3>' + L('รายชื่อสมาชิก') +
-      '<span class="admin-count">' + signedIn.length + ' ' + L('คนที่เคยล็อกอิน') + '</span></h3>';
-
-    if (!signedIn.length) {
-      h += '<div class="admin-empty">' +
-        L('ยังไม่มีใครล็อกอินด้วยบัญชีบริษัท รายชื่อจะขึ้นเองเมื่อมีคนเข้าใช้งาน') + '</div>';
-    } else {
-      h += '<div class="admin-tbl">';
-      h += '<div class="admin-tr admin-th"><span>' + L('ชื่อ') + '</span><span>' +
-        L('บทบาท') + '</span><span>' + L('เข้าใช้ล่าสุด') + '</span></div>';
-      signedIn.forEach(function (u) {
-        var isMe = u.id === db.currentUserId;
-        h += '<div class="admin-tr">';
-        h += '<span class="admin-who">' + avatar(u) +
-          '<span><b>' + esc(u.name) + (isMe ? ' <i>' + L('(คุณ)') + '</i>' : '') + '</b>' +
-          '<em>' + esc(u.email) + '</em></span></span>';
-        h += '<span><button class="role-pill' + (u.role === 'admin' ? ' is-admin' : '') +
-          '" data-act="pick-role" data-id="' + esc(u.id) + '">' +
-          roleLabel(u.role) + ' ' + I('chevronDown', 12) + '</button></span>';
-        h += '<span class="admin-seen">' + esc(fmtWhen(u.lastSeenAt)) + '</span>';
-        h += '</div>';
-      });
-      h += '</div>';
-    }
-
-    /* ผู้ใช้ตัวอย่างที่ยังค้างอยู่ — บอกให้รู้ว่าต้องเก็บกวาด */
-    var demo = db.users.filter(function (u) { return !u.lastSeenAt; });
-    if (demo.length) {
+    if (team) {
       h += '<div class="admin-demo">' + I('alert', 15) + '<div>' +
-        L('มีผู้ใช้ตัวอย่างค้างอยู่ {n} รายการ — เป็นข้อมูลสมมติจากตอนทดลอง ลบทิ้งได้ที่ “สมาชิกทีม”',
-          { n: demo.length }) + '</div></div>';
+        L('การเพิ่มหรือลบที่นี่ไม่ได้ให้หรือถอนสิทธิ์เข้าถึงข้อมูล ' +
+          'ต้องเพิ่มหรือเอาออกจากไซต์ SharePoint ควบคู่กันเสมอ') + '</div></div>';
     }
+
+    h += '<div class="admin-tbl">';
+    h += '<div class="admin-tr admin-th"><span>' + L('ชื่อ') + '</span><span>' +
+      L('บทบาท') + '</span><span>' + L('เข้าใช้ล่าสุด') + '</span><span></span></div>';
+    db.users.forEach(function (u) {
+      var isMe = u.id === db.currentUserId;
+      var lastAdmin = u.role === 'admin' && S.adminCount() <= 1;
+      h += '<div class="admin-tr">';
+      h += '<span class="admin-who">' + avatar(u) +
+        '<span><b>' + esc(u.name) + (isMe ? ' <i>' + L('(คุณ)') + '</i>' : '') + '</b>' +
+        '<em>' + esc(u.email || '—') + '</em></span></span>';
+      h += '<span><button class="role-pill' + (u.role === 'admin' ? ' is-admin' : '') +
+        '" data-act="pick-role" data-id="' + esc(u.id) + '">' +
+        roleLabel(u.role) + ' ' + I('chevronDown', 12) + '</button></span>';
+      h += '<span class="admin-seen">' +
+        (u.lastSeenAt ? esc(fmtWhen(u.lastSeenAt))
+                      : '<i class="never">' + L('ยังไม่เคยเข้าใช้') + '</i>') + '</span>';
+      h += '<span class="admin-rm">' +
+        (isMe || lastAdmin ? ''
+          : '<button class="icon-btn" data-act="remove-user" data-id="' + esc(u.id) +
+            '" title="' + L('ลบออกจากรายชื่อ') + '">' + I('trash', 15) + '</button>') +
+        '</span>';
+      h += '</div>';
+    });
+    h += '</div>';
+
+    /* ตารางอ้างอิงว่าแต่ละระดับทำอะไรได้ ผู้ดูแลจะได้เลือกถูก */
+    h += '<details class="admin-roles"><summary>' + L('แต่ละระดับทำอะไรได้บ้าง') + '</summary><ul>';
+    S.ROLES.forEach(function (r) {
+      h += '<li><b>' + L(r.label) + '</b><span>' + L(r.desc) + '</span></li>';
+    });
+    h += '<li class="hint">' + I('shield', 14) + '<span>' +
+      L('ระดับ “ดูอย่างเดียว” จะบังคับได้จริงก็ต่อเมื่อตั้งสิทธิ์บนไซต์ SharePoint ของคนนั้นเป็น Read ด้วย') +
+      '</span></li>';
+    h += '</ul></details>';
     h += '</section>';
 
     /* ---- กิจกรรมล่าสุด ---- */
