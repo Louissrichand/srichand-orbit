@@ -1550,10 +1550,16 @@
   /* ---------- users / settings ---------- */
 
   /** เพิ่มรายชื่อไว้ล่วงหน้า เพื่อมอบหมายงานได้ก่อนเจ้าตัวล็อกอินครั้งแรก
+   *
+   *  ถ้าส่ง id มาด้วย (ได้จากสมุดรายชื่อ Microsoft) รายการนี้จะเชื่อมกับ
+   *  ตอนเจ้าตัวล็อกอินจริงโดยอัตโนมัติ ไม่เกิดรายการซ้ำ
    *  หมายเหตุ: การเพิ่มที่นี่ไม่ได้ให้สิทธิ์เข้าถึงข้อมูล ต้องเพิ่มเข้าไซต์ SharePoint ด้วย */
   function addUser(attrs) {
+    var id = attrs.id || uid('u');
+    var existing = user(id);
+    if (existing) return existing;          // เลือกคนเดิมซ้ำ ไม่ต้องเพิ่มอีก
     var u = {
-      id: uid('u'), name: attrs.name, email: attrs.email || '',
+      id: id, name: attrs.name, email: attrs.email || '',
       color: PALETTE[db.users.length % PALETTE.length],
       role: ROLE_CAPS[attrs.role] ? attrs.role : 'member',
       lastSeenAt: null

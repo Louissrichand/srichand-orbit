@@ -33,7 +33,14 @@
     return null;
   }
 
-  var SCOPES = ['User.Read', 'Files.ReadWrite.All'];
+  var SCOPES = ['User.Read', 'User.ReadBasic.All', 'Files.ReadWrite.All'];
+
+  /* รหัสประจำตัวใน Orbit ต้องมาจาก object id ของ Entra เท่านั้น
+   * เพราะเป็นค่าเดียวกับที่ Microsoft Graph คืนมาตอนค้นหารายชื่อ
+   * ถ้าใช้ค่าอื่น คนที่ผู้ดูแลเพิ่มไว้ล่วงหน้าจะไม่เชื่อมกับตอนเขาล็อกอินจริง */
+  function orbitId(oid) {
+    return 'u_' + String(oid || '').replace(/[^a-z0-9]/gi, '').slice(0, 32);
+  }
 
   function redirectUri() {
     /* ต้องตรงกับที่ลงทะเบียนไว้ใน Entra เป๊ะ ๆ
@@ -103,11 +110,13 @@
   function profile() {
     if (!account) return null;
     var claims = account.idTokenClaims || {};
+    // homeAccountId มีรูปแบบ {oid}.{tid} จึงใช้ส่วนหน้าเป็นตัวสำรองได้
+    var oid = claims.oid || (account.homeAccountId || '').split('.')[0] || account.username;
     return {
-      id: 'u_' + (account.homeAccountId || claims.oid || account.username).replace(/[^a-z0-9]/gi, '').slice(0, 24),
+      id: orbitId(oid),
       name: account.name || claims.name || account.username,
       email: account.username || claims.preferred_username || '',
-      oid: claims.oid || ''
+      oid: oid
     };
   }
 
@@ -121,7 +130,7 @@
     profile: profile,
     isSignedIn: function () { return !!account; },
     isReady: function () { return ready; },
-    scopes: SCOPES,
+    scopes: SCOPES, orbitId: orbitId,
     redirectUri: redirectUri
   };
 

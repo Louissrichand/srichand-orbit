@@ -165,12 +165,37 @@
     }).catch(function () { return null; });
   }
 
+
+  /* ---------- ค้นหารายชื่อคนในองค์กร ----------
+   * ใช้สมุดรายชื่อของ Entra ผ่าน Graph เพื่อให้ผู้ดูแลเลือกคนได้โดยไม่ต้องพิมพ์เอง
+   * ใช้ startswith แทน $search เพราะไม่ต้องส่งหัว ConsistencyLevel เพิ่ม */
+  function searchPeople(q) {
+    var s = String(q || '').trim().replace(/'/g, "''");
+    if (s.length < 2) return Promise.resolve([]);
+    var fields = ['displayName', 'givenName', 'surname', 'mail', 'userPrincipalName'];
+    var filter = fields.map(function (k) {
+      return "startswith(" + k + ",'" + s + "')";
+    }).join(' or ');
+    return call('/users?$top=15&$select=id,displayName,mail,userPrincipalName,jobTitle' +
+      '&$filter=' + encodeURIComponent(filter))
+      .then(asJson)
+      .then(function (r) {
+        return (r.value || []).map(function (u) {
+          return {
+            oid: u.id,
+            name: u.displayName || u.userPrincipalName || '',
+            email: u.mail || u.userPrincipalName || '',
+            title: u.jobTitle || ''
+          };
+        });
+      });
+  }
   function reset() { driveId = null; itemId = null; eTag = null; }
 
   global.OrbitCloud = {
     load: load, push: push, forcePush: forcePush,
     remoteChanged: remoteChanged, lastEditor: lastEditor,
-    stat: stat, reset: reset,
+    stat: stat, reset: reset, searchPeople: searchPeople,
     get eTag() { return eTag; },
     get lastError() { return lastError; },
     describeTarget: function () {

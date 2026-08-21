@@ -1579,3 +1579,36 @@ body.gated { overflow: hidden; }
   .admin-roles li { flex-direction: column; gap: 2px; }
   .admin-roles li b { width: auto; }
 }
+
+/* ---- ช่องเลือกคนจากสมุดรายชื่อบริษัท ---- */
+.people {
+  max-height: 240px; overflow-y: auto; margin-top: -4px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.people:empty { display: none; }
+.people-note { padding: 12px 4px; font-size: 13px; color: var(--fg-faint); }
+
+.person {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 8px 10px; border-radius: var(--radius); text-align: left;
+  border: 1px solid transparent;
+}
+.person:hover:not([disabled]) { background: var(--bg-sunk); border-color: var(--line); }
+.person > span { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.person b { font-size: 14px; font-weight: 600; color: var(--fg); }
+.person em {
+  font-style: normal; font-size: 12px; color: var(--fg-faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.person i {
+  font-style: normal; font-size: 12px; font-weight: 600; flex: none;
+  color: var(--accent); padding: 3px 9px; border-radius: 999px; background: var(--accent-bg);
+}
+.person[disabled] { opacity: .55; cursor: default; }
+.person[disabled] i { color: var(--fg-faint); background: var(--bg-inset); }
+
+details.manual { margin-top: 6px; }
+details.manual summary {
+  cursor: pointer; font-size: 13px; color: var(--fg-soft); padding: 6px 0;
+}
+details.manual summary:hover { color: var(--fg); }

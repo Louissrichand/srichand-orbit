@@ -723,25 +723,68 @@
 
   /** เพิ่มรายชื่อไว้ล่วงหน้า ใช้ตอนอยากมอบหมายงานก่อนเจ้าตัวล็อกอินครั้งแรก */
   function addMemberModal() {
-    var team = global.OrbitSync && global.OrbitSync.state.mode === 'team';
+    var picker = canPickPeople();
     var h = '<h2>' + L('เพิ่มสมาชิก') + '</h2>';
-    h += '<div class="field"><label>' + L('ชื่อ') + '</label>' +
-      '<input id="uName" placeholder="' + L('ชื่อ') + '"></div>';
-    h += '<div class="field"><label>' + L('อีเมล') + '</label>' +
-      '<input id="uEmail" type="email" placeholder="name@srichand.co.th"></div>';
-    h += '<div class="field"><label>' + L('บทบาท') + '</label><select id="uRole">';
+
+    h += '<div class="field"><label>' + L('บทบาทที่จะให้') + '</label><select id="uRole">';
     S.ROLES.forEach(function (r) {
       h += '<option value="' + r.id + '"' + (r.id === 'member' ? ' selected' : '') + '>' +
         L(r.label) + ' — ' + L(r.desc) + '</option>';
     });
     h += '</select></div>';
-    if (team) {
-      h += '<div class="modal-note">' + L('อย่าลืมเพิ่มคนนี้เข้าไซต์ SharePoint ด้วย ' +
-        'ไม่งั้นเขาจะล็อกอินเข้ามาแล้วเปิดข้อมูลไม่ได้') + '</div>';
+
+    if (picker) {
+      h += '<div class="field"><label>' + L('ค้นหาจากรายชื่อพนักงานบริษัท') + '</label>' +
+        '<input id="uSearch" autocomplete="off" placeholder="' +
+        L('พิมพ์ชื่อหรืออีเมล อย่างน้อย 2 ตัวอักษร') + '"></div>';
+      h += '<div id="uResults" class="people"></div>';
+      h += '<details class="manual"><summary>' + L('ไม่เจอชื่อ? กรอกเอง') + '</summary>' + manualFields() + '</details>';
+    } else {
+      h += manualFields();
     }
-    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
-      '<button class="btn btn-primary" data-act="do-add-user">' + L('เพิ่ม') + '</button></div>';
+
+    h += '<div class="modal-note">' +
+      (picker ? L('อย่าลืมเพิ่มคนนี้เข้าไซต์ SharePoint ด้วย ไม่งั้นเขาจะล็อกอินเข้ามาแล้วเปิดข้อมูลไม่ได้')
+              : L('กรอกอีเมลให้ตรงกับบัญชีบริษัท ไม่งั้นตอนเจ้าตัวล็อกอินจะกลายเป็นคนละรายการ')) +
+      '</div>';
+
+    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button>' +
+      '<button class="btn btn-primary" data-act="do-add-user">' + L('เพิ่มด้วยข้อมูลที่กรอก') + '</button></div>';
     return h;
+  }
+
+  function manualFields() {
+    return '<div class="field"><label>' + L('ชื่อ') + '</label>' +
+      '<input id="uName" placeholder="' + L('ชื่อ') + '"></div>' +
+      '<div class="field"><label>' + L('อีเมล') + '</label>' +
+      '<input id="uEmail" type="email" placeholder="name@srichand.co.th"></div>';
+  }
+
+  /** เลือกคนจากสมุดรายชื่อบริษัทได้ไหม — ต้องล็อกอินอยู่และมี Graph ให้เรียก */
+  function canPickPeople() {
+    return !!(global.OrbitCloud && global.OrbitAuth &&
+              global.OrbitAuth.isSignedIn && global.OrbitAuth.isSignedIn());
+  }
+
+  /** วาดผลการค้นหารายชื่อ */
+  function renderPeople(list, note) {
+    var box = document.getElementById('uResults');
+    if (!box) return;
+    if (note) { box.innerHTML = '<div class="people-note">' + R.esc(note) + '</div>'; return; }
+    if (!list.length) {
+      box.innerHTML = '<div class="people-note">' + L('ไม่พบชื่อนี้ในบริษัท') + '</div>';
+      return;
+    }
+    box.innerHTML = list.map(function (p) {
+      var already = !!S.user(global.OrbitAuth.orbitId(p.oid));
+      return '<button class="person" data-act="pick-person" data-oid="' + R.esc(p.oid) +
+        '" data-name="' + R.esc(p.name) + '" data-email="' + R.esc(p.email) + '"' +
+        (already ? ' disabled' : '') + '>' +
+        R.avatar({ name: p.name, color: '#8a8a92' }) +
+        '<span><b>' + R.esc(p.name) + '</b><em>' + R.esc(p.email) +
+        (p.title ? ' · ' + R.esc(p.title) : '') + '</em></span>' +
+        '<i>' + (already ? L('มีอยู่แล้ว') : L('เพิ่ม')) + '</i></button>';
+    }).join('');
   }
 
   function fieldsModal(projectId) {
@@ -1052,7 +1095,7 @@
     function put(cap, list) { list.forEach(function (a) { map[a] = cap; }); }
 
     put('manage', [
-      'manage-members', 'add-user', 'do-add-user', 'remove-user', 'pick-role', 'set-role',
+      'manage-members', 'add-user', 'do-add-user', 'pick-person', 'remove-user', 'pick-role', 'set-role',
       'delete-project', 'reset', 'import', 'paste-backup', 'do-paste-import'
     ]);
     put('structure', [
@@ -1724,6 +1767,17 @@
       /* --- members --- */
       case 'manage-members': openModal(addMemberModal()); break;
       case 'add-user': openModal(addMemberModal()); break;
+      case 'pick-person': {
+        var pRole = document.getElementById('uRole').value;
+        var added = S.addUser({
+          id: global.OrbitAuth.orbitId(el.dataset.oid),
+          name: el.dataset.name, email: el.dataset.email, role: pRole
+        });
+        el.disabled = true;
+        el.querySelector('i').textContent = L('เพิ่มแล้ว');
+        toast(L('เพิ่ม “{name}” เข้ารายชื่อแล้ว', { name: added.name }));
+        break;
+      }
       case 'do-add-user': {
         var un = document.getElementById('uName').value.trim();
         if (!un) { toast(L('ใส่ชื่อก่อน')); break; }
@@ -2055,6 +2109,29 @@
     if (si) si.focus();
   }
 
+
+  /* ค้นหารายชื่อพนักงานแบบพิมพ์ไปหาไป หน่วงไว้กันยิงทุกตัวอักษร */
+  var peopleTimer = null;
+  var peopleSeq = 0;
+  document.addEventListener('input', function (e) {
+    if (!e.target || e.target.id !== 'uSearch') return;
+    var q = e.target.value;
+    clearTimeout(peopleTimer);
+    if (q.trim().length < 2) { renderPeople([], ''); return; }
+    renderPeople([], L('กำลังค้นหา…'));
+    var seq = ++peopleSeq;
+    peopleTimer = setTimeout(function () {
+      global.OrbitCloud.searchPeople(q).then(function (list) {
+        if (seq !== peopleSeq) return;          // มีการพิมพ์ต่อแล้ว ผลนี้เก่าไปแล้ว
+        renderPeople(list);
+      }, function (err) {
+        if (seq !== peopleSeq) return;
+        renderPeople([], err && err.status === 403
+          ? L('บัญชีนี้ไม่มีสิทธิ์อ่านรายชื่อพนักงาน')
+          : L('ค้นหาไม่สำเร็จ ลองใหม่อีกครั้ง'));
+      });
+    }, 300);
+  });
   document.addEventListener('keyup', function (e) {
     if (e.key === 'Tab') tabHeld = false;
   });

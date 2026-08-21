@@ -468,6 +468,18 @@
     /* --- หน้าผู้ดูแลระบบ --- */
     'ผู้ดูแลระบบ': 'Admin', 'ผู้ดูแล': 'Admin', 'สมาชิก': 'Member',
     'สมาชิกและสิทธิ์': 'Members & permissions', 'คน': 'people',
+    'บทบาทที่จะให้': 'Role to assign',
+    'ค้นหาจากรายชื่อพนักงานบริษัท': 'Search your company directory',
+    'พิมพ์ชื่อหรืออีเมล อย่างน้อย 2 ตัวอักษร': 'Type a name or email — at least 2 characters',
+    'ไม่เจอชื่อ? กรอกเอง': 'Not listed? Enter manually',
+    'ไม่พบชื่อนี้ในบริษัท': 'No one in the directory matches that',
+    'กำลังค้นหา…': 'Searching…',
+    'ค้นหาไม่สำเร็จ ลองใหม่อีกครั้ง': 'Search failed — please try again',
+    'บัญชีนี้ไม่มีสิทธิ์อ่านรายชื่อพนักงาน': 'This account cannot read the company directory',
+    'มีอยู่แล้ว': 'Already added', 'เพิ่มแล้ว': 'Added',
+    'เพิ่มด้วยข้อมูลที่กรอก': 'Add from the fields above',
+    'กรอกอีเมลให้ตรงกับบัญชีบริษัท ไม่งั้นตอนเจ้าตัวล็อกอินจะกลายเป็นคนละรายการ':
+      'Use their exact work email — otherwise they will appear as a separate person when they sign in.',
     'เพิ่มสมาชิก': 'Add member', 'ยังไม่เคยเข้าใช้': 'Never signed in',
     'ลบออกจากรายชื่อ': 'Remove from list',
     'แต่ละระดับทำอะไรได้บ้าง': 'What each level can do',
