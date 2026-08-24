@@ -15,3 +15,7 @@ orbit-proposal.png
 orbit-login-steps.png
 orbit-proposal.jpg
 orbit-login-steps.jpg
+
+# แพ็กเกจของ API — ติดตั้งตอน build บน GitHub Actions
+api/node_modules/
+api/local.settings.json

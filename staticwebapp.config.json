@@ -2,6 +2,7 @@
   "$schema": "https://json.schemastore.org/staticwebapp.config.json",
 
   "auth": {
+    "rolesSource": "/api/roles",
     "identityProviders": {
       "azureActiveDirectory": {
         "registration": {
@@ -23,7 +24,8 @@
     { "route": "/.auth/login/facebook", "statusCode": 404 },
     { "route": "/.auth/login/apple", "statusCode": 404 },
 
-    { "route": "/api/admin/*", "allowedRoles": ["authenticated"] },
+    { "route": "/api/roles", "allowedRoles": ["anonymous"], "methods": ["POST"] },
+    { "route": "/api/admin/*", "allowedRoles": ["orbit-admin"] },
     { "route": "/api/*", "allowedRoles": ["authenticated"] },
     { "route": "/*", "allowedRoles": ["authenticated"] }
   ],
@@ -41,5 +43,7 @@
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "strict-origin-when-cross-origin"
-  }
+  },
+
+  "platform": { "apiRuntime": "node:20" }
 }
