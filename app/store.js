@@ -390,6 +390,11 @@
       if (!u.role) u.role = 'member';
       if (!('lastSeenAt' in u)) u.lastSeenAt = null;
     });
+    d.audit = d.audit || [];
+    d.users.forEach(function (u) {
+      if (!('active' in u)) u.active = true;      // ปิดใช้งานได้โดยไม่ต้องลบทิ้ง
+      if (!('authBy' in u)) u.authBy = null;      // microsoft | password | null (ยังไม่เคยเข้า)
+    });
     if (!d.users.some(function (u) { return u.role === 'admin'; })) {
       var firstUser = d.users.filter(function (u) { return u.id === d.currentUserId; })[0] || d.users[0];
       if (firstUser) firstUser.role = 'admin';
@@ -494,6 +499,80 @@
     listeners.forEach(function (fn) { fn(); });
   }
 
+
+  /* ---------- บันทึกการทำงาน ----------
+   *
+   * แยกเป็นสองชั้นโดยตั้งใจ เพราะตอบคำถามคนละแบบ
+   *
+   *   stories  — งานชิ้นนี้เปลี่ยนอะไรไปบ้าง อยู่ในหน้ารายละเอียดงาน
+   *   audit    — ใครทำอะไรกับระบบ อยู่ในหน้าผู้ดูแล
+   *
+   * ที่ไม่เอาการแก้งานทุกครั้งมาลง audit เพราะจะท่วมจนหาของสำคัญไม่เจอ
+   * audit เก็บเฉพาะเรื่องที่ต้องตอบได้ตอนมีคนถามย้อนหลัง
+   * เช่น ใครเปลี่ยนสิทธิ์ใคร ใครลบโปรเจกต์ ใครถูกปิดบัญชีเมื่อไหร่
+   */
+  var AUDIT_MAX = 2000;    // เก็บเท่าที่จำเป็น ไม่ให้ไฟล์บวมไม่มีที่สิ้นสุด
+
+  function audit(action, target, detail) {
+    if (!db.audit) db.audit = [];
+    db.audit.push({
+      id: uid('a'),
+      at: new Date().toISOString(),
+      actorId: db.currentUserId,
+      action: action,                       // เช่น user.role, project.delete
+      target: target || null,               // ชื่อหรือรหัสของสิ่งที่ถูกกระทำ
+      detail: detail || null
+    });
+    if (db.audit.length > AUDIT_MAX) {
+      db.audit = db.audit.slice(-AUDIT_MAX);
+    }
+  }
+
+  /** รายการบันทึกล่าสุด กรองได้ตามหมวดและตามคน */
+  function auditLog(opts) {
+    opts = opts || {};
+    var rows = (db.audit || []).slice().reverse();
+    if (opts.group) {
+      rows = rows.filter(function (r) { return r.action.split('.')[0] === opts.group; });
+    }
+    if (opts.actorId) {
+      rows = rows.filter(function (r) { return r.actorId === opts.actorId; });
+    }
+    if (opts.q) {
+      var q = String(opts.q).toLowerCase();
+      rows = rows.filter(function (r) {
+        return (r.target || '').toLowerCase().indexOf(q) >= 0 ||
+               (r.detail || '').toLowerCase().indexOf(q) >= 0 ||
+               r.action.toLowerCase().indexOf(q) >= 0;
+      });
+    }
+    return rows.slice(0, opts.limit || 200);
+  }
+
+  function auditGroups() {
+    var seen = {};
+    (db.audit || []).forEach(function (r) { seen[r.action.split('.')[0]] = true; });
+    return Object.keys(seen).sort();
+  }
+
+  /** ส่งออกเป็น CSV ให้ผู้ตรวจสอบเอาไปเปิดใน Excel ได้ */
+  function auditCsv() {
+    var head = ['เวลา', 'ผู้ทำ', 'อีเมล', 'การกระทำ', 'เป้าหมาย', 'รายละเอียด'];
+    var lines = [head.join(',')];
+    (db.audit || []).slice().reverse().forEach(function (r) {
+      var u = user(r.actorId);
+      lines.push([
+        r.at, u ? u.name : '?', u ? u.email : '',
+        r.action, r.target || '', r.detail || ''
+      ].map(csvCell).join(','));
+    });
+    return '\uFEFF' + lines.join('\r\n');   // BOM เพื่อให้ Excel อ่านภาษาไทยถูก
+  }
+
+  function csvCell(v) {
+    var s = String(v == null ? '' : v);
+    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
   /* ---------- undo ---------- */
 
   var undoStack = [];   // อยู่ในหน่วยความจำเท่านั้น ไม่ persist
@@ -1263,6 +1342,7 @@
       fields: [], status: null, rules: [], savedViews: [], colWidths: {}
     };
     db.projects.push(p);
+    audit("project.create", p.name);
     commit();
     return p;
   }
@@ -1319,6 +1399,7 @@
     });
     p.savedViews = [];
     db.projects.push(p);
+    audit("project.duplicate", p.name, "คัดลอกจากโปรเจกต์เดิม");
 
     if (withTasks) {
       tasksInProject(id).forEach(function (x) {
@@ -1349,6 +1430,8 @@
 
   function deleteProject(id) {
     snapshot('ลบโปรเจกต์');
+    var _dp = project(id);
+    audit("project.delete", _dp ? _dp.name : id, "งานที่อยู่เฉพาะโปรเจกต์นี้ถูกลบไปด้วย");
     var ms = db.memberships.filter(function (m) { return m.projectId === id; });
     ms.forEach(function (m) {
       var others = db.memberships.filter(function (x) {
@@ -1566,6 +1649,7 @@
     };
     snapshot('เพิ่มสมาชิก');
     db.users.push(u);
+    audit("user.add", u.name, u.email + " · บทบาท " + u.role);
     commit();
     return u;
   }
@@ -1583,6 +1667,7 @@
     });
     db.notifications = db.notifications.filter(function (n) { return n.userId !== id; });
     db.users = db.users.filter(function (x) { return x.id !== id; });
+    audit("user.remove", u.name, u.email);
     commit();
     return true;
   }
@@ -1609,8 +1694,12 @@
       });
       u.role = hasRealAdmin ? 'member' : 'admin';
     }
+    var _first = !u.lastSeenAt;
     u.lastSeenAt = new Date().toISOString();
     db.currentUserId = u.id;
+    u.authBy = "microsoft";
+    /* ผู้ทำกับเป้าหมายเป็นคนเดียวกัน จึงไม่ต้องใส่ชื่อซ้ำ */
+    audit(_first ? "auth.first-login" : "auth.login", null, u.email);
     commit();
     return u;
   }
@@ -1651,6 +1740,7 @@
    *         คนระดับ "แก้เฉพาะงานของตัวเอง" จะผ่านเฉพาะงานที่ตัวเองเกี่ยวข้อง
    */
   function can(cap, taskId) {
+    if (!isActive()) return false;
     var caps = ROLE_CAPS[role()] || [];
     if (caps.indexOf(cap) >= 0) return true;
     if (cap === 'write' && caps.indexOf('writeOwn') >= 0) {
@@ -1665,7 +1755,7 @@
   function isAdmin(userId) { return role(userId) === 'admin'; }
 
   function adminCount() {
-    return db.users.filter(function (u) { return u.role === 'admin'; }).length;
+    return db.users.filter(function (u) { return u.role === "admin" && u.active !== false; }).length;
   }
 
   /** เปลี่ยนบทบาท — ห้ามเหลือศูนย์ผู้ดูแล ไม่งั้นไม่มีใครเข้าหน้าผู้ดูแลได้อีก */
@@ -1675,10 +1765,32 @@
     if (u.role === 'admin' && newRole !== 'admin' && adminCount() <= 1) return false;
     snapshot('เปลี่ยนบทบาท');
     u.role = newRole;
+    audit("user.role", u.name, "เปลี่ยนเป็น " + newRole);
     commit();
     return true;
   }
 
+
+  /** ปิดหรือเปิดการใช้งานบัญชี
+   *  ตัดสิทธิ์ได้ทันทีโดยไม่ต้องลบคนออก งานที่มอบหมายไว้จึงไม่หลุดหาย
+   *  และเปิดกลับได้ถ้าเป็นการปิดชั่วคราว */
+  function setActive(userId, active) {
+    var u = user(userId);
+    if (!u) return false;
+    if (userId === db.currentUserId) return false;                     // ห้ามปิดตัวเอง
+    if (u.role === 'admin' && !active && adminCount() <= 1) return false;
+    snapshot(active ? 'เปิดใช้งานบัญชี' : 'ปิดใช้งานบัญชี');
+    u.active = !!active;
+    audit(active ? 'user.enable' : 'user.disable', u.name, u.email);
+    commit();
+    return true;
+  }
+
+  /** บัญชีนี้ใช้งานได้อยู่ไหม — ปิดแล้วต้องทำอะไรไม่ได้เลย */
+  function isActive(userId) {
+    var u = user(userId || db.currentUserId);
+    return !!u && u.active !== false;
+  }
   /** คนที่เคยล็อกอินจริง แยกจากผู้ใช้ตัวอย่าง */
   function signedInUsers() {
     return db.users.filter(function (u) { return !!u.lastSeenAt; });
@@ -1716,6 +1828,7 @@
   function reset() {
     snapshot('ล้างข้อมูล');
     db = migrate(seed());
+    audit("system.reset", null, "ล้างข้อมูลทั้งหมดและเริ่มใหม่");
     commit();
   }
 
@@ -1781,6 +1894,8 @@
     addUser: addUser, removeUser: removeUser, setCurrentUser: setCurrentUser,
     adoptIdentity: adoptIdentity, ROLES: ROLES, ROLE_CAPS: ROLE_CAPS,
     isAdmin: isAdmin, setRole: setRole, can: can, role: role, adminCount: adminCount,
+    setActive: setActive, isActive: isActive,
+    audit: audit, auditLog: auditLog, auditGroups: auditGroups, auditCsv: auditCsv,
     signedInUsers: signedInUsers, recentActivity: recentActivity,
     setSetting: setSetting,
 

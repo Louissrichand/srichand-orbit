@@ -1392,6 +1392,24 @@
     return h;
   }
 
+
+  /** หน้าจอสำหรับบัญชีที่ถูกปิดใช้งาน
+   *  ถ้าไม่มีหน้านี้ คนที่ถูกปิดจะเห็นแอปที่กดอะไรก็ไม่ขึ้น โดยไม่รู้ว่าทำไม */
+  function disabledScreen() {
+    var me = S.me();
+    var h = '<div class="gate-card">';
+    h += '<div class="gate-logo">' + global.Icons.logoLockup(30) + '</div>';
+    h += '<h1>' + L('บัญชีของคุณถูกปิดใช้งาน') + '</h1>';
+    h += '<p>' + L('บัญชีนี้ถูกผู้ดูแลระบบปิดการใช้งานไว้ จึงเข้าถึงข้อมูลงานไม่ได้') + '</p>';
+    if (me && me.email) {
+      h += '<div class="gate-who">' + esc(me.name) + ' · ' + esc(me.email) + '</div>';
+    }
+    h += '<div class="gate-err">' + I('alert', 15) + '<span>' +
+      L('หากคิดว่าเป็นความผิดพลาด กรุณาติดต่อฝ่ายเทคโนโลยีสารสนเทศ') + '</span></div>';
+    h += '<button class="gate-alt" data-act="sign-out">' + L('ออกจากระบบ') + '</button>';
+    h += '</div>';
+    return h;
+  }
   /** หน้าเข้าสู่ระบบเต็มจอ ใช้เมื่อเปิดโหมดทีมแต่ยังไม่ได้ล็อกอิน */
   function gateScreen(st) {
     st = st || {};
@@ -1424,12 +1442,59 @@
 
   /* ---------- หน้าผู้ดูแลระบบ ---------- */
 
+
+
+  /* ---------- ตัวช่วยแสดงบันทึกการทำงาน ---------- */
+
+  var AUDIT_GROUP = {
+    auth: 'การเข้าใช้งาน', user: 'จัดการสมาชิก', project: 'โปรเจกต์',
+    system: 'ระบบ', task: 'งาน', security: 'ความปลอดภัย'
+  };
+  function auditGroupLabel(g) { return AUDIT_GROUP[g] || g; }
+
+  /* แปลรหัสการกระทำเป็นประโยคที่คนอ่านรู้เรื่อง
+     ถ้าเจอรหัสที่ยังไม่ได้แปล จะคืนรหัสเดิม ไม่ปล่อยให้ว่าง */
+  var AUDIT_TEXT = {
+    'auth.login': 'เข้าสู่ระบบ',
+    'auth.first-login': 'เข้าสู่ระบบครั้งแรก',
+    'auth.logout': 'ออกจากระบบ',
+    'auth.denied': 'ถูกปฏิเสธการเข้าถึง',
+    'user.add': 'เพิ่มสมาชิก',
+    'user.remove': 'ลบสมาชิก',
+    'user.role': 'เปลี่ยนบทบาทของ',
+    'user.disable': 'ปิดใช้งานบัญชีของ',
+    'user.enable': 'เปิดใช้งานบัญชีของ',
+    'project.create': 'สร้างโปรเจกต์',
+    'project.duplicate': 'คัดลอกโปรเจกต์',
+    'project.delete': 'ลบโปรเจกต์',
+    'system.reset': 'ล้างข้อมูลทั้งหมด',
+    'system.export': 'ส่งออกข้อมูล',
+    'system.import': 'นำเข้าข้อมูล'
+  };
+  function auditText(a) { return AUDIT_TEXT[a] || a; }
+
+  var AUDIT_ICON = {
+    auth: 'signIn', user: 'users', project: 'archive',
+    system: 'settings', task: 'checkCircle', security: 'shield'
+  };
+  function auditIcon(a) { return AUDIT_ICON[a.split('.')[0]] || 'more'; }
+  /** บอกว่าคนนี้เข้าระบบด้วยวิธีไหน ผู้ดูแลจะได้รู้ว่าต้องตัดสิทธิ์ที่ไหนบ้าง */
+  function authTag(u) {
+    if (u.authBy === 'password') {
+      return ' <span class="auth-tag pw">' + L('รหัสผ่าน') + '</span>';
+    }
+    if (u.authBy === 'microsoft') {
+      return ' <span class="auth-tag ms">Microsoft</span>';
+    }
+    return '';
+  }
   function roleLabel(id) {
     var r = S.ROLES.filter(function (x) { return x.id === id; })[0];
     return r ? L(r.label) : L('สมาชิก');
   }
 
-  function adminView() {
+  function adminView(filter) {
+    var f = filter || {};
     var db = S.db;
     var team = global.OrbitSync && global.OrbitSync.state.mode === 'team';
 
@@ -1483,21 +1548,36 @@
     db.users.forEach(function (u) {
       var isMe = u.id === db.currentUserId;
       var lastAdmin = u.role === 'admin' && S.adminCount() <= 1;
-      h += '<div class="admin-tr">';
+      var off = u.active === false;
+      h += '<div class="admin-tr' + (off ? ' is-off' : '') + '">';
+
       h += '<span class="admin-who">' + avatar(u) +
-        '<span><b>' + esc(u.name) + (isMe ? ' <i>' + L('(คุณ)') + '</i>' : '') + '</b>' +
-        '<em>' + esc(u.email || '—') + '</em></span></span>';
+        '<span><b>' + esc(u.name) + (isMe ? ' <i>' + L('(คุณ)') + '</i>' : '') +
+        (off ? '<span class="pill-off">' + L('ปิดใช้งาน') + '</span>' : '') + '</b>' +
+        '<em>' + esc(u.email || '—') + authTag(u) + '</em></span></span>';
+
       h += '<span><button class="role-pill' + (u.role === 'admin' ? ' is-admin' : '') +
         '" data-act="pick-role" data-id="' + esc(u.id) + '">' +
         roleLabel(u.role) + ' ' + I('chevronDown', 12) + '</button></span>';
+
       h += '<span class="admin-seen">' +
         (u.lastSeenAt ? esc(fmtWhen(u.lastSeenAt))
                       : '<i class="never">' + L('ยังไม่เคยเข้าใช้') + '</i>') + '</span>';
-      h += '<span class="admin-rm">' +
-        (isMe || lastAdmin ? ''
-          : '<button class="icon-btn" data-act="remove-user" data-id="' + esc(u.id) +
-            '" title="' + L('ลบออกจากรายชื่อ') + '">' + I('trash', 15) + '</button>') +
-        '</span>';
+
+      h += '<span class="admin-rm">';
+      if (!isMe) {
+        h += off
+          ? '<button class="icon-btn ok" data-act="enable-user" data-id="' + esc(u.id) +
+            '" title="' + L('เปิดใช้งานอีกครั้ง') + '">' + I('checkCircle', 15) + '</button>'
+          : (lastAdmin ? ''
+            : '<button class="icon-btn" data-act="disable-user" data-id="' + esc(u.id) +
+              '" title="' + L('ปิดใช้งานบัญชี') + '">' + I('blocked', 15) + '</button>');
+        if (!lastAdmin) {
+          h += '<button class="icon-btn" data-act="remove-user" data-id="' + esc(u.id) +
+            '" title="' + L('ลบออกจากรายชื่อ') + '">' + I('trash', 15) + '</button>';
+        }
+      }
+      h += '</span>';
       h += '</div>';
     });
     h += '</div>';
@@ -1513,9 +1593,54 @@
     h += '</ul></details>';
     h += '</section>';
 
-    /* ---- กิจกรรมล่าสุด ---- */
-    h += '<section class="admin-sec"><h3>' + L('กิจกรรมล่าสุด') + '</h3>';
-    var acts = S.recentActivity(25);
+    /* ---- บันทึกการทำงานของระบบ ----
+     * แยกจากกิจกรรมของงาน เพราะตอบคำถามคนละแบบ
+     * อันนี้ตอบว่า "ใครทำอะไรกับระบบ" ไว้ให้ผู้ดูแลไล่ย้อนหลังได้ */
+    h += '<section class="admin-sec"><h3>' + L('บันทึกการทำงาน') +
+      '<span class="admin-count">' + (db.audit || []).length + ' ' + L('รายการ') + '</span>' +
+      '<button class="btn btn-sm" data-act="audit-csv">' + I('archive', 13) + ' ' +
+      L('ส่งออก CSV') + '</button></h3>';
+
+    var groups = S.auditGroups();
+    if (groups.length) {
+      h += '<div class="audit-filter">';
+      h += '<button class="chip' + (!f.group ? ' on' : '') + '" data-act="audit-group" data-g="">' +
+        L('ทั้งหมด') + '</button>';
+      groups.forEach(function (g) {
+        h += '<button class="chip' + (f.group === g ? ' on' : '') +
+          '" data-act="audit-group" data-g="' + esc(g) + '">' + L(auditGroupLabel(g)) + '</button>';
+      });
+      h += '<input class="audit-q" id="auditQ" data-act="audit-q" placeholder="' +
+        L('ค้นหาในบันทึก…') + '" value="' + esc(f.q || '') + '">';
+      h += '</div>';
+    }
+
+    var rows = S.auditLog({ group: f.group, q: f.q, limit: 120 });
+    if (!rows.length) {
+      h += '<div class="admin-empty">' +
+        L('ยังไม่มีบันทึกที่ตรงกับเงื่อนไข') + '</div>';
+    } else {
+      h += '<ul class="audit">';
+      rows.forEach(function (r) {
+        var who = S.user(r.actorId);
+        h += '<li><span class="ico ' + esc(r.action.split('.')[0]) + '">' +
+          I(auditIcon(r.action), 14) + '</span><div>' +
+          '<b>' + esc(who ? who.name : '—') + '</b> ' + esc(L(auditText(r.action))) +
+          (r.target ? ' <u>' + esc(r.target) + '</u>' : '') +
+          (r.detail ? '<span class="d">' + esc(r.detail) + '</span>' : '') +
+          '<em>' + esc(fmtWhen(r.at)) + '</em></div></li>';
+      });
+      h += '</ul>';
+      if ((db.audit || []).length > rows.length) {
+        h += '<div class="audit-more">' +
+          L('แสดง {n} รายการล่าสุด กด “ส่งออก CSV” เพื่อดูทั้งหมด', { n: rows.length }) + '</div>';
+      }
+    }
+    h += '</section>';
+
+    /* ---- กิจกรรมของงานล่าสุด ---- */
+    h += '<section class="admin-sec"><h3>' + L('กิจกรรมของงานล่าสุด') + '</h3>';
+    var acts = S.recentActivity(20);
     if (!acts.length) {
       h += '<div class="admin-empty">' + L('ยังไม่มีกิจกรรม') + '</div>';
     } else {
@@ -1550,7 +1675,7 @@
 
   global.Render = {
     adminView: adminView, roleLabel: roleLabel,
-    teamReady: teamReady, syncChip: syncChip, syncMenu: syncMenu,
+    teamReady: teamReady, syncChip: syncChip, syncMenu: syncMenu, disabledScreen: disabledScreen,
     accountBlock: accountBlock, accountMenu: accountMenu, gateScreen: gateScreen,
     esc: esc, avatar: avatar, initials: initials,
     fmtDate: fmtDate, fmtWhen: fmtWhen,

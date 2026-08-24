@@ -28,7 +28,8 @@
     ganttCollapsed: {},
     ganttScroll: null,
     tlScrollLeft: null,      // ตำแหน่งเลื่อนไทม์ไลน์ (null = ให้เลื่อนไปวันนี้เอง)
-    suppressHash: false
+    suppressHash: false,
+    auditFilter: { group: '', q: '' }   // ตัวกรองบันทึกการทำงานในหน้าผู้ดูแล
   };
 
   function viewFor(projectId) {
@@ -193,7 +194,7 @@
     } else if (r.type === 'admin') {
       // ไม่ใช่ผู้ดูแลก็ไม่ต้องเห็น — เป็นเรื่องความเรียบร้อยของเมนู ไม่ใช่การกันสิทธิ์จริง
       if (!S.isAdmin()) { state.route = { type: 'mytasks' }; return renderAll(); }
-      body = R.adminView();
+      body = R.adminView(state.auditFilter);
     } else if (r.type === 'search') {
       body = R.searchView(r.q, state.sel);
     }
@@ -278,6 +279,19 @@
       clearSel();
     }
     applyLang();
+    /* บัญชีถูกปิดใช้งาน — กั้นไว้ก่อนวาดแอป และบอกเหตุผลให้ชัด
+     * ไม่ปล่อยให้เห็นหน้าจอที่กดอะไรก็ไม่ขึ้นโดยไม่รู้ว่าทำไม */
+    if (!S.isActive()) {
+      $gate.innerHTML = R.disabledScreen();
+      $gate.dataset.kind = "disabled";
+      $gate.hidden = false;
+      document.body.classList.add('gated');
+      return;
+    }
+    if ($gate.dataset.kind === "disabled") {   // เพิ่งถูกเปิดใช้งานกลับ ต้องเก็บหน้ากั้นออก
+      delete $gate.dataset.kind;
+      hideGate();
+    }
     applyTheme();
     $sidebar.innerHTML = R.sidebar(state.route);
     renderTopbar();
@@ -1801,6 +1815,32 @@
         toast(L('เอาออกจากรายชื่อแล้ว'), L('ย้อนกลับ'), 'undo');
         break;
       }
+      /* --- จัดการบัญชีและบันทึกการทำงาน --- */
+      case 'disable-user': {
+        var du = S.user(id);
+        if (!du) break;
+        if (!confirm(L('ปิดใช้งานบัญชีของ “{name}”?\nเขาจะเข้าระบบไม่ได้ทันที แต่งานที่มอบหมายไว้ยังอยู่ครบ',
+          { name: du.name }))) break;
+        if (!S.setActive(id, false)) { toast(L('ปิดบัญชีนี้ไม่ได้')); break; }
+        renderAll();
+        toast(L('ปิดใช้งานบัญชีแล้ว'), L('ย้อนกลับ'), 'undo');
+        break;
+      }
+      case 'enable-user':
+        if (S.setActive(id, true)) { renderAll(); toast(L('เปิดใช้งานบัญชีอีกครั้งแล้ว')); }
+        break;
+
+      case 'audit-group':
+        state.auditFilter.group = el.dataset.g || '';
+        renderAll();
+        break;
+      case 'audit-csv': {
+        var csv = S.auditCsv();
+        downloadDirect(csv, 'orbit-audit-' + S.today() + '.csv');
+        S.audit('system.export', null, L('ส่งออกบันทึกการทำงานเป็น CSV'));
+        break;
+      }
+
       /* --- บทบาทในหน้าผู้ดูแล --- */
       case 'pick-role': {
         if (popIsOpenFor(el)) { closePops(); break; }
@@ -2110,6 +2150,20 @@
   }
 
 
+
+  /* ค้นหาในบันทึกการทำงาน หน่วงไว้ไม่ให้วาดใหม่ทุกตัวอักษร */
+  var auditQTimer = null;
+  document.addEventListener('input', function (e) {
+    if (!e.target || e.target.id !== 'auditQ') return;
+    var v = e.target.value;
+    clearTimeout(auditQTimer);
+    auditQTimer = setTimeout(function () {
+      state.auditFilter.q = v;
+      renderAll();
+      var box = document.getElementById('auditQ');
+      if (box) { box.focus(); box.setSelectionRange(v.length, v.length); }
+    }, 250);
+  });
   /* ค้นหารายชื่อพนักงานแบบพิมพ์ไปหาไป หน่วงไว้กันยิงทุกตัวอักษร */
   var peopleTimer = null;
   var peopleSeq = 0;
