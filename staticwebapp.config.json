@@ -2,7 +2,6 @@
   "$schema": "https://json.schemastore.org/staticwebapp.config.json",
 
   "auth": {
-    "rolesSource": "/api/roles",
     "identityProviders": {
       "azureActiveDirectory": {
         "registration": {
@@ -42,7 +41,5 @@
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "strict-origin-when-cross-origin"
-  },
-
-  "platform": { "apiRuntime": "node:20" }
+  }
 }
