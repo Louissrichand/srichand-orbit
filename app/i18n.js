@@ -22,7 +22,6 @@
     'งานของฉัน': 'My Tasks', 'กล่องข้อความ': 'Inbox', 'ปฏิทินรวม': 'All calendars',
     'โปรเจกต์': 'Projects', 'เก็บเข้าคลัง': 'Archived', 'คีย์ลัด': 'Shortcuts',
     'สมาชิกทีม': 'Team members', 'ตั้งค่า / สำรองข้อมูล': 'Settings / Backup',
-    'สร้างโปรเจกต์': 'New project',
 
     /* --- แท็บมุมมอง --- */
     'รายการ': 'List', 'บอร์ด': 'Board', 'ไทม์ไลน์': 'Timeline',
@@ -304,6 +303,7 @@
     'ไปที่ช่องค้นหา': 'Jump to search',
     'ปิดหน้าต่าง / ยกเลิกการเลือก': 'Close dialog / clear selection',
     'ส่งความเห็น': 'Post comment', 'เปิดหน้าคีย์ลัดนี้': 'Open this shortcut list',
+    'ไปหน้าแรก': 'Go to Home',
     'ไปงานของฉัน': 'Go to My Tasks', 'ไปกล่องข้อความ': 'Go to Inbox',
     'เพิ่มงานด่วน': 'Quick add task',
     'มอบหมายงานที่เปิดอยู่ให้ตัวเอง': 'Assign the open task to me',
@@ -593,10 +593,33 @@
       '{n} sample users left over from the demo data — remove them under “Team members”.',
     'กิจกรรมล่าสุด': 'Recent activity', 'ยังไม่มีกิจกรรม': 'No activity yet',
     'แสดงความเห็น': 'commented on',
+    /* --- หน้าแรก --- */
+    'หน้าแรก': 'Home',
+    'สวัสดีตอนเช้า': 'Good morning', 'สวัสดีตอนบ่าย': 'Good afternoon',
+    'สวัสดีตอนเย็น': 'Good evening',
+    '{greet}, {name}': '{greet}, {name}',
+    '{dow}ที่ {d} {mon}': '{dow}, {mon} {d}',
+    '{n} งานเสร็จสัปดาห์นี้': '{n} tasks completed this week',
+    '{n} งานเลยกำหนด': '{n} overdue',
+    '{n} งานครบกำหนดใน 7 วัน': '{n} due in 7 days',
+    '{n} เพื่อนร่วมงาน': '{n} collaborators',
+    'กำลังจะถึง': 'Upcoming', 'เลยกำหนด ({n})': 'Overdue ({n})',
+    'เสร็จแล้ว': 'Completed', 'สัปดาห์นี้ ({n})': 'This week ({n})',
+    'งานที่ฉันมอบหมาย': 'Tasks I’ve assigned',
+    'ดูทั้งหมด': 'See all', 'ดูโปรเจกต์ทั้งหมด': 'Browse projects',
+    'งานใกล้ครบกำหนด {n} งาน': '{n} due soon',
+    'ไม่มีงานใกล้ครบกำหนด': 'Nothing due soon',
+    'ดูเพิ่ม': 'Show more', 'ย่อกลับ': 'Show less',
+    'ไม่มีงานในช่วงนี้': 'Nothing here',
+    'ยังไม่ได้มอบหมายงานให้ใคร': 'You have not assigned any tasks yet',
+    'ยังไม่มีโปรเจกต์': 'No projects yet',
+    'เปิดหน้านี้เป็นหน้าแรกทุกครั้ง': 'Open this page on start',
+
     /* --- ชื่อเดือน / วัน --- */
     '__monthsShort': 'Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec',
     '__monthsFull': 'January,February,March,April,May,June,July,August,September,October,November,December',
-    '__dow': 'Su,Mo,Tu,We,Th,Fr,Sa'
+    '__dow': 'Su,Mo,Tu,We,Th,Fr,Sa',
+    '__dowFull': 'Sunday,Monday,Tuesday,Wednesday,Thursday,Friday,Saturday'
   };
 
   var lang = 'th';
@@ -628,10 +651,12 @@
   var TH_MON_FULL = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
                      'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
   var TH_DOW = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
+  var TH_DOW_FULL = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
 
   function monthsShort() { return lang === 'en' ? EN.__monthsShort.split(',') : TH_MON; }
   function monthsFull() { return lang === 'en' ? EN.__monthsFull.split(',') : TH_MON_FULL; }
   function dow() { return lang === 'en' ? EN.__dow.split(',') : TH_DOW; }
+  function dowFull() { return lang === 'en' ? EN.__dowFull.split(',') : TH_DOW_FULL; }
 
   /** ไทยใช้ พ.ศ. อังกฤษใช้ ค.ศ. */
   function year(y) { return lang === 'en' ? y : y + 543; }
@@ -639,7 +664,7 @@
 
   global.I18N = {
     t: t, setLang: setLang, getLang: getLang, detect: detect,
-    monthsShort: monthsShort, monthsFull: monthsFull, dow: dow,
+    monthsShort: monthsShort, monthsFull: monthsFull, dow: dow, dowFull: dowFull,
     year: year, yearShort: yearShort
   };
 

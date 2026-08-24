@@ -1731,3 +1731,121 @@ ul.audit em { display: block; font-style: normal; font-size: 12px; color: var(--
   padding: 11px 13px; border-radius: var(--radius); font-size: 13px; line-height: 1.6;
 }
 .pa-note svg { flex: none; margin-top: 2px; }
+
+/* ---------- หน้าแรก ----------
+ *
+ * เป็นหน้าสรุป ไม่ใช่หน้าทำงาน จึงจัดกลางและจำกัดความกว้างไว้
+ * ถ้าปล่อยเต็มจอบนจอกว้าง สายตาจะไม่รู้ว่าควรอ่านตรงไหนก่อน
+ */
+
+.home { padding: 28px 24px 64px; max-width: 1120px; margin: 0 auto; }
+
+.home-head { text-align: center; margin-bottom: 26px; }
+.home-date { font-size: 13px; font-weight: 600; color: var(--fg-soft); }
+.home-hi {
+  margin: 6px 0 14px; font-size: 30px; font-weight: 400;
+  letter-spacing: -.02em; line-height: 1.25;
+}
+.home-stats { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.hstat {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 999px; font-size: 13px;
+  background: var(--bg-sunk); color: var(--fg-soft); border: 1px solid var(--line);
+}
+.hstat svg { color: var(--fg-faint); }
+.hstat.warn { background: var(--warn-bg); color: var(--warn-fg); border-color: transparent; }
+.hstat.warn svg { color: var(--warn-fg); }
+
+.home-grid { column-count: 2; column-gap: 16px; }
+
+.hcard {
+  background: var(--bg-raise); border: 1px solid var(--line);
+  border-radius: var(--radius-lg); padding: 16px 6px 8px;
+  break-inside: avoid; margin-bottom: 16px; min-width: 0;
+}
+.hcard-head { display: flex; align-items: center; gap: 9px; padding: 0 14px; }
+.hcard-head .grow { flex: 1; }
+.hcard-title {
+  display: inline-flex; align-items: center; gap: 9px;
+  font-size: 15.5px; font-weight: 700; letter-spacing: -.01em; min-width: 0;
+}
+.hcard-title svg { color: var(--fg-soft); }
+.hcard-tabs { display: flex; gap: 2px; padding: 8px 8px 0; overflow-x: auto; scrollbar-width: none; }
+.hcard-tabs::-webkit-scrollbar { display: none; }
+.hcard-tabs .tb-tab { padding: 6px 10px; font-size: 13px; white-space: nowrap; }
+.hcard-body { padding: 6px 6px 4px; min-height: 96px; }
+
+/* --- แถวงาน --- */
+.hrow {
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 8px; border-radius: var(--radius); cursor: pointer;
+  border-bottom: 1px solid var(--line-soft);
+}
+.hrow:last-child { border-bottom: 0; }
+.hrow:hover { background: var(--bg-sunk); }
+.hrow .nm { flex: 1; min-width: 0; font-size: 14px; overflow: hidden;
+            text-overflow: ellipsis; white-space: nowrap; }
+.hrow.done .nm { color: var(--fg-faint); text-decoration: line-through; }
+.hchip {
+  flex: none; max-width: 118px; padding: 2px 8px; border-radius: 12px;
+  font-size: 11.5px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.hdue { flex: none; font-size: 12.5px; color: var(--fg-soft); }
+.hdue.due-over { color: var(--danger); font-weight: 600; }
+.hdue.due-today { color: var(--warn-fg); font-weight: 600; }
+
+.hempty { padding: 30px 12px; text-align: center; font-size: 13px; color: var(--fg-faint); }
+.hmore { padding: 8px; font-size: 12.5px; color: var(--fg-faint); }
+.hlink {
+  margin: 6px 2px 2px; padding: 6px 8px; border-radius: var(--radius);
+  font-size: 13px; font-weight: 600; color: var(--fg-soft);
+}
+.hlink:hover { background: var(--bg-sunk); color: var(--fg); }
+
+/* --- ตารางโปรเจกต์ --- */
+.hproj-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+.hproj {
+  display: flex; align-items: center; gap: 10px; text-align: left;
+  padding: 9px 8px; border-radius: var(--radius); min-width: 0;
+}
+.hproj:hover { background: var(--bg-sunk); }
+.hproj-ic {
+  flex: none; width: 32px; height: 32px; border-radius: var(--radius);
+  display: grid; place-items: center; font-size: 15px;
+  background: var(--bg-inset); color: var(--fg-soft);
+}
+.hproj.new .hproj-ic { border: 1.5px dashed var(--line-strong); background: none; }
+.hproj-txt { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.hproj-nm {
+  font-size: 13.5px; font-weight: 600; display: flex; align-items: center; gap: 5px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.hproj-nm .lockmark { flex: none; color: var(--fg-faint); display: inline-flex; }
+.hproj-sub {
+  font-size: 12px; color: var(--fg-faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* --- กิจกรรม --- */
+.hact {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 8px; border-radius: var(--radius); cursor: pointer;
+}
+.hact:hover { background: var(--bg-sunk); }
+.hact-body { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.hact-txt { font-size: 13.5px; line-height: 1.45; }
+.hact-sub {
+  font-size: 12px; color: var(--fg-faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+@media (max-width: 860px) {
+  .home { padding: 20px 14px 60px; }
+  .home-hi { font-size: 24px; }
+  .home-grid { column-count: 1; }
+}
+@media (max-width: 420px) {
+  .hproj-grid { grid-template-columns: minmax(0, 1fr); }
+  .hchip { display: none; }
+}

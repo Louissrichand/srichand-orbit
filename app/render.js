@@ -113,6 +113,9 @@
     h += '<div class="sb-brand">' + global.Icons.logoLockup(26) + '</div>';
 
     h += '<div class="sb-section">';
+    h += '<button class="sb-item' + (route.type === 'home' ? ' active' : '') +
+         '" data-act="go" data-route="home">' + I('home') + '' +
+         '<span class="grow">' + L('หน้าแรก') + '</span></button>';
     h += '<button class="sb-item' + (route.type === 'mytasks' ? ' active' : '') +
          '" data-act="go" data-route="mytasks">' + I('checkCircle') + '' +
          '<span class="grow">' + L('งานของฉัน') + '</span>' +
@@ -127,7 +130,7 @@
     h += '</div>';
 
     h += '<div class="sb-section">';
-    h += '<div class="sb-label">' + L('โปรเจกต์') + '<button data-act="new-project" title="' + L('สร้างโปรเจกต์') + '">+</button></div>';
+    h += '<div class="sb-label">' + L('โปรเจกต์') + '<button data-act="new-project" title="' + L('สร้างโปรเจกต์ใหม่') + '">+</button></div>';
     S.visibleProjects().forEach(function (p) {
       var n = S.tasksInProject(p.id).filter(function (x) { return !x.task.completed; }).length;
       h += '<button class="sb-item' +
@@ -879,6 +882,201 @@
     return h;
   }
 
+  /* ---------- home (หน้าแรก) ----------
+   *
+   * เป็นหน้า "วันนี้ต้องดูอะไร" ไม่ใช่หน้าทำงาน จึงไม่มีตัวกรอง ไม่มีการเลือกหลายรายการ
+   * ทุกอย่างที่กดได้จะพาไปหน้าจริงเสมอ ยกเว้นช่องติ๊กงานเสร็จที่ทำตรงนี้ได้เลย
+   * เพราะเป็นสิ่งที่คนเปิดหน้าแรกมาทำบ่อยที่สุด
+   */
+
+  function greeting() {
+    var h = new Date().getHours();
+    if (h < 12) return L('สวัสดีตอนเช้า');
+    if (h < 17) return L('สวัสดีตอนบ่าย');
+    return L('สวัสดีตอนเย็น');
+  }
+
+  /** ไทยเรียง วัน-ที่-เดือน อังกฤษเรียง วัน-เดือน-ที่ จึงต้องให้คำแปลคุมลำดับเอง */
+  function homeDateLine() {
+    var d = new Date();
+    return L('{dow}ที่ {d} {mon}', {
+      dow: global.I18N.dowFull()[d.getDay()],
+      d: d.getDate(),
+      mon: MONF()[d.getMonth()]
+    });
+  }
+
+  /** แถวงานบนหน้าแรก สั้นกว่าแถวในรายการเพราะการ์ดแคบกว่าหน้าจอเต็ม */
+  function homeRow(t) {
+    var pj = S.projectsOfTask(t.id)[0];
+    var h = '<div class="hrow' + (t.completed ? ' done' : '') +
+      '" data-act="open-task" data-id="' + esc(t.id) + '">';
+    h += checkbox(t);
+    h += '<span class="nm">' + esc(t.name) + '</span>';
+    if (pj) {
+      h += '<span class="hchip" style="background:' + esc(pj.project.color) +
+        '22;color:' + esc(pj.project.color) + '" title="' + esc(pj.project.name) + '">' +
+        esc(pj.project.name) + '</span>';
+    }
+    if (t.dueOn) {
+      h += '<span class="hdue' + dueClass(t.dueOn, t.completed) + '">' + fmtDate(t.dueOn) + '</span>';
+    }
+    h += '</div>';
+    return h;
+  }
+
+  function hcard(o) {
+    var h = '<section class="hcard">';
+    h += '<div class="hcard-head">' + o.title + '<span class="grow"></span>' + (o.action || '') + '</div>';
+    if (o.tabs) h += '<div class="hcard-tabs">' + o.tabs + '</div>';
+    h += '<div class="hcard-body">' + o.body + '</div>';
+    h += '</section>';
+    return h;
+  }
+
+  function hTabs(card, cur, list) {
+    var h = '';
+    list.forEach(function (x) {
+      h += '<button class="tb-tab' + (cur === x[0] ? ' active' : '') +
+        '" data-act="home-tab" data-card="' + card + '" data-tab="' + x[0] + '">' +
+        esc(x[1]) + '</button>';
+    });
+    return h;
+  }
+
+  var HOME_ROWS = 6;
+
+  function hList(items, emptyText) {
+    if (!items.length) return '<div class="hempty">' + esc(emptyText) + '</div>';
+    var h = '';
+    items.slice(0, HOME_ROWS).forEach(function (t) { h += homeRow(t); });
+    if (items.length > HOME_ROWS) {
+      h += '<div class="hmore">+' + (items.length - HOME_ROWS) + ' ' + L('อื่น ๆ') + '</div>';
+    }
+    return h;
+  }
+
+  function homeView(st) {
+    st = st || {};
+    var meUser = S.me();
+    var mine = S.myTasks(S.db.currentUserId);
+    var stats = S.homeStats();
+    var assigned = S.assignedByMe();
+
+    var h = '<div class="home">';
+
+    h += '<div class="home-head">';
+    h += '<div class="home-date">' + esc(homeDateLine()) + '</div>';
+    h += '<h1 class="home-hi">' +
+      esc(L('{greet}, {name}', { greet: greeting(), name: meUser ? meUser.name : '' })) + '</h1>';
+    h += '<div class="home-stats">';
+    h += '<span class="hstat">' + I('checkCircle', 14) +
+      esc(L('{n} งานเสร็จสัปดาห์นี้', { n: stats.doneWeek })) + '</span>';
+    h += stats.overdue
+      ? '<span class="hstat warn">' + I('alert', 14) +
+        esc(L('{n} งานเลยกำหนด', { n: stats.overdue })) + '</span>'
+      : '<span class="hstat">' + I('calendar', 14) +
+        esc(L('{n} งานครบกำหนดใน 7 วัน', { n: stats.dueWeek })) + '</span>';
+    h += '<span class="hstat">' + I('users', 14) +
+      esc(L('{n} เพื่อนร่วมงาน', { n: stats.collaborators })) + '</span>';
+    h += '</div></div>';
+
+    h += '<div class="home-grid">';
+
+    /* --- งานของฉัน --- */
+    var mineTab = st.mine || 'upcoming';
+    var mineItems = mineTab === 'overdue' ? mine.overdue
+      : mineTab === 'done' ? S.myCompleted(S.db.currentUserId, HOME_ROWS)
+      : mine.today.concat(mine.upcoming, mine.later, mine.nodate);
+    h += hcard({
+      title: '<span class="hcard-title">' + avatar(meUser, 'sm') + L('งานของฉัน') + '</span>',
+      action: '<button class="btn btn-sm btn-ghost" data-act="go" data-route="mytasks">' +
+              L('ดูทั้งหมด') + '</button>',
+      tabs: hTabs('mine', mineTab, [
+        ['upcoming', L('กำลังจะถึง')],
+        ['overdue', L('เลยกำหนด ({n})', { n: mine.overdue.length })],
+        ['done', L('เสร็จแล้ว')]
+      ]),
+      body: hList(mineItems, L('ไม่มีงานในช่วงนี้'))
+    });
+
+    /* --- โปรเจกต์ --- */
+    var projs = S.visibleProjects();
+    var showAll = !!st.allProjects;
+    var pb;
+    if (!projs.length && !S.can('structure')) {
+      pb = '<div class="hempty">' + L('ยังไม่มีโปรเจกต์') + '</div>';
+    } else {
+      pb = '<div class="hproj-grid">';
+      if (S.can('structure')) {
+        pb += '<button class="hproj new" data-act="new-project">' +
+          '<span class="hproj-ic">' + I('plus', 15) + '</span>' +
+          '<span class="hproj-txt"><span class="hproj-nm">' + L('สร้างโปรเจกต์ใหม่') + '</span></span></button>';
+      }
+      (showAll ? projs : projs.slice(0, 7)).forEach(function (p) {
+        var n = S.dueSoonCount(p.id);
+        pb += '<button class="hproj" data-act="go" data-route="project" data-id="' + esc(p.id) + '">' +
+          '<span class="hproj-ic" style="background:' + esc(p.color) + '22">' + esc(p.icon) + '</span>' +
+          '<span class="hproj-txt"><span class="hproj-nm">' + esc(p.name) +
+          (p.visibility === 'private'
+            ? '<span class="lockmark" title="' + L('โปรเจกต์ปิด') + '">' + I('shield', 11) + '</span>'
+            : '') +
+          '</span><span class="hproj-sub">' +
+          (n ? esc(L('งานใกล้ครบกำหนด {n} งาน', { n: n })) : L('ไม่มีงานใกล้ครบกำหนด')) +
+          '</span></span></button>';
+      });
+      pb += '</div>';
+      if (projs.length > 7) {
+        pb += '<button class="hlink" data-act="home-more-projects">' +
+          (showAll ? L('ย่อกลับ') : L('ดูเพิ่ม')) + '</button>';
+      }
+    }
+    h += hcard({
+      title: '<span class="hcard-title">' + I('grid', 15) + L('โปรเจกต์') + '</span>',
+      body: pb
+    });
+
+    /* --- งานที่ฉันมอบหมาย --- */
+    var aTab = st.assigned || 'week';
+    var aItems = aTab === 'upcoming' ? assigned.upcoming
+      : aTab === 'overdue' ? assigned.overdue
+      : aTab === 'done' ? assigned.completed
+      : assigned.week;
+    h += hcard({
+      title: '<span class="hcard-title">' + I('users', 15) + L('งานที่ฉันมอบหมาย') + '</span>',
+      tabs: hTabs('assigned', aTab, [
+        ['week', L('สัปดาห์นี้ ({n})', { n: assigned.week.length })],
+        ['upcoming', L('กำลังจะถึง')],
+        ['overdue', L('เลยกำหนด ({n})', { n: assigned.overdue.length })],
+        ['done', L('เสร็จแล้ว')]
+      ]),
+      body: hList(aItems, L('ยังไม่ได้มอบหมายงานให้ใคร'))
+    });
+
+    /* --- กิจกรรมล่าสุด --- */
+    var acts = S.recentActivity(HOME_ROWS);
+    var ab = '';
+    if (!acts.length) ab = '<div class="hempty">' + L('ยังไม่มีกิจกรรม') + '</div>';
+    acts.forEach(function (a) {
+      ab += '<div class="hact" data-act="open-task" data-id="' + esc(a.story.taskId) + '">' +
+        avatar(a.actor, 'sm') +
+        '<span class="hact-body"><span class="hact-txt"><strong>' +
+        esc(a.actor ? a.actor.name : '?') + '</strong> ' +
+        esc(a.story.type === 'comment' ? L('แสดงความเห็น') : a.story.text) + '</span>' +
+        '<span class="hact-sub">' + esc(a.taskName || '') + ' · ' +
+        esc(fmtWhen(a.story.createdAt)) + '</span></span></div>';
+    });
+    h += hcard({
+      title: '<span class="hcard-title">' + I('bell', 15) + L('กิจกรรมล่าสุด') + '</span>',
+      action: '<button class="btn btn-sm btn-ghost" data-act="go" data-route="inbox">' +
+              L('ดูทั้งหมด') + '</button>',
+      body: ab
+    });
+
+    h += '</div></div>';
+    return h;
+  }
+
   /* ---------- my tasks ---------- */
 
   function myTasksView(sel) {
@@ -955,9 +1153,11 @@
     var start = new Date(first);
     start.setDate(1 - first.getDay());
 
+    /* ปฏิทินรวมกวาดทุกงานในระบบ จึงต้องกรองสิทธิ์เอง
+     * ไม่งั้นงานของโปรเจกต์ปิดจะโผล่ให้คนนอกโปรเจกต์เห็นทางนี้ */
     var pool = projectId
       ? S.tasksInProject(projectId).map(function (x) { return x.task; })
-      : S.db.tasks.filter(function (t) { return !t.parentId; });
+      : S.db.tasks.filter(function (t) { return !t.parentId && S.canSeeTask(t.id); });
 
     var byDate = {};
     pool.forEach(function (t) {
@@ -1694,7 +1894,8 @@
     checkbox: checkbox, dueClass: dueClass, badges: badges, depTypeHint: depTypeHint,
     sidebar: sidebar, topbar: topbar, viewbar: viewbar, bulkbar: bulkbar,
     listView: listView, boardView: boardView, timelineView: timelineView,
-    dashboardView: dashboardView, myTasksView: myTasksView, inboxView: inboxView,
+    homeView: homeView, dashboardView: dashboardView,
+    myTasksView: myTasksView, inboxView: inboxView,
     calendarView: calendarView, searchView: searchView, drawer: drawer,
     taskRow: taskRow, taskCard: taskCard
   };

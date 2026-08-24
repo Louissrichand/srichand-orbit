@@ -16,10 +16,11 @@
   var $toast   = document.getElementById('toast');
 
   var state = {
-    route: { type: 'mytasks' },
+    route: { type: 'home' },
     openTaskId: null,
     calOffset: 0,
     inboxArchived: false,
+    home: { mine: 'upcoming', assigned: 'week', allProjects: false },
     reopenAddIn: null,
     sel: {},                 // งานที่ถูกเลือกไว้ (id -> true)
     views: {},               // ตัวกรองต่อโปรเจกต์
@@ -152,7 +153,7 @@
     if (type === 'search' && seg[1]) {
       return { route: { type: 'search', q: decodeURIComponent(seg[1]) }, taskId: taskId };
     }
-    if (['mytasks', 'inbox', 'calendar', 'admin'].indexOf(type) >= 0) {
+    if (['home', 'mytasks', 'inbox', 'calendar', 'admin'].indexOf(type) >= 0) {
       return { route: { type: type }, taskId: taskId };
     }
     return null;
@@ -174,12 +175,14 @@
     var r = state.route;
     var body = '';
 
-    if (r.type === 'project') {
+    if (r.type === 'home') {
+      body = R.homeView(state.home);
+    } else if (r.type === 'project') {
       var p = S.project(r.id);
-      if (!p) { state.route = { type: 'mytasks' }; return renderAll(); }
+      if (!p) { state.route = { type: 'home' }; return renderAll(); }
       /* ไม่มีสิทธิ์เห็นโปรเจกต์นี้ — ถอยออกเงียบ ๆ เหมือนโปรเจกต์ไม่มีอยู่จริง
        * ไม่บอกว่า "ไม่มีสิทธิ์" เพราะนั่นเท่ากับยืนยันว่าโปรเจกต์นี้มีอยู่ */
-      if (!S.projectAccess(r.id)) { state.route = { type: "mytasks" }; return renderAll(); }
+      if (!S.projectAccess(r.id)) { state.route = { type: "home" }; return renderAll(); }
       var v = viewFor(r.id);
       if (r.view === 'board') body = R.boardView(r.id, v, state.sel);
       else if (r.view === 'timeline') body = R.timelineView(r.id, v, state.tlZoom);
@@ -196,7 +199,7 @@
       body = R.calendarView(null, state.calOffset);
     } else if (r.type === 'admin') {
       // ไม่ใช่ผู้ดูแลก็ไม่ต้องเห็น — เป็นเรื่องความเรียบร้อยของเมนู ไม่ใช่การกันสิทธิ์จริง
-      if (!S.isAdmin()) { state.route = { type: 'mytasks' }; return renderAll(); }
+      if (!S.isAdmin()) { state.route = { type: 'home' }; return renderAll(); }
       body = R.adminView(state.auditFilter);
     } else if (r.type === 'search') {
       body = R.searchView(r.q, state.sel);
@@ -277,7 +280,7 @@
   function renderAll(skipHash) {
     // โปรเจกต์อาจถูกลบไประหว่างนี้ ต้องถอยกลับก่อนวาด ไม่งั้นหน้าจะพัง
     if (state.route.type === 'project' && !S.project(state.route.id)) {
-      state.route = { type: 'mytasks' };
+      state.route = { type: 'home' };
       state.openTaskId = null;
       clearSel();
     }
@@ -1022,6 +1025,7 @@
       ['Ctrl + Z', L('ย้อนกลับการกระทำล่าสุด')],
       ['Ctrl + Enter', L('ส่งความเห็น')],
       ['Ctrl + /', L('เปิดหน้าคีย์ลัดนี้')],
+      ['Tab + H', L('ไปหน้าแรก')],
       ['Tab + Z', L('ไปงานของฉัน')],
       ['Tab + I', L('ไปกล่องข้อความ')],
       ['Tab + Q', L('เพิ่มงานด่วน')],
@@ -1154,7 +1158,7 @@
         try {
           S.importJSON(fr.result);
           closeModal();
-          state.route = { type: 'mytasks' };
+          state.route = { type: 'home' };
           state.openTaskId = null;
           clearSel();
           renderAll();
@@ -1340,6 +1344,18 @@
         renderAll();
         break;
       }
+      /* แท็บบนหน้าแรกเปลี่ยนแค่สิ่งที่แสดง ไม่แตะข้อมูล จึงวาดเฉพาะเนื้อหน้า
+       * ไม่ต้อง renderAll ให้แถบซ้ายกะพริบตาม */
+      case 'home-tab':
+        state.home[el.dataset.card] = el.dataset.tab;
+        renderViewBody();
+        break;
+
+      case 'home-more-projects':
+        state.home.allProjects = !state.home.allProjects;
+        renderViewBody();
+        break;
+
       case 'set-view':
         state.route.view = el.dataset.view;
         state.calOffset = 0;
@@ -1895,7 +1911,7 @@
         if (!confirm(L('ลบโปรเจกต์ “') + dp.name + L('” ?\nงานที่อยู่เฉพาะในโปรเจกต์นี้จะถูกลบด้วย'))) break;
         S.deleteProject(id);
         closeModal();
-        state.route = { type: 'mytasks' };
+        state.route = { type: 'home' };
         renderAll();
         toast(L('ลบโปรเจกต์แล้ว'), L('ย้อนกลับ'), 'undo');
         break;
@@ -2167,7 +2183,7 @@
         try {
           S.importJSON(pb.value);
           closeModal();
-          state.route = { type: 'mytasks' };
+          state.route = { type: 'home' };
           state.openTaskId = null;
           clearSel();
           renderAll();
@@ -2181,7 +2197,7 @@
         if (!confirm(L('ล้างข้อมูลทั้งหมดและเริ่มใหม่?\nแนะนำให้ดาวน์โหลดสำรองก่อน'))) break;
         S.reset();
         closeModal();
-        state.route = { type: 'mytasks' };
+        state.route = { type: 'home' };
         state.openTaskId = null;
         clearSel();
         renderAll();
@@ -2306,7 +2322,7 @@
           renderViewBody();
           syncHash();
         } else if (state.route.type === 'search') {
-          state.route = { type: 'mytasks' };
+          state.route = { type: 'home' };
           renderAll();
           var si = document.getElementById('searchInput');
           if (si) si.focus();
@@ -2411,7 +2427,8 @@
     if (tabHeld && !typing) {
       var k = e.key.toLowerCase();
       var handled = true;
-      if (k === 'z') { state.route = { type: 'mytasks' }; clearSel(); renderAll(); }
+      if (k === 'h') { state.route = { type: 'home' }; clearSel(); renderAll(); }
+      else if (k === 'z') { state.route = { type: 'mytasks' }; clearSel(); renderAll(); }
       else if (k === 'i') { state.route = { type: 'inbox' }; clearSel(); renderAll(); }
       else if (k === 'q' && state.route.type === 'project') {
         var qp2 = S.project(state.route.id);

@@ -677,11 +677,43 @@
     });
   }
 
+  /** เห็นงานนี้ได้ไหม
+   *
+   * กติกาเดียวกับ can() คือถ้างานอยู่หลายโปรเจกต์ เห็นได้โปรเจกต์เดียวก็พอ
+   * งานที่ไม่ได้อยู่โปรเจกต์ไหนเลยถือว่าเห็นได้ ส่วนงานย่อยไม่ได้ผูกกับโปรเจกต์เอง
+   * จึงต้องยึดตามงานแม่ ไม่งั้นงานย่อยของโปรเจกต์ปิดจะโผล่ในค้นหาและปฏิทิน
+   */
+  /** เป็นคู่กรณีของงานนี้ไหม — ถูกมอบหมาย เป็นคนสร้าง หรือเป็นผู้ติดตาม */
+  function isTaskParticipant(taskId, userId) {
+    var uid2 = userId || db.currentUserId;
+    var t = task(taskId);
+    if (!t) return false;
+    return t.assigneeId === uid2 || t.createdBy === uid2 ||
+           (t.followers || []).indexOf(uid2) >= 0;
+  }
+
+  function canSeeTask(taskId, depth) {
+    /* คู่กรณีของงานเห็นงานของตัวเองได้เสมอ แม้งานจะอยู่ในโปรเจกต์ปิดที่ตัวเองไม่ได้เป็นสมาชิก
+     * เป็นกติกาเดียวกับ Asana ถ้าซ่อนจะเกิดงานผี คือถูกสั่งงานแต่เปิดไม่ได้
+     * และไม่มีใครรู้ว่าทำไมงานไม่เดิน — เห็นได้เฉพาะตัวงาน ไม่ได้เห็นทั้งโปรเจกต์
+     * กดเข้าโปรเจกต์ยังโดนเด้งออกเหมือนเดิม */
+    if (isTaskParticipant(taskId)) return true;
+
+    var ms = db.memberships.filter(function (m) { return m.taskId === taskId; });
+    if (ms.length) {
+      return ms.some(function (m) { return !!projectAccess(m.projectId); });
+    }
+    var t = task(taskId);
+    if (t && t.parentId && (depth || 0) < 8) return canSeeTask(t.parentId, (depth || 0) + 1);
+    return true;
+  }
+
   function myTasks(userId) {
     var t = today();
     var buckets = { overdue: [], today: [], upcoming: [], later: [], nodate: [] };
     db.tasks.forEach(function (item) {
       if (item.assigneeId !== userId || item.completed) return;
+      if (!canSeeTask(item.id)) return;
       if (!item.dueOn) { buckets.nodate.push(item); return; }
       if (item.dueOn < t) buckets.overdue.push(item);
       else if (item.dueOn === t) buckets.today.push(item);
@@ -700,9 +732,104 @@
     q = (q || '').trim().toLowerCase();
     if (!q) return [];
     return db.tasks.filter(function (t) {
-      return t.name.toLowerCase().indexOf(q) >= 0 ||
-             (t.notes || '').toLowerCase().indexOf(q) >= 0;
+      if (t.name.toLowerCase().indexOf(q) < 0 &&
+          (t.notes || '').toLowerCase().indexOf(q) < 0) return false;
+      return canSeeTask(t.id);
     }).slice(0, 60);
+  }
+
+  /** งานทั้งหมดที่เห็นได้ ใช้กับปฏิทินรวมที่ไม่ได้เจาะจงโปรเจกต์ */
+  function visibleTasks() {
+    return db.tasks.filter(function (t) { return canSeeTask(t.id); });
+  }
+
+  /* ---------- หน้าแรก ---------- */
+
+  /** งานที่ฉันมอบหมายให้คนอื่น
+   *
+   * นับเฉพาะงานที่เราเป็นคนสร้างและมอบให้คนอื่น งานที่มอบให้ตัวเองอยู่ใน
+   * "งานของฉัน" อยู่แล้ว ถ้านับซ้ำหน้าแรกจะอ่านแล้วสับสนว่าตกลงมีกี่งาน
+   */
+  function assignedByMe(userId) {
+    var uid2 = userId || db.currentUserId;
+    var t = today();
+    var soon = addDays(t, 7);
+    var b = { week: [], upcoming: [], overdue: [], completed: [] };
+
+    db.tasks.forEach(function (x) {
+      if (x.createdBy !== uid2) return;
+      if (!x.assigneeId || x.assigneeId === uid2) return;
+      if (!canSeeTask(x.id)) return;
+      if (x.completed) { b.completed.push(x); return; }
+      if (x.dueOn && x.dueOn < t) b.overdue.push(x);
+      else if (x.dueOn && x.dueOn <= soon) b.week.push(x);
+      else b.upcoming.push(x);
+    });
+
+    ['week', 'upcoming', 'overdue'].forEach(function (k) {
+      b[k].sort(function (a, c) { return (a.dueOn || '9999') < (c.dueOn || '9999') ? -1 : 1; });
+    });
+    b.completed.sort(function (a, c) {
+      return (a.completedAt || '') < (c.completedAt || '') ? 1 : -1;
+    });
+    return b;
+  }
+
+  /** งานของฉันที่เพิ่งทำเสร็จ เรียงใหม่สุดก่อน */
+  function myCompleted(userId, limit) {
+    return db.tasks
+      .filter(function (x) {
+        return x.completed && x.assigneeId === userId && canSeeTask(x.id);
+      })
+      .sort(function (a, c) { return (a.completedAt || '') < (c.completedAt || '') ? 1 : -1; })
+      .slice(0, limit || 12);
+  }
+
+  /** จำนวนงานที่ยังไม่เสร็จและใกล้ครบกำหนดในโปรเจกต์ ใช้บนการ์ดหน้าแรก */
+  function dueSoonCount(projectId) {
+    var lim = addDays(today(), 7), n = 0;
+    tasksInProject(projectId).forEach(function (x) {
+      if (!x.task.completed && x.task.dueOn && x.task.dueOn <= lim) n++;
+    });
+    return n;
+  }
+
+  /** ตัวเลขสรุปบนหัวหน้าแรก นับเฉพาะงานที่เห็นได้ */
+  function homeStats(userId) {
+    var uid2 = userId || db.currentUserId;
+    var t = today();
+    var weekAgo = addDays(t, -6);
+    var soon = addDays(t, 7);
+    var doneWeek = 0, overdue = 0, dueWeek = 0;
+
+    db.tasks.forEach(function (x) {
+      if (x.assigneeId !== uid2) return;
+      if (!canSeeTask(x.id)) return;
+      if (x.completed) {
+        if (x.completedAt && x.completedAt >= weekAgo) doneWeek++;
+        return;
+      }
+      if (!x.dueOn) return;
+      if (x.dueOn < t) overdue++;
+      else if (x.dueOn <= soon) dueWeek++;
+    });
+
+    /* เพื่อนร่วมงาน = คนที่ถืองานอยู่ในโปรเจกต์ที่เราเข้าถึงได้
+     * ไม่ใช่จำนวนคนทั้งบริษัท ไม่งั้นตัวเลขนี้จะเท่ากันทุกคนและไม่มีความหมาย */
+    var mates = {};
+    var projs = visibleProjects(uid2);
+    projs.forEach(function (p) {
+      tasksInProject(p.id).forEach(function (x) {
+        var a = x.task.assigneeId;
+        if (a && a !== uid2 && user(a)) mates[a] = 1;
+      });
+    });
+
+    return {
+      doneWeek: doneWeek, overdue: overdue, dueWeek: dueWeek,
+      collaborators: Object.keys(mates).length,
+      projects: projs.length
+    };
   }
 
   function inbox(userId, showArchived) {
@@ -1894,7 +2021,14 @@
       var need = cap === 'comment' ? 'comment' : 'edit';
       var ms = db.memberships.filter(function (m) { return m.taskId === taskId; });
       if (!ms.length) return true;                  // งานที่ยังไม่ผูกกับโปรเจกต์ใด
-      return ms.some(function (m) { return canInProject(m.projectId, need); });
+
+      var reachable = ms.filter(function (m) { return !!projectAccess(m.projectId); });
+      /* ไม่ได้เป็นสมาชิกโปรเจกต์ไหนเลย แต่ถูกมอบหมายงานนี้มาโดยตรง
+       * ให้แก้งานของตัวเองได้ ไม่งั้นจะเห็นงานแต่ติ๊กว่าเสร็จไม่ได้ (คู่กับ canSeeTask)
+       * ถ้าเป็นสมาชิกโปรเจกต์อยู่แล้ว ให้ยึดระดับสิทธิ์ในโปรเจกต์เป็นหลัก
+       * ไม่งั้นคนระดับ "ดูอย่างเดียว" จะแก้ได้ทันทีที่ถูกมอบหมายงาน */
+      if (!reachable.length) return isTaskParticipant(taskId);
+      return reachable.some(function (m) { return canInProject(m.projectId, need); });
     }
     return true;
   }
@@ -1943,15 +2077,23 @@
     return db.users.filter(function (u) { return !!u.lastSeenAt; });
   }
 
-  /** กิจกรรมล่าสุดทั้งระบบ ไว้ให้ผู้ดูแลไล่ดูย้อนหลัง */
+  /** กิจกรรมล่าสุด ใช้ทั้งหน้าแรกและหน้าผู้ดูแล
+   *
+   * กรองสิทธิ์ก่อนตัดจำนวน ไม่งั้นคนที่เห็นงานไม่กี่งานจะได้ลิสต์ว่างเปล่า
+   * ทั้งที่มีกิจกรรมของตัวเองอยู่ท้าย ๆ
+   */
   function recentActivity(limit) {
-    return db.stories.slice()
-      .sort(function (a, b) { return a.createdAt < b.createdAt ? 1 : -1; })
-      .slice(0, limit || 40)
-      .map(function (s) {
-        var t = task(s.taskId);
-        return { story: s, actor: user(s.actorId), taskName: t ? t.name : null };
-      });
+    var cache = {}, out = [], n = limit || 40;
+    var list = db.stories.slice()
+      .sort(function (a, b) { return a.createdAt < b.createdAt ? 1 : -1; });
+    for (var i = 0; i < list.length && out.length < n; i++) {
+      var s = list[i];
+      if (!(s.taskId in cache)) cache[s.taskId] = canSeeTask(s.taskId);
+      if (!cache[s.taskId]) continue;
+      var t = task(s.taskId);
+      out.push({ story: s, actor: user(s.actorId), taskName: t ? t.name : null });
+    }
+    return out;
   }
 
   function setSetting(key, value) {
@@ -2009,6 +2151,9 @@
     storiesOfTask: storiesOfTask, fieldValue: fieldValue,
     blockers: blockers, isBlocked: isBlocked, blocking: blocking,
     myTasks: myTasks, search: search, allTags: allTags,
+    canSeeTask: canSeeTask, visibleTasks: visibleTasks, isTaskParticipant: isTaskParticipant,
+    assignedByMe: assignedByMe, myCompleted: myCompleted,
+    dueSoonCount: dueSoonCount, homeStats: homeStats,
     inbox: inbox, unreadCount: unreadCount,
     defaultView: defaultView, viewGroups: viewGroups, matchesFilter: matchesFilter,
     sortItems: sortItems, projectStats: projectStats,
