@@ -128,17 +128,19 @@
 
     h += '<div class="sb-section">';
     h += '<div class="sb-label">' + L('โปรเจกต์') + '<button data-act="new-project" title="' + L('สร้างโปรเจกต์') + '">+</button></div>';
-    S.activeProjects().forEach(function (p) {
+    S.visibleProjects().forEach(function (p) {
       var n = S.tasksInProject(p.id).filter(function (x) { return !x.task.completed; }).length;
       h += '<button class="sb-item' +
         (route.type === 'project' && route.id === p.id ? ' active' : '') +
         '" data-act="go" data-route="project" data-id="' + esc(p.id) + '">' +
         '<span class="emoji">' + esc(p.icon) + '</span>' +
         '<span class="swatch" style="background:' + esc(p.color) + '"></span>' +
-        '<span class="grow">' + esc(p.name) + '</span>' +
+        "<span class=\"grow\">" + esc(p.name) + "</span>" +
+        (p.visibility === "private" ? "<span class=\"lockmark\" title=\"" + L("โปรเจกต์ปิด") + "\">" + I("shield", 12) + "</span>" : "") +
         (n ? '<span class="count">' + n + '</span>' : '') + '</button>';
     });
-    var archived = db.projects.filter(function (p) { return p.archived; });
+    /* คลังก็ต้องกรองตามสิทธิ์เหมือนกัน ไม่งั้นเก็บเข้าคลังแล้วโปรเจกต์ปิดโผล่ให้ทุกคนเห็น */
+    var archived = db.projects.filter(function (p) { return p.archived && S.projectAccess(p.id); });
     if (archived.length) {
       h += '<div class="sb-label" style="padding-top:14px">' + L('เก็บเข้าคลัง') + '</div>';
       archived.forEach(function (p) {
@@ -1467,6 +1469,11 @@
     'project.create': 'สร้างโปรเจกต์',
     'project.duplicate': 'คัดลอกโปรเจกต์',
     'project.delete': 'ลบโปรเจกต์',
+    'project.visibility': 'เปลี่ยนความเป็นส่วนตัวของ',
+    'project.lock': 'ล็อกรายชื่อสมาชิกของ',
+    'project.unlock': 'ปลดล็อกรายชื่อสมาชิกของ',
+    'project.member': 'ตั้งสิทธิ์ในโปรเจกต์',
+    'project.member-remove': 'ถอดสมาชิกออกจากโปรเจกต์',
     'system.reset': 'ล้างข้อมูลทั้งหมด',
     'system.export': 'ส่งออกข้อมูล',
     'system.import': 'นำเข้าข้อมูล'

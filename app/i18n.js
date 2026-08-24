@@ -468,6 +468,37 @@
     /* --- หน้าผู้ดูแลระบบ --- */
     'ผู้ดูแลระบบ': 'Admin', 'ผู้ดูแล': 'Admin', 'สมาชิก': 'Member',
     'สมาชิกและสิทธิ์': 'Members & permissions', 'คน': 'people',
+    'ใครเข้าถึงโปรเจกต์นี้ได้': 'Who can access this project',
+    'เปิดให้ทั้งองค์กร': 'Open to everyone',
+    'พนักงานทุกคนเห็นและเข้าทำงานได้': 'All staff can see it and work in it',
+    'ปิด เห็นเฉพาะคนที่เชิญ': 'Private — invited people only',
+    'ไม่ขึ้นในเมนูของคนอื่น และเปิดจากลิงก์ตรงก็ไม่ได้':
+      'Hidden from other people’s menus, and a direct link will not open it',
+    'ล็อกรายชื่อสมาชิก': 'Lock the member list',
+    'สมาชิกเชิญคนเพิ่มเองไม่ได้ ต้องให้ผู้ดูแลระบบทำเท่านั้น':
+      'Members cannot invite anyone — only a system admin can',
+    'สมาชิกของโปรเจกต์': 'Project members',
+    'ยังไม่มีสมาชิก ยังไม่มีใครเข้าโปรเจกต์นี้ได้': 'No members yet — nobody can open this project',
+    'โปรเจกต์นี้ถูกล็อก เฉพาะผู้ดูแลระบบเท่านั้นที่เพิ่มหรือถอดสมาชิกได้':
+      'This project is locked — only a system admin can add or remove members',
+    'ให้สิทธิ์ระดับ': 'Access level', 'เพิ่มเข้าโปรเจกต์': 'Add to project',
+    'ถอดออกจากโปรเจกต์': 'Remove from project',
+    'ถอด “{name}” ออกจากโปรเจกต์นี้?': 'Remove “{name}” from this project?',
+    'ต้องเหลือผู้ดูแลโปรเจกต์อย่างน้อยหนึ่งคน': 'A project must keep at least one project admin',
+    'ไม่มีคนให้เพิ่มแล้ว': 'Everyone has already been added',
+    'ล็อกรายชื่อสมาชิกแล้ว': 'Member list locked', 'ปลดล็อกแล้ว': 'Unlocked',
+    'โปรเจกต์ปิด': 'Private project', 'ปิด': 'Private',
+    'ผู้ดูแลโปรเจกต์': 'Project admin', 'จัดการสมาชิกและลบโปรเจกต์ได้': 'Manage members and delete the project',
+    'แก้ไขได้': 'Editor', 'สร้างและแก้งาน จัดโครงสร้างโปรเจกต์ได้': 'Create and edit tasks, change project structure',
+    'แสดงความเห็นได้': 'Commenter', 'ดูและคอมเมนต์ได้ แต่แก้งานไม่ได้': 'View and comment, but cannot edit tasks',
+    'เปิดดูได้ แก้และคอมเมนต์ไม่ได้': 'View only — cannot edit or comment',
+    'ในเวอร์ชันนี้การกันสิทธิ์ทำที่หน้าจอ เมื่อย้ายไปฐานข้อมูลแล้วจะบังคับที่เซิร์ฟเวอร์จริง':
+      'In this version access is enforced in the browser. Once we move to the database it will be enforced on the server.',
+    'เปลี่ยนความเป็นส่วนตัว': 'Change privacy',
+    'เปลี่ยนเป็นโปรเจกต์ปิด': 'made private', 'เปลี่ยนเป็นเปิดให้ทั้งองค์กร': 'made open to everyone',
+    'ล็อกโปรเจกต์': 'locked project', 'ปลดล็อกโปรเจกต์': 'unlocked project',
+    'ตั้งสิทธิ์ในโปรเจกต์': 'Set project access',
+    'ถอดสมาชิกออกจากโปรเจกต์': 'Remove project member',
     'บันทึกการทำงาน': 'Activity log', 'รายการ': 'entries',
     'ส่งออก CSV': 'Export CSV', 'ทั้งหมด': 'All',
     'ค้นหาในบันทึก…': 'Search the log…',
@@ -490,6 +521,9 @@
     'เปิดใช้งานบัญชีของ': 'enabled the account of',
     'สร้างโปรเจกต์': 'created project', 'คัดลอกโปรเจกต์': 'duplicated project',
     'ลบโปรเจกต์': 'deleted project',
+    'เปลี่ยนความเป็นส่วนตัวของ': 'changed the privacy of',
+    'ล็อกรายชื่อสมาชิกของ': 'locked the member list of',
+    'ปลดล็อกรายชื่อสมาชิกของ': 'unlocked the member list of',
     'ล้างข้อมูลทั้งหมด': 'cleared all data',
     'ส่งออกข้อมูล': 'exported data', 'นำเข้าข้อมูล': 'imported data',
     'ปิดใช้งาน': 'Disabled', 'รหัสผ่าน': 'Password',
@@ -529,6 +563,8 @@
     'อย่าลืมเพิ่มคนนี้เข้าไซต์ SharePoint ด้วย ไม่งั้นเขาจะล็อกอินเข้ามาแล้วเปิดข้อมูลไม่ได้':
       'Remember to add this person to the SharePoint site too, or they will sign in but cannot open the data.',
     'บทบาทของคุณคือ “{role}” จึงทำสิ่งนี้ไม่ได้': 'Your role is “{role}”, so you cannot do this',
+    'สิทธิ์ของคุณในโปรเจกต์นี้คือ “{acc}” จึงทำสิ่งนี้ไม่ได้':
+      'Your access to this project is “{acc}”, so you cannot do this',
     'เพิ่ม “{name}” เข้ารายชื่อแล้ว': 'Added “{name}” to the list',
     'เอา “{name}” ออกจากรายชื่อ?\nงานที่มอบหมายไว้จะกลายเป็นยังไม่มอบหมาย':
       'Remove “{name}” from the list?\nTheir assigned tasks become unassigned.',

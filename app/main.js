@@ -177,6 +177,9 @@
     if (r.type === 'project') {
       var p = S.project(r.id);
       if (!p) { state.route = { type: 'mytasks' }; return renderAll(); }
+      /* ไม่มีสิทธิ์เห็นโปรเจกต์นี้ — ถอยออกเงียบ ๆ เหมือนโปรเจกต์ไม่มีอยู่จริง
+       * ไม่บอกว่า "ไม่มีสิทธิ์" เพราะนั่นเท่ากับยืนยันว่าโปรเจกต์นี้มีอยู่ */
+      if (!S.projectAccess(r.id)) { state.route = { type: "mytasks" }; return renderAll(); }
       var v = viewFor(r.id);
       if (r.view === 'board') body = R.boardView(r.id, v, state.sel);
       else if (r.view === 'timeline') body = R.timelineView(r.id, v, state.tlZoom);
@@ -637,10 +640,109 @@
     return h;
   }
 
+  /** ตั้งความเป็นส่วนตัวและสมาชิกของโปรเจกต์ */
+  function projectAccessModal(projectId) {
+    var p = S.project(projectId);
+    if (!p) return '';
+    var priv = p.visibility === 'private';
+    var members = S.projectMembers(projectId);
+    var canManage = S.canInProject(projectId, 'admin') || S.isAdmin();
+    var lockedByAdmin = p.locked && !S.isAdmin();
+
+    var h = '<h2>' + L('ใครเข้าถึงโปรเจกต์นี้ได้') + '</h2>';
+    h += '<div class="pa-name">' + R.esc(p.icon) + ' ' + R.esc(p.name) + '</div>';
+
+    /* ---- ความเป็นส่วนตัว ---- */
+    h += '<div class="pa-vis">';
+    [['org', 'เปิดให้ทั้งองค์กร', 'พนักงานทุกคนเห็นและเข้าทำงานได้', 'users'],
+     ['private', 'ปิด เห็นเฉพาะคนที่เชิญ', 'ไม่ขึ้นในเมนูของคนอื่น และเปิดจากลิงก์ตรงก็ไม่ได้', 'shield']
+    ].forEach(function (o) {
+      var on = (o[0] === 'private') === priv;
+      h += '<button class="pa-opt' + (on ? ' on' : '') + '"' +
+        (canManage ? ' data-act="set-visibility" data-id="' + R.esc(projectId) +
+          '" data-v="' + o[0] + '"' : ' disabled') + '>' +
+        I(o[3], 17) + '<span><b>' + L(o[1]) + '</b><em>' + L(o[2]) + '</em></span>' +
+        (on ? I('check', 15) : '') + '</button>';
+    });
+    h += '</div>';
+
+    if (priv) {
+      /* ---- ล็อก ---- */
+      h += '<label class="pa-lock' + (p.locked ? ' on' : '') + '">' +
+        '<input type="checkbox" data-act="toggle-lock" data-id="' + R.esc(projectId) + '"' +
+        (p.locked ? ' checked' : '') + (S.isAdmin() ? '' : ' disabled') + '>' +
+        '<span><b>' + L('ล็อกรายชื่อสมาชิก') + '</b><em>' +
+        L('สมาชิกเชิญคนเพิ่มเองไม่ได้ ต้องให้ผู้ดูแลระบบทำเท่านั้น') + '</em></span></label>';
+
+      /* ---- รายชื่อสมาชิก ---- */
+      h += '<div class="pa-head">' + L('สมาชิกของโปรเจกต์') +
+        '<span>' + members.length + ' ' + L('คน') + '</span></div>';
+
+      if (!members.length) {
+        h += '<div class="pa-empty">' + L('ยังไม่มีสมาชิก ยังไม่มีใครเข้าโปรเจกต์นี้ได้') + '</div>';
+      } else {
+        h += '<div class="pa-list">';
+        members.forEach(function (m) {
+          var u = S.user(m.userId);
+          if (!u) return;
+          h += '<div class="pa-row">' + R.avatar(u) +
+            '<div class="grow"><b>' + R.esc(u.name) + '</b>' +
+            '<em>' + R.esc(u.email || '') + '</em></div>' +
+            '<button class="acc-pill" ' +
+              (canManage && !lockedByAdmin ? 'data-act="pick-access" data-id="' + R.esc(projectId) +
+                '" data-user="' + R.esc(m.userId) + '"' : 'disabled') + '>' +
+              L(accessLabel(m.access)) + ' ' + I('chevronDown', 12) + '</button>' +
+            (canManage && !lockedByAdmin
+              ? '<button class="icon-btn" data-act="drop-member" data-id="' + R.esc(projectId) +
+                '" data-user="' + R.esc(m.userId) + '" title="' + L('ถอดออกจากโปรเจกต์') + '">' +
+                I('close', 14) + '</button>'
+              : '') +
+            '</div>';
+        });
+        h += '</div>';
+      }
+
+      if (lockedByAdmin) {
+        h += '<div class="pa-note">' + I('shield', 14) + '<span>' +
+          L('โปรเจกต์นี้ถูกล็อก เฉพาะผู้ดูแลระบบเท่านั้นที่เพิ่มหรือถอดสมาชิกได้') + '</span></div>';
+      } else if (canManage) {
+        h += '<div class="field" style="margin-top:12px"><label>' + L('เพิ่มสมาชิก') + '</label>' +
+          '<select id="paUser">';
+        S.db.users.filter(function (u) {
+          return u.active !== false &&
+                 !members.some(function (m) { return m.userId === u.id; });
+        }).forEach(function (u) {
+          h += '<option value="' + R.esc(u.id) + '">' + R.esc(u.name) +
+            (u.email ? ' — ' + R.esc(u.email) : '') + '</option>';
+        });
+        h += '</select></div>';
+        h += '<div class="field"><label>' + L('ให้สิทธิ์ระดับ') + '</label><select id="paAccess">';
+        S.PROJECT_ACCESS.forEach(function (a) {
+          h += '<option value="' + a.id + '"' + (a.id === 'edit' ? ' selected' : '') + '>' +
+            L(a.label) + ' — ' + L(a.desc) + '</option>';
+        });
+        h += '</select></div>';
+        h += '<button class="btn btn-primary" style="width:100%" data-act="add-project-member" ' +
+          'data-id="' + R.esc(projectId) + '">' + L('เพิ่มเข้าโปรเจกต์') + '</button>';
+      }
+    }
+
+    h += '<div class="modal-note" style="margin-top:16px">' +
+      L('ในเวอร์ชันนี้การกันสิทธิ์ทำที่หน้าจอ เมื่อย้ายไปฐานข้อมูลแล้วจะบังคับที่เซิร์ฟเวอร์จริง') +
+      '</div>';
+    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
+    return h;
+  }
+
+  function accessLabel(id) {
+    var a = S.PROJECT_ACCESS.filter(function (x) { return x.id === id; })[0];
+    return a ? a.label : id;
+  }
   function projectMenuModal(projectId) {
     var p = S.project(projectId);
     var h = '<h2>' + R.esc(p.icon) + ' ' + R.esc(p.name) + '</h2>';
     h += '<div style="display:flex;flex-direction:column;gap:8px">' +
+      '<button class="btn" data-act="project-access" data-id="' + R.esc(projectId) + '">' + I('shield', 14) + ' ' + L('ใครเข้าถึงโปรเจกต์นี้ได้') + (p.visibility === 'private' ? ' <span class="chip">' + L('ปิด') + '</span>' : '') + '</button>' +
       '<button class="btn" data-act="edit-project" data-id="' + R.esc(projectId) + '">' + I('pencil', 14) + ' ' + L('แก้ไขชื่อ / สี / ไอคอน') + '</button>' +
       '<button class="btn" data-act="update-status" data-id="' + R.esc(projectId) + '">' + I('flag', 14) + ' ' + L('อัปเดตสถานะโปรเจกต์') + '</button>' +
       '<button class="btn" data-act="manage-fields" data-id="' + R.esc(projectId) + '">' + I('filter', 14) + ' ' + L('จัดการฟิลด์') + '</button>' +
@@ -837,7 +939,8 @@
     h += '<p style="font-size:13px;color:var(--fg-soft);margin:0 0 14px">' +
       L('งานชิ้นเดียวอยู่ได้หลายโปรเจกต์ แก้ที่ไหนก็อัปเดตทุกที่') + '</p>';
     var any = false;
-    S.activeProjects().forEach(function (p) {
+    S.visibleProjects().forEach(function (p) {
+      if (!S.canInProject(p.id, "edit")) return;   // เพิ่มงานเข้าโปรเจกต์ที่แก้ไม่ได้ ไม่ควรทำได้
       if (current[p.id]) return;
       any = true;
       h += '<div class="mini-row"><span>' + R.esc(p.icon) + '</span>' +
@@ -1110,6 +1213,8 @@
 
     put('manage', [
       'manage-members', 'add-user', 'do-add-user', 'pick-person', 'remove-user', 'pick-role', 'set-role',
+      'set-visibility', 'toggle-lock', 'add-project-member', 'pick-access', 'set-access', 'drop-member',
+      'disable-user', 'enable-user',
       'delete-project', 'reset', 'import', 'paste-backup', 'do-paste-import'
     ]);
     put('structure', [
@@ -1152,9 +1257,24 @@
     return state.openTaskId || null;
   }
 
+  /** บอกเหตุผลที่ถูกปฏิเสธให้ตรงจุด ไม่งั้นผู้ใช้ไปแก้ผิดที่
+   *  ติดที่สิทธิ์โปรเจกต์กับติดที่บทบาทองค์กร แก้คนละที่กัน */
   function denyToast() {
-    toast(L('บทบาทของคุณคือ “{role}” จึงทำสิ่งนี้ไม่ได้',
+    if (state.route.type === "project") {
+      var acc = S.projectAccess(state.route.id);
+      if (acc && !S.canInProject(state.route.id, "edit")) {
+        toast(L("สิทธิ์ของคุณในโปรเจกต์นี้คือ “{acc}” จึงทำสิ่งนี้ไม่ได้",
+          { acc: L(projectAccessLabel(acc)) }));
+        return;
+      }
+    }
+    toast(L("บทบาทของคุณคือ “{role}” จึงทำสิ่งนี้ไม่ได้",
       { role: R.roleLabel(S.role()) }));
+  }
+
+  function projectAccessLabel(id) {
+    var a = S.PROJECT_ACCESS.filter(function (x) { return x.id === id; })[0];
+    return a ? a.label : id;
   }
 
   /** ผ่านสิทธิ์ไหม ถ้าไม่ผ่านจะเตือนให้ผู้ใช้รู้ว่าทำไม ไม่เงียบหาย */
@@ -1162,8 +1282,14 @@
     var need = NEEDS[act];
     if (!need) return true;
     var ok;
-    if (need === 'write:task') ok = S.can('write', actTaskId(el));
-    else if (need === 'create') ok = S.can('write');
+    if (need === "write:task") ok = S.can("write", actTaskId(el));
+    else if (need === "create") ok = S.can("write");
+    else if (need === "structure") {
+      /* การแก้โครงสร้างเกิดขึ้นในบริบทของโปรเจกต์ที่เปิดอยู่
+       * จึงต้องผ่านสิทธิ์ของโปรเจกต์นั้นด้วย ไม่ใช่แค่บทบาทระดับองค์กร */
+      ok = S.can("structure") &&
+           (state.route.type !== "project" || S.canInProject(state.route.id, "edit"));
+    }
     else ok = S.can(need);
     if (!ok) denyToast();
     return ok;
@@ -1679,6 +1805,57 @@
         break;
       }
       case 'project-menu': openModal(projectMenuModal(id)); break;
+      /* --- สิทธิ์รายโปรเจกต์ --- */
+      case 'project-access': openModal(projectAccessModal(id || state.route.id)); break;
+      case 'set-visibility':
+        S.setProjectVisibility(id, el.dataset.v);
+        openModal(projectAccessModal(id));
+        renderAll();
+        break;
+      case 'toggle-lock':
+        S.setProjectLocked(id, el.checked);
+        openModal(projectAccessModal(id));
+        toast(el.checked ? L('ล็อกรายชื่อสมาชิกแล้ว') : L('ปลดล็อกแล้ว'));
+        break;
+      case 'add-project-member': {
+        var pu = document.getElementById('paUser');
+        if (!pu || !pu.value) { toast(L('ไม่มีคนให้เพิ่มแล้ว')); break; }
+        S.setProjectMember(id, pu.value, document.getElementById('paAccess').value);
+        openModal(projectAccessModal(id));
+        renderAll();
+        break;
+      }
+      case 'pick-access': {
+        if (popIsOpenFor(el)) { closePops(); break; }
+        var pid = id, uid2 = el.dataset.user;
+        var ah2 = '';
+        S.PROJECT_ACCESS.forEach(function (a) {
+          ah2 += '<button class="role-opt" data-act="set-access" data-id="' + R.esc(pid) +
+            '" data-user="' + R.esc(uid2) + '" data-a="' + a.id + '">' +
+            I(a.id === 'admin' ? 'shield' : a.id === 'view' ? 'search' : 'users') +
+            '<span><b>' + L(a.label) + '</b><em>' + L(a.desc) + '</em></span></button>';
+        });
+        openPop(el, ah2);
+        break;
+      }
+      case 'set-access':
+        closePops();
+        S.setProjectMember(id, el.dataset.user, el.dataset.a);
+        openModal(projectAccessModal(id));
+        renderAll();
+        break;
+      case 'drop-member': {
+        var dm = S.user(el.dataset.user);
+        if (!confirm(L('ถอด “{name}” ออกจากโปรเจกต์นี้?', { name: dm ? dm.name : '' }))) break;
+        if (!S.removeProjectMember(id, el.dataset.user)) {
+          toast(L('ต้องเหลือผู้ดูแลโปรเจกต์อย่างน้อยหนึ่งคน'));
+          break;
+        }
+        openModal(projectAccessModal(id));
+        renderAll();
+        break;
+      }
+
       case 'edit-project': openModal(projectModal(S.project(id))); break;
       case 'save-project': {
         var ep = S.project(id);

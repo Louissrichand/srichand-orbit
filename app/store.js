@@ -391,6 +391,11 @@
       if (!('lastSeenAt' in u)) u.lastSeenAt = null;
     });
     d.audit = d.audit || [];
+    d.projectMembers = d.projectMembers || [];
+    d.projects.forEach(function (p) {
+      if (!p.visibility) p.visibility = 'org';   // ของเดิมทุกโปรเจกต์เปิดให้ทุกคน
+      if (!('locked' in p)) p.locked = false;
+    });
     d.users.forEach(function (u) {
       if (!('active' in u)) u.active = true;      // ปิดใช้งานได้โดยไม่ต้องลบทิ้ง
       if (!('authBy' in u)) u.authBy = null;      // microsoft | password | null (ยังไม่เคยเข้า)
@@ -1704,6 +1709,137 @@
     return u;
   }
 
+
+  /* ---------- สิทธิ์รายโปรเจกต์ ----------
+   *
+   * เจตนาเดียวกับที่ Asana ทำ คือแยกสองชั้น
+   *   บทบาทระดับองค์กร  คุมว่าเข้าหน้าผู้ดูแลได้ไหม สร้างโปรเจกต์ได้ไหม
+   *   สิทธิ์รายโปรเจกต์  คุมว่าเห็นโปรเจกต์ไหน และทำอะไรกับมันได้
+   *
+   * visibility = org      พนักงานทุกคนเห็น (ค่าเริ่มต้น)
+   *            = private  เห็นเฉพาะคนที่อยู่ในรายชื่อสมาชิกโปรเจกต์
+   * locked = true         สมาชิกเชิญคนเพิ่มเองไม่ได้ ต้องให้ผู้ดูแลระบบทำ
+   *
+   * ย้ำอีกครั้ง: ในเวอร์ชันที่ทำงานในเบราว์เซอร์ นี่คือการจัดระเบียบหน้าจอ
+   * ไม่ใช่การบังคับสิทธิ์จริง ของจริงจะบังคับที่ API เมื่อย้ายไปฐานข้อมูลแล้ว
+   */
+  var PROJECT_ACCESS = [
+    { id: 'admin',   label: 'ผู้ดูแลโปรเจกต์', desc: 'จัดการสมาชิกและลบโปรเจกต์ได้' },
+    { id: 'edit',    label: 'แก้ไขได้',        desc: 'สร้างและแก้งาน จัดโครงสร้างโปรเจกต์ได้' },
+    { id: 'comment', label: 'แสดงความเห็นได้', desc: 'ดูและคอมเมนต์ได้ แต่แก้งานไม่ได้' },
+    { id: 'view',    label: 'ดูอย่างเดียว',    desc: 'เปิดดูได้ แก้และคอมเมนต์ไม่ได้' }
+  ];
+  var ACCESS_RANK = { view: 1, comment: 2, edit: 3, admin: 4 };
+
+  function projectMembers(projectId) {
+    return (db.projectMembers || []).filter(function (m) { return m.projectId === projectId; });
+  }
+
+  /** สิทธิ์ของคนหนึ่งในโปรเจกต์หนึ่ง คืน null ถ้าไม่มีสิทธิ์เห็นเลย */
+  function projectAccess(projectId, userId) {
+    var uid = userId || db.currentUserId;
+    var u = user(uid);
+    if (!u || u.active === false) return null;
+
+    var p = project(projectId);
+    if (!p) return null;
+
+    if (u.role === 'admin') return 'admin';        // ผู้ดูแลระบบเห็นทุกโปรเจกต์
+
+    var m = (db.projectMembers || []).filter(function (x) {
+      return x.projectId === projectId && x.userId === uid;
+    })[0];
+    if (m) return m.access;
+
+    /* โปรเจกต์เปิด ให้สิทธิ์แก้ไขตามบทบาทองค์กร ยกเว้นบุคคลภายนอก
+     * ที่ต้องถูกเชิญเป็นรายโปรเจกต์เสมอ */
+    if (p.visibility !== 'private' && u.role !== 'guest') {
+      return u.role === 'limited' ? 'edit' : 'edit';
+    }
+    return null;
+  }
+
+  /** โปรเจกต์ที่คนนี้เห็นได้ ใช้แทน activeProjects ทุกที่ที่แสดงรายการ */
+  function visibleProjects(userId) {
+    return db.projects.filter(function (p) {
+      return !p.archived && projectAccess(p.id, userId);
+    });
+  }
+
+  /** มีสิทธิ์ระดับที่ต้องการในโปรเจกต์นี้ไหม */
+  function canInProject(projectId, needed) {
+    var a = projectAccess(projectId);
+    if (!a) return false;
+    return (ACCESS_RANK[a] || 0) >= (ACCESS_RANK[needed] || 0);
+  }
+
+  function setProjectVisibility(projectId, visibility) {
+    var p = project(projectId);
+    if (!p) return false;
+    snapshot('เปลี่ยนความเป็นส่วนตัว');
+    p.visibility = visibility === 'private' ? 'private' : 'org';
+    /* ปิดโปรเจกต์แล้วต้องมีสมาชิกอย่างน้อยหนึ่งคน ไม่งั้นจะไม่มีใครเข้าได้อีก */
+    if (p.visibility === 'private' && !projectMembers(projectId).length) {
+      setProjectMember(projectId, db.currentUserId, 'admin', true);
+    }
+    audit('project.visibility', p.name,
+      p.visibility === 'private' ? 'เปลี่ยนเป็นโปรเจกต์ปิด' : 'เปลี่ยนเป็นเปิดให้ทั้งองค์กร');
+    commit();
+    return true;
+  }
+
+  function setProjectLocked(projectId, locked) {
+    var p = project(projectId);
+    if (!p) return false;
+    snapshot(locked ? 'ล็อกโปรเจกต์' : 'ปลดล็อกโปรเจกต์');
+    p.locked = !!locked;
+    audit(locked ? 'project.lock' : 'project.unlock', p.name);
+    commit();
+    return true;
+  }
+
+  function setProjectMember(projectId, userId, access, quiet) {
+    if (!ACCESS_RANK[access]) return false;
+    db.projectMembers = db.projectMembers || [];
+    var m = db.projectMembers.filter(function (x) {
+      return x.projectId === projectId && x.userId === userId;
+    })[0];
+    var p = project(projectId), u = user(userId);
+    if (!quiet) snapshot('ตั้งสิทธิ์ในโปรเจกต์');
+    if (m) {
+      m.access = access;
+    } else {
+      db.projectMembers.push({ projectId: projectId, userId: userId, access: access });
+    }
+    if (!quiet) {
+      audit('project.member', (p ? p.name : projectId),
+        (u ? u.name : userId) + ' → ' + access);
+      commit();
+    }
+    return true;
+  }
+
+  /** ถอดคนออกจากโปรเจกต์ — ห้ามเหลือศูนย์ผู้ดูแลโปรเจกต์ในโปรเจกต์ปิด */
+  function removeProjectMember(projectId, userId) {
+    var p = project(projectId);
+    var list = projectMembers(projectId);
+    var target = list.filter(function (m) { return m.userId === userId; })[0];
+    if (!target) return false;
+    if (target.access === 'admin' && p && p.visibility === 'private') {
+      var others = list.filter(function (m) {
+        return m.userId !== userId && m.access === 'admin';
+      });
+      if (!others.length) return false;
+    }
+    snapshot('ถอดสมาชิกออกจากโปรเจกต์');
+    db.projectMembers = db.projectMembers.filter(function (m) {
+      return !(m.projectId === projectId && m.userId === userId);
+    });
+    var u = user(userId);
+    audit('project.member-remove', (p ? p.name : projectId), u ? u.name : userId);
+    commit();
+    return true;
+  }
   /* ---------- สิทธิ์ ----------
    *
    * ย้ำให้ชัด: นี่คือการจัดระเบียบในหน้าจอ ไม่ใช่การบังคับสิทธิ์จริง
@@ -1737,19 +1873,30 @@
   /**
    * cap: 'manage' | 'structure' | 'write' | 'comment'
    * taskId: ใส่มาเมื่อเป็นการแก้งานชิ้นใดชิ้นหนึ่ง
-   *         คนระดับ "แก้เฉพาะงานของตัวเอง" จะผ่านเฉพาะงานที่ตัวเองเกี่ยวข้อง
+   *
+   * ต้องผ่านสองด่าน — บทบาทระดับองค์กร แล้วจึงสิทธิ์ของโปรเจกต์ที่งานนั้นอยู่
+   * ถ้างานอยู่หลายโปรเจกต์ ผ่านโปรเจกต์ใดโปรเจกต์หนึ่งก็พอ
+   * เป็นกติกาเดียวกับที่ Asana ใช้ คือได้สิทธิ์สูงสุดเท่าที่มีทางใดทางหนึ่ง
    */
   function can(cap, taskId) {
     if (!isActive()) return false;
     var caps = ROLE_CAPS[role()] || [];
-    if (caps.indexOf(cap) >= 0) return true;
-    if (cap === 'write' && caps.indexOf('writeOwn') >= 0) {
-      if (!taskId) return true;             // สร้างงานใหม่ทำได้เสมอ
-      var t = task(taskId);
-      if (!t) return true;
-      return t.assigneeId === db.currentUserId || t.createdBy === db.currentUserId;
+    var orgOk = caps.indexOf(cap) >= 0;
+
+    if (!orgOk && cap === 'write' && caps.indexOf('writeOwn') >= 0) {
+      var t = taskId && task(taskId);
+      orgOk = !taskId || !t ||
+              t.assigneeId === db.currentUserId || t.createdBy === db.currentUserId;
     }
-    return false;
+    if (!orgOk) return false;
+
+    if (taskId && (cap === 'write' || cap === 'comment')) {
+      var need = cap === 'comment' ? 'comment' : 'edit';
+      var ms = db.memberships.filter(function (m) { return m.taskId === taskId; });
+      if (!ms.length) return true;                  // งานที่ยังไม่ผูกกับโปรเจกต์ใด
+      return ms.some(function (m) { return canInProject(m.projectId, need); });
+    }
+    return true;
   }
 
   function isAdmin(userId) { return role(userId) === 'admin'; }
@@ -1893,6 +2040,10 @@
 
     addUser: addUser, removeUser: removeUser, setCurrentUser: setCurrentUser,
     adoptIdentity: adoptIdentity, ROLES: ROLES, ROLE_CAPS: ROLE_CAPS,
+    PROJECT_ACCESS: PROJECT_ACCESS, projectMembers: projectMembers, projectAccess: projectAccess,
+    visibleProjects: visibleProjects, canInProject: canInProject,
+    setProjectVisibility: setProjectVisibility, setProjectLocked: setProjectLocked,
+    setProjectMember: setProjectMember, removeProjectMember: removeProjectMember,
     isAdmin: isAdmin, setRole: setRole, can: can, role: role, adminCount: adminCount,
     setActive: setActive, isActive: isActive,
     audit: audit, auditLog: auditLog, auditGroups: auditGroups, auditCsv: auditCsv,
