@@ -24,6 +24,7 @@
     { "route": "/.auth/login/facebook", "statusCode": 404 },
     { "route": "/.auth/login/apple", "statusCode": 404 },
 
+    { "route": "/login.html", "allowedRoles": ["anonymous"] },
     { "route": "/api/roles", "allowedRoles": ["anonymous"], "methods": ["POST"] },
     { "route": "/api/admin/*", "allowedRoles": ["orbit-admin"] },
     { "route": "/api/*", "allowedRoles": ["authenticated"] },
@@ -31,7 +32,8 @@
   ],
 
   "responseOverrides": {
-    "401": { "redirect": "/.auth/login/aad", "statusCode": 302 }
+    "401": { "redirect": "/login.html", "statusCode": 302 },
+    "403": { "redirect": "/login.html?error=access_denied", "statusCode": 302 }
   },
 
   "navigationFallback": {

@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>เข้าสู่ระบบ — Orbit</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23EE0B3F'/%3E%3Ccircle cx='16' cy='16.8' r='7.5' fill='none' stroke='white' stroke-width='2.9'/%3E%3Cellipse cx='16' cy='16.8' rx='11.4' ry='4.3' fill='none' stroke='white' stroke-width='2' transform='rotate(-24 16 16.8)'/%3E%3Ccircle cx='24.6' cy='7.7' r='2.75' fill='white'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anuphan:wght@600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ink:#17161a; --ink-mid:#45424b; --ink-soft:#6d6a74; --ink-faint:#97949c;
+    --paper:#ffffff; --surface:#f7f5f6; --rule:#e2dee1; --rule-soft:#eeebed;
+    --orbit:#ee0b3f; --orbit-dk:#c50a35; --orbit-ink:#a90a30; --orbit-wash:#fdeef1;
+    --warn:#8a5a00; --warn-wash:#fbf2e2;
+    --radius:10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink:#eeeaef; --ink-mid:#c2bcc4; --ink-soft:#9c96a0; --ink-faint:#78737c;
+      --paper:#141317; --surface:#1c1a20; --rule:#322e38; --rule-soft:#262330;
+      --orbit:#ff476b; --orbit-dk:#ff2e57; --orbit-ink:#ff7b95; --orbit-wash:#2c1219;
+      --warn:#e0a54a; --warn-wash:#2a2113;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink:#eeeaef; --ink-mid:#c2bcc4; --ink-soft:#9c96a0; --ink-faint:#78737c;
+    --paper:#141317; --surface:#1c1a20; --rule:#322e38; --rule-soft:#262330;
+    --orbit:#ff476b; --orbit-dk:#ff2e57; --orbit-ink:#ff7b95; --orbit-wash:#2c1219;
+    --warn:#e0a54a; --warn-wash:#2a2113;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--surface); color: var(--ink);
+    font-family: "IBM Plex Sans Thai", "Noto Sans Thai", system-ui, sans-serif;
+    line-height: 1.75; -webkit-font-smoothing: antialiased;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+
+  .card {
+    width: 100%; max-width: 440px; background: var(--paper);
+    border: 1px solid var(--rule); border-radius: var(--radius);
+    box-shadow: 0 8px 32px rgba(0,0,0,.10);
+    padding: 44px 36px 30px; text-align: center;
+    display: flex; flex-direction: column; gap: 0;
+  }
+
+  .logo { display: flex; justify-content: center; margin-bottom: 24px; }
+
+  h1 {
+    font-family: Anuphan, "IBM Plex Sans Thai", sans-serif;
+    font-size: 25px; font-weight: 700; margin: 0 0 10px; letter-spacing: -.01em;
+  }
+  .lede {
+    margin: 0 auto 28px; max-width: 34ch;
+    font-size: 15px; color: var(--ink-soft); line-height: 1.7;
+    text-wrap: pretty;
+  }
+
+  .btn {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    width: 100%; min-height: 50px; padding: 12px 18px;
+    background: var(--orbit); color: #fff; border: 0; border-radius: 8px;
+    font-family: inherit; font-size: 15.5px; font-weight: 600;
+    text-decoration: none; cursor: pointer;
+    transition: background .14s;
+  }
+  .btn:hover { background: var(--orbit-dk); }
+  .btn:focus-visible { outline: 3px solid var(--orbit); outline-offset: 3px; }
+  .btn svg { flex: none; }
+
+  .foot {
+    margin-top: 26px; padding-top: 20px; border-top: 1px solid var(--rule-soft);
+    display: flex; align-items: flex-start; gap: 9px; text-align: left;
+    font-size: 12.5px; color: var(--ink-faint); line-height: 1.6;
+  }
+  .foot svg { flex: none; margin-top: 3px; }
+
+  .notice {
+    display: none; text-align: left; gap: 10px; margin-bottom: 24px;
+    background: var(--warn-wash); border-radius: 8px; padding: 14px 15px;
+    font-size: 13.5px; line-height: 1.65; color: var(--ink-mid);
+  }
+  .notice.show { display: flex; }
+  .notice svg { flex: none; margin-top: 3px; color: var(--warn); }
+  .notice b { display: block; color: var(--warn); margin-bottom: 2px; }
+
+  .sub { margin: 16px 0 0; font-size: 12.5px; color: var(--ink-faint); }
+  .sub a { color: var(--ink-soft); }
+
+  @media (max-width: 420px) {
+    .card { padding: 34px 24px 24px; }
+  }
+</style>
+</head>
+<body>
+
+<main class="card">
+
+  <div class="logo">
+    <svg width="150" height="34" viewBox="0 0 150 34" role="img" aria-label="Orbit">
+      <defs>
+        <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#ff2e57"/>
+          <stop offset="1" stop-color="#c50a35"/>
+        </linearGradient>
+      </defs>
+      <rect x="0" y="1" width="32" height="32" rx="8" fill="url(#lg)"/>
+      <circle cx="16" cy="17.8" r="7.5" fill="none" stroke="#fff" stroke-width="2.9"/>
+      <ellipse cx="16" cy="17.8" rx="11.4" ry="4.3" fill="none" stroke="#fff"
+               stroke-width="2" transform="rotate(-24 16 17.8)"/>
+      <circle cx="24.6" cy="8.7" r="2.75" fill="#fff"/>
+      <text x="42" y="25" font-family="Anuphan, sans-serif" font-size="23"
+            font-weight="700" fill="currentColor" letter-spacing="-0.3">Orbit</text>
+    </svg>
+  </div>
+
+  <div class="notice" id="notice">
+    <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+      <path d="M8 2.4 14.4 13.4H1.6z"/><path d="M8 6.6v3"/><path d="M8 11.4h.01"/>
+    </svg>
+    <div id="noticeText"></div>
+  </div>
+
+  <h1>เข้าสู่ระบบด้วยบัญชีบริษัท</h1>
+  <p class="lede">
+    ใช้บัญชี Microsoft 365 ตัวเดียวกับที่เข้า Outlook และ Teams
+    ไม่ต้องจำรหัสผ่านชุดใหม่
+  </p>
+
+  <a class="btn" id="loginBtn" href="/.auth/login/aad">
+    <svg width="19" height="19" viewBox="0 0 21 21" aria-hidden="true">
+      <rect x="0" y="0" width="10" height="10" fill="#f25022"/>
+      <rect x="11" y="0" width="10" height="10" fill="#7fba00"/>
+      <rect x="0" y="11" width="10" height="10" fill="#00a4ef"/>
+      <rect x="11" y="11" width="10" height="10" fill="#ffb900"/>
+    </svg>
+    <span>เข้าสู่ระบบด้วย Microsoft</span>
+  </a>
+
+  <p class="sub" id="sub">ระบบจัดการงานภายในของศรีจันทร์</p>
+
+  <div class="foot">
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M8 1.8 13.4 4v4.2c0 3.2-2.3 5.5-5.4 6.4-3.1-.9-5.4-3.2-5.4-6.4V4z"/>
+      <path d="M5.8 8.1 7.4 9.7l3-3.2"/>
+    </svg>
+    <span>ข้อมูลงานทั้งหมดเก็บอยู่ใน Microsoft 365 ของบริษัทเท่านั้น ไม่ผ่านผู้ให้บริการภายนอก</span>
+  </div>
+
+</main>
+
+<script>
+/* Static Web Apps ส่งเหตุผลกลับมาทาง query string เมื่อล็อกอินไม่ผ่าน
+   แปลเป็นภาษาที่พนักงานเข้าใจ ไม่ปล่อยให้เจอข้อความดิบของ Microsoft */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var reason = q.get('error') || q.get('post_login_redirect_error') || '';
+  var notice = document.getElementById('notice');
+  var text = document.getElementById('noticeText');
+
+  if (!reason) return;
+
+  var msg;
+  if (/consent|forbidden|access_denied|unauthorized/i.test(reason)) {
+    /* กรณีที่พบบ่อยที่สุดช่วง pilot — บัญชีถูกต้องแต่ยังไม่ได้อยู่ในกลุ่มที่เปิดให้ใช้ */
+    msg = '<b>บัญชีของคุณยังไม่ได้รับสิทธิ์เข้าใช้</b>' +
+          'ช่วงนี้ Orbit เปิดให้เฉพาะทีมนำร่องก่อน ' +
+          'หากต้องการเข้าร่วม กรุณาแจ้งฝ่ายเทคโนโลยีสารสนเทศ';
+  } else {
+    msg = '<b>เข้าสู่ระบบไม่สำเร็จ</b>' +
+          'กรุณาลองใหม่อีกครั้ง หากยังไม่ได้ กรุณาแจ้งฝ่ายเทคโนโลยีสารสนเทศ ' +
+          'พร้อมแจ้งรหัสนี้: ' + String(reason).slice(0, 60);
+  }
+  text.innerHTML = msg;
+  notice.classList.add('show');
+})();
+
+/* กลับไปหน้าที่ตั้งใจเปิดตอนแรกหลังล็อกอินเสร็จ ไม่ใช่โยนไปหน้าแรกเสมอ */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var back = q.get('post_login_redirect_uri');
+  if (!back || back.charAt(0) !== '/' || back.indexOf('//') === 0) return;   // รับเฉพาะเส้นทางภายใน
+  var btn = document.getElementById('loginBtn');
+  btn.href = '/.auth/login/aad?post_login_redirect_uri=' + encodeURIComponent(back);
+})();
+</script>
+</body>
+</html>
