@@ -166,8 +166,12 @@
   }
 
 
-  /* ---------- ค้นหารายชื่อคนในองค์กร ----------
-   * ใช้สมุดรายชื่อของ Entra ผ่าน Graph เพื่อให้ผู้ดูแลเลือกคนได้โดยไม่ต้องพิมพ์เอง
+  /* ค้นหารายชื่อคนในองค์กร
+   *
+   * ขอเฉพาะชื่อกับอีเมล ซึ่งเป็นขอบเขตของสิทธิ์ User.ReadBasic.All พอดี
+   * ตำแหน่งงาน (jobTitle) อยู่นอกขอบเขตนั้น ต้องใช้ User.Read.All ที่กว้างกว่ามาก
+   * จึงตัดออก ไม่คุ้มกับการขอสิทธิ์เพิ่มแค่เพื่อแสดงตำแหน่ง
+   *
    * ใช้ startswith แทน $search เพราะไม่ต้องส่งหัว ConsistencyLevel เพิ่ม */
   function searchPeople(q) {
     var s = String(q || '').trim().replace(/'/g, "''");
@@ -176,7 +180,7 @@
     var filter = fields.map(function (k) {
       return "startswith(" + k + ",'" + s + "')";
     }).join(' or ');
-    return call('/users?$top=15&$select=id,displayName,mail,userPrincipalName,jobTitle' +
+    return call('/users?$top=15&$select=id,displayName,mail,userPrincipalName' +
       '&$filter=' + encodeURIComponent(filter))
       .then(asJson)
       .then(function (r) {
@@ -185,7 +189,7 @@
             oid: u.id,
             name: u.displayName || u.userPrincipalName || '',
             email: u.mail || u.userPrincipalName || '',
-            title: u.jobTitle || ''
+            title: ''
           };
         });
       });

@@ -782,7 +782,7 @@
         (already ? ' disabled' : '') + '>' +
         R.avatar({ name: p.name, color: '#8a8a92' }) +
         '<span><b>' + R.esc(p.name) + '</b><em>' + R.esc(p.email) +
-        (p.title ? ' · ' + R.esc(p.title) : '') + '</em></span>' +
+        '</em></span>' +
         '<i>' + (already ? L('มีอยู่แล้ว') : L('เพิ่ม')) + '</i></button>';
     }).join('');
   }
