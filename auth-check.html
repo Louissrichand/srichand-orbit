@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orbit — ตรวจการเข้าสู่ระบบ</title>
+<style>
+  :root {
+    --ink:#17161a; --soft:#6d6a74; --faint:#97949c;
+    --paper:#fff; --surface:#f7f5f6; --rule:#e2dee1;
+    --orbit:#ee0b3f; --orbit-ink:#a90a30; --orbit-wash:#fdeef1;
+    --good:#12735a; --good-wash:#e7f3ef;
+    --bad:#b3261e; --bad-wash:#fbeae9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink:#eeeaef; --soft:#9c96a0; --faint:#78737c;
+      --paper:#141317; --surface:#1c1a20; --rule:#322e38;
+      --orbit:#ff476b; --orbit-ink:#ff7b95; --orbit-wash:#2c1219;
+      --good:#4fc9a3; --good-wash:#12261f;
+      --bad:#ff8a80; --bad-wash:#2e1614;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:"IBM Plex Sans Thai","Noto Sans Thai",system-ui,sans-serif;
+    line-height:1.7; padding:32px 20px;
+  }
+  .wrap { max-width:640px; margin:0 auto; display:flex; flex-direction:column; gap:20px; }
+  h1 { font-size:24px; margin:0; }
+  .lede { color:var(--soft); font-size:14.5px; margin:0; }
+  .card { border:1px solid var(--rule); padding:18px; }
+  .state { display:flex; align-items:center; gap:10px; font-weight:600; font-size:16px; }
+  .dot { width:10px; height:10px; border-radius:50%; flex:none; }
+  .ok   { color:var(--good); }  .ok   .dot { background:var(--good); }
+  .bad  { color:var(--bad); }   .bad  .dot { background:var(--bad); }
+  .wait { color:var(--faint); } .wait .dot { background:var(--faint); }
+  dl { display:grid; grid-template-columns:150px 1fr; gap:8px 14px; margin:16px 0 0; font-size:14px; }
+  dt { color:var(--faint); }
+  dd { margin:0; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12.5px; word-break:break-all; }
+  pre { background:var(--surface); border:1px solid var(--rule); padding:14px; overflow-x:auto;
+        font-size:11.5px; line-height:1.6; margin:0; }
+  .hint { background:var(--orbit-wash); border-left:3px solid var(--orbit); padding:12px 14px; font-size:13.5px; }
+  .hint b { color:var(--orbit-ink); }
+  a.btn { display:inline-block; background:var(--orbit); color:#fff; text-decoration:none;
+          padding:9px 16px; border-radius:6px; font-weight:600; font-size:14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <h1>ตรวจการเข้าสู่ระบบ</h1>
+    <p class="lede">หน้านี้ใช้ยืนยันว่าการเชื่อม Entra ID กับ Static Web Apps ทำงานถูกต้องแล้ว</p>
+  </div>
+
+  <div class="card">
+    <div id="state" class="state wait"><span class="dot"></span><span>กำลังตรวจสอบ…</span></div>
+    <dl id="detail"></dl>
+  </div>
+
+  <div id="hint"></div>
+
+  <details>
+    <summary style="cursor:pointer;color:var(--soft);font-size:13.5px">ข้อมูลดิบจาก /.auth/me</summary>
+    <pre id="raw" style="margin-top:10px">—</pre>
+  </details>
+</div>
+
+<script>
+/* Static Web Apps เปิดปลายทาง /.auth/me ให้เสมอเมื่อเปิดใช้การล็อกอิน
+   ถ้าล็อกอินอยู่จะได้ clientPrincipal กลับมา ถ้ายังไม่ล็อกอินจะได้ค่าว่าง */
+function el(id) { return document.getElementById(id); }
+
+function show(cls, text) {
+  var s = el('state');
+  s.className = 'state ' + cls;
+  s.lastElementChild.textContent = text;
+}
+
+function row(k, v) {
+  return '<dt>' + k + '</dt><dd>' + (v == null || v === '' ? '—' : String(v)) + '</dd>';
+}
+
+fetch('/.auth/me', { credentials: 'include' })
+  .then(function (r) {
+    if (!r.ok) throw new Error('/.auth/me ตอบ ' + r.status);
+    return r.json();
+  })
+  .then(function (data) {
+    el('raw').textContent = JSON.stringify(data, null, 2);
+    var p = data && data.clientPrincipal;
+
+    if (!p) {
+      show('bad', 'ยังไม่ได้เข้าสู่ระบบ');
+      el('hint').innerHTML =
+        '<div class="hint"><b>ยังไม่ล็อกอิน</b><br>' +
+        'ถ้าตั้งค่า routes ไว้ถูกต้อง หน้านี้ควรพาไปล็อกอินเองอัตโนมัติ<br>' +
+        'ถ้าไม่เด้ง ให้กดปุ่มนี้แล้วดูว่าเกิดอะไรขึ้น<br><br>' +
+        '<a class="btn" href="/.auth/login/aad">เข้าสู่ระบบด้วย Microsoft</a></div>';
+      return;
+    }
+
+    /* claims จาก Entra — oid คือค่าที่ Orbit ใช้เป็นรหัสประจำตัว */
+    var claims = {};
+    (p.claims || []).forEach(function (c) {
+      var k = String(c.typ).split('/').pop();
+      if (!(k in claims)) claims[k] = c.val;
+    });
+
+    var oid = claims.objectidentifier || claims.oid || '';
+    var tid = claims.tenantid || claims.tid || '';
+
+    show('ok', 'เข้าสู่ระบบสำเร็จ');
+    el('detail').innerHTML =
+      row('ชื่อ', claims.name || p.userDetails) +
+      row('อีเมล', p.userDetails) +
+      row('ผู้ให้บริการ', p.identityProvider) +
+      row('Entra object id', oid) +
+      row('Tenant id', tid) +
+      row('บทบาทจาก SWA', (p.userRoles || []).join(', '));
+
+    var problems = [];
+    if (p.identityProvider !== 'aad') {
+      problems.push('ผู้ให้บริการไม่ใช่ <code>aad</code> — แปลว่าไม่ได้ล็อกอินผ่าน Entra ของบริษัท');
+    }
+    if (!oid) {
+      problems.push('ไม่พบ <code>oid</code> ใน claims — Orbit ใช้ค่านี้เป็นรหัสประจำตัว ถ้าไม่มีจะจับคู่คนไม่ได้');
+    }
+    if (p.userDetails && p.userDetails.indexOf('@srichand.co.th') < 0) {
+      problems.push('อีเมลไม่ได้ลงท้ายด้วย <code>@srichand.co.th</code> — ตรวจว่าลงทะเบียนเป็น single tenant แล้วหรือยัง');
+    }
+
+    el('hint').innerHTML = problems.length
+      ? '<div class="hint"><b>ผ่านแล้ว แต่มีจุดต้องตรวจ</b><ul style="margin:8px 0 0;padding-left:18px">' +
+        problems.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul></div>'
+      : '<div class="hint" style="background:var(--good-wash);border-color:var(--good)">' +
+        '<b style="color:var(--good)">ครบทุกอย่าง</b><br>' +
+        'การเชื่อม Entra ทำงานถูกต้อง ส่ง <b>Entra object id</b> ข้างบนมาให้ผมได้เลย ' +
+        'จะได้ตั้งบัญชีนี้เป็นผู้ดูแลระบบคนแรก</div>';
+  })
+  .catch(function (e) {
+    show('bad', 'เรียก /.auth/me ไม่สำเร็จ');
+    el('raw').textContent = String(e);
+    el('hint').innerHTML =
+      '<div class="hint"><b>ยังไม่ได้เปิดใช้การล็อกอิน</b><br>' +
+      'ปลายทาง <code>/.auth/me</code> มีเฉพาะบน Azure Static Web Apps เท่านั้น<br>' +
+      'ถ้าเปิดหน้านี้จาก GitHub Pages หรือจากเครื่อง จะขึ้นข้อความนี้เป็นปกติ</div>';
+  });
+</script>
+</body>
+</html>
