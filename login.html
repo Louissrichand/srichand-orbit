@@ -11,24 +11,32 @@
 <style>
   :root {
     --ink:#17161a; --ink-mid:#45424b; --ink-soft:#6d6a74; --ink-faint:#97949c;
-    --paper:#ffffff; --surface:#f7f5f6; --rule:#e2dee1; --rule-soft:#eeebed;
+    --paper:#ffffff; --surface:#f7f5f6; --field:#ffffff;
+    --rule:#e2dee1; --rule-soft:#eeebed; --rule-strong:#cfc9ce;
     --orbit:#ee0b3f; --orbit-dk:#c50a35; --orbit-ink:#a90a30; --orbit-wash:#fdeef1;
     --warn:#8a5a00; --warn-wash:#fbf2e2;
-    --radius:10px;
+    --bad:#b3261e; --bad-wash:#fbeae9;
+    --good:#12735a; --good-wash:#e7f3ef;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       --ink:#eeeaef; --ink-mid:#c2bcc4; --ink-soft:#9c96a0; --ink-faint:#78737c;
-      --paper:#141317; --surface:#1c1a20; --rule:#322e38; --rule-soft:#262330;
+      --paper:#141317; --surface:#1c1a20; --field:#1c1a20;
+      --rule:#322e38; --rule-soft:#262330; --rule-strong:#413b48;
       --orbit:#ff476b; --orbit-dk:#ff2e57; --orbit-ink:#ff7b95; --orbit-wash:#2c1219;
       --warn:#e0a54a; --warn-wash:#2a2113;
+      --bad:#ff8a80; --bad-wash:#2e1614;
+      --good:#4fc9a3; --good-wash:#12261f;
     }
   }
   :root[data-theme="dark"] {
     --ink:#eeeaef; --ink-mid:#c2bcc4; --ink-soft:#9c96a0; --ink-faint:#78737c;
-    --paper:#141317; --surface:#1c1a20; --rule:#322e38; --rule-soft:#262330;
+    --paper:#141317; --surface:#1c1a20; --field:#1c1a20;
+    --rule:#322e38; --rule-soft:#262330; --rule-strong:#413b48;
     --orbit:#ff476b; --orbit-dk:#ff2e57; --orbit-ink:#ff7b95; --orbit-wash:#2c1219;
     --warn:#e0a54a; --warn-wash:#2a2113;
+    --bad:#ff8a80; --bad-wash:#2e1614;
+    --good:#4fc9a3; --good-wash:#12261f;
   }
 
   *, *::before, *::after { box-sizing: border-box; }
@@ -37,64 +45,82 @@
     margin: 0; background: var(--surface); color: var(--ink);
     font-family: "IBM Plex Sans Thai", "Noto Sans Thai", system-ui, sans-serif;
     line-height: 1.75; -webkit-font-smoothing: antialiased;
-    display: flex; align-items: center; justify-content: center;
-    padding: 24px;
+    display: flex; align-items: center; justify-content: center; padding: 24px;
   }
 
   .card {
     width: 100%; max-width: 440px; background: var(--paper);
-    border: 1px solid var(--rule); border-radius: var(--radius);
+    border: 1px solid var(--rule); border-radius: 10px;
     box-shadow: 0 8px 32px rgba(0,0,0,.10);
-    padding: 44px 36px 30px; text-align: center;
-    display: flex; flex-direction: column; gap: 0;
+    padding: 40px 36px 28px; text-align: center;
   }
-
-  .logo { display: flex; justify-content: center; margin-bottom: 24px; }
-
-  h1 {
-    font-family: Anuphan, "IBM Plex Sans Thai", sans-serif;
-    font-size: 25px; font-weight: 700; margin: 0 0 10px; letter-spacing: -.01em;
-  }
-  .lede {
-    margin: 0 auto 28px; max-width: 34ch;
-    font-size: 15px; color: var(--ink-soft); line-height: 1.7;
-    text-wrap: pretty;
-  }
+  .logo { display: flex; justify-content: center; margin-bottom: 22px; }
+  h1 { font-family: Anuphan, sans-serif; font-size: 24px; font-weight: 700; margin: 0 0 9px; letter-spacing: -.01em; }
+  .lede { margin: 0 auto 26px; max-width: 34ch; font-size: 15px; color: var(--ink-soft); line-height: 1.7; text-wrap: pretty; }
 
   .btn {
     display: flex; align-items: center; justify-content: center; gap: 10px;
     width: 100%; min-height: 50px; padding: 12px 18px;
-    background: var(--orbit); color: #fff; border: 0; border-radius: 8px;
-    font-family: inherit; font-size: 15.5px; font-weight: 600;
-    text-decoration: none; cursor: pointer;
-    transition: background .14s;
+    border: 0; border-radius: 8px; font-family: inherit;
+    font-size: 15.5px; font-weight: 600; text-decoration: none; cursor: pointer;
+    transition: background .14s, border-color .14s;
   }
-  .btn:hover { background: var(--orbit-dk); }
+  .btn-ms { background: var(--orbit); color: #fff; }
+  .btn-ms:hover { background: var(--orbit-dk); }
+  .btn-alt {
+    background: transparent; color: var(--ink-mid);
+    border: 1px solid var(--rule-strong); min-height: 46px; font-size: 14.5px;
+  }
+  .btn-alt:hover { background: var(--surface); color: var(--ink); }
   .btn:focus-visible { outline: 3px solid var(--orbit); outline-offset: 3px; }
-  .btn svg { flex: none; }
+  .btn[disabled] { opacity: .55; cursor: default; }
+
+  .or {
+    display: flex; align-items: center; gap: 12px; margin: 20px 0 16px;
+    font-size: 12.5px; color: var(--ink-faint);
+  }
+  .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--rule); }
+
+  /* ฟอร์มรหัสผ่าน ซ่อนไว้ก่อน ให้ทางหลักเด่นกว่า */
+  form { display: none; flex-direction: column; gap: 12px; text-align: left; margin-top: 4px; }
+  form.show { display: flex; }
+  label { font-size: 13px; font-weight: 600; color: var(--ink-mid); display: block; margin-bottom: 5px; }
+  input[type=email], input[type=password] {
+    width: 100%; min-height: 46px; padding: 10px 13px;
+    background: var(--field); color: var(--ink);
+    border: 1px solid var(--rule-strong); border-radius: 8px;
+    font-family: inherit; font-size: 15px;
+  }
+  input:focus { outline: 2px solid var(--orbit); outline-offset: 1px; border-color: var(--orbit); }
+  .row-end { display: flex; justify-content: flex-end; margin-top: -4px; }
+  .link {
+    background: none; border: 0; padding: 0; cursor: pointer;
+    font-family: inherit; font-size: 13px; color: var(--ink-soft);
+    text-decoration: underline; text-underline-offset: 3px;
+  }
+  .link:hover { color: var(--orbit-ink); }
+
+  .msg { display: none; gap: 10px; text-align: left; border-radius: 8px; padding: 13px 15px;
+         font-size: 13.5px; line-height: 1.65; margin-bottom: 22px; }
+  .msg.show { display: flex; }
+  .msg svg { flex: none; margin-top: 3px; }
+  .msg b { display: block; margin-bottom: 2px; }
+  .msg.warn { background: var(--warn-wash); color: var(--ink-mid); }
+  .msg.warn svg, .msg.warn b { color: var(--warn); }
+  .msg.bad { background: var(--bad-wash); color: var(--ink-mid); }
+  .msg.bad svg, .msg.bad b { color: var(--bad); }
+  .msg.good { background: var(--good-wash); color: var(--ink-mid); }
+  .msg.good svg, .msg.good b { color: var(--good); }
 
   .foot {
-    margin-top: 26px; padding-top: 20px; border-top: 1px solid var(--rule-soft);
+    margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--rule-soft);
     display: flex; align-items: flex-start; gap: 9px; text-align: left;
     font-size: 12.5px; color: var(--ink-faint); line-height: 1.6;
   }
   .foot svg { flex: none; margin-top: 3px; }
+  .sub { margin: 14px 0 0; font-size: 12.5px; color: var(--ink-faint); }
 
-  .notice {
-    display: none; text-align: left; gap: 10px; margin-bottom: 24px;
-    background: var(--warn-wash); border-radius: 8px; padding: 14px 15px;
-    font-size: 13.5px; line-height: 1.65; color: var(--ink-mid);
-  }
-  .notice.show { display: flex; }
-  .notice svg { flex: none; margin-top: 3px; color: var(--warn); }
-  .notice b { display: block; color: var(--warn); margin-bottom: 2px; }
-
-  .sub { margin: 16px 0 0; font-size: 12.5px; color: var(--ink-faint); }
-  .sub a { color: var(--ink-soft); }
-
-  @media (max-width: 420px) {
-    .card { padding: 34px 24px 24px; }
-  }
+  @media (max-width: 420px) { .card { padding: 32px 22px 22px; } }
 </style>
 </head>
 <body>
@@ -103,36 +129,30 @@
 
   <div class="logo">
     <svg width="150" height="34" viewBox="0 0 150 34" role="img" aria-label="Orbit">
-      <defs>
-        <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="#ff2e57"/>
-          <stop offset="1" stop-color="#c50a35"/>
-        </linearGradient>
-      </defs>
+      <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#ff2e57"/><stop offset="1" stop-color="#c50a35"/>
+      </linearGradient></defs>
       <rect x="0" y="1" width="32" height="32" rx="8" fill="url(#lg)"/>
       <circle cx="16" cy="17.8" r="7.5" fill="none" stroke="#fff" stroke-width="2.9"/>
-      <ellipse cx="16" cy="17.8" rx="11.4" ry="4.3" fill="none" stroke="#fff"
-               stroke-width="2" transform="rotate(-24 16 17.8)"/>
+      <ellipse cx="16" cy="17.8" rx="11.4" ry="4.3" fill="none" stroke="#fff" stroke-width="2"
+               transform="rotate(-24 16 17.8)"/>
       <circle cx="24.6" cy="8.7" r="2.75" fill="#fff"/>
-      <text x="42" y="25" font-family="Anuphan, sans-serif" font-size="23"
-            font-weight="700" fill="currentColor" letter-spacing="-0.3">Orbit</text>
+      <text x="42" y="25" font-family="Anuphan, sans-serif" font-size="23" font-weight="700"
+            fill="currentColor" letter-spacing="-0.3">Orbit</text>
     </svg>
   </div>
 
-  <div class="notice" id="notice">
-    <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+  <div class="msg" id="msg">
+    <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
       <path d="M8 2.4 14.4 13.4H1.6z"/><path d="M8 6.6v3"/><path d="M8 11.4h.01"/>
     </svg>
-    <div id="noticeText"></div>
+    <div id="msgText"></div>
   </div>
 
-  <h1>เข้าสู่ระบบด้วยบัญชีบริษัท</h1>
-  <p class="lede">
-    ใช้บัญชี Microsoft 365 ตัวเดียวกับที่เข้า Outlook และ Teams
-    ไม่ต้องจำรหัสผ่านชุดใหม่
-  </p>
+  <h1>เข้าสู่ระบบ</h1>
+  <p class="lede">ใช้บัญชี Microsoft 365 ตัวเดียวกับที่เข้า Outlook และ Teams</p>
 
-  <a class="btn" id="loginBtn" href="/.auth/login/aad">
+  <a class="btn btn-ms" id="msBtn" href="/.auth/login/aad">
     <svg width="19" height="19" viewBox="0 0 21 21" aria-hidden="true">
       <rect x="0" y="0" width="10" height="10" fill="#f25022"/>
       <rect x="11" y="0" width="10" height="10" fill="#7fba00"/>
@@ -142,10 +162,32 @@
     <span>เข้าสู่ระบบด้วย Microsoft</span>
   </a>
 
+  <div class="or">หรือ</div>
+
+  <button class="btn btn-alt" id="toggleBtn" type="button" aria-expanded="false" aria-controls="pwForm">
+    เข้าสู่ระบบด้วยอีเมลและรหัสผ่าน
+  </button>
+
+  <form id="pwForm" novalidate>
+    <div>
+      <label for="email">อีเมล</label>
+      <input type="email" id="email" name="email" autocomplete="username"
+             inputmode="email" placeholder="name@srichand.co.th" required>
+    </div>
+    <div>
+      <label for="password">รหัสผ่าน</label>
+      <input type="password" id="password" name="password" autocomplete="current-password" required>
+    </div>
+    <div class="row-end">
+      <button type="button" class="link" id="forgotBtn">ลืมรหัสผ่าน</button>
+    </div>
+    <button class="btn btn-ms" type="submit" id="submitBtn">เข้าสู่ระบบ</button>
+  </form>
+
   <p class="sub" id="sub">ระบบจัดการงานภายในของศรีจันทร์</p>
 
   <div class="foot">
-    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
       <path d="M8 1.8 13.4 4v4.2c0 3.2-2.3 5.5-5.4 6.4-3.1-.9-5.4-3.2-5.4-6.4V4z"/>
       <path d="M5.8 8.1 7.4 9.7l3-3.2"/>
     </svg>
@@ -155,38 +197,127 @@
 </main>
 
 <script>
-/* Static Web Apps ส่งเหตุผลกลับมาทาง query string เมื่อล็อกอินไม่ผ่าน
-   แปลเป็นภาษาที่พนักงานเข้าใจ ไม่ปล่อยให้เจอข้อความดิบของ Microsoft */
 (function () {
+  'use strict';
+
+  var msg = document.getElementById('msg');
+  var msgText = document.getElementById('msgText');
+  var form = document.getElementById('pwForm');
+  var toggleBtn = document.getElementById('toggleBtn');
+  var submitBtn = document.getElementById('submitBtn');
+
+  function show(kind, title, body) {
+    msg.className = 'msg show ' + kind;
+    msgText.innerHTML = '<b>' + title + '</b>' + (body || '');
+    msg.scrollIntoView({ block: 'nearest' });
+  }
+  function hide() { msg.className = 'msg'; }
+
+  /* ---------- ข้อความจาก Static Web Apps ตอนล็อกอินผ่าน Microsoft ไม่ผ่าน ---------- */
   var q = new URLSearchParams(location.search);
   var reason = q.get('error') || q.get('post_login_redirect_error') || '';
-  var notice = document.getElementById('notice');
-  var text = document.getElementById('noticeText');
-
-  if (!reason) return;
-
-  var msg;
-  if (/consent|forbidden|access_denied|unauthorized/i.test(reason)) {
-    /* กรณีที่พบบ่อยที่สุดช่วง pilot — บัญชีถูกต้องแต่ยังไม่ได้อยู่ในกลุ่มที่เปิดให้ใช้ */
-    msg = '<b>บัญชีของคุณยังไม่ได้รับสิทธิ์เข้าใช้</b>' +
-          'ช่วงนี้ Orbit เปิดให้เฉพาะทีมนำร่องก่อน ' +
-          'หากต้องการเข้าร่วม กรุณาแจ้งฝ่ายเทคโนโลยีสารสนเทศ';
-  } else {
-    msg = '<b>เข้าสู่ระบบไม่สำเร็จ</b>' +
-          'กรุณาลองใหม่อีกครั้ง หากยังไม่ได้ กรุณาแจ้งฝ่ายเทคโนโลยีสารสนเทศ ' +
-          'พร้อมแจ้งรหัสนี้: ' + String(reason).slice(0, 60);
+  if (reason) {
+    if (/consent|forbidden|access_denied|unauthorized/i.test(reason)) {
+      show('warn', 'บัญชีของคุณยังไม่ได้รับสิทธิ์เข้าใช้',
+        'ช่วงนี้ Orbit เปิดให้เฉพาะทีมนำร่องก่อน หากต้องการเข้าร่วม กรุณาแจ้งฝ่ายเทคโนโลยีสารสนเทศ');
+    } else {
+      show('bad', 'เข้าสู่ระบบไม่สำเร็จ',
+        'กรุณาลองใหม่อีกครั้ง หากยังไม่ได้ กรุณาแจ้งฝ่ายเทคโนโลยีสารสนเทศ พร้อมแจ้งรหัสนี้: ' +
+        String(reason).slice(0, 60));
+    }
   }
-  text.innerHTML = msg;
-  notice.classList.add('show');
-})();
+  if (q.get('changed') === '1') {
+    show('good', 'ตั้งรหัสผ่านใหม่เรียบร้อยแล้ว', 'กรุณาเข้าสู่ระบบด้วยรหัสผ่านใหม่');
+  }
 
-/* กลับไปหน้าที่ตั้งใจเปิดตอนแรกหลังล็อกอินเสร็จ ไม่ใช่โยนไปหน้าแรกเสมอ */
-(function () {
-  var q = new URLSearchParams(location.search);
+  /* ---------- กลับไปหน้าที่ตั้งใจเปิดตอนแรก ---------- */
   var back = q.get('post_login_redirect_uri');
-  if (!back || back.charAt(0) !== '/' || back.indexOf('//') === 0) return;   // รับเฉพาะเส้นทางภายใน
-  var btn = document.getElementById('loginBtn');
-  btn.href = '/.auth/login/aad?post_login_redirect_uri=' + encodeURIComponent(back);
+  var safeBack = (back && back.charAt(0) === '/' && back.indexOf('//') !== 0) ? back : '/';
+  if (back && safeBack !== '/') {
+    document.getElementById('msBtn').href =
+      '/.auth/login/aad?post_login_redirect_uri=' + encodeURIComponent(safeBack);
+  }
+
+  /* ---------- เปิด/ปิดฟอร์มรหัสผ่าน ---------- */
+  toggleBtn.addEventListener('click', function () {
+    var open = form.classList.toggle('show');
+    toggleBtn.setAttribute('aria-expanded', String(open));
+    toggleBtn.textContent = open ? 'ซ่อนการเข้าสู่ระบบด้วยรหัสผ่าน'
+                                 : 'เข้าสู่ระบบด้วยอีเมลและรหัสผ่าน';
+    if (open) document.getElementById('email').focus();
+  });
+
+  /* ---------- ส่งฟอร์ม ---------- */
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    hide();
+    var email = document.getElementById('email').value.trim();
+    var password = document.getElementById('password').value;
+
+    if (!email || !password) {
+      show('bad', 'กรอกข้อมูลให้ครบ', 'กรุณากรอกทั้งอีเมลและรหัสผ่าน');
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'กำลังตรวจสอบ…';
+
+    fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ email: email, password: password })
+    })
+      .then(function (r) { return r.json().then(function (j) { return { s: r.status, j: j }; }); })
+      .then(function (res) {
+        if (res.s === 200) { location.href = safeBack; return; }
+
+        /* ข้อความเดียวกันหมดสำหรับอีเมลผิดและรหัสผิด
+           เพื่อไม่ให้ใครใช้หน้านี้ไล่เดาว่าอีเมลไหนมีอยู่ในระบบ */
+        if (res.s === 423) {
+          show('bad', 'บัญชีถูกระงับชั่วคราว',
+            'กรอกรหัสผ่านผิดหลายครั้งเกินไป กรุณารออีกสักครู่แล้วลองใหม่ ' +
+            'หรือใช้ปุ่มลืมรหัสผ่านเพื่อตั้งรหัสใหม่');
+        } else if (res.s === 501) {
+          show('warn', 'ยังไม่ได้เปิดใช้การเข้าสู่ระบบด้วยรหัสผ่าน',
+            'กรุณาใช้ปุ่มเข้าสู่ระบบด้วย Microsoft');
+        } else {
+          show('bad', 'อีเมลหรือรหัสผ่านไม่ถูกต้อง', 'กรุณาตรวจสอบแล้วลองใหม่อีกครั้ง');
+        }
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'เข้าสู่ระบบ';
+      })
+      .catch(function () {
+        show('bad', 'เชื่อมต่อไม่สำเร็จ', 'กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'เข้าสู่ระบบ';
+      });
+  });
+
+  /* ---------- ลืมรหัสผ่าน ---------- */
+  document.getElementById('forgotBtn').addEventListener('click', function () {
+    hide();
+    var email = document.getElementById('email').value.trim();
+    if (!email) {
+      show('warn', 'กรอกอีเมลก่อน', 'กรุณากรอกอีเมลในช่องด้านบน แล้วกดลืมรหัสผ่านอีกครั้ง');
+      document.getElementById('email').focus();
+      return;
+    }
+
+    fetch('/api/auth/forgot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email })
+    }).then(function () {
+      /* ตอบเหมือนกันเสมอ ไม่ว่าอีเมลนั้นจะมีอยู่จริงหรือไม่
+         เพื่อไม่ให้ใครใช้ปุ่มนี้ตรวจว่าใครมีบัญชีในระบบบ้าง */
+      show('good', 'ส่งอีเมลแล้ว',
+        'ถ้าอีเมลนี้มีบัญชีอยู่ในระบบ คุณจะได้รับลิงก์สำหรับตั้งรหัสผ่านใหม่ภายในไม่กี่นาที ' +
+        'กรุณาตรวจในกล่องจดหมายและโฟลเดอร์อีเมลขยะ');
+    }).catch(function () {
+      show('bad', 'ส่งคำขอไม่สำเร็จ', 'กรุณาลองใหม่อีกครั้ง');
+    });
+  });
 })();
 </script>
 </body>

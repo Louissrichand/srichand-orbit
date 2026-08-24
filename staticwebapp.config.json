@@ -25,6 +25,8 @@
     { "route": "/.auth/login/apple", "statusCode": 404 },
 
     { "route": "/login.html", "allowedRoles": ["anonymous"] },
+    { "route": "/set-password.html", "allowedRoles": ["anonymous"] },
+    { "route": "/api/auth/*", "allowedRoles": ["anonymous"] },
     { "route": "/api/roles", "allowedRoles": ["anonymous"], "methods": ["POST"] },
     { "route": "/api/admin/*", "allowedRoles": ["orbit-admin"] },
     { "route": "/api/*", "allowedRoles": ["authenticated"] },
