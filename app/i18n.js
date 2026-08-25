@@ -535,6 +535,10 @@
     'ได้ลบเส้นฐานของ': 'cleared the baseline of',
     'ได้นำเข้างานเข้าโปรเจกต์': 'imported tasks into',
     'ได้ส่งออกงานของโปรเจกต์': 'exported tasks from',
+    'ได้สร้างพอร์ตโฟลิโอ': 'created portfolio',
+    'ได้ลบพอร์ตโฟลิโอ': 'deleted portfolio',
+    'ได้เพิ่มโปรเจกต์เข้าพอร์ตโฟลิโอ': 'added a project to portfolio',
+    'ได้ถอดโปรเจกต์ออกจากพอร์ตโฟลิโอ': 'removed a project from portfolio',
     'ได้ล้างข้อมูลทั้งหมด': 'cleared all data',
     'ได้ส่งออกข้อมูล': 'exported data', 'ได้นำเข้าข้อมูล': 'imported data',
     'ปิดใช้งาน': 'Disabled', 'รหัสผ่าน': 'Password',
@@ -812,6 +816,51 @@
     'โอนงานแล้วปิดบัญชี': 'Hand over and disable', 'โอนงาน': 'Hand over',
     'โอนงาน {n} งานแล้ว': 'Handed over {n} tasks',
     'โอนงาน {n} งาน และปิดบัญชีแล้ว': 'Handed over {n} tasks and disabled the account',
+
+    /* --- พอร์ตโฟลิโอ --- */
+    'พอร์ตโฟลิโอ': 'Portfolios', 'สร้างพอร์ตโฟลิโอ': 'New portfolio',
+    'ชื่อพอร์ตโฟลิโอ': 'Portfolio name', 'พอร์ตโฟลิโอใหม่': 'New portfolio',
+    'สร้างพอร์ตโฟลิโอแล้ว': 'Portfolio created',
+    'คำอธิบายพอร์ตโฟลิโอ': 'Portfolio description',
+    'เมนูพอร์ตโฟลิโอ': 'Portfolio menu', 'ลบพอร์ตโฟลิโอ': 'Delete portfolio',
+    'ลบพอร์ตโฟลิโอแล้ว': 'Portfolio deleted',
+    'ลบพอร์ตโฟลิโอ “{name}”?\nโปรเจกต์ข้างในจะยังอยู่ครบ ลบแค่กล่องที่ใช้จัดกลุ่ม':
+      'Delete the portfolio “{name}”?\nEvery project inside stays — only the grouping is removed.',
+    'ไม่พบพอร์ตโฟลิโอนี้': 'Portfolio not found',
+    'เพิ่มเข้าพอร์ตโฟลิโอ': 'Add to portfolio',
+    'เพิ่มโปรเจกต์เข้าพอร์ต': 'Add projects', '+ เพิ่มโปรเจกต์เข้าพอร์ต': '+ Add projects',
+    'เพิ่มโปรเจกต์เข้าพอร์ตโฟลิโอ': 'Add projects to this portfolio',
+    'เพิ่มโปรเจกต์เข้า': 'Add projects to',
+    'ถอดออกจากพอร์ตโฟลิโอ': 'Remove from portfolio', 'ถอดออก': 'Remove',
+    'ถอดออกจากพอร์ตโฟลิโอแล้ว': 'Removed from portfolio',
+    'อยู่ในพอร์ตโฟลิโอแล้ว': 'Already in this portfolio',
+    'พอร์ตโฟลิโอของ': 'Portfolios for',
+    'เลือกโปรเจกต์ที่จะรวมไว้ในภาพรวมนี้ กดได้หลายอันติดกัน':
+      'Pick the projects to roll up here — you can add several in a row.',
+    'โปรเจกต์ที่คุณเข้าถึงได้ถูกใส่ไว้ในพอร์ตโฟลิโอนี้หมดแล้ว':
+      'Every project you can reach is already in this portfolio.',
+    'ยังไม่มีพอร์ตโฟลิโอเลย สร้างจากแถบซ้ายได้ที่หัวข้อ “พอร์ตโฟลิโอ”':
+      'No portfolios yet — create one from the “Portfolios” heading in the sidebar.',
+    'ยังไม่มีโปรเจกต์ในพอร์ตโฟลิโอนี้': 'No projects in this portfolio yet',
+    'พอร์ตโฟลิโอนี้มีแต่โปรเจกต์ที่คุณไม่มีสิทธิ์เห็น':
+      'This portfolio only contains projects you cannot access',
+    'มีอีก {n} โปรเจกต์ในพอร์ตโฟลิโอนี้ที่คุณไม่มีสิทธิ์เห็น ตัวเลขข้างบนจึงไม่รวมของพวกนั้น':
+      '{n} more projects in this portfolio are not visible to you, so the numbers above exclude them.',
+    'ความคืบหน้ารวม': 'Overall progress', 'ต้องจับตา': 'Needs attention',
+    'งานเลยกำหนด': 'Overdue tasks',
+    'ความคืบหน้า': 'Progress', 'เจ้าของ': 'Owner', 'ยังไม่รายงาน': 'No update',
+    'ตามสถานะโปรเจกต์': 'By project status',
+    'ความคืบหน้าแต่ละโปรเจกต์': 'Progress by project',
+    'แท่ง = สัดส่วนงานที่เสร็จ เรียงจากช้าที่สุดขึ้นก่อน':
+      'Bars show completed share — slowest first',
+    'ยังไม่มีโปรเจกต์ที่น่าห่วง': 'Nothing looks worrying yet',
+    'คนที่ถือโปรเจกต์': 'Project owners',
+    'เลยกำหนด {n}': '{n} overdue',
+    'ยังไม่มีโปรเจกต์ไหนที่มีวันที่': 'No project has dates yet',
+    'ไม่มีวันที่': 'No dates',
+    '{n} งาน · เสร็จ {p}%': '{n} tasks · {p}% done',
+    '{n} โปรเจกต์': '{n} projects',
+    'แก้คำอธิบาย': 'Edit description',
 
     /* --- ชื่อเดือน / วัน --- */
     '__monthsShort': 'Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec',

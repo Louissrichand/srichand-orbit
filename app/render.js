@@ -163,6 +163,32 @@
         (p.visibility === "private" ? "<span class=\"lockmark\" title=\"" + L("โปรเจกต์ปิด") + "\">" + I("shield", 12) + "</span>" : "") +
         (n ? '<span class="count">' + n + '</span>' : '') + '</button>';
     });
+    h += '</div>';
+
+    /* พอร์ตโฟลิโอ วางไว้ใต้โปรเจกต์เพราะเป็นกล่องที่รวมของด้านบน
+     * ซ่อนหัวข้อทั้งก้อนถ้ายังไม่มีใครสร้าง ไม่งั้นแถบซ้ายจะรกด้วยหัวข้อว่าง */
+    var pfs = S.portfolios();
+    if (pfs.length || S.can('structure')) {
+      h += '<div class="sb-section">';
+      h += '<div class="sb-label">' + L('พอร์ตโฟลิโอ') +
+        (S.can('structure')
+          ? '<button data-act="new-portfolio" title="' + L('สร้างพอร์ตโฟลิโอ') + '">+</button>' : '') +
+        '</div>';
+      pfs.forEach(function (f) {
+        var n = S.portfolioProjects(f.id).length;
+        h += '<button class="sb-item' +
+          (route.type === 'portfolio' && route.id === f.id ? ' active' : '') +
+          '" data-act="go" data-route="portfolio" data-id="' + esc(f.id) + '">' +
+          '<span class="emoji">' + esc(f.icon) + '</span>' +
+          '<span class="swatch" style="background:' + esc(f.color) + '"></span>' +
+          '<span class="grow">' + esc(f.name) + '</span>' +
+          (n ? '<span class="count">' + n + '</span>' : '') + '</button>';
+      });
+      h += '</div>';
+    }
+
+    h += '<div class="sb-section">';
+
     /* คลังก็ต้องกรองตามสิทธิ์เหมือนกัน ไม่งั้นเก็บเข้าคลังแล้วโปรเจกต์ปิดโผล่ให้ทุกคนเห็น */
     var archived = db.projects.filter(function (p) { return p.archived && S.projectAccess(p.id); });
     if (archived.length) {
@@ -230,6 +256,24 @@
       h += '</div>' +
         (p.description ? '<div class="tb-desc">' + esc(p.description) + '</div>' : '') +
         '</div>';
+    } else if (route.type === 'portfolio') {
+      var f = S.portfolio(route.id);
+      if (!f) return '';
+      h += '<div style="min-width:0"><div class="tb-title"><span class="emoji">' + esc(f.icon) +
+           '</span><span class="nm">' + esc(f.name) + '</span>';
+      if (f.status) {
+        var fst = projectState(f.status.state);
+        h += '<button class="status-pill" data-act="pf-status" data-id="' + esc(f.id) +
+             '" style="background:' + fst.color + '22;color:' + fst.color + '">' +
+             '<i style="background:' + fst.color + '"></i>' + esc(L(fst.label)) +
+             I('chevronDown', 12) + '</button>';
+      } else {
+        h += '<button class="status-pill empty" data-act="pf-status" data-id="' + esc(f.id) +
+             '"><i></i>' + L('ตั้งสถานะ') + I('chevronDown', 12) + '</button>';
+      }
+      h += '</div>' +
+        (f.description ? '<div class="tb-desc">' + esc(f.description) + '</div>' : '') +
+        '</div>';
     } else if (route.type === 'mytasks') {
       h += '<div class="tb-title">' + I('checkCircle', 20) + ' ' + L('งานของฉัน') + '</div>';
     } else if (route.type === 'inbox') {
@@ -255,6 +299,11 @@
     } else if (route.type === 'inbox') {
       h += '<button class="btn" data-act="inbox-read-all">' + L('อ่านทั้งหมด') + '</button>';
       h += '<button class="btn" data-act="inbox-archive-all">' + L('เก็บทั้งหมด') + '</button>';
+    } else if (route.type === 'portfolio') {
+      h += '<button class="btn btn-primary" data-act="pf-add" data-pf="' + esc(route.id) + '">' +
+           L('+ เพิ่มโปรเจกต์เข้าพอร์ต') + '</button>';
+      h += '<button class="btn btn-ghost" data-act="pf-menu" data-id="' + esc(route.id) +
+           '" title="' + L('เมนูพอร์ตโฟลิโอ') + '">' + I('more') + '</button>';
     }
     h += '</div>';
 
@@ -263,6 +312,14 @@
       projectTabs().forEach(function (v) {
         h += '<button class="tb-tab' + (route.view === v[0] ? ' active' : '') +
              '" data-act="set-view" data-view="' + v[0] + '">' + v[1] + '</button>';
+      });
+      h += '</div>';
+    }
+    if (route.type === 'portfolio') {
+      h += '<div class="tb-tabs">';
+      PF_TABS.forEach(function (v) {
+        h += '<button class="tb-tab' + ((route.view || 'list') === v[0] ? ' active' : '') +
+             '" data-act="set-view" data-view="' + v[0] + '">' + L(v[1]) + '</button>';
       });
       h += '</div>';
     }
@@ -921,6 +978,216 @@
     });
     h += '</div>';
 
+    h += '</div></div>';
+    return h;
+  }
+
+  /* ---------- พอร์ตโฟลิโอ ----------
+   *
+   * มุมมองรวมของหลายโปรเจกต์ ตอบคำถามระดับบริหารว่า "ภาพรวมตอนนี้เป็นยังไง"
+   * ไม่ใช่ระดับ "งานชิ้นไหนค้าง" ซึ่งหน้าโปรเจกต์ตอบอยู่แล้ว
+   * หนึ่งแถวคือหนึ่งโปรเจกต์ ไม่ใช่หนึ่งงาน
+   */
+
+  var PF_TABS = [['list', 'รายการ'], ['timeline', 'ไทม์ไลน์'], ['dashboard', 'สรุปผล']];
+
+  function pfProgress(pct, color) {
+    return '<span class="pf-bar" title="' + pct + '%"><i style="width:' + pct +
+      '%;background:' + esc(color) + '"></i></span><span class="pf-pct">' + pct + '%</span>';
+  }
+
+  function portfolioView(portfolioId, tab) {
+    var f = S.portfolio(portfolioId);
+    if (!f) return '<div class="empty"><div class="big">🗂</div>' + L('ไม่พบพอร์ตโฟลิโอนี้') + '</div>';
+    var list = S.portfolioProjects(portfolioId);
+    var st = S.portfolioStats(portfolioId);
+    tab = tab || 'list';
+
+    var h = '<div class="pf">';
+
+    /* แถบสรุปมีทุกแท็บ เพราะเป็นคำตอบที่คนเปิดพอร์ตโฟลิโอมาหา */
+    h += '<div class="pf-kpis">';
+    h += '<div class="stat"><div class="k">' + L('โปรเจกต์') + '</div><div class="v">' + st.projects + '</div></div>';
+    h += '<div class="stat"><div class="k">' + L('ความคืบหน้ารวม') + '</div><div class="v">' + st.percent + '%</div></div>';
+    h += '<div class="stat' + (st.atRisk ? ' warn' : '') + '"><div class="k">' + L('ต้องจับตา') +
+      '</div><div class="v">' + st.atRisk + '</div></div>';
+    h += '<div class="stat' + (st.overdue ? ' bad' : '') + '"><div class="k">' + L('งานเลยกำหนด') +
+      '</div><div class="v">' + st.overdue + '</div></div>';
+    h += '<div class="stat"><div class="k">' + L('งานทั้งหมด') + '</div><div class="v">' + st.total + '</div></div>';
+    h += '</div>';
+
+    if (st.hidden) {
+      h += '<div class="pf-hidden">' + I('shield', 14) + '<span>' +
+        L('มีอีก {n} โปรเจกต์ในพอร์ตโฟลิโอนี้ที่คุณไม่มีสิทธิ์เห็น ตัวเลขข้างบนจึงไม่รวมของพวกนั้น',
+          { n: st.hidden }) + '</span></div>';
+    }
+
+    if (!list.length) {
+      h += '<div class="empty"><div class="big">🗂</div>' +
+        (st.hidden ? L('พอร์ตโฟลิโอนี้มีแต่โปรเจกต์ที่คุณไม่มีสิทธิ์เห็น')
+                   : L('ยังไม่มีโปรเจกต์ในพอร์ตโฟลิโอนี้')) + '</div>';
+      if (!st.hidden) {
+        h += '<div style="text-align:center"><button class="btn btn-primary" data-act="pf-add" data-pf="' +
+          esc(f.id) + '">' + I('plus', 15) + ' ' + L('เพิ่มโปรเจกต์เข้าพอร์ตโฟลิโอ') + '</button></div>';
+      }
+      return h + '</div>';
+    }
+
+    if (tab === 'list') h += pfList(f, list);
+    else if (tab === 'timeline') h += pfTimeline(f, list);
+    else h += pfDashboard(f, list, st);
+
+    h += '</div>';
+    return h;
+  }
+
+  function pfList(f, list) {
+    var h = '<div class="pf-tbl">';
+    h += '<div class="pf-head">' +
+      '<span>' + L('โปรเจกต์') + '</span>' +
+      '<span>' + L('สถานะ') + '</span>' +
+      '<span>' + L('ความคืบหน้า') + '</span>' +
+      '<span>' + L('เจ้าของ') + '</span>' +
+      '<span>' + L('กำหนดส่ง') + '</span>' +
+      '<span>' + L('เลยกำหนด') + '</span>' +
+      '<span></span></div>';
+
+    list.forEach(function (p) {
+      var s = S.projectStats(p.id);
+      var owner = S.user(p.owner);
+      var stt = p.status ? projectState(p.status.state) : null;
+      h += '<div class="pf-row" data-act="go" data-route="project" data-id="' + esc(p.id) + '">';
+      h += '<span class="pf-nm"><span class="hproj-ic" style="background:' + esc(p.color) +
+        '22">' + esc(p.icon) + '</span><span class="grow"><b>' + esc(p.name) + '</b>' +
+        (p.description ? '<em>' + esc(p.description) + '</em>' : '') + '</span></span>';
+      h += '<span>' + (stt
+        ? '<span class="status-pill" style="background:' + stt.color + '22;color:' + stt.color +
+          '"><i style="background:' + stt.color + '"></i>' + esc(L(stt.label)) + '</span>'
+        : '<span class="pf-none">' + L('ยังไม่รายงาน') + '</span>') + '</span>';
+      h += '<span class="pf-prog">' + pfProgress(s.percent, p.color) + '</span>';
+      h += '<span>' + (owner ? avatar(owner, 'sm') + '<span class="pf-owner">' + esc(owner.name) + '</span>'
+                             : '<span class="pf-none">—</span>') + '</span>';
+      h += '<span class="' + (p.dueOn ? dueClass(p.dueOn, false) : '') + '">' +
+        (p.dueOn ? fmtDate(p.dueOn) : '<span class="pf-none">—</span>') + '</span>';
+      h += '<span class="' + (s.overdue ? 'pf-bad' : 'pf-none') + '">' + (s.overdue || '—') + '</span>';
+      h += '<span><button class="icon-btn" data-act="pf-remove" data-pf="' + esc(f.id) +
+        '" data-id="' + esc(p.id) + '" title="' + L('ถอดออกจากพอร์ตโฟลิโอ') + '">' +
+        I('close', 14) + '</button></span>';
+      h += '</div>';
+    });
+    h += '</div>';
+    h += '<button class="pf-add" data-act="pf-add" data-pf="' + esc(f.id) + '">' +
+      I('plus', 15) + ' ' + L('เพิ่มโปรเจกต์เข้าพอร์ตโฟลิโอ') + '</button>';
+    return h;
+  }
+
+  /** ไทม์ไลน์ระดับโปรเจกต์ หนึ่งแท่งคือหนึ่งโปรเจกต์ ไม่ใช่หนึ่งงาน
+   *  ใช้สัดส่วนเปอร์เซ็นต์ ไม่ใช้พิกเซล จะได้ยืดเต็มจอโดยไม่ต้องเลื่อนแนวนอน */
+  function pfTimeline(f, list) {
+    var spans = list.map(function (p) { return { p: p, d: S.projectDates(p.id) }; });
+    var dated = spans.filter(function (x) { return x.d; });
+    if (!dated.length) {
+      return '<div class="empty"><div class="big">📅</div>' +
+        L('ยังไม่มีโปรเจกต์ไหนที่มีวันที่') + '</div>';
+    }
+    var td = S.today();
+    var min = td, max = td;
+    dated.forEach(function (x) {
+      if (x.d.from < min) min = x.d.from;
+      if (x.d.to > max) max = x.d.to;
+    });
+    min = S.addDays(min, -15);
+    max = S.addDays(max, 15);
+    var days = S.daysBetween(min, max) + 1;
+    function pct(d) { return (S.daysBetween(min, d) / days) * 100; }
+
+    var h = '<div class="pf-tl">';
+    h += '<div class="pf-tl-head"><span class="pf-tl-nm"></span><span class="pf-tl-track">';
+    var cur = min.slice(0, 8) + '01', guard = 0;
+    while (cur <= max && guard++ < 160) {
+      var d = new Date(cur + 'T00:00:00');
+      var next = S.iso(new Date(d.getFullYear(), d.getMonth() + 1, 1));
+      var left = Math.max(0, pct(cur)), right = Math.min(100, pct(next));
+      if (right > 0 && left < 100 && right - left > 3) {
+        h += '<span class="pf-tl-mon" style="left:' + left + '%;width:' + (right - left) + '%">' +
+          MON()[d.getMonth()] + '</span>';
+      }
+      cur = next;
+    }
+    h += '<span class="pf-tl-today" style="left:' + pct(td) + '%"></span></span></div>';
+
+    spans.forEach(function (x) {
+      var p = x.p;
+      var s = S.projectStats(p.id);
+      var stt = p.status ? projectState(p.status.state) : null;
+      var color = stt ? stt.color : p.color;
+      h += '<div class="pf-tl-row" data-act="go" data-route="project" data-id="' + esc(p.id) + '">';
+      h += '<span class="pf-tl-nm"><span class="em">' + esc(p.icon) + '</span>' +
+        '<span class="grow">' + esc(p.name) + '</span></span>';
+      h += '<span class="pf-tl-track">';
+      if (x.d) {
+        var l = pct(x.d.from), w = Math.max(pct(x.d.to) - l, 1.2);
+        h += '<span class="pf-tl-bar" style="left:' + l + '%;width:' + w + '%;background:' +
+          esc(color) + '2e;border-color:' + esc(color) + '" title="' +
+          esc(fmtDate(x.d.from) + ' – ' + fmtDate(x.d.to)) + '">' +
+          '<i style="width:' + s.percent + '%;background:' + esc(color) + '"></i>' +
+          '<b>' + s.percent + '%</b></span>';
+      } else {
+        h += '<span class="pf-tl-nodate">' + L('ไม่มีวันที่') + '</span>';
+      }
+      h += '<span class="pf-tl-today" style="left:' + pct(td) + '%"></span>';
+      h += '</span></div>';
+    });
+    return h + '</div>';
+  }
+
+  function pfDashboard(f, list, st) {
+    var h = '<div class="dash-cols" style="margin-top:16px">';
+
+    h += '<div class="panel"><h3>' + L('ตามสถานะโปรเจกต์') + '</h3>';
+    S.PROJECT_STATES.forEach(function (x) {
+      var n = st.byStatus[x.id] || 0;
+      if (n) h += bar(L(x.label), n, st.projects, x.color);
+    });
+    if (st.noStatus) h += bar(L('ยังไม่รายงาน'), st.noStatus, st.projects, 'var(--fg-faint)');
+    h += '</div>';
+
+    h += '<div class="panel"><h3>' + L('ความคืบหน้าแต่ละโปรเจกต์') + '</h3>';
+    list.slice().sort(function (a, b) {
+      return S.projectStats(a.id).percent - S.projectStats(b.id).percent;
+    }).forEach(function (p) {
+      var s = S.projectStats(p.id);
+      h += bar(p.icon + ' ' + p.name, s.done, s.total || 1, p.color);
+    });
+    h += '<div class="bar-note">' + L('แท่ง = สัดส่วนงานที่เสร็จ เรียงจากช้าที่สุดขึ้นก่อน') + '</div></div>';
+
+    h += '<div class="panel"><h3>' + L('ต้องจับตา') + '</h3>';
+    var risky = list.filter(function (p) {
+      var s = S.projectStats(p.id);
+      return (p.status && (p.status.state === 'at_risk' || p.status.state === 'off_track')) || s.overdue > 0;
+    });
+    if (!risky.length) h += '<div class="pf-none">' + L('ยังไม่มีโปรเจกต์ที่น่าห่วง') + '</div>';
+    risky.forEach(function (p) {
+      var s = S.projectStats(p.id);
+      var stt = p.status ? projectState(p.status.state) : null;
+      h += '<div class="pf-risk" data-act="go" data-route="project" data-id="' + esc(p.id) + '">' +
+        '<span class="em">' + esc(p.icon) + '</span>' +
+        '<span class="grow"><b>' + esc(p.name) + '</b>' +
+        (p.status && p.status.text ? '<em>' + esc(p.status.text) + '</em>' : '') + '</span>' +
+        (stt ? '<span class="status-pill" style="background:' + stt.color + '22;color:' + stt.color +
+          '"><i style="background:' + stt.color + '"></i>' + esc(L(stt.label)) + '</span>' : '') +
+        (s.overdue ? '<span class="pf-bad">' + L('เลยกำหนด {n}', { n: s.overdue }) + '</span>' : '') +
+        '</div>';
+    });
+    h += '</div>';
+
+    h += '<div class="panel"><h3>' + L('คนที่ถือโปรเจกต์') + '</h3>';
+    var byOwner = {};
+    list.forEach(function (p) { byOwner[p.owner || ''] = (byOwner[p.owner || ''] || 0) + 1; });
+    Object.keys(byOwner).sort(function (a, b) { return byOwner[b] - byOwner[a]; }).forEach(function (uid) {
+      var u = S.user(uid);
+      h += bar(u ? u.name : L('ยังไม่ระบุ'), byOwner[uid], list.length, u ? u.color : 'var(--fg-faint)');
+    });
     h += '</div></div>';
     return h;
   }
@@ -1773,6 +2040,10 @@
     'project.baselineClear': 'ได้ลบเส้นฐานของ',
     'project.import': 'ได้นำเข้างานเข้าโปรเจกต์',
     'project.export': 'ได้ส่งออกงานของโปรเจกต์',
+    'portfolio.create': 'ได้สร้างพอร์ตโฟลิโอ',
+    'portfolio.delete': 'ได้ลบพอร์ตโฟลิโอ',
+    'portfolio.add': 'ได้เพิ่มโปรเจกต์เข้าพอร์ตโฟลิโอ',
+    'portfolio.remove': 'ได้ถอดโปรเจกต์ออกจากพอร์ตโฟลิโอ',
     'system.reset': 'ได้ล้างข้อมูลทั้งหมด',
     'system.export': 'ได้ส่งออกข้อมูล',
     'system.import': 'ได้นำเข้าข้อมูล'
@@ -2003,6 +2274,7 @@
     sidebar: sidebar, topbar: topbar, viewbar: viewbar, bulkbar: bulkbar,
     listView: listView, boardView: boardView, timelineView: timelineView,
     homeView: homeView, dashboardView: dashboardView,
+    portfolioView: portfolioView, PF_TABS: PF_TABS,
     myTasksView: myTasksView, inboxView: inboxView,
     calendarView: calendarView, searchView: searchView, drawer: drawer,
     taskRow: taskRow, taskCard: taskCard

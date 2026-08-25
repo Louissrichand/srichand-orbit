@@ -132,6 +132,7 @@
   function buildHash() {
     var r = state.route, parts;
     if (r.type === 'project') parts = ['project', r.id, r.view];
+    else if (r.type === 'portfolio') parts = ['portfolio', r.id, r.view || 'list'];
     else if (r.type === 'search') parts = ['search', encodeURIComponent(r.q)];
     else parts = [r.type];
     if (state.openTaskId) parts.push(state.openTaskId);
@@ -162,6 +163,12 @@
       var v = seg[2] || p.defaultView || 'list';
       var ok = R.TAB_IDS.indexOf(v) >= 0;
       return { route: { type: 'project', id: seg[1], view: ok ? v : 'list' }, taskId: taskId };
+    }
+    if (type === 'portfolio' && seg[1]) {
+      if (!S.portfolio(seg[1])) return null;
+      var pv = seg[2] || 'list';
+      var pok = R.PF_TABS.some(function (x) { return x[0] === pv; });
+      return { route: { type: 'portfolio', id: seg[1], view: pok ? pv : 'list' }, taskId: taskId };
     }
     if (type === 'search' && seg[1]) {
       return { route: { type: 'search', q: decodeURIComponent(seg[1]) }, taskId: taskId };
@@ -204,6 +211,9 @@
       else if (r.view === 'calendar') body = R.calendarView(r.id, state.calOffset);
       else if (r.view === 'dashboard') body = R.dashboardView(r.id);
       else body = R.listView(r.id, v, state.sel);
+    } else if (r.type === 'portfolio') {
+      if (!S.portfolio(r.id)) { state.route = { type: 'home' }; return renderAll(); }
+      body = R.portfolioView(r.id, r.view || 'list');
     } else if (r.type === 'mytasks') {
       body = R.myTasksView(state.sel);
     } else if (r.type === 'inbox') {
@@ -1085,6 +1095,7 @@
     h += item('project-settings', 'settings', L('ตั้งค่าโปรเจกต์'));
     h += item('project-access', 'shield', L('ใครเข้าถึงโปรเจกต์นี้ได้')) ;
     h += item('project-look', 'pencil', L('ตั้งสีและไอคอน'));
+    h += item('add-to-portfolio', 'star', L('เพิ่มเข้าพอร์ตโฟลิโอ'));
     h += '<div class="pop-sep"></div>';
     h += item('update-status', 'flag', L('อัปเดตสถานะโปรเจกต์'));
     h += item('copy-project-link', 'link', L('คัดลอกลิงก์โปรเจกต์'));
@@ -1101,6 +1112,138 @@
       p.archived ? L('เอากลับจากคลัง') : L('เก็บโปรเจกต์เข้าคลัง'));
     h += '<button class="danger" data-act="delete-project"' + d + '>' +
       I('trash', 14) + '<span class="grow">' + L('ลบโปรเจกต์') + '</span></button>';
+    return h;
+  }
+
+  /* ---------- พอร์ตโฟลิโอ ---------- */
+
+  function portfolioMenu(pfId) {
+    var d = ' data-id="' + R.esc(pfId) + '"';
+    function item(act, icon, label) {
+      return '<button data-act="' + act + '"' + d + '>' + I(icon, 14) +
+        '<span class="grow">' + label + '</span></button>';
+    }
+    var h = '';
+    h += item('pf-rename', 'pencil', L('เปลี่ยนชื่อ'));
+    h += item('pf-desc', 'text', L('แก้คำอธิบาย'));
+    h += item('pf-look', 'star', L('ตั้งสีและไอคอน'));
+    h += '<div class="pop-sep"></div>';
+    h += '<button data-act="pf-add" data-pf="' + R.esc(pfId) + '">' + I('plus', 14) +
+      '<span class="grow">' + L('เพิ่มโปรเจกต์เข้าพอร์ต') + '</span></button>';
+    h += item('pf-status', 'flag', L('อัปเดตสถานะ'));
+    h += '<div class="pop-sep"></div>';
+    h += '<button class="danger" data-act="pf-delete"' + d + '>' + I('trash', 14) +
+      '<span class="grow">' + L('ลบพอร์ตโฟลิโอ') + '</span></button>';
+    return h;
+  }
+
+  function portfolioStatusMenu(pfId) {
+    var f = S.portfolio(pfId);
+    var cur = f && f.status ? f.status.state : null;
+    var h = '', sep = false;
+    S.PROJECT_STATES.forEach(function (x) {
+      if (x.done && !sep) { h += '<div class="pop-sep"></div>'; sep = true; }
+      h += '<button class="st-opt' + (cur === x.id ? ' on' : '') +
+        '" data-act="pf-pick-status" data-id="' + R.esc(pfId) + '" data-v="' + x.id + '">' +
+        '<i style="background:' + x.color + '"></i>' +
+        '<span class="grow" style="color:' + x.color + '">' + R.esc(L(x.label)) + '</span>' +
+        (cur === x.id ? R.ICON.check : '') + '</button>';
+    });
+    if (cur) {
+      h += '<div class="pop-sep"></div><button data-act="pf-clear-status" data-id="' +
+        R.esc(pfId) + '">' + I('close', 14) + '<span class="grow">' + L('ล้างสถานะ') + '</span></button>';
+    }
+    return h;
+  }
+
+  function portfolioLookModal(pfId) {
+    var f = S.portfolio(pfId);
+    if (!f) return '';
+    var h = '<h2>' + L('ตั้งสีและไอคอน') + '</h2>';
+    h += '<div class="look-prev"><span class="look-ic" id="lookPrev" style="background:' +
+      R.esc(f.color) + '22">' + R.esc(f.icon) + '</span><b>' + R.esc(f.name) + '</b></div>';
+    h += '<label class="opt-lbl">' + L('สี') + '</label><div class="swatch-pick" id="pColors">';
+    S.PALETTE.forEach(function (c) {
+      h += '<button type="button" data-color="' + c + '" class="' + (c === f.color ? 'on' : '') +
+        '" style="background:' + c + '"></button>';
+    });
+    h += '</div>';
+    h += '<label class="opt-lbl">' + L('ไอคอน') + '</label><div class="icon-pick" id="pIcons">';
+    PROJECT_ICONS.forEach(function (em) {
+      h += '<button type="button" data-icon="' + R.esc(em) + '" class="' +
+        (em === f.icon ? 'on' : '') + '">' + em + '</button>';
+    });
+    h += '</div>';
+    h += '<div class="field" style="max-width:170px;margin-top:12px"><label>' +
+      L('หรือพิมพ์อีโมจิเอง') + '</label><input id="pIcon" value="' + R.esc(f.icon) +
+      '" maxlength="4"></div>';
+    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="save-pf-look" data-id="' + R.esc(pfId) +
+      '">' + L('บันทึก') + '</button></div>';
+    return h;
+  }
+
+  /** เลือกโปรเจกต์ใส่พอร์ตโฟลิโอ — เห็นเฉพาะโปรเจกต์ที่ตัวเองเข้าถึงได้ */
+  function portfolioAddModal(pfId) {
+    var f = S.portfolio(pfId);
+    if (!f) return '';
+    var all = S.visibleProjects();
+    var h = '<h2>' + L('เพิ่มโปรเจกต์เข้า') + ' ' + R.esc(f.icon) + ' ' + R.esc(f.name) + '</h2>';
+    var free = all.filter(function (p) { return f.projectIds.indexOf(p.id) < 0; });
+    if (!free.length) {
+      h += '<p class="prj-note">' + L('โปรเจกต์ที่คุณเข้าถึงได้ถูกใส่ไว้ในพอร์ตโฟลิโอนี้หมดแล้ว') + '</p>';
+    } else {
+      h += '<p class="prj-note">' + L('เลือกโปรเจกต์ที่จะรวมไว้ในภาพรวมนี้ กดได้หลายอันติดกัน') + '</p>';
+      h += '<div class="pf-pick">';
+      free.forEach(function (p) {
+        var s = S.projectStats(p.id);
+        h += '<button class="pf-pick-row" data-act="pf-pick" data-pf="' + R.esc(pfId) +
+          '" data-id="' + R.esc(p.id) + '">' +
+          '<span class="hproj-ic" style="background:' + R.esc(p.color) + '22">' + R.esc(p.icon) + '</span>' +
+          '<span class="grow"><b>' + R.esc(p.name) + '</b><em>' +
+          L('{n} งาน · เสร็จ {p}%', { n: s.total, p: s.percent }) + '</em></span>' +
+          I('plus', 15) + '</button>';
+      });
+      h += '</div>';
+    }
+    var inside = S.portfolioProjects(pfId);
+    if (inside.length) {
+      h += '<label class="opt-lbl">' + L('อยู่ในพอร์ตโฟลิโอแล้ว') + '</label><div class="pf-inside">';
+      inside.forEach(function (p) {
+        h += '<span class="chip">' + R.esc(p.icon) + ' ' + R.esc(p.name) +
+          '<button data-act="pf-remove" data-pf="' + R.esc(pfId) + '" data-id="' + R.esc(p.id) +
+          '" title="' + L('ถอดออก') + '">✕</button></span>';
+      });
+      h += '</div>';
+    }
+    h += '<div class="modal-acts"><button class="btn btn-primary" data-act="close-modal">' +
+      L('เสร็จแล้ว') + '</button></div>';
+    return h;
+  }
+
+  /** เปิดจากเมนูโปรเจกต์ — ติ๊กว่าโปรเจกต์นี้อยู่ในพอร์ตโฟลิโอไหนบ้าง */
+  function addProjectToPortfolioModal(projectId) {
+    var p = S.project(projectId);
+    if (!p) return '';
+    var all = S.portfolios();
+    var h = '<h2>' + L('พอร์ตโฟลิโอของ') + ' ' + R.esc(p.icon) + ' ' + R.esc(p.name) + '</h2>';
+    if (!all.length) {
+      h += '<p class="prj-note">' + L('ยังไม่มีพอร์ตโฟลิโอเลย สร้างจากแถบซ้ายได้ที่หัวข้อ “พอร์ตโฟลิโอ”') + '</p>';
+    } else {
+      h += '<div class="pf-pick">';
+      all.forEach(function (f) {
+        var on = f.projectIds.indexOf(projectId) >= 0;
+        h += '<button class="pf-pick-row' + (on ? ' on' : '') + '" data-act="pf-toggle-project" data-pf="' +
+          R.esc(f.id) + '" data-id="' + R.esc(projectId) + '">' +
+          '<span class="hproj-ic" style="background:' + R.esc(f.color) + '22">' + R.esc(f.icon) + '</span>' +
+          '<span class="grow"><b>' + R.esc(f.name) + '</b><em>' +
+          L('{n} โปรเจกต์', { n: S.portfolioProjects(f.id).length }) + '</em></span>' +
+          (on ? R.ICON.check : I('plus', 15)) + '</button>';
+      });
+      h += '</div>';
+    }
+    h += '<div class="modal-acts"><button class="btn btn-primary" data-act="close-modal">' +
+      L('เสร็จแล้ว') + '</button></div>';
     return h;
   }
 
@@ -2007,6 +2150,9 @@
       'opt-color', 'set-opt-color',
       'manage-rules', 'add-rule', 'delete-rule',
       'pick-status', 'clear-status',
+      'new-portfolio', 'pf-rename', 'pf-desc', 'pf-look', 'save-pf-look', 'pf-delete',
+      'pf-add', 'pf-pick', 'pf-remove', 'pf-pick-status', 'pf-clear-status',
+      'pf-toggle-project', 'add-to-portfolio',
       'manage-templates', 'delete-template', 'save-template', 'use-template',
       'save-view', 'delete-view', 'reset-cols',
       'g-set-baseline', 'g-clear-baseline',
@@ -2094,7 +2240,7 @@
 
     if (!el || ['pick-assignee', 'pick-priority', 'pick-follower',
          'add-field-picker', 'field-menu', 'opt-color', 'edit-cell',
-         'project-menu', 'status-menu', 'g-zoom-menu', 'g-views-menu'].indexOf(el.dataset.act) < 0) {
+         'project-menu', 'status-menu', 'g-zoom-menu', 'g-views-menu', 'pf-menu', 'pf-status'].indexOf(el.dataset.act) < 0) {
       if (!e.target.closest || !e.target.closest('.pop')) closePops();
     }
 
@@ -2121,6 +2267,10 @@
         closeSidebar();
         var rt = el.dataset.route;
         if (rt === 'project') { goProject(id); break; }
+        if (rt === 'portfolio') {
+          state.route = { type: 'portfolio', id: id, view: 'list' };
+          clearSel(); renderAll(); break;
+        }
         state.route = { type: rt };
         state.calOffset = 0;
         clearSel();
@@ -2739,6 +2889,103 @@
         if (popIsOpenFor(el)) { closePops(); break; }
         openPop(el, projectMenu(id || state.route.id));
         break;
+
+      /* --- พอร์ตโฟลิโอ --- */
+      case 'new-portfolio': {
+        var pfn = prompt(L('ชื่อพอร์ตโฟลิโอ'), L('พอร์ตโฟลิโอใหม่'));
+        if (!pfn || !pfn.trim()) break;
+        var nf = S.createPortfolio({ name: pfn.trim() });
+        state.route = { type: 'portfolio', id: nf.id, view: 'list' };
+        renderAll();
+        toast(L('สร้างพอร์ตโฟลิโอแล้ว'));
+        break;
+      }
+      case 'pf-menu':
+        if (popIsOpenFor(el)) { closePops(); break; }
+        openPop(el, portfolioMenu(id || state.route.id));
+        break;
+      case 'pf-rename': {
+        closePops();
+        var pf1 = S.portfolio(id);
+        var nn = prompt(L('ชื่อพอร์ตโฟลิโอ'), pf1 ? pf1.name : '');
+        if (nn && nn.trim()) { S.updatePortfolio(id, { name: nn.trim() }); renderAll(); }
+        break;
+      }
+      case 'pf-desc': {
+        closePops();
+        var pf2 = S.portfolio(id);
+        var dd = prompt(L('คำอธิบายพอร์ตโฟลิโอ'), pf2 ? pf2.description : '');
+        if (dd !== null) { S.updatePortfolio(id, { description: dd.trim() }); renderAll(); }
+        break;
+      }
+      case 'pf-look': closePops(); openModal(portfolioLookModal(id)); break;
+      case 'save-pf-look': {
+        var lf = S.portfolio(id);
+        var ic2 = document.getElementById('pIcon');
+        S.updatePortfolio(id, {
+          color: pickedColor(lf.color),
+          icon: (ic2 && ic2.value.trim()) || lf.icon
+        });
+        closeModal();
+        renderAll();
+        break;
+      }
+      case 'pf-delete': {
+        closePops();
+        var pf3 = S.portfolio(id);
+        if (!pf3) break;
+        if (!confirm(L('ลบพอร์ตโฟลิโอ “{name}”?\nโปรเจกต์ข้างในจะยังอยู่ครบ ลบแค่กล่องที่ใช้จัดกลุ่ม',
+          { name: pf3.name }))) break;
+        S.deletePortfolio(id);
+        state.route = { type: 'home' };
+        renderAll();
+        toast(L('ลบพอร์ตโฟลิโอแล้ว'), L('ย้อนกลับ'), 'undo');
+        break;
+      }
+      case 'pf-add': closePops(); openModal(portfolioAddModal(el.dataset.pf || state.route.id)); break;
+      case 'pf-pick': {
+        S.addToPortfolio(el.dataset.pf, el.dataset.id);
+        openModal(portfolioAddModal(el.dataset.pf));
+        renderAll();
+        break;
+      }
+      case 'pf-remove': {
+        e.stopPropagation();
+        S.removeFromPortfolio(el.dataset.pf, id);
+        renderAll();
+        toast(L('ถอดออกจากพอร์ตโฟลิโอแล้ว'), L('ย้อนกลับ'), 'undo');
+        break;
+      }
+      case 'pf-status':
+        if (popIsOpenFor(el)) { closePops(); break; }
+        openPop(el, portfolioStatusMenu(id));
+        break;
+      case 'pf-pick-status':
+        closePops();
+        S.setPortfolioStatus(id, el.dataset.v, null);
+        renderAll();
+        toast(L('ตั้งสถานะเป็น “{s}” แล้ว', { s: L(R.projectState(el.dataset.v).label) }),
+          L('ย้อนกลับ'), 'undo');
+        break;
+      case 'pf-clear-status':
+        closePops();
+        S.updatePortfolio(id, { status: null });
+        renderAll();
+        break;
+      case 'add-to-portfolio': {
+        closePops();
+        openModal(addProjectToPortfolioModal(id || state.route.id));
+        break;
+      }
+      case 'pf-toggle-project': {
+        var pfid = el.dataset.pf, prid = el.dataset.id;
+        var f4 = S.portfolio(pfid);
+        if (f4 && f4.projectIds.indexOf(prid) >= 0) S.removeFromPortfolio(pfid, prid);
+        else S.addToPortfolio(pfid, prid);
+        openModal(addProjectToPortfolioModal(prid));
+        renderAll();
+        break;
+      }
 
       case 'project-settings':
         closePops();

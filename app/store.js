@@ -402,6 +402,12 @@
     });
     d.audit = d.audit || [];
     d.projectMembers = d.projectMembers || [];
+    d.portfolios = d.portfolios || [];
+    d.portfolios.forEach(function (f) {
+      f.projectIds = f.projectIds || [];
+      if (!('status' in f)) f.status = null;
+      f.statusLog = f.statusLog || [];
+    });
     d.projects.forEach(function (p) {
       if (!p.visibility) p.visibility = 'org';   // ของเดิมทุกโปรเจกต์เปิดให้ทุกคน
       if (!('locked' in p)) p.locked = false;
@@ -2044,6 +2050,171 @@
     commit();
   }
 
+  /* ---------- พอร์ตโฟลิโอ ----------
+   *
+   * กล่องรวมโปรเจกต์ไว้ดูภาพรวมทีเดียว เช่น "สินค้าใหม่ปี 2027" หรือ "งานฝ่ายการตลาด"
+   * ไม่ใช่ชั้นสิทธิ์ใหม่ เป็นแค่มุมมองรวม
+   *
+   * สิทธิ์ยังยึดตามโปรเจกต์เหมือนเดิม พอร์ตโฟลิโอที่มีโปรเจกต์ปิดอยู่ข้างใน
+   * คนที่ไม่ได้เป็นสมาชิกโปรเจกต์นั้นจะไม่เห็นทั้งแถวและไม่ถูกนับในตัวเลขสรุป
+   * ถ้าไม่กันตรงนี้ พอร์ตโฟลิโอจะกลายเป็นช่องทางอ้อมไปดูว่ามีโปรเจกต์ลับอะไรอยู่บ้าง
+   */
+  function portfolios() { return db.portfolios || []; }
+
+  function portfolio(id) {
+    return (db.portfolios || []).filter(function (f) { return f.id === id; })[0] || null;
+  }
+
+  /** โปรเจกต์ในพอร์ตโฟลิโอที่คนปัจจุบันมีสิทธิ์เห็น เรียงตามลำดับที่จัดไว้ */
+  function portfolioProjects(portfolioId) {
+    var f = portfolio(portfolioId);
+    if (!f) return [];
+    return f.projectIds
+      .map(function (pid) { return project(pid); })
+      .filter(function (p) { return p && projectAccess(p.id); });
+  }
+
+  /** จำนวนโปรเจกต์ที่ถูกซ่อนเพราะไม่มีสิทธิ์ ไว้บอกตรง ๆ ว่ายังมีของที่มองไม่เห็น */
+  function portfolioHidden(portfolioId) {
+    var f = portfolio(portfolioId);
+    if (!f) return 0;
+    return f.projectIds.filter(function (pid) {
+      var p = project(pid);
+      return p && !projectAccess(pid);
+    }).length;
+  }
+
+  function createPortfolio(attrs) {
+    attrs = attrs || {};
+    snapshot('สร้างพอร์ตโฟลิโอ');
+    var f = {
+      id: uid('pf'),
+      name: attrs.name || 'พอร์ตโฟลิโอใหม่',
+      icon: attrs.icon || '🗂',
+      color: attrs.color || PALETTE[(db.portfolios || []).length % PALETTE.length],
+      description: attrs.description || '',
+      owner: db.currentUserId,
+      projectIds: attrs.projectIds || [],
+      status: null,
+      statusLog: [],
+      createdBy: db.currentUserId,
+      createdAt: today()
+    };
+    db.portfolios = db.portfolios || [];
+    db.portfolios.push(f);
+    audit('portfolio.create', f.name);
+    commit();
+    return f;
+  }
+
+  function updatePortfolio(id, patch) {
+    var f = portfolio(id);
+    if (!f) return null;
+    Object.keys(patch).forEach(function (k) { f[k] = patch[k]; });
+    commit();
+    return f;
+  }
+
+  function deletePortfolio(id) {
+    var f = portfolio(id);
+    if (!f) return false;
+    snapshot('ลบพอร์ตโฟลิโอ');
+    db.portfolios = db.portfolios.filter(function (x) { return x.id !== id; });
+    /* ลบกล่องไม่ได้ลบของข้างใน โปรเจกต์ทุกอันยังอยู่ครบ
+     * ถ้าลบตามไปด้วยจะเป็นการทำลายงานจริงเพราะแค่จัดกลุ่มผิด */
+    audit('portfolio.delete', f.name, 'มีโปรเจกต์อยู่ ' + f.projectIds.length + ' โปรเจกต์ ซึ่งยังอยู่ครบ');
+    commit();
+    return true;
+  }
+
+  function addToPortfolio(portfolioId, projectId) {
+    var f = portfolio(portfolioId);
+    var p = project(projectId);
+    if (!f || !p) return false;
+    if (f.projectIds.indexOf(projectId) >= 0) return false;
+    f.projectIds.push(projectId);
+    audit('portfolio.add', f.name, p.name);
+    commit();
+    return true;
+  }
+
+  function removeFromPortfolio(portfolioId, projectId) {
+    var f = portfolio(portfolioId);
+    if (!f) return false;
+    var p = project(projectId);
+    f.projectIds = f.projectIds.filter(function (x) { return x !== projectId; });
+    audit('portfolio.remove', f.name, p ? p.name : projectId);
+    commit();
+    return true;
+  }
+
+  /** พอร์ตโฟลิโอที่โปรเจกต์นี้อยู่ */
+  function portfoliosOfProject(projectId) {
+    return (db.portfolios || []).filter(function (f) {
+      return f.projectIds.indexOf(projectId) >= 0;
+    });
+  }
+
+  /** ช่วงวันของโปรเจกต์ = วันแรกสุดถึงวันท้ายสุดของงานในนั้น ใช้วาดไทม์ไลน์รวม */
+  function projectDates(projectId) {
+    var min = null, max = null;
+    tasksInProject(projectId).forEach(function (x) {
+      var t = x.task;
+      var a = t.startOn || t.dueOn;
+      var b = t.dueOn || t.startOn;
+      if (!a) return;
+      if (!min || a < min) min = a;
+      if (!max || b > max) max = b;
+    });
+    var p = project(projectId);
+    if (p && p.dueOn && (!max || p.dueOn > max)) max = p.dueOn;
+    return min ? { from: min, to: max || min } : null;
+  }
+
+  /** ตัวเลขรวมของทั้งพอร์ตโฟลิโอ นับเฉพาะโปรเจกต์ที่คนดูมีสิทธิ์เห็น */
+  function portfolioStats(portfolioId) {
+    var list = portfolioProjects(portfolioId);
+    var s = {
+      projects: list.length, hidden: portfolioHidden(portfolioId),
+      total: 0, done: 0, overdue: 0, dueWeek: 0,
+      byStatus: {}, noStatus: 0, percent: 0, atRisk: 0
+    };
+    list.forEach(function (p) {
+      var st = projectStats(p.id);
+      s.total += st.total;
+      s.done += st.done;
+      s.overdue += st.overdue;
+      s.dueWeek += st.dueWeek;
+      var key = p.status ? p.status.state : null;
+      if (key) {
+        s.byStatus[key] = (s.byStatus[key] || 0) + 1;
+        if (key === 'at_risk' || key === 'off_track') s.atRisk++;
+      } else s.noStatus++;
+    });
+    s.percent = s.total ? Math.round(s.done * 100 / s.total) : 0;
+    return s;
+  }
+
+  /** ตั้งสถานะของพอร์ตโฟลิโอ กติกาเดียวกับสถานะโปรเจกต์ */
+  function setPortfolioStatus(id, state, text) {
+    var f = portfolio(id);
+    if (!f) return;
+    snapshot('อัปเดตสถานะพอร์ตโฟลิโอ');
+    var keep = text === null || text === undefined;
+    f.status = {
+      state: state,
+      text: keep ? ((f.status && f.status.text) || '') : text,
+      by: db.currentUserId, at: today()
+    };
+    f.statusLog = f.statusLog || [];
+    f.statusLog.push({
+      id: uid('ps'), state: state, text: f.status.text,
+      by: db.currentUserId, at: new Date().toISOString()
+    });
+    if (f.statusLog.length > 30) f.statusLog = f.statusLog.slice(-30);
+    commit();
+  }
+
   /* ---------- projects ---------- */
 
   function createProject(attrs) {
@@ -2944,6 +3115,13 @@
 
     markRead: markRead, markAllRead: markAllRead,
     archiveNotification: archiveNotification, archiveAll: archiveAll,
+
+    portfolios: portfolios, portfolio: portfolio, portfolioProjects: portfolioProjects,
+    portfolioHidden: portfolioHidden, portfoliosOfProject: portfoliosOfProject,
+    createPortfolio: createPortfolio, updatePortfolio: updatePortfolio,
+    deletePortfolio: deletePortfolio, addToPortfolio: addToPortfolio,
+    removeFromPortfolio: removeFromPortfolio, portfolioStats: portfolioStats,
+    setPortfolioStatus: setPortfolioStatus, projectDates: projectDates,
 
     createProject: createProject, updateProject: updateProject,
     deleteProject: deleteProject, duplicateProject: duplicateProject,
