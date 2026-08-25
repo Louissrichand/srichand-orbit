@@ -496,6 +496,7 @@
   function replaceDb(obj) {
     suppressRemote = true;
     db = migrate(obj);
+    dropIndex();
     commit();
     suppressRemote = false;
     // บอกชั้นหน้าจอให้วาดใหม่ ไม่งั้นจอค้างอยู่ที่ข้อมูลชุดเก่า
@@ -513,6 +514,7 @@
     undoStack.length = 0;
     suppressRemote = true;
     db = migrate(seed());
+    dropIndex();
     commit();
     suppressRemote = false;
   }
@@ -532,6 +534,7 @@
   var listeners = [];
   function onChange(fn) { listeners.push(fn); }
   function commit() {
+    dropIndex();          // ข้อมูลเปลี่ยนแล้ว ดัชนีเก่าใช้ไม่ได้
     persist();
     listeners.forEach(function (fn) { fn(); });
   }
@@ -789,6 +792,7 @@
     var s = undoStack.pop();
     if (!s) return null;
     db = JSON.parse(s.data);
+    dropIndex();
     commit();
     return s.label;
   }
@@ -797,16 +801,65 @@
 
   /* ---------- selectors ---------- */
 
-  function user(id) {
-    return db.users.filter(function (u) { return u.id === id; })[0] || null;
+  /* ---------- ดัชนี ----------
+   *
+   * เดิมทุกการค้นหากวาดทั้งอาเรย์ พอข้อมูลโตถึงหลักพันงาน การวาดหน้าเดียว
+   * กลายเป็นการกวาดหลายสิบล้านครั้ง หน้าแรกกับปฏิทินค้างเป็นวินาที
+   * ที่แย่กว่านั้นคือมันโตแบบกำลังสอง ยิ่งใช้ไปยิ่งช้าลงเรื่อย ๆ
+   *
+   * สร้างดัชนีครั้งเดียวแล้วใช้ซ้ำ ทิ้งทุกครั้งที่ commit
+   * และมีลายเซ็นความยาวอาเรย์เป็นตาข่ายกันพลาด เผื่อมีที่ไหนแก้ข้อมูลตรง ๆ
+   * โดยไม่ผ่าน commit ดัชนีเก็บแต่การอ้างอิงวัตถุเดิม ค่าในฟิลด์จึงสดเสมอ
+   */
+  var idx = null;
+
+  function dropIndex() { idx = null; }
+
+  function indexSig() {
+    return db.tasks.length + '/' + db.memberships.length + '/' + db.projects.length +
+           '/' + db.users.length + '/' + db.stories.length +
+           '/' + (db.fieldValues || []).length + '/' + (db.projectMembers || []).length;
   }
+
+  function index() {
+    if (idx && idx.sig === indexSig()) return idx;
+    var i = {
+      sig: '', user: {}, project: {}, task: {},
+      memByTask: {}, memByProject: {}, subsByParent: {},
+      storyByTask: {}, fvByTask: {}, blockedByMe: {},
+      pmByProject: {}, access: {}
+    };
+    db.users.forEach(function (u) { i.user[u.id] = u; });
+    db.projects.forEach(function (p) { i.project[p.id] = p; });
+    db.tasks.forEach(function (t) {
+      i.task[t.id] = t;
+      if (t.parentId) (i.subsByParent[t.parentId] = i.subsByParent[t.parentId] || []).push(t);
+      (t.dependsOn || []).forEach(function (d) {
+        if (d && d.id) (i.blockedByMe[d.id] = i.blockedByMe[d.id] || []).push(t);
+      });
+    });
+    db.memberships.forEach(function (m) {
+      (i.memByTask[m.taskId] = i.memByTask[m.taskId] || []).push(m);
+      (i.memByProject[m.projectId] = i.memByProject[m.projectId] || []).push(m);
+    });
+    db.stories.forEach(function (s) {
+      (i.storyByTask[s.taskId] = i.storyByTask[s.taskId] || []).push(s);
+    });
+    (db.fieldValues || []).forEach(function (v) {
+      (i.fvByTask[v.taskId] = i.fvByTask[v.taskId] || {})[v.fieldId] = v;
+    });
+    (db.projectMembers || []).forEach(function (m) {
+      (i.pmByProject[m.projectId] = i.pmByProject[m.projectId] || {})[m.userId] = m;
+    });
+    i.sig = indexSig();
+    idx = i;
+    return i;
+  }
+
+  function user(id) { return index().user[id] || null; }
   function me() { return user(db.currentUserId); }
-  function project(id) {
-    return db.projects.filter(function (p) { return p.id === id; })[0] || null;
-  }
-  function task(id) {
-    return db.tasks.filter(function (t) { return t.id === id; })[0] || null;
-  }
+  function project(id) { return index().project[id] || null; }
+  function task(id) { return index().task[id] || null; }
   function section(projectId, sectionId) {
     var p = project(projectId);
     if (!p) return null;
@@ -817,10 +870,10 @@
   }
 
   function tasksInProject(projectId) {
-    return db.memberships
-      .filter(function (m) { return m.projectId === projectId; })
+    var i = index();
+    return (i.memByProject[projectId] || [])
       .map(function (m) {
-        var t = task(m.taskId);
+        var t = i.task[m.taskId];
         return t ? { task: t, membership: m } : null;
       })
       .filter(function (x) { return x && !x.task.parentId; })
@@ -834,26 +887,24 @@
   }
 
   function subtasks(taskId) {
-    return db.tasks.filter(function (t) { return t.parentId === taskId; });
+    return index().subsByParent[taskId] || [];
   }
 
   function projectsOfTask(taskId) {
-    return db.memberships
-      .filter(function (m) { return m.taskId === taskId; })
-      .map(function (m) { return { project: project(m.projectId), membership: m }; })
+    var i = index();
+    return (i.memByTask[taskId] || [])
+      .map(function (m) { return { project: i.project[m.projectId], membership: m }; })
       .filter(function (x) { return x.project; });
   }
 
   function storiesOfTask(taskId) {
-    return db.stories
-      .filter(function (s) { return s.taskId === taskId; })
+    return (index().storyByTask[taskId] || []).slice()
       .sort(function (a, b) { return a.createdAt < b.createdAt ? -1 : 1; });
   }
 
   function fieldValue(taskId, fieldId) {
-    var fv = db.fieldValues.filter(function (v) {
-      return v.taskId === taskId && v.fieldId === fieldId;
-    })[0];
+    var row = index().fvByTask[taskId];
+    var fv = row && row[fieldId];
     return fv ? fv.value : null;
   }
 
@@ -870,9 +921,7 @@
 
   /** งานที่รองานนี้อยู่ */
   function blocking(taskId) {
-    return db.tasks.filter(function (t) {
-      return t.dependsOn.filter(function (d) { return d.id === taskId; }).length > 0;
-    });
+    return index().blockedByMe[taskId] || [];
   }
 
   /** จำนวนวันของงาน นับทั้งวันเริ่มและวันจบ งานวันเดียวจึงเท่ากับ 1 ไม่ใช่ 0 */
@@ -1079,8 +1128,8 @@
      * กดเข้าโปรเจกต์ยังโดนเด้งออกเหมือนเดิม */
     if (isTaskParticipant(taskId)) return true;
 
-    var ms = db.memberships.filter(function (m) { return m.taskId === taskId; });
-    if (ms.length) {
+    var ms = index().memByTask[taskId];
+    if (ms && ms.length) {
       return ms.some(function (m) { return !!projectAccess(m.projectId); });
     }
     var t = task(taskId);
@@ -1108,14 +1157,53 @@
     return buckets;
   }
 
+  /* ค้นหา
+   *
+   * เดิมดูแค่ชื่อกับรายละเอียด ซึ่งพอมีงานหลายพันแล้วหาไม่เจอ
+   * เพราะคนจำชื่องานเป๊ะ ๆ ไม่ได้ แต่จำได้ว่า "งานของคุณมานี" หรือ "อยู่ในโปรเจกต์สบู่"
+   *
+   * ให้คะแนนแทนการกรองล้วน ๆ ชื่อที่ตรงเป๊ะต้องมาก่อนงานที่บังเอิญมีคำนั้นในรายละเอียด
+   * และงานที่ทำเสร็จแล้วถูกลดคะแนนให้ไปอยู่ท้าย เพราะคนค้นหามักหาสิ่งที่ยังทำอยู่
+   */
   function search(q) {
     q = (q || '').trim().toLowerCase();
     if (!q) return [];
-    return db.tasks.filter(function (t) {
-      if (t.name.toLowerCase().indexOf(q) < 0 &&
-          (t.notes || '').toLowerCase().indexOf(q) < 0) return false;
-      return canSeeTask(t.id);
-    }).slice(0, 60);
+    var i = index();
+    var hits = [];
+
+    db.tasks.forEach(function (t) {
+      var name = t.name.toLowerCase();
+      var score = 0;
+      if (name === q) score = 100;
+      else if (name.indexOf(q) === 0) score = 80;
+      else if (name.indexOf(q) >= 0) score = 60;
+
+      if (!score && (t.notes || '').toLowerCase().indexOf(q) >= 0) score = 30;
+      if (!score) {
+        var u = i.user[t.assigneeId];
+        if (u && u.name.toLowerCase().indexOf(q) >= 0) score = 25;
+      }
+      if (!score && (t.tags || []).some(function (g) {
+        return String(g).toLowerCase().indexOf(q) >= 0;
+      })) score = 22;
+      if (!score && (i.memByTask[t.id] || []).some(function (m) {
+        var p = i.project[m.projectId];
+        return p && p.name.toLowerCase().indexOf(q) >= 0;
+      })) score = 15;
+
+      if (!score) return;
+      if (!canSeeTask(t.id)) return;
+      if (t.completed) score -= 40;
+      hits.push({ t: t, s: score });
+    });
+
+    return hits
+      .sort(function (a, b) {
+        if (b.s !== a.s) return b.s - a.s;
+        return (a.t.dueOn || '9999') < (b.t.dueOn || '9999') ? -1 : 1;
+      })
+      .slice(0, 60)
+      .map(function (x) { return x.t; });
   }
 
   /** งานทั้งหมดที่เห็นได้ ใช้กับปฏิทินรวมที่ไม่ได้เจาะจงโปรเจกต์ */
@@ -2405,17 +2493,27 @@
   /** สิทธิ์ของคนหนึ่งในโปรเจกต์หนึ่ง คืน null ถ้าไม่มีสิทธิ์เห็นเลย */
   function projectAccess(projectId, userId) {
     var uid = userId || db.currentUserId;
-    var u = user(uid);
+    /* จำคำตอบไว้ในดัชนี ฟังก์ชันนี้ถูกเรียกหนึ่งครั้งต่อหนึ่งงานเวลากรองสิทธิ์
+     * ทั้งที่คำตอบขึ้นกับแค่คู่ (คน, โปรเจกต์) ซึ่งมีไม่กี่ร้อยคู่ */
+    var i = index();
+    var key = uid + '|' + projectId;
+    if (key in i.access) return i.access[key];
+    var v = computeAccess(projectId, uid, i);
+    i.access[key] = v;
+    return v;
+  }
+
+  function computeAccess(projectId, uid, i) {
+    var u = i.user[uid];
     if (!u || u.active === false) return null;
 
-    var p = project(projectId);
+    var p = i.project[projectId];
     if (!p) return null;
 
     if (u.role === 'admin') return 'admin';        // ผู้ดูแลระบบเห็นทุกโปรเจกต์
 
-    var m = (db.projectMembers || []).filter(function (x) {
-      return x.projectId === projectId && x.userId === uid;
-    })[0];
+    var byProj = i.pmByProject[projectId];
+    var m = byProj && byProj[uid];
 
     /* ด่านแรก เห็นโปรเจกต์นี้ไหม
      * โปรเจกต์ปิดต้องเป็นสมาชิกเท่านั้น ส่วนบุคคลภายนอกต้องถูกเชิญเป็นรายโปรเจกต์เสมอ
@@ -2610,6 +2708,57 @@
     return true;
   }
 
+  /* ---------- โอนงานต่อ ----------
+   *
+   * ปิดบัญชีเฉย ๆ ไม่พอ งานที่ค้างอยู่กับคนนั้นยังผูกกับบัญชีที่เข้าไม่ได้
+   * ไม่มีใครได้รับแจ้ง งานจะเงียบหายไปจนกว่าจะมีคนไปตามหาเอง
+   * ซึ่งมักเป็นตอนที่เลยกำหนดไปแล้ว
+   */
+  function openTasksOf(userId) {
+    return db.tasks.filter(function (t) {
+      return t.assigneeId === userId && !t.completed;
+    });
+  }
+
+  /**
+   * โอนงานที่ยังไม่เสร็จทั้งหมดของคนหนึ่งไปให้อีกคน
+   * @param toUserId  null = ปล่อยว่าง ต้องเป็นการเลือกอย่างจงใจ ไม่ใช่ผลข้างเคียง
+   * @returns จำนวนงานที่โอน
+   */
+  function handoverTasks(fromId, toUserId) {
+    var from = user(fromId);
+    if (!from) return 0;
+    var list = openTasksOf(fromId);
+    if (!list.length) return 0;
+    var to = toUserId ? user(toUserId) : null;
+    if (toUserId && !to) return 0;
+
+    snapshot('โอนงานต่อ');
+    var actor = me();
+    list.forEach(function (t) {
+      t.assigneeId = to ? to.id : null;
+      if (to && (t.followers || []).indexOf(to.id) < 0) t.followers.push(to.id);
+      db.stories.push({
+        id: uid('st'), taskId: t.id, actorId: db.currentUserId, type: 'log',
+        text: to ? 'รับช่วงงานต่อจาก ' + from.name
+                 : 'ยกเลิกผู้รับผิดชอบ เดิมเป็นของ ' + from.name,
+        createdAt: new Date().toISOString()
+      });
+    });
+
+    /* แจ้งครั้งเดียวสำหรับทั้งชุด ไม่ใช่ยิงทีละงาน
+     * คนที่รับช่วงงานสามสิบงานไม่ควรเจอสามสิบแถวในกล่องข้อความ */
+    if (to) {
+      notifyOnly(list[0].id, [to.id],
+        (actor ? actor.name : 'มีคน') + ' โอนงานที่ยังไม่เสร็จ ' + list.length +
+        ' งาน จาก ' + from.name + ' มาให้คุณ', 'assigned');
+    }
+    audit('user.handover', from.name,
+      (to ? 'โอนให้ ' + to.name : 'ปล่อยว่างไว้') + ' จำนวน ' + list.length + ' งาน');
+    commit();
+    return list.length;
+  }
+
   /** บัญชีนี้ใช้งานได้อยู่ไหม — ปิดแล้วต้องทำอะไรไม่ได้เลย */
   function isActive(userId) {
     var u = user(userId || db.currentUserId);
@@ -2727,12 +2876,14 @@
     if (!parsed.projects || !parsed.tasks) throw new Error('ไฟล์ไม่ถูกรูปแบบ');
     snapshot('กู้คืนข้อมูล');
     db = migrate(parsed);
+    dropIndex();
     commit();
   }
 
   function reset() {
     snapshot('ล้างข้อมูล');
     db = migrate(seed());
+    dropIndex();
     audit("system.reset", null, "ล้างข้อมูลทั้งหมดและเริ่มใหม่");
     commit();
   }
@@ -2813,6 +2964,7 @@
     setProjectVisibility: setProjectVisibility, setProjectLocked: setProjectLocked,
     setProjectMember: setProjectMember, removeProjectMember: removeProjectMember,
     isAdmin: isAdmin, setRole: setRole, can: can, role: role, adminCount: adminCount,
+    openTasksOf: openTasksOf, handoverTasks: handoverTasks,
     NOTIFY_KINDS: NOTIFY_KINDS, pref: pref, setPref: setPref, setNotifyPref: setNotifyPref,
     updateProfile: updateProfile, setAway: setAway, isAway: isAway,
     setActive: setActive, isActive: isActive,

@@ -2252,3 +2252,26 @@ body.rownum .list-wrap .row > .nm::before {
   .g-toolbar .btn { padding: 0 10px; }
   .g-tb-search input { width: 84px; }
 }
+
+/* ---------- โอนงานต่อ ---------- */
+
+.admin-openn {
+  position: absolute; top: -3px; right: -3px; min-width: 15px; height: 15px;
+  padding: 0 3px; border-radius: 8px; background: var(--warn); color: #fff;
+  font-size: 10px; font-weight: 700; display: grid; place-items: center;
+}
+.admin-rm .icon-btn { position: relative; }
+
+.ho-list {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  max-height: 190px; overflow-y: auto;
+}
+.ho-row {
+  display: flex; align-items: center; gap: 8px; padding: 8px 11px;
+  border-bottom: 1px solid var(--line-soft); font-size: 13.5px;
+}
+.ho-row:last-child { border-bottom: 0; }
+.ho-row .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ho-row .due { font-size: 12.5px; color: var(--fg-soft); flex: none; }
+.ho-row .due.due-over { color: var(--danger); font-weight: 600; }
+.ho-more { padding: 8px 11px; font-size: 12.5px; color: var(--fg-faint); }

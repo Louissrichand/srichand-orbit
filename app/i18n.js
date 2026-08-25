@@ -521,6 +521,7 @@
     'ได้เปลี่ยนบทบาทของ': 'changed the role of',
     'ได้ปิดใช้งานบัญชีของ': 'disabled the account of',
     'ได้เปิดใช้งานบัญชีของ': 'enabled the account of',
+    'ได้โอนงานต่อจาก': 'handed over the open tasks of',
     'ได้ตั้งสถานะไม่อยู่': 'set themselves as away',
     'ได้ยกเลิกสถานะไม่อยู่': 'is back',
     'ได้สร้างโปรเจกต์': 'created project', 'ได้คัดลอกโปรเจกต์': 'duplicated project',
@@ -799,6 +800,18 @@
     'แสดงเลขบรรทัด': 'Show row numbers',
     'ใส่เลขลำดับหน้าแถวในมุมมองรายการ ใช้อ้างอิงตอนคุยกันได้':
       'Numbers each row in list views, handy for pointing at one in a conversation',
+
+    /* --- โอนงานต่อ --- */
+    'โอนงานต่อ': 'Hand over open tasks', 'ปิดบัญชีและโอนงานต่อ': 'Hand over and disable',
+    'โอนงานที่ค้างอยู่ {n} งานให้คนอื่น': 'Hand over {n} open tasks to someone else',
+    'มีงานที่ยังไม่เสร็จอยู่ {n} งาน ถ้าปล่อยไว้กับบัญชีที่ปิดแล้ว จะไม่มีใครได้รับแจ้งและงานจะค้างเงียบ ๆ':
+      '{n} tasks are still open. Left on a disabled account, nobody gets notified and the work quietly stalls.',
+    'โอนให้ใคร': 'Hand over to',
+    'ไม่โอน ปล่อยว่างไว้ (ต้องมีคนมาหยิบเอง)': 'Leave unassigned — someone must pick them up',
+    'งานที่จะโอน': 'Tasks to hand over',
+    'โอนงานแล้วปิดบัญชี': 'Hand over and disable', 'โอนงาน': 'Hand over',
+    'โอนงาน {n} งานแล้ว': 'Handed over {n} tasks',
+    'โอนงาน {n} งาน และปิดบัญชีแล้ว': 'Handed over {n} tasks and disabled the account',
 
     /* --- ชื่อเดือน / วัน --- */
     '__monthsShort': 'Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec',

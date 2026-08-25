@@ -1759,6 +1759,57 @@
     return h;
   }
 
+  /** โอนงานที่ค้างอยู่ให้คนอื่น
+   *
+   * @param withDisable เปิดจากปุ่มปิดบัญชี จึงต้องปิดบัญชีต่อหลังโอนเสร็จในคราวเดียว
+   *                    ถ้าแยกสองขั้น คนจะโอนแล้วลืมปิด หรือปิดแล้วลืมโอน
+   */
+  function handoverModal(userId, withDisable) {
+    var u = S.user(userId);
+    if (!u) return '';
+    var list = S.openTasksOf(userId);
+    var others = S.db.users.filter(function (x) {
+      return x.id !== userId && x.active !== false;
+    });
+
+    var h = '<h2>' + (withDisable ? L('ปิดบัญชีและโอนงานต่อ') : L('โอนงานต่อ')) + '</h2>';
+    h += '<div class="look-prev">' + R.avatar(u, 'lg') +
+      '<div><b>' + R.esc(u.name) + '</b>' +
+      '<div style="font-size:12.5px;color:var(--fg-soft)">' + R.esc(u.email || '') + '</div></div></div>';
+
+    h += '<div class="prj-warn">' + I('alert', 15) + '<span>' +
+      L('มีงานที่ยังไม่เสร็จอยู่ {n} งาน ถ้าปล่อยไว้กับบัญชีที่ปิดแล้ว จะไม่มีใครได้รับแจ้งและงานจะค้างเงียบ ๆ',
+        { n: list.length }) + '</span></div>';
+
+    h += '<div class="field" style="margin-top:14px"><label>' + L('โอนให้ใคร') + '</label>' +
+      '<select id="hoTo">';
+    others.forEach(function (x) {
+      h += '<option value="' + R.esc(x.id) + '">' + R.esc(x.name) +
+        (x.title ? ' — ' + R.esc(x.title) : '') + '</option>';
+    });
+    h += '<option value="">' + L('ไม่โอน ปล่อยว่างไว้ (ต้องมีคนมาหยิบเอง)') + '</option>';
+    h += '</select></div>';
+
+    h += '<label class="opt-lbl">' + L('งานที่จะโอน') + '</label><div class="ho-list">';
+    list.slice(0, 12).forEach(function (t) {
+      var pj = S.projectsOfTask(t.id)[0];
+      h += '<div class="ho-row"><span class="nm">' + R.esc(t.name) + '</span>' +
+        (pj ? '<span class="chip">' + R.esc(pj.project.name) + '</span>' : '') +
+        (t.dueOn ? '<span class="due' + R.dueClass(t.dueOn, false) + '">' +
+          R.fmtDate(t.dueOn) + '</span>' : '') + '</div>';
+    });
+    if (list.length > 12) {
+      h += '<div class="ho-more">+' + (list.length - 12) + ' ' + L('อื่น ๆ') + '</div>';
+    }
+    h += '</div>';
+
+    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="do-handover" data-id="' + R.esc(userId) +
+      '" data-off="' + (withDisable ? '1' : '0') + '">' +
+      (withDisable ? L('โอนงานแล้วปิดบัญชี') : L('โอนงาน')) + '</button></div>';
+    return h;
+  }
+
   /** ตั้งสถานะไม่อยู่ — มีวันสิ้นสุดเสมอ ไม่งั้นป้ายจะค้างจนไม่มีใครเชื่อ */
   function awayModal() {
     var me = S.me();
@@ -1944,7 +1995,7 @@
     put('manage', [
       'manage-members', 'add-user', 'do-add-user', 'pick-person', 'remove-user', 'pick-role', 'set-role',
       'set-visibility', 'toggle-lock', 'add-project-member', 'pick-access', 'set-access', 'drop-member',
-      'disable-user', 'enable-user',
+      'disable-user', 'enable-user', 'handover', 'do-handover',
       'delete-project', 'reset', 'import', 'paste-backup', 'do-paste-import'
     ]);
     put('structure', [
@@ -2977,11 +3028,28 @@
       case 'disable-user': {
         var du = S.user(id);
         if (!du) break;
+        /* มีงานค้างอยู่ ต้องตัดสินใจเรื่องงานก่อน ไม่ใช่ปิดแล้วค่อยไปตามหาทีหลัง
+         * งานที่ผูกกับบัญชีที่เข้าไม่ได้จะเงียบไปจนกว่าจะเลยกำหนด */
+        if (S.openTasksOf(id).length) { openModal(handoverModal(id, true)); break; }
         if (!confirm(L('ปิดใช้งานบัญชีของ “{name}”?\nเขาจะเข้าระบบไม่ได้ทันที แต่งานที่มอบหมายไว้ยังอยู่ครบ',
           { name: du.name }))) break;
         if (!S.setActive(id, false)) { toast(L('ปิดบัญชีนี้ไม่ได้')); break; }
         renderAll();
         toast(L('ปิดใช้งานบัญชีแล้ว'), L('ย้อนกลับ'), 'undo');
+        break;
+      }
+      case 'handover': openModal(handoverModal(id, false)); break;
+      case 'do-handover': {
+        var toSel = document.getElementById('hoTo');
+        var to = toSel ? toSel.value : '';
+        var alsoOff = el.dataset.off === '1';
+        var moved = S.handoverTasks(id, to || null);
+        if (alsoOff && !S.setActive(id, false)) { toast(L('ปิดบัญชีนี้ไม่ได้')); break; }
+        closeModal();
+        renderAll();
+        toast(alsoOff
+          ? L('โอนงาน {n} งาน และปิดบัญชีแล้ว', { n: moved })
+          : L('โอนงาน {n} งานแล้ว', { n: moved }), L('ย้อนกลับ'), 'undo');
         break;
       }
       case 'enable-user':

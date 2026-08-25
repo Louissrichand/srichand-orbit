@@ -1758,6 +1758,7 @@
     'user.role': 'ได้เปลี่ยนบทบาทของ',
     'user.disable': 'ได้ปิดใช้งานบัญชีของ',
     'user.enable': 'ได้เปิดใช้งานบัญชีของ',
+    'user.handover': 'ได้โอนงานต่อจาก',
     'user.away': 'ได้ตั้งสถานะไม่อยู่',
     'user.back': 'ได้ยกเลิกสถานะไม่อยู่',
     'project.create': 'ได้สร้างโปรเจกต์',
@@ -1872,6 +1873,14 @@
 
       h += '<span class="admin-rm">';
       if (!isMe) {
+        /* จำนวนงานค้างเห็นตั้งแต่ในแถว ผู้ดูแลจะได้รู้ก่อนกดปิดบัญชี
+         * ว่าการปิดคนนี้จะทำให้งานกี่ชิ้นไม่มีเจ้าของ */
+        var openN = S.openTasksOf(u.id).length;
+        if (openN) {
+          h += '<button class="icon-btn" data-act="handover" data-id="' + esc(u.id) +
+            '" title="' + L('โอนงานที่ค้างอยู่ {n} งานให้คนอื่น', { n: openN }) + '">' +
+            I('signOut', 15) + '<span class="admin-openn">' + openN + '</span></button>';
+        }
         h += off
           ? '<button class="icon-btn ok" data-act="enable-user" data-id="' + esc(u.id) +
             '" title="' + L('เปิดใช้งานอีกครั้ง') + '">' + I('checkCircle', 15) + '</button>'
