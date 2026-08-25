@@ -76,10 +76,19 @@
     { id: 'rejected', label: 'ไม่อนุมัติ',  color: '#e8384f' }
   ];
 
+  /* สถานะโปรเจกต์ — ชุดเดียวกับที่ทีมใช้อยู่บน Asana
+   *
+   * สี่อันแรกบอกว่า "ตอนนี้เป็นยังไง" ส่วนสองอันท้ายบอกว่า "จบแล้ว" คนละความหมายกัน
+   * done = true คือปิดจ๊อบไปแล้ว ไม่ต้องรายงานความคืบหน้าอีก
+   * จึงแยกกลุ่มในเมนู ไม่ให้ปนกับสถานะที่ยังเดินอยู่
+   */
   var PROJECT_STATES = [
-    { id: 'on_track',  label: 'ตามแผน',  color: '#37c5ab' },
-    { id: 'at_risk',   label: 'เสี่ยง',   color: '#f5a623' },
-    { id: 'off_track', label: 'หลุดแผน', color: '#e8384f' }
+    { id: 'on_track',  label: 'ตามแผน',      color: '#37c5ab' },
+    { id: 'at_risk',   label: 'เสี่ยง',       color: '#f5a623' },
+    { id: 'off_track', label: 'หลุดแผน',     color: '#e8384f' },
+    { id: 'on_hold',   label: 'พักไว้ก่อน',   color: '#4186e0' },
+    { id: 'complete',  label: 'เสร็จสมบูรณ์', color: '#37c5ab', done: true },
+    { id: 'dropped',   label: 'ยกเลิกแล้ว',   color: '#9ca0a8', done: true }
   ];
 
   var FIELD_TYPES = [
@@ -400,6 +409,7 @@
       if (!('dueOn' in p)) p.dueOn = null;
       if (!p.depShift) p.depShift = { mode: 'consume', scope: 'downstream' };
       if (!p.workDays) p.workDays = 'all';
+      p.statusLog = p.statusLog || [];
       (p.savedViews || []).forEach(function (v) { v.view = fillView(v.view); });
     });
     d.users.forEach(function (u) {
@@ -1894,12 +1904,40 @@
     return p;
   }
 
+  /**
+   * ตั้งสถานะโปรเจกต์
+   *
+   * เก็บย้อนหลังไว้ด้วย ไม่ใช่ทับของเดิมอย่างเดียว เพราะคำถามที่ผู้บริหารถามบ่อยที่สุด
+   * ไม่ใช่ "ตอนนี้สีอะไร" แต่เป็น "มันเปลี่ยนเป็นสีแดงตั้งแต่เมื่อไร"
+   * ถ้าทับทุกครั้งจะตอบไม่ได้เลย
+   *
+   * @param text  ส่ง null มาแปลว่าเปลี่ยนแค่สถานะ ให้เก็บข้อความเดิมไว้
+   */
   function setProjectStatus(id, state, text) {
     var p = project(id);
     if (!p) return;
     snapshot('อัปเดตสถานะโปรเจกต์');
-    p.status = { state: state, text: text, by: db.currentUserId, at: today() };
+    var keep = text === null || text === undefined;
+    p.status = {
+      state: state,
+      text: keep ? ((p.status && p.status.text) || '') : text,
+      by: db.currentUserId,
+      at: today()
+    };
+    p.statusLog = p.statusLog || [];
+    p.statusLog.push({
+      id: uid('ps'), state: state, text: p.status.text,
+      by: db.currentUserId, at: new Date().toISOString()
+    });
+    if (p.statusLog.length > 30) p.statusLog = p.statusLog.slice(-30);
     commit();
+  }
+
+  /** ประวัติการรายงานสถานะ ใหม่สุดก่อน */
+  function statusLog(projectId, limit) {
+    var p = project(projectId);
+    if (!p || !p.statusLog) return [];
+    return p.statusLog.slice().reverse().slice(0, limit || 10);
   }
 
   function archiveProject(id, archived) {
@@ -2598,7 +2636,7 @@
 
     createProject: createProject, updateProject: updateProject,
     deleteProject: deleteProject, duplicateProject: duplicateProject,
-    setProjectStatus: setProjectStatus, archiveProject: archiveProject,
+    setProjectStatus: setProjectStatus, statusLog: statusLog, archiveProject: archiveProject,
     addSection: addSection, renameSection: renameSection,
     deleteSection: deleteSection, moveSection: moveSection,
     addField: addField, renameField: renameField, deleteField: deleteField,

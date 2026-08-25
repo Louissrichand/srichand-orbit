@@ -1243,19 +1243,60 @@
     return h;
   }
 
+  /** เมนูเลือกสถานะ — แยกสถานะที่ยังเดินอยู่ออกจากสถานะที่จบแล้วด้วยเส้นคั่น */
+  function statusMenu(projectId) {
+    var p = S.project(projectId);
+    var cur = p.status ? p.status.state : null;
+    var h = '', sepDone = false;
+    S.PROJECT_STATES.forEach(function (x) {
+      if (x.done && !sepDone) { h += '<div class="pop-sep"></div>'; sepDone = true; }
+      h += '<button class="st-opt' + (cur === x.id ? ' on' : '') +
+        '" data-act="pick-status" data-id="' + R.esc(projectId) + '" data-v="' + x.id + '">' +
+        '<i style="background:' + x.color + '"></i>' +
+        '<span class="grow" style="color:' + x.color + '">' + R.esc(L(x.label)) + '</span>' +
+        (cur === x.id ? R.ICON.check : '') + '</button>';
+    });
+    h += '<div class="pop-sep"></div>';
+    h += '<button data-act="update-status" data-id="' + R.esc(projectId) + '">' +
+      I('pencil', 14) + '<span class="grow">' + L('เขียนรายงานสถานะ') + '</span></button>';
+    if (p.status) {
+      h += '<button data-act="clear-status" data-id="' + R.esc(projectId) + '">' +
+        I('close', 14) + '<span class="grow">' + L('ล้างสถานะ') + '</span></button>';
+    }
+    return h;
+  }
+
   function statusModal(projectId) {
     var p = S.project(projectId);
     var cur = p.status || { state: 'on_track', text: '' };
-    var h = '<h2>' + L('อัปเดตสถานะ') + ' ' + R.esc(p.name) + '</h2>';
-    h += '<div class="field"><label>' + L('สถานะ') + '</label><select id="stState">';
+    var h = '<h2>' + L('รายงานสถานะ') + ' — ' + R.esc(p.name) + '</h2>';
+
+    h += '<label class="opt-lbl">' + L('สถานะ') + '</label><div class="st-pick" id="stPick">';
     S.PROJECT_STATES.forEach(function (x) {
-      h += '<option value="' + x.id + '"' + (cur.state === x.id ? ' selected' : '') + '>' +
-        R.esc(L(x.label)) + '</option>';
+      h += '<button type="button" class="' + (cur.state === x.id ? 'on' : '') +
+        '" data-v="' + x.id + '" style="--c:' + x.color + '">' +
+        '<i style="background:' + x.color + '"></i>' + R.esc(L(x.label)) + '</button>';
     });
-    h += '</select></div>';
-    h += '<div class="field"><label>' + L('สรุปให้ทีมอ่าน') + '</label>' +
+    h += '</div>';
+
+    h += '<div class="field" style="margin-top:14px"><label>' + L('สรุปให้ทีมอ่าน') + '</label>' +
       '<textarea id="stText" rows="4" placeholder="' + L('งานเดินถึงไหน ติดอะไร ต้องการอะไร') + '">' +
       R.esc(cur.text) + '</textarea></div>';
+
+    var log = S.statusLog(projectId, 6);
+    if (log.length) {
+      h += '<label class="opt-lbl">' + L('รายงานก่อนหน้า') + '</label><div class="st-log">';
+      log.forEach(function (e) {
+        var s = R.projectState(e.state);
+        var by = S.user(e.by);
+        h += '<div class="st-log-row"><i style="background:' + s.color + '"></i>' +
+          '<div><b style="color:' + s.color + '">' + R.esc(L(s.label)) + '</b>' +
+          (e.text ? '<em>' + R.esc(e.text) + '</em>' : '') +
+          '<span>' + R.esc(by ? by.name : '?') + ' · ' + R.fmtWhen(e.at) + '</span></div></div>';
+      });
+      h += '</div>';
+    }
+
     h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
       '<button class="btn btn-primary" data-act="save-status" data-id="' + R.esc(projectId) +
       '">' + L('บันทึก') + '</button></div>';
@@ -1735,6 +1776,7 @@
       'drop-field', 'add-field-picker', 'pick-ftype', 'add-option', 'remove-option',
       'opt-color', 'set-opt-color',
       'manage-rules', 'add-rule', 'delete-rule',
+      'pick-status', 'clear-status',
       'manage-templates', 'delete-template', 'save-template', 'use-template',
       'save-view', 'delete-view', 'reset-cols',
       'g-set-baseline', 'g-clear-baseline',
@@ -1821,7 +1863,8 @@
     var el = e.target.closest ? e.target.closest('[data-act]') : null;
 
     if (!el || ['pick-assignee', 'pick-priority', 'pick-follower',
-         'add-field-picker', 'field-menu', 'opt-color', 'edit-cell'].indexOf(el.dataset.act) < 0) {
+         'add-field-picker', 'field-menu', 'opt-color', 'edit-cell',
+         'project-menu', 'status-menu', 'g-zoom-menu', 'g-views-menu'].indexOf(el.dataset.act) < 0) {
       if (!e.target.closest || !e.target.closest('.pop')) closePops();
     }
 
@@ -2597,13 +2640,39 @@
         closeModal();
         break;
       }
-      case 'update-status': openModal(statusModal(id || state.route.id)); break;
-      case 'save-status':
-        S.setProjectStatus(id, document.getElementById('stState').value,
+      case 'status-menu':
+        if (popIsOpenFor(el)) { closePops(); break; }
+        openPop(el, statusMenu(id || state.route.id));
+        break;
+      case 'pick-status': {
+        closePops();
+        /* ส่ง null เป็นข้อความ แปลว่าเปลี่ยนแค่สี ไม่ล้างรายงานที่คนเขียนไว้
+         * คนเปลี่ยนสีเร็ว ๆ ระหว่างวันบ่อยกว่าเขียนรายงานใหม่ทุกครั้ง */
+        S.setProjectStatus(id, el.dataset.v, null);
+        renderAll();
+        var stp = R.projectState(el.dataset.v);
+        toast(L('ตั้งสถานะเป็น “{s}” แล้ว', { s: L(stp.label) }), L('ย้อนกลับ'), 'undo');
+        break;
+      }
+      case 'clear-status':
+        closePops();
+        S.updateProject(id, { status: null });
+        renderAll();
+        toast(L('ล้างสถานะแล้ว'), L('ย้อนกลับ'), 'undo');
+        break;
+      case 'update-status':
+        closePops();
+        openModal(statusModal(id || state.route.id));
+        break;
+      case 'save-status': {
+        var stSel = $modal.querySelector('#stPick .on');
+        S.setProjectStatus(id, (stSel && stSel.dataset.v) || 'on_track',
           document.getElementById('stText').value.trim());
         closeModal();
-        toast(L('อัปเดตสถานะแล้ว'));
+        renderAll();
+        toast(L('อัปเดตสถานะแล้ว'), L('ย้อนกลับ'), 'undo');
         break;
+      }
       case 'toggle-archive': {
         var ap = S.project(id);
         S.archiveProject(id, !ap.archived);
@@ -2937,6 +3006,14 @@
       b.classList.add('on');
       var prevC = document.getElementById('lookPrev');
       if (prevC) prevC.style.background = b.dataset.color + '22';
+      return;
+    }
+    var sp = e.target.closest ? e.target.closest('#stPick button') : null;
+    if (sp) {
+      Array.prototype.forEach.call($modal.querySelectorAll('#stPick button'), function (x) {
+        x.classList.remove('on');
+      });
+      sp.classList.add('on');
       return;
     }
     /* ตารางไอคอน — กดแล้วเติมลงช่องพิมพ์เอง ให้ค่าที่จะบันทึกมีที่เดียว

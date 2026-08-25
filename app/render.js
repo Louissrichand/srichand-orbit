@@ -192,10 +192,18 @@
       if (!p) return '';
       h += '<div style="min-width:0"><div class="tb-title"><span class="emoji">' + esc(p.icon) +
            '</span><span class="nm">' + esc(p.name) + '</span>';
+      /* ป้ายสถานะเป็นปุ่ม ไม่ใช่ป้ายอ่านอย่างเดียว
+       * ที่เดียวกับที่คนอ่านสถานะ คือที่ที่คนอยากแก้สถานะ ไม่ควรบังคับให้ไปหาในเมนู
+       * โปรเจกต์ที่ยังไม่เคยรายงานต้องเห็นปุ่มด้วย ไม่งั้นจะไม่มีใครรู้ว่ารายงานได้ */
       if (p.status) {
         var st = projectState(p.status.state);
-        h += '<span class="approval-pill" style="background:' + st.color +
-             '22;color:' + st.color + '">' + esc(L(st.label)) + '</span>';
+        h += '<button class="status-pill" data-act="status-menu" data-id="' + esc(p.id) +
+             '" style="background:' + st.color + '22;color:' + st.color + '">' +
+             '<i style="background:' + st.color + '"></i>' + esc(L(st.label)) +
+             I('chevronDown', 12) + '</button>';
+      } else {
+        h += '<button class="status-pill empty" data-act="status-menu" data-id="' + esc(p.id) +
+             '"><i></i>' + L('ตั้งสถานะ') + I('chevronDown', 12) + '</button>';
       }
       if (p.archived) h += '<span class="chip">' + L('เก็บเข้าคลังแล้ว') + '</span>';
       h += '</div>' +
@@ -825,6 +833,20 @@
         '</div><div style="margin-top:4px">' + esc(p.status.text) + '</div>' +
         '<div style="font-size:12px;color:var(--fg-faint);margin-top:6px">' +
         esc(by ? by.name : '?') + ' · ' + fmtDate(p.status.at) + '</div></div></div>';
+
+      /* ประวัติย้อนหลัง ตอบคำถามที่ถามกันบ่อยที่สุดคือ "เปลี่ยนเป็นสีแดงตั้งแต่เมื่อไร"
+       * ตัดรายการล่าสุดออกเพราะแสดงเต็ม ๆ อยู่ข้างบนแล้ว */
+      var hist = S.statusLog(projectId, 6).slice(1);
+      if (hist.length) {
+        h += '<div class="st-trail">';
+        hist.forEach(function (e) {
+          var s2 = projectState(e.state);
+          h += '<div class="st-trail-row"><i style="background:' + s2.color + '"></i>' +
+            '<b style="color:' + s2.color + '">' + esc(L(s2.label)) + '</b>' +
+            '<span>' + esc(fmtWhen(e.at)) + '</span></div>';
+        });
+        h += '</div>';
+      }
     } else {
       h += '<div style="color:var(--fg-faint)">' + L('ยังไม่มีการอัปเดตสถานะ') + '</div>';
     }
@@ -1022,6 +1044,11 @@
             ? '<span class="lockmark" title="' + L('โปรเจกต์ปิด') + '">' + I('shield', 11) + '</span>'
             : '') +
           '</span><span class="hproj-sub">' +
+          /* จุดสีบอกสถานะ อ่านทั้งหน้าแรกครั้งเดียวก็รู้ว่าโปรเจกต์ไหนกำลังมีปัญหา */
+          (p.status
+            ? '<i class="st-dot" style="background:' + esc(projectState(p.status.state).color) +
+              '" title="' + esc(L(projectState(p.status.state).label)) + '"></i>'
+            : '') +
           (n ? esc(L('งานใกล้ครบกำหนด {n} งาน', { n: n })) : L('ไม่มีงานใกล้ครบกำหนด')) +
           '</span></span></button>';
       });

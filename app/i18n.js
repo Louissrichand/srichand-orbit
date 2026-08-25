@@ -718,6 +718,14 @@
     'หรือพิมพ์อีโมจิเอง': 'Or type an emoji',
 
 
+    /* --- สถานะโปรเจกต์ --- */
+    'ตั้งสถานะ': 'Set status',
+    'พักไว้ก่อน': 'On hold', 'เสร็จสมบูรณ์': 'Complete', 'ยกเลิกแล้ว': 'Dropped',
+    'เขียนรายงานสถานะ': 'Write a status update', 'ล้างสถานะ': 'Clear status',
+    'รายงานสถานะ': 'Status update', 'รายงานก่อนหน้า': 'Previous updates',
+    'ตั้งสถานะเป็น “{s}” แล้ว': 'Status set to “{s}”',
+    'ล้างสถานะแล้ว': 'Status cleared',
+
     /* --- ชื่อเดือน / วัน --- */
     '__monthsShort': 'Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec',
     '__monthsFull': 'January,February,March,April,May,June,July,August,September,October,November,December',
