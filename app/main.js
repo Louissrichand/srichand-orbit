@@ -1756,9 +1756,15 @@
     var me = S.me();
     tab = tab || 'general';
 
+    /* แท็บข้อมูลและสำรองเป็นของผู้ดูแลเท่านั้น
+     * ในนั้นดึงฐานข้อมูลทั้งก้อนออกไปเป็นไฟล์ได้ ซึ่งข้ามระบบสิทธิ์รายโปรเจกต์ทั้งหมด
+     * ถ้าคนทั่วไปเปิดแท็บนี้ตรง ๆ ให้ตกไปแท็บทั่วไป ไม่ใช่โชว์หน้าเปล่า */
+    var tabs = SET_TABS.filter(function (t) { return t[0] !== 'data' || S.can('manage'); });
+    if (!tabs.some(function (t) { return t[0] === tab; })) tab = 'general';
+
     var h = '<h2>' + L('ตั้งค่า') + '</h2>';
     h += '<div class="prj-set"><nav class="prj-tabs">';
-    SET_TABS.forEach(function (t) {
+    tabs.forEach(function (t) {
       h += '<button class="' + (tab === t[0] ? 'on' : '') +
         '" data-act="open-settings" data-tab="' + t[0] + '">' + L(t[1]) + '</button>';
     });
@@ -1774,7 +1780,11 @@
       h += setToggle('set-confirmdel', L('ถามยืนยันก่อนลบงาน'), !!S.pref('confirmDelete'),
         L('ปิดไว้ถ้าลบงานบ่อยและมั่นใจว่ากด Ctrl+Z ทัน'));
       h += '<div class="opt-acts"><button class="btn btn-sm" data-act="show-shortcuts">' +
-        I('keyboard', 14) + ' ' + L('ดูคีย์ลัดทั้งหมด') + '</button></div>';
+        I('keyboard', 14) + ' ' + L('ดูคีย์ลัดทั้งหมด') + '</button>' +
+        /* เทมเพลตงานเป็นเครื่องมือทำงานปกติ ไม่ใช่งานผู้ดูแล
+         * เดิมอยู่ในแท็บสำรองข้อมูล พอซ่อนแท็บนั้นจากคนทั่วไปจึงต้องย้ายออกมา */
+        '<button class="btn btn-sm" data-act="manage-templates">' +
+        I('star', 14) + ' ' + L('เทมเพลตงาน') + '</button></div>';
     }
 
     if (tab === 'profile') {
@@ -1891,7 +1901,7 @@
       h += '<div class="opt-acts">' +
         '<button class="btn" data-act="export">' + I('arrowDown', 14) + ' ' + L('ดาวน์โหลดสำรอง') + '</button>' +
         '<button class="btn" data-act="import">' + I('arrowUp', 14) + ' ' + L('กู้คืนจากไฟล์') + '</button>' +
-        '<button class="btn" data-act="manage-templates">' + I('star', 14) + ' ' + L('เทมเพลตงาน') + '</button></div>';
+        '</div>';
       h += '<div class="opt-acts">' +
         '<button class="btn" data-act="copy-backup">' + I('copy', 14) + ' ' + L('คัดลอกข้อมูล') + '</button>' +
         '<button class="btn" data-act="paste-backup">' + I('paperclip', 14) + ' ' + L('วางข้อมูลกู้คืน') + '</button>' +
@@ -2139,7 +2149,11 @@
       'manage-members', 'add-user', 'do-add-user', 'pick-person', 'remove-user', 'pick-role', 'set-role',
       'set-visibility', 'toggle-lock', 'add-project-member', 'pick-access', 'set-access', 'drop-member',
       'disable-user', 'enable-user', 'handover', 'do-handover',
-      'delete-project', 'reset', 'import', 'paste-backup', 'do-paste-import'
+      'delete-project', 'reset', 'import', 'paste-backup', 'do-paste-import',
+      /* การสำรองข้อมูลคือการดึงฐานข้อมูลทั้งก้อนออกไปเป็นไฟล์
+       * ในนั้นมีทุกโปรเจกต์ รวมถึงโปรเจกต์ปิดที่คนกดไม่มีสิทธิ์เห็น และอีเมลของทุกคน
+       * ถ้าไม่กั้น ระบบสิทธิ์รายโปรเจกต์ทั้งหมดข้ามได้ด้วยปุ่มเดียว */
+      'export', 'copy-backup', 'copy-dump'
     ]);
     put('structure', [
       'new-project', 'create-project', 'edit-project', 'save-project', 'dup-project',

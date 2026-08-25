@@ -210,8 +210,13 @@
            '" data-act="go" data-route="admin">' + I('shield') + '' +
            '<span class="grow">' + L('ผู้ดูแลระบบ') + '</span></button>';
     }
-    h += '<button class="sb-item" data-act="open-settings" data-tab="data">' + I('settings') + '' +
-         '<span class="grow">' + L('ข้อมูลและสำรอง') + '</span></button>';
+    /* การสำรองข้อมูลเป็นงานของผู้ดูแล ไม่ใช่ของทุกคน
+     * ปุ่มนี้เปิดหน้าที่ดึงฐานข้อมูลทั้งก้อนออกไปได้ จึงไม่ควรอยู่ในสายตาคนทั่วไป
+     * คนทั่วไปเข้าตั้งค่าส่วนตัวได้จากเมนูบัญชีมุมล่างซ้ายอยู่แล้ว */
+    h += '<button class="sb-item" data-act="open-settings" data-tab="' +
+         (S.can('manage') ? 'data' : 'general') + '">' + I('settings') + '' +
+         '<span class="grow">' +
+         (S.can('manage') ? L('ข้อมูลและสำรอง') : L('ตั้งค่า')) + '</span></button>';
     h += accountBlock(me);
     h += '</div>';
 
