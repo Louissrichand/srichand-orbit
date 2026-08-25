@@ -34,7 +34,8 @@
     viewIcon: '📊',
     tlScrollLeft: null,      // ตำแหน่งเลื่อนไทม์ไลน์ (null = ให้เลื่อนไปวันนี้เอง)
     suppressHash: false,
-    auditFilter: { group: '', q: '' }   // ตัวกรองบันทึกการทำงานในหน้าผู้ดูแล
+    auditFilter: { group: '', q: '' },  // ตัวกรองบันทึกการทำงานในหน้าผู้ดูแล
+    setTab: 'general'                   // แท็บที่เปิดอยู่ในหน้าตั้งค่าของฉัน
   };
 
   function viewFor(projectId) {
@@ -108,16 +109,22 @@
 
   /* ---------- theme ---------- */
 
-  /** ตั้งภาษาให้ตรงกับที่ผู้ใช้เลือก ถ้ายังไม่เคยเลือกให้เดาจากเบราว์เซอร์ */
+  /** ตั้งภาษาให้ตรงกับที่ผู้ใช้เลือก ถ้ายังไม่เคยเลือกให้เดาจากเบราว์เซอร์
+   *
+   * ธีมกับภาษาเป็นค่าของแต่ละคน ไม่ใช่ของฐานข้อมูล
+   * ในโหมดทีมทุกคนใช้ข้อมูลก้อนเดียวกัน ถ้าเก็บรวมจะเปลี่ยนตามกันหมด */
   function applyLang() {
-    var l = (S.db.settings && S.db.settings.lang) || global.I18N.detect();
-    global.I18N.setLang(l);
+    global.I18N.setLang(S.pref('lang') || global.I18N.detect());
   }
 
   function applyTheme() {
-    var th = (S.db.settings && S.db.settings.theme) || 'auto';
+    var th = S.pref('theme') || 'auto';
     if (th === 'auto') document.documentElement.removeAttribute('data-theme');
     else document.documentElement.setAttribute('data-theme', th);
+
+    /* โหมดแน่นกับเลขบรรทัดเป็นคลาสบน body แล้วให้ CSS จัดการต่อ */
+    document.body.classList.toggle('compact', !!S.pref('compact'));
+    document.body.classList.toggle('rownum', !!S.pref('rowNumbers'));
   }
 
   /* ---------- hash routing ---------- */
@@ -1556,48 +1563,205 @@
     return h;
   }
 
-  function settingsModal() {
+  /* ---------- ตั้งค่าของฉัน ----------
+   *
+   * รวมทุกอย่างที่เป็น "ของตัวฉัน" ไว้ที่เดียว โครงเดียวกับ Settings ของ Asana
+   * แท็บซ้ายเหมือนหน้าตั้งค่าโปรเจกต์ ใช้ CSS ชุดเดียวกัน เพื่อให้สองที่นี้หน้าตาเหมือนกัน
+   */
+  var SET_TABS = [
+    ['general',  'ทั่วไป'],
+    ['profile',  'โปรไฟล์'],
+    ['notify',   'การแจ้งเตือน'],
+    ['account',  'บัญชี'],
+    ['display',  'การแสดงผล'],
+    ['data',     'ข้อมูลและสำรอง']
+  ];
+
+  function setToggle(act, label, on, desc, extra) {
+    return '<div class="opt-toggle"><div class="grow"><b>' + R.esc(label) + '</b>' +
+      (desc ? '<em>' + R.esc(desc) + '</em>' : '') + '</div>' +
+      '<button class="switch' + (on ? ' on' : '') + '" data-act="' + act + '"' +
+      (extra || '') + ' role="switch" aria-checked="' + (on ? 'true' : 'false') + '"><i></i></button></div>';
+  }
+
+  function segmented(act, options, current) {
+    var h = '<div class="segmented">';
+    options.forEach(function (o) {
+      h += '<button data-act="' + act + '" data-v="' + R.esc(o[0]) + '" class="' +
+        (current === o[0] ? 'on' : '') + '">' + R.esc(o[1]) + '</button>';
+    });
+    return h + '</div>';
+  }
+
+  function settingsModal(tab) {
     var db = S.db;
-    var th = (db.settings && db.settings.theme) || 'auto';
-    var h = '<h2>' + L('ตั้งค่า / สำรองข้อมูล') + '</h2>';
+    var me = S.me();
+    tab = tab || 'general';
 
-    h += '<div class="field"><label>' + L('ธีม') + '</label><div class="segmented">' +
-      '<button data-act="set-theme" data-v="auto" class="' + (th === 'auto' ? 'on' : '') + '">' + L('ตามระบบ') + '</button>' +
-      '<button data-act="set-theme" data-v="light" class="' + (th === 'light' ? 'on' : '') + '">' + L('สว่าง') + '</button>' +
-      '<button data-act="set-theme" data-v="dark" class="' + (th === 'dark' ? 'on' : '') + '">' + L('มืด') + '</button>' +
-      '</div></div>';
+    var h = '<h2>' + L('ตั้งค่า') + '</h2>';
+    h += '<div class="prj-set"><nav class="prj-tabs">';
+    SET_TABS.forEach(function (t) {
+      h += '<button class="' + (tab === t[0] ? 'on' : '') +
+        '" data-act="open-settings" data-tab="' + t[0] + '">' + L(t[1]) + '</button>';
+    });
+    h += '</nav><div class="prj-pane">';
 
-    var lg = global.I18N.getLang();
-    h += '<div class="field"><label>' + L('ภาษา') + '</label><div class="segmented">' +
-      '<button data-act="set-lang" data-v="th" class="' + (lg === 'th' ? 'on' : '') + '">ไทย</button>' +
-      '<button data-act="set-lang" data-v="en" class="' + (lg === 'en' ? 'on' : '') + '">English</button>' +
-      '</div></div>';
-
-    h += '<div class="mini-row"><div class="grow"><div>' + L('ข้อมูลปัจจุบัน') + '</div><div class="sub">' +
-      db.projects.length + ' ' + L('โปรเจกต์ ·') + ' ' + db.tasks.length + ' ' + L('งาน ·') + ' ' +
-      db.users.length + ' ' + L('สมาชิก ·') + ' ' + db.notifications.length + ' ' + L('แจ้งเตือน') + '</div></div></div>';
-
-    if (S.storageKind === 'memory') {
-      h += '<p style="font-size:13px;line-height:1.6;margin:14px 0;padding:10px 12px;' +
-        'background:var(--warn-bg);color:var(--warn-fg);border-radius:var(--radius)">' +
-        '<strong>' + L('โหมดทดลอง') + '</strong> ' + L('— เบราว์เซอร์นี้ไม่อนุญาตให้เก็บข้อมูล') + ' ' +
-        L('ใช้งานได้ครบทุกอย่าง แต่') + '<strong>' + L('ข้อมูลจะหายเมื่อรีเฟรชหน้า') + '</strong> ' +
-        L('ถ้าอยากเก็บงานไว้ ให้กด “ดาวน์โหลดสำรอง” ก่อนปิดหน้า') + '</p>';
-    } else {
-      h += '<p style="font-size:13px;color:var(--fg-soft);line-height:1.6;margin:14px 0">' +
-        L('ข้อมูลเก็บอยู่ในเบราว์เซอร์เครื่องนี้เท่านั้น ควรกด “ดาวน์โหลดสำรอง” เก็บไว้สม่ำเสมอ') + ' ' +
-        L('ถ้าล้างข้อมูลเบราว์เซอร์ ข้อมูลจะหายทั้งหมด') + '</p>';
+    if (tab === 'general') {
+      h += '<label class="opt-lbl">' + L('หน้าที่เปิดเมื่อเข้าแอป') + '</label>' +
+        segmented('set-landing', [['home', L('หน้าแรก')], ['mytasks', L('งานของฉัน')],
+                                  ['inbox', L('กล่องข้อความ')]], S.pref('landing'));
+      h += '<div class="opt-sep"></div>';
+      h += setToggle('set-shortcuts', L('เปิดใช้คีย์ลัด'), !!S.pref('shortcuts'),
+        L('กด Tab ค้างแล้วตามด้วยตัวอักษร เพื่อข้ามไปหน้าต่าง ๆ ปิดไว้ถ้าพิมพ์ไทยแล้วชนกัน'));
+      h += setToggle('set-confirmdel', L('ถามยืนยันก่อนลบงาน'), !!S.pref('confirmDelete'),
+        L('ปิดไว้ถ้าลบงานบ่อยและมั่นใจว่ากด Ctrl+Z ทัน'));
+      h += '<div class="opt-acts"><button class="btn btn-sm" data-act="show-shortcuts">' +
+        I('keyboard', 14) + ' ' + L('ดูคีย์ลัดทั้งหมด') + '</button></div>';
     }
 
-    h += '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-      '<button class="btn" data-act="export">' + I('arrowDown', 14) + ' ' + L('ดาวน์โหลดสำรอง') + '</button>' +
-      '<button class="btn" data-act="import">' + I('arrowUp', 14) + ' ' + L('กู้คืนจากไฟล์') + '</button>' +
-      '<button class="btn" data-act="manage-templates">' + I('star', 14) + ' ' + L('เทมเพลตงาน') + '</button></div>';
-    h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">' +
-      '<button class="btn" data-act="copy-backup">' + I('copy', 14) + ' ' + L('คัดลอกข้อมูล') + '</button>' +
-      '<button class="btn" data-act="paste-backup">' + I('paperclip', 14) + ' ' + L('วางข้อมูลกู้คืน') + '</button>' +
-      '<button class="btn btn-danger" data-act="reset">' + L('ล้างและเริ่มใหม่') + '</button></div>';
-    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
+    if (tab === 'profile') {
+      h += '<div class="look-prev">' + R.avatar(me, 'lg') +
+        '<div><b>' + R.esc(me ? me.name : '') + '</b>' +
+        '<div style="font-size:12.5px;color:var(--fg-soft)">' +
+        R.esc((me && me.title) || L('ยังไม่ได้ระบุตำแหน่ง')) + '</div></div></div>';
+      h += '<label class="opt-lbl">' + L('สีประจำตัว') + '</label>' +
+        '<div class="swatch-pick" id="pColors">';
+      S.PALETTE.forEach(function (c) {
+        h += '<button type="button" data-color="' + c + '" class="' +
+          (me && c === me.color ? 'on' : '') + '" style="background:' + c + '"></button>';
+      });
+      h += '</div><p class="prj-note" style="margin-top:6px">' +
+        L('Orbit ใช้ตัวย่อชื่อบนวงกลมสี ไม่ใช้รูปถ่าย รูปถ่ายทำให้ไฟล์ข้อมูลใหญ่ขึ้นมากโดยไม่ช่วยให้หางานเจอเร็วขึ้น') + '</p>';
+
+      h += '<div class="prj-2col" style="margin-top:8px">';
+      h += '<div class="field"><label>' + L('ชื่อที่แสดง') + '</label>' +
+        '<input id="prName" value="' + R.esc(me ? me.name : '') + '"></div>';
+      h += '<div class="field"><label>' + L('ตำแหน่งงาน') + '</label>' +
+        '<input id="prTitle" value="' + R.esc((me && me.title) || '') +
+        '" placeholder="' + L('เช่น ผู้จัดการฝ่ายพัฒนาธุรกิจ') + '"></div>';
+      h += '<div class="field"><label>' + L('ฝ่ายหรือทีม') + '</label>' +
+        '<input id="prDept" value="' + R.esc((me && me.dept) || '') +
+        '" placeholder="' + L('เช่น พัฒนาธุรกิจ') + '"></div>';
+      h += '<div class="field"><label>' + L('อีเมล') + '</label>' +
+        '<input value="' + R.esc(me ? me.email : '') + '" disabled></div>';
+      h += '</div>';
+      h += '<div class="field"><label>' + L('เกี่ยวกับฉัน') + '</label>' +
+        '<textarea id="prAbout" rows="3" placeholder="' +
+        L('ทำอะไรอยู่ ถนัดเรื่องไหน ติดต่อยังไงเร็วที่สุด') + '">' +
+        R.esc((me && me.about) || '') + '</textarea></div>';
+      h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+        '<button class="btn btn-primary" data-act="save-profile">' + L('บันทึก') + '</button></div>';
+    }
+
+    if (tab === 'notify') {
+      h += '<p class="prj-note">' +
+        L('เลือกว่าเรื่องไหนควรขึ้นในกล่องข้อความ ปิดเรื่องที่ไม่สำคัญออก กล่องข้อความจะได้ยังน่าอ่าน') + '</p>';
+      S.NOTIFY_KINDS.forEach(function (k) {
+        var on = !me || !me.prefs || !me.prefs.notify || !(k.id in me.prefs.notify)
+          ? true : !!me.prefs.notify[k.id];
+        h += setToggle('set-notify', L(k.label), on, k.desc ? L(k.desc) : '',
+          ' data-kind="' + k.id + '"');
+      });
+      h += '<div class="prj-warn">' + I('alert', 15) + '<span>' +
+        L('การแจ้งเตือนทางอีเมลยังไม่เปิด จะทำได้เมื่อเชื่อมต่อระบบส่วนกลางแล้ว ตอนนี้ทุกอย่างอยู่ในกล่องข้อความของแอป') +
+        '</span></div>';
+      h += '<div class="modal-acts"><button class="btn btn-primary" data-act="close-modal">' + L('ปิด') + '</button></div>';
+    }
+
+    if (tab === 'account') {
+      var team = global.OrbitSync && global.OrbitSync.state.mode === 'team';
+      h += '<label class="opt-lbl">' + L('องค์กร') + '</label>' +
+        '<div class="opt-base">' + I('building', 15) + '<span class="grow">' +
+        R.esc((global.OrbitConfig && global.OrbitConfig.orgName) || 'Srichand') + '</span>' +
+        '<span class="chip">' + (team ? L('โหมดทีม') : L('โหมดเครื่องเดียว')) + '</span></div>';
+
+      h += '<label class="opt-lbl">' + L('อีเมลที่ใช้เข้าระบบ') + '</label>' +
+        '<div class="opt-base">' + I('signIn', 15) + '<span class="grow">' +
+        R.esc(me ? me.email : '-') + '</span>' + R.authTag(me) + '</div>';
+
+      h += '<label class="opt-lbl">' + L('บทบาทในองค์กร') + '</label>' +
+        '<div class="opt-base">' + I('shield', 15) + '<span class="grow">' +
+        R.esc(R.roleLabel(S.role())) + '</span>' +
+        '<em style="font-style:normal;font-size:12.5px;color:var(--fg-faint)">' +
+        L('ผู้ดูแลระบบเท่านั้นที่เปลี่ยนได้') + '</em></div>';
+
+      h += '<div class="prj-warn">' + I('alert', 15) + '<span>' +
+        L('การเปลี่ยนรหัสผ่านและการยืนยันสองชั้น จะทำได้เมื่อเชื่อมต่อระบบส่วนกลางแล้ว ตอนนี้เข้าระบบด้วยบัญชี Microsoft ของบริษัทเป็นหลัก') +
+        '</span></div>';
+
+      if (team) {
+        h += '<div class="opt-acts"><button class="btn btn-danger" data-act="sign-out">' +
+          I('signOut', 14) + ' ' + L('ออกจากระบบ') + '</button></div>';
+      }
+    }
+
+    if (tab === 'display') {
+      h += '<div class="prj-2col">';
+      h += '<div><label class="opt-lbl">' + L('ธีม') + '</label>' +
+        segmented('set-theme', [['auto', L('ตามระบบ')], ['light', L('สว่าง')],
+                                ['dark', L('มืด')]], S.pref('theme')) + '</div>';
+      h += '<div><label class="opt-lbl">' + L('ภาษา') + '</label>' +
+        segmented('set-lang', [['th', 'ไทย'], ['en', 'English']], global.I18N.getLang()) + '</div>';
+      h += '</div>';
+      h += '<label class="opt-lbl">' + L('วันแรกของสัปดาห์') + '</label>' +
+        segmented('set-firstday', [['auto', L('อัตโนมัติ')], ['sun', L('อาทิตย์')],
+                                   ['mon', L('จันทร์')]], S.pref('firstDay'));
+      h += '<div class="opt-sep"></div>';
+      h += setToggle('set-compact', L('โหมดแน่น'), !!S.pref('compact'),
+        L('ลดระยะห่างของแถว เห็นงานได้มากขึ้นต่อหนึ่งหน้าจอ'));
+      h += setToggle('set-rownum', L('แสดงเลขบรรทัด'), !!S.pref('rowNumbers'),
+        L('ใส่เลขลำดับหน้าแถวในมุมมองรายการ ใช้อ้างอิงตอนคุยกันได้'));
+      h += '<div class="modal-acts"><button class="btn btn-primary" data-act="close-modal">' + L('ปิด') + '</button></div>';
+    }
+
+    if (tab === 'data') {
+      h += '<div class="mini-row"><div class="grow"><div>' + L('ข้อมูลปัจจุบัน') + '</div><div class="sub">' +
+        db.projects.length + ' ' + L('โปรเจกต์ ·') + ' ' + db.tasks.length + ' ' + L('งาน ·') + ' ' +
+        db.users.length + ' ' + L('สมาชิก ·') + ' ' + db.notifications.length + ' ' + L('แจ้งเตือน') + '</div></div></div>';
+
+      if (S.storageKind === 'memory') {
+        h += '<div class="prj-warn">' + I('alert', 15) + '<span><b>' + L('โหมดทดลอง') + '</b> ' +
+          L('— เบราว์เซอร์นี้ไม่อนุญาตให้เก็บข้อมูล') + ' ' +
+          L('ใช้งานได้ครบทุกอย่าง แต่') + '<b>' + L('ข้อมูลจะหายเมื่อรีเฟรชหน้า') + '</b> ' +
+          L('ถ้าอยากเก็บงานไว้ ให้กด “ดาวน์โหลดสำรอง” ก่อนปิดหน้า') + '</span></div>';
+      } else {
+        h += '<p class="prj-note">' +
+          L('ข้อมูลเก็บอยู่ในเบราว์เซอร์เครื่องนี้เท่านั้น ควรกด “ดาวน์โหลดสำรอง” เก็บไว้สม่ำเสมอ') + ' ' +
+          L('ถ้าล้างข้อมูลเบราว์เซอร์ ข้อมูลจะหายทั้งหมด') + '</p>';
+      }
+
+      h += '<div class="opt-acts">' +
+        '<button class="btn" data-act="export">' + I('arrowDown', 14) + ' ' + L('ดาวน์โหลดสำรอง') + '</button>' +
+        '<button class="btn" data-act="import">' + I('arrowUp', 14) + ' ' + L('กู้คืนจากไฟล์') + '</button>' +
+        '<button class="btn" data-act="manage-templates">' + I('star', 14) + ' ' + L('เทมเพลตงาน') + '</button></div>';
+      h += '<div class="opt-acts">' +
+        '<button class="btn" data-act="copy-backup">' + I('copy', 14) + ' ' + L('คัดลอกข้อมูล') + '</button>' +
+        '<button class="btn" data-act="paste-backup">' + I('paperclip', 14) + ' ' + L('วางข้อมูลกู้คืน') + '</button>' +
+        '<button class="btn btn-danger" data-act="reset">' + L('ล้างและเริ่มใหม่') + '</button></div>';
+    }
+
+    h += '</div></div>';
+    return h;
+  }
+
+  /** ตั้งสถานะไม่อยู่ — มีวันสิ้นสุดเสมอ ไม่งั้นป้ายจะค้างจนไม่มีใครเชื่อ */
+  function awayModal() {
+    var me = S.me();
+    var cur = (me && me.away) || null;
+    var h = '<h2>' + L('ตั้งสถานะไม่อยู่') + '</h2>';
+    h += '<p class="prj-note">' +
+      L('ระหว่างนี้ชื่อของคุณจะมีจุดสีส้มกำกับ คนที่กำลังจะมอบหมายงานให้จะได้รู้ก่อน') + '</p>';
+    h += '<div class="prj-2col">';
+    h += '<div class="field"><label>' + L('ไม่อยู่ถึงวันที่') + '</label>' +
+      '<input id="awUntil" type="date" value="' + R.esc(cur ? cur.until : '') + '"></div>';
+    h += '<div class="field"><label>' + L('ข้อความสั้น ๆ (ไม่บังคับ)') + '</label>' +
+      '<input id="awNote" value="' + R.esc(cur ? cur.note : '') +
+      '" placeholder="' + L('เช่น ลาพักร้อน ติดต่อคุณมานีแทน') + '"></div>';
+    h += '</div>';
+    h += '<div class="modal-acts">' +
+      (cur ? '<button class="btn" data-act="clear-away">' + L('ยกเลิกสถานะไม่อยู่') + '</button>' : '') +
+      '<button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="save-away">' + L('บันทึก') + '</button></div>';
     return h;
   }
 
@@ -2294,7 +2458,9 @@
       }
       case 'delete-task': {
         var tk2 = S.task(id);
-        if (!tk2 || !confirm(L('ลบงาน “') + tk2.name + '” ?')) break;
+        if (!tk2) break;
+        /* ถามยืนยันตามที่ผู้ใช้ตั้งไว้ ปิดได้เพราะลบงานย้อนกลับได้ด้วย Ctrl+Z อยู่แล้ว */
+        if (S.pref('confirmDelete') && !confirm(L('ลบงาน “') + tk2.name + '” ?')) break;
         if (state.openTaskId === id) state.openTaskId = null;
         closeModal();
         S.deleteTask(id);
@@ -2938,16 +3104,71 @@
 
       /* --- settings --- */
       case 'show-shortcuts': openModal(shortcutsModal(), true); break;
-      case 'open-settings': openModal(settingsModal()); break;
+      case 'open-settings':
+        closePops();
+        state.setTab = el.dataset.tab || state.setTab || 'general';
+        openModal(settingsModal(state.setTab), true);
+        break;
       case 'set-lang':
-        S.setSetting('lang', el.dataset.v);
+        S.setPref('lang', el.dataset.v);
         global.I18N.setLang(el.dataset.v);
         renderAll();
-        openModal(settingsModal());
+        openModal(settingsModal(state.setTab), true);
         break;
       case 'set-theme':
-        S.setSetting('theme', el.dataset.v);
-        openModal(settingsModal());
+        S.setPref('theme', el.dataset.v);
+        applyTheme();
+        openModal(settingsModal(state.setTab), true);
+        break;
+
+      /* --- ค่าที่ตั้งไว้ของแต่ละคน --- */
+      case 'set-landing':   S.setPref('landing', el.dataset.v); openModal(settingsModal('general'), true); break;
+      case 'set-firstday':  S.setPref('firstDay', el.dataset.v); renderAll(); openModal(settingsModal('display'), true); break;
+      case 'set-shortcuts': S.setPref('shortcuts', !S.pref('shortcuts')); openModal(settingsModal('general'), true); break;
+      case 'set-confirmdel': S.setPref('confirmDelete', !S.pref('confirmDelete')); openModal(settingsModal('general'), true); break;
+      case 'set-compact':   S.setPref('compact', !S.pref('compact')); applyTheme(); openModal(settingsModal('display'), true); break;
+      case 'set-rownum':    S.setPref('rowNumbers', !S.pref('rowNumbers')); applyTheme(); renderAll(); openModal(settingsModal('display'), true); break;
+      case 'set-notify': {
+        var nk = el.dataset.kind;
+        var meN = S.me();
+        var was = !meN.prefs || !meN.prefs.notify || !(nk in meN.prefs.notify)
+          ? true : !!meN.prefs.notify[nk];
+        S.setNotifyPref(nk, !was);
+        openModal(settingsModal('notify'), true);
+        break;
+      }
+      case 'save-profile': {
+        var nmP = document.getElementById('prName').value.trim();
+        if (!nmP) { toast(L('ใส่ชื่อก่อน')); break; }
+        S.updateProfile({
+          name: nmP,
+          title: document.getElementById('prTitle').value.trim(),
+          dept: document.getElementById('prDept').value.trim(),
+          about: document.getElementById('prAbout').value.trim(),
+          color: pickedColor(S.me().color)
+        });
+        closeModal();
+        renderAll();
+        toast(L('บันทึกโปรไฟล์แล้ว'));
+        break;
+      }
+
+      /* --- สถานะไม่อยู่ --- */
+      case 'set-away': closePops(); openModal(awayModal()); break;
+      case 'save-away': {
+        var au = document.getElementById('awUntil').value;
+        if (!au) { toast(L('เลือกวันที่กลับมาก่อน')); break; }
+        S.setAway(au, document.getElementById('awNote').value.trim());
+        closeModal();
+        renderAll();
+        toast(L('ตั้งสถานะไม่อยู่ถึง {d} แล้ว', { d: R.fmtDate(au) }));
+        break;
+      }
+      case 'clear-away':
+        S.setAway(null, '');
+        closeModal();
+        renderAll();
+        toast(L('ยกเลิกสถานะไม่อยู่แล้ว'));
         break;
       case 'export': doExport(); break;
       case 'import': doImport(); break;
@@ -3266,7 +3487,7 @@
     }
 
     // Tab + key แบบ Asana
-    if (e.key === 'Tab' && !typing) {
+    if (e.key === 'Tab' && !typing && S.pref('shortcuts')) {
       tabHeld = true;
       e.preventDefault();
       return;
@@ -3752,7 +3973,12 @@
 
   global.Orbit = { toast: toast, state: state, render: renderAll };
 
+  /* ไม่มี hash = เปิดแอปสด ให้ไปหน้าที่ผู้ใช้ตั้งไว้ */
   var boot = readHash();
+  if (!boot) {
+    var land = S.pref('landing');
+    if (land && land !== 'home') state.route = { type: land };
+  }
   if (boot) {
     state.route = boot.route;
     state.openTaskId = boot.taskId && S.task(boot.taskId) ? boot.taskId : null;

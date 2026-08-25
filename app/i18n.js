@@ -521,6 +521,8 @@
     'ได้เปลี่ยนบทบาทของ': 'changed the role of',
     'ได้ปิดใช้งานบัญชีของ': 'disabled the account of',
     'ได้เปิดใช้งานบัญชีของ': 'enabled the account of',
+    'ได้ตั้งสถานะไม่อยู่': 'set themselves as away',
+    'ได้ยกเลิกสถานะไม่อยู่': 'is back',
     'ได้สร้างโปรเจกต์': 'created project', 'ได้คัดลอกโปรเจกต์': 'duplicated project',
     'ได้ลบโปรเจกต์': 'deleted project',
     'ได้เปลี่ยนความเป็นส่วนตัวของ': 'changed the privacy of',
@@ -628,7 +630,7 @@
     'เลื่อนไปทางซ้าย': 'Scroll left', 'เลื่อนไปทางขวา': 'Scroll right',
     'ดูช่วงกว้างขึ้น': 'Zoom out', 'ดูละเอียดขึ้น': 'Zoom in',
     'ครึ่งปี': 'Half-year', 'ปี': 'Years',
-    'ระดับการซูม': 'Zoom', 'อัตโนมัติ': 'On',
+    'ระดับการซูม': 'Zoom',
     'ซ่อนไว้': 'Collapsed', 'กางออก': 'Expanded',
     'ชื่อมุมมอง': 'View name',
     'รูปแบบการแสดงผล': 'Layout options', 'ระบายสีแท่งงานตาม': 'Color tasks by',
@@ -725,6 +727,77 @@
     'รายงานสถานะ': 'Status update', 'รายงานก่อนหน้า': 'Previous updates',
     'ตั้งสถานะเป็น “{s}” แล้ว': 'Status set to “{s}”',
     'ล้างสถานะแล้ว': 'Status cleared',
+
+    /* --- เมนูบัญชีและตั้งค่าของฉัน --- */
+    'ทำงานอยู่': 'Active', 'ไม่อยู่': 'Away',
+    'ตั้งสถานะไม่อยู่': 'Set out of office',
+    'ไม่อยู่ถึง {d}': 'Away until {d}',
+    'ไม่อยู่ถึงวันที่': 'Away until',
+    'ข้อความสั้น ๆ (ไม่บังคับ)': 'Short note (optional)',
+    'เช่น ลาพักร้อน ติดต่อคุณมานีแทน': 'e.g. On leave — contact Manee instead',
+    'ระหว่างนี้ชื่อของคุณจะมีจุดสีส้มกำกับ คนที่กำลังจะมอบหมายงานให้จะได้รู้ก่อน':
+      'Your name gets an amber dot while you are away, so anyone about to assign you work sees it first.',
+    'ยกเลิกสถานะไม่อยู่': 'Clear out of office',
+    'ยกเลิกสถานะไม่อยู่แล้ว': 'Out of office cleared',
+    'ตั้งสถานะไม่อยู่ถึง {d} แล้ว': 'Away until {d}',
+    'เลือกวันที่กลับมาก่อน': 'Pick a return date first',
+    'องค์กรของฉัน': 'My organisation', 'ตั้งค่า': 'Settings', 'โปรไฟล์': 'Profile',
+    'สลับผู้ใช้ (ทดสอบ)': 'Switch user (testing)',
+
+    'ทั่วไป': 'General', 'การแจ้งเตือน': 'Notifications',
+    'บัญชี': 'Account', 'การแสดงผล': 'Display', 'ข้อมูลและสำรอง': 'Data & backup',
+    'หน้าที่เปิดเมื่อเข้าแอป': 'Open this page on start',
+    'เปิดใช้คีย์ลัด': 'Enable keyboard shortcuts',
+    'กด Tab ค้างแล้วตามด้วยตัวอักษร เพื่อข้ามไปหน้าต่าง ๆ ปิดไว้ถ้าพิมพ์ไทยแล้วชนกัน':
+      'Hold Tab then press a letter to jump between pages. Turn off if it clashes with your typing.',
+    'ถามยืนยันก่อนลบงาน': 'Confirm before deleting a task',
+    'ปิดไว้ถ้าลบงานบ่อยและมั่นใจว่ากด Ctrl+Z ทัน':
+      'Turn off if you delete often and trust Ctrl+Z to catch mistakes.',
+    'ดูคีย์ลัดทั้งหมด': 'See all shortcuts',
+
+    'ชื่อที่แสดง': 'Display name', 'ตำแหน่งงาน': 'Job title',
+    'ฝ่ายหรือทีม': 'Department or team', 'เกี่ยวกับฉัน': 'About me',
+    'สีประจำตัว': 'Your colour', 'ยังไม่ได้ระบุตำแหน่ง': 'No job title yet',
+    'เช่น ผู้จัดการฝ่ายพัฒนาธุรกิจ': 'e.g. Business Development Manager',
+    'เช่น พัฒนาธุรกิจ': 'e.g. Business Development',
+    'ทำอะไรอยู่ ถนัดเรื่องไหน ติดต่อยังไงเร็วที่สุด':
+      'What you work on, what you are good at, the fastest way to reach you',
+    'Orbit ใช้ตัวย่อชื่อบนวงกลมสี ไม่ใช้รูปถ่าย รูปถ่ายทำให้ไฟล์ข้อมูลใหญ่ขึ้นมากโดยไม่ช่วยให้หางานเจอเร็วขึ้น':
+      'Orbit uses coloured initials rather than photos — photos bloat the data file a great deal without helping anyone find work faster.',
+    'บันทึกโปรไฟล์แล้ว': 'Profile saved',
+
+    'เลือกว่าเรื่องไหนควรขึ้นในกล่องข้อความ ปิดเรื่องที่ไม่สำคัญออก กล่องข้อความจะได้ยังน่าอ่าน':
+      'Choose what lands in your inbox. Switch off what does not matter to you and the inbox stays worth reading.',
+    'มีคนมอบหมายงานให้ฉัน': 'A task is assigned to me',
+    'ได้รับงานใหม่ หรือถูกเปลี่ยนตัวผู้รับผิดชอบ': 'A new task, or the assignee changed to you',
+    'มีคนพูดถึงฉันในความเห็น': 'Someone mentions me in a comment',
+    'มีคนพิมพ์ @ชื่อ ของคุณไว้': 'Someone typed  name',
+    'มีความเห็นใหม่ในงานที่ฉันติดตาม': 'New comments on tasks I follow',
+    'ความเห็นที่ไม่ได้พูดถึงคุณโดยตรง': 'Comments that do not mention you directly',
+    'งานที่รออยู่พร้อมทำต่อแล้ว': 'A task I was waiting on is ready',
+    'งานที่บล็อกงานของคุณอยู่ถูกทำเสร็จ': 'The task blocking yours was completed',
+    'ความเคลื่อนไหวอื่นในงานที่ฉันติดตาม': 'Other activity on tasks I follow',
+    'เปลี่ยนวัน เปลี่ยนความสำคัญ ติ๊กว่าเสร็จ และอื่น ๆ':
+      'Date changes, priority changes, completions and so on',
+    'มีคนพูดถึงคุณในความเห็น': 'mentioned you in a comment',
+    'การแจ้งเตือนทางอีเมลยังไม่เปิด จะทำได้เมื่อเชื่อมต่อระบบส่วนกลางแล้ว ตอนนี้ทุกอย่างอยู่ในกล่องข้อความของแอป':
+      'Email notifications are not available yet — they need the central system. For now everything lands in the in-app inbox.',
+
+    'องค์กร': 'Organisation', 'อีเมลที่ใช้เข้าระบบ': 'Sign-in email',
+    'บทบาทในองค์กร': 'Role in the organisation',
+    'ผู้ดูแลระบบเท่านั้นที่เปลี่ยนได้': 'Only an administrator can change this',
+    'โหมดทีม': 'Team mode', 'โหมดเครื่องเดียว': 'Single device',
+    'การเปลี่ยนรหัสผ่านและการยืนยันสองชั้น จะทำได้เมื่อเชื่อมต่อระบบส่วนกลางแล้ว ตอนนี้เข้าระบบด้วยบัญชี Microsoft ของบริษัทเป็นหลัก':
+      'Changing your password and two-factor authentication need the central system. For now sign-in goes through your company Microsoft account.',
+
+    'วันแรกของสัปดาห์': 'First day of the week',
+    'อัตโนมัติ': 'Automatic', 'อาทิตย์': 'Sunday', 'จันทร์': 'Monday',
+    'โหมดแน่น': 'Compact mode',
+    'ลดระยะห่างของแถว เห็นงานได้มากขึ้นต่อหนึ่งหน้าจอ':
+      'Tighter rows, so more tasks fit on one screen',
+    'แสดงเลขบรรทัด': 'Show row numbers',
+    'ใส่เลขลำดับหน้าแถวในมุมมองรายการ ใช้อ้างอิงตอนคุยกันได้':
+      'Numbers each row in list views, handy for pointing at one in a conversation',
 
     /* --- ชื่อเดือน / วัน --- */
     '__monthsShort': 'Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec',

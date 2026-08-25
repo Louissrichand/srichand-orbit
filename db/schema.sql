@@ -338,6 +338,8 @@ GO
      - โปรเจกต์เปิด และไม่ใช่บุคคลภายนอก ได้ระดับ edit
      - นอกนั้นไม่เห็นเลย
 
+   คืน can_structure มาด้วย เป็นด่านที่สองแยกจากระดับสิทธิ์ ดูคำอธิบายในตัวฟังก์ชัน
+
    ตรงกับ projectAccess() ใน app/store.js ทีละข้อ แก้ที่ไหนต้องแก้อีกที่ด้วย
    ============================================================= */
 CREATE FUNCTION dbo.fn_VisibleProjects (@user_id UNIQUEIDENTIFIER)
@@ -352,7 +354,19 @@ RETURN
             WHEN u.org_role = 'viewer'     THEN 'view'
             WHEN pm.access IS NOT NULL     THEN pm.access
             ELSE 'edit'
-        END AS access
+        END AS access,
+
+        /* แก้โครงสร้างได้ไหม — เซกชัน ฟิลด์กำหนดเอง ชื่อโปรเจกต์ มุมมองที่บันทึกไว้
+
+           ต้องแยกเป็นบิตต่างหาก เพราะ "แก้งานได้ แต่แก้โครงสร้างไม่ได้" ไม่มีขั้นของ
+           ตัวเองบนบันได admin > edit > comment > view — บุคคลภายนอกตกอยู่ระหว่าง
+           edit กับ comment พอดี ถ้าไม่มีบิตนี้ guest ที่ถูกเชิญด้วยระดับ edit จะเปลี่ยน
+           ชื่อโปรเจกต์ได้ ทั้งที่บทบาทระดับองค์กรไม่ให้
+
+           เป็นเรื่องของบทบาทองค์กรล้วน ๆ ไม่เกี่ยวกับสิทธิ์ในโปรเจกต์ ปลายทางที่แก้
+           โครงสร้างจึงต้องผ่านสองด่าน คือ access >= edit และ can_structure = 1
+           ตรงกับ ROLE_CAPS ใน app/store.js ที่ guest กับ viewer ไม่มี cap 'structure' */
+        CASE WHEN u.org_role IN ('admin','member') THEN 1 ELSE 0 END AS can_structure
     FROM dbo.projects p
     CROSS JOIN (SELECT org_role FROM dbo.users WHERE id = @user_id AND is_active = 1) u
     LEFT JOIN dbo.project_members pm

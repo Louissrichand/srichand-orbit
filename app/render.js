@@ -31,8 +31,29 @@
   function avatar(u, size) {
     var cls = 'avatar' + (size ? ' ' + size : '');
     if (!u) return '<span class="' + cls + ' avatar-empty">+</span>';
-    return '<span class="' + cls + '" style="background:' + esc(u.color) + '" title="' +
-      esc(u.name) + '">' + esc(initials(u.name)) + '</span>';
+    /* คนที่ตั้งสถานะไม่อยู่ ติดจุดส้มไว้ที่วงกลม
+     * คนที่กำลังจะมอบหมายงานให้จะได้เห็นก่อนกด ไม่ใช่รู้ตอนงานเลยกำหนดไปแล้ว */
+    var away = S.isAway && S.isAway(u.id);
+    return '<span class="' + cls + (away ? ' is-away' : '') + '" style="background:' +
+      esc(u.color) + '" title="' + esc(u.name) +
+      (away ? ' · ' + L('ไม่อยู่ถึง {d}', { d: fmtDate(u.away.until) }) +
+              (u.away.note ? ' · ' + u.away.note : '') : '') +
+      '">' + esc(initials(u.name)) + '</span>';
+  }
+
+  /** วันแรกของสัปดาห์ 0 = อาทิตย์ 1 = จันทร์
+   *  อัตโนมัติ = ไทยเริ่มอาทิตย์ อังกฤษเริ่มจันทร์ ตามที่แต่ละที่ใช้กันจริง */
+  function weekStart() {
+    var fd = S.pref ? S.pref('firstDay') : 'auto';
+    if (fd === 'mon') return 1;
+    if (fd === 'sun') return 0;
+    return global.I18N.getLang() === 'en' ? 1 : 0;
+  }
+
+  /** ชื่อวันเรียงตามวันแรกของสัปดาห์ที่ตั้งไว้ */
+  function DOWR() {
+    var d = DOW(), ws = weekStart();
+    return d.slice(ws).concat(d.slice(0, ws));
   }
 
   function fmtDate(isoStr) {
@@ -163,8 +184,8 @@
            '" data-act="go" data-route="admin">' + I('shield') + '' +
            '<span class="grow">' + L('ผู้ดูแลระบบ') + '</span></button>';
     }
-    h += '<button class="sb-item" data-act="open-settings">' + I('settings') + '' +
-         '<span class="grow">' + L('ตั้งค่า / สำรองข้อมูล') + '</span></button>';
+    h += '<button class="sb-item" data-act="open-settings" data-tab="data">' + I('settings') + '' +
+         '<span class="grow">' + L('ข้อมูลและสำรอง') + '</span></button>';
     h += accountBlock(me);
     h += '</div>';
 
@@ -1178,7 +1199,7 @@
     var year = base.getFullYear(), month = base.getMonth();
     var first = new Date(year, month, 1);
     var start = new Date(first);
-    start.setDate(1 - first.getDay());
+    start.setDate(1 - ((first.getDay() - weekStart() + 7) % 7));
 
     /* ปฏิทินรวมกวาดทุกงานในระบบ จึงต้องกรองสิทธิ์เอง
      * ไม่งั้นงานของโปรเจกต์ปิดจะโผล่ให้คนนอกโปรเจกต์เห็นทางนี้ */
@@ -1200,7 +1221,7 @@
       '<button class="btn btn-sm btn-ghost" data-act="cal-today">' + L('วันนี้') + '</button></div>';
 
     h += '<div class="cal-grid">';
-    DOW().forEach(function (d) { h += '<div class="cal-dow">' + d + '</div>'; });
+    DOWR().forEach(function (d) { h += '<div class="cal-dow">' + d + '</div>'; });
 
     var t = S.today();
     for (var i = 0; i < 42; i++) {
@@ -1607,17 +1628,53 @@
       ? '<button class="sb-item sb-signin" data-act="show-gate">' + I('signIn') +
         '<span class="grow">' + L('เข้าสู่ระบบด้วยบัญชีบริษัท') + '</span></button>'
       : '';
-    return signin + '<button class="sb-user" data-act="switch-user">' + inner + '</button>';
+    /* โหมดเครื่องเดียวก็เปิดเมนูเดียวกัน ไม่งั้นจะแก้โปรไฟล์กับตั้งค่าไม่ได้เลย
+     * จนกว่าจะเชื่อมต่อระบบทีม ซึ่งไม่มีเหตุผล */
+    return signin + '<button class="sb-user" data-act="account-menu">' + inner + '</button>';
   }
 
+  /** เมนูบัญชี — ทางเข้าเดียวสำหรับทุกอย่างที่เป็นเรื่องของ "ตัวฉัน"
+   *
+   * ใช้ทั้งโหมดเครื่องเดียวและโหมดทีม ต่างกันแค่บรรทัดสุดท้าย
+   * เพราะโหมดเครื่องเดียวยังไม่มีอะไรให้ออกจากระบบ มีแต่สลับผู้ใช้เพื่อทดสอบ
+   */
   function accountMenu() {
     var me = S.me();
-    var h = '<div class="pop-note strong">' + esc(me ? me.name : '') + '</div>';
-    h += '<div class="pop-note">' + esc(me ? me.email : '') + '</div>';
-    h += '<button data-act="sync-now">' + I('repeat') +
-      '<span>' + L('ดึงข้อมูลล่าสุดเดี๋ยวนี้') + '</span></button>';
-    h += '<button data-act="sign-out">' + I('signOut') +
-      '<span>' + L('ออกจากระบบ') + '</span></button>';
+    var team = global.OrbitSync && global.OrbitSync.state.mode === 'team';
+    var away = me && S.isAway(me.id);
+
+    var h = '<div class="acct-head">' + avatar(me, 'lg') +
+      '<div><b>' + esc(me ? me.name : '-') +
+      '<i class="acct-dot' + (away ? ' away' : '') + '" title="' +
+      (away ? L('ไม่อยู่') : L('ทำงานอยู่')) + '"></i></b>' +
+      '<em>' + esc(me ? me.email : '') + '</em>' +
+      (me && me.title ? '<em>' + esc(me.title) + '</em>' : '') + '</div></div>';
+
+    h += '<button class="acct-away" data-act="set-away">' + I('calendar', 14) +
+      '<span class="grow">' + (away
+        ? esc(L('ไม่อยู่ถึง {d}', { d: fmtDate(me.away.until) }))
+        : L('ตั้งสถานะไม่อยู่')) + '</span></button>';
+
+    h += '<div class="pop-sep"></div>';
+    if (S.isAdmin()) {
+      h += '<button data-act="go" data-route="admin">' + I('building', 14) +
+        '<span class="grow">' + L('องค์กรของฉัน') + '</span></button>';
+    }
+    h += '<button data-act="open-settings" data-tab="profile">' + I('users', 14) +
+      '<span class="grow">' + L('โปรไฟล์') + '</span></button>';
+    h += '<button data-act="open-settings" data-tab="general">' + I('settings', 14) +
+      '<span class="grow">' + L('ตั้งค่า') + '</span></button>';
+
+    h += '<div class="pop-sep"></div>';
+    if (team) {
+      h += '<button data-act="sync-now">' + I('repeat', 14) +
+        '<span class="grow">' + L('ดึงข้อมูลล่าสุดเดี๋ยวนี้') + '</span></button>';
+      h += '<button data-act="sign-out">' + I('signOut', 14) +
+        '<span class="grow">' + L('ออกจากระบบ') + '</span></button>';
+    } else {
+      h += '<button data-act="switch-user">' + I('users', 14) +
+        '<span class="grow">' + L('สลับผู้ใช้ (ทดสอบ)') + '</span></button>';
+    }
     return h;
   }
 
@@ -1701,6 +1758,8 @@
     'user.role': 'ได้เปลี่ยนบทบาทของ',
     'user.disable': 'ได้ปิดใช้งานบัญชีของ',
     'user.enable': 'ได้เปิดใช้งานบัญชีของ',
+    'user.away': 'ได้ตั้งสถานะไม่อยู่',
+    'user.back': 'ได้ยกเลิกสถานะไม่อยู่',
     'project.create': 'ได้สร้างโปรเจกต์',
     'project.duplicate': 'ได้คัดลอกโปรเจกต์',
     'project.delete': 'ได้ลบโปรเจกต์',
@@ -1725,6 +1784,7 @@
   function auditIcon(a) { return AUDIT_ICON[a.split('.')[0]] || 'more'; }
   /** บอกว่าคนนี้เข้าระบบด้วยวิธีไหน ผู้ดูแลจะได้รู้ว่าต้องตัดสิทธิ์ที่ไหนบ้าง */
   function authTag(u) {
+    if (!u) return '';
     if (u.authBy === 'password') {
       return ' <span class="auth-tag pw">' + L('รหัสผ่าน') + '</span>';
     }
@@ -1919,14 +1979,14 @@
   }
 
   global.Render = {
-    adminView: adminView, roleLabel: roleLabel,
+    adminView: adminView, roleLabel: roleLabel, authTag: authTag,
     teamReady: teamReady, syncChip: syncChip, syncMenu: syncMenu, disabledScreen: disabledScreen,
     accountBlock: accountBlock, accountMenu: accountMenu, gateScreen: gateScreen,
     esc: esc, avatar: avatar, initials: initials,
     fmtDate: fmtDate, fmtWhen: fmtWhen,
     prio: prio, taskType: taskType, approvalState: approvalState,
     projectState: projectState, recurLabel: recurLabel,
-    MON: MON, MONF: MONF, DOW: DOW, YR: YR, ICON: ICON,
+    MON: MON, MONF: MONF, DOW: DOW, DOWR: DOWR, weekStart: weekStart, YR: YR, ICON: ICON,
     TAB_IDS: TAB_IDS, projectTabs: projectTabs, ZOOMS: ZOOMS, ROW_H: ROW_H,
 
     checkbox: checkbox, dueClass: dueClass, badges: badges, depTypeHint: depTypeHint,

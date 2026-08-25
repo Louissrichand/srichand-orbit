@@ -415,7 +415,22 @@
     d.users.forEach(function (u) {
       if (!('active' in u)) u.active = true;      // ปิดใช้งานได้โดยไม่ต้องลบทิ้ง
       if (!('authBy' in u)) u.authBy = null;      // microsoft | password | null (ยังไม่เคยเข้า)
+      if (!('title' in u)) u.title = '';          // ตำแหน่งงาน คนกรอกเอง ไม่ได้ดึงจาก Graph
+      if (!('dept' in u)) u.dept = '';
+      if (!('about' in u)) u.about = '';
+      if (!('away' in u)) u.away = null;          // { until, note } ตอนไม่อยู่
+      u.prefs = u.prefs || {};
     });
+    /* ธีมกับภาษาเคยเก็บรวมไว้ที่ db.settings ซึ่งเป็นของทั้งฐานข้อมูล
+     * พอเข้าโหมดทีม คนหนึ่งเปลี่ยนเป็นธีมมืดแล้วทุกคนมืดตาม
+     * ย้ายมาเป็นของแต่ละคน แล้วยกค่าเดิมมาให้คนที่ใช้อยู่ตอนนี้ */
+    if (d.settings && (d.settings.theme || d.settings.lang)) {
+      var meNow = d.users.filter(function (u) { return u.id === d.currentUserId; })[0];
+      if (meNow) {
+        if (d.settings.theme && !meNow.prefs.theme) meNow.prefs.theme = d.settings.theme;
+        if (d.settings.lang && !meNow.prefs.lang) meNow.prefs.lang = d.settings.lang;
+      }
+    }
     if (!d.users.some(function (u) { return u.role === 'admin'; })) {
       var firstUser = d.users.filter(function (u) { return u.id === d.currentUserId; })[0] || d.users[0];
       if (firstUser) firstUser.role = 'admin';
@@ -1428,17 +1443,47 @@
 
   /* ---------- notifications ---------- */
 
-  function notify(taskId, text, exceptUserId, extraUserIds) {
+  /* ชนิดของการแจ้งเตือน ผู้ใช้ปิดเป็นรายชนิดได้จากหน้าตั้งค่า
+   *
+   * ที่ต้องแยกชนิด เพราะคนที่ติดตามงานเยอะจะโดนถล่มด้วยรายการเล็ก ๆ น้อย ๆ
+   * จนเลิกอ่านกล่องข้อความไปเลย ซึ่งแย่กว่าไม่มีกล่องข้อความตั้งแต่แรก
+   */
+  var NOTIFY_KINDS = [
+    { id: 'assigned', label: 'มีคนมอบหมายงานให้ฉัน',
+      desc: 'ได้รับงานใหม่ หรือถูกเปลี่ยนตัวผู้รับผิดชอบ' },
+    { id: 'mention',  label: 'มีคนพูดถึงฉันในความเห็น',
+      desc: 'มีคนพิมพ์ @ชื่อ ของคุณไว้' },
+    { id: 'comment',  label: 'มีความเห็นใหม่ในงานที่ฉันติดตาม',
+      desc: 'ความเห็นที่ไม่ได้พูดถึงคุณโดยตรง' },
+    { id: 'unblock',  label: 'งานที่รออยู่พร้อมทำต่อแล้ว',
+      desc: 'งานที่บล็อกงานของคุณอยู่ถูกทำเสร็จ' },
+    { id: 'activity', label: 'ความเคลื่อนไหวอื่นในงานที่ฉันติดตาม',
+      desc: 'เปลี่ยนวัน เปลี่ยนความสำคัญ ติ๊กว่าเสร็จ และอื่น ๆ' }
+  ];
+
+  function wantsNotify(userId, kind) {
+    var u = user(userId);
+    if (!u) return false;
+    if (!kind) return true;
+    var n = u.prefs && u.prefs.notify;
+    if (!n || !(kind in n)) return true;    // ไม่เคยตั้งค่า = เปิดทุกชนิด
+    return !!n[kind];
+  }
+
+  function notify(taskId, text, exceptUserId, extraUserIds, kind, excludeIds) {
     var t = task(taskId);
     if (!t) return;
     var targets = {};
     (t.followers || []).forEach(function (u) { targets[u] = true; });
     (extraUserIds || []).forEach(function (u) { targets[u] = true; });
+    (excludeIds || []).forEach(function (u) { delete targets[u]; });
     delete targets[exceptUserId];
     Object.keys(targets).forEach(function (target) {
       if (!user(target)) return;
+      if (!wantsNotify(target, kind)) return;
       db.notifications.push({
         id: uid('n'), userId: target, taskId: taskId, text: text,
+        kind: kind || null,
         createdAt: new Date().toISOString(), read: false, archived: false
       });
     });
@@ -1459,7 +1504,7 @@
       type: 'log', text: text, createdAt: new Date().toISOString()
     });
     var actor = me();
-    notify(taskId, (actor ? actor.name : 'มีคน') + ' ' + text, db.currentUserId);
+    notify(taskId, (actor ? actor.name : 'มีคน') + ' ' + text, db.currentUserId, null, 'activity');
   }
 
   /* ---------- task mutations ---------- */
@@ -1531,7 +1576,7 @@
           var others = blockers(b.id).filter(function (x) { return x.id !== id; });
           if (!others.length) {
             notify(b.id, 'งาน “' + b.name + '” พร้อมทำต่อแล้ว', db.currentUserId,
-              b.assigneeId ? [b.assigneeId] : []);
+              b.assigneeId ? [b.assigneeId] : [], 'unblock');
           }
         });
       }
@@ -1541,6 +1586,13 @@
       log(id, u ? 'มอบหมายให้ ' + u.name : 'ยกเลิกผู้รับผิดชอบ');
       if (patch.assigneeId && t.followers.indexOf(patch.assigneeId) < 0) {
         t.followers.push(patch.assigneeId);
+      }
+      /* แจ้งคนที่เพิ่งได้รับงานเป็นการเฉพาะ แยกจากความเคลื่อนไหวทั่วไป
+       * เพราะ "มีงานเข้า" เป็นเรื่องที่คนอยากรู้ทันที ต่างจาก "มีคนเปลี่ยนวัน" */
+      if (patch.assigneeId && patch.assigneeId !== db.currentUserId) {
+        var actorA = me();
+        notify(id, (actorA ? actorA.name : 'มีคน') + ' มอบหมายงาน “' + t.name + '” ให้คุณ',
+          db.currentUserId, [patch.assigneeId], 'assigned');
       }
     }
     if ('dueOn' in patch && patch.dueOn !== t.dueOn) {
@@ -1767,7 +1819,7 @@
     if (i >= 0) t.likes.splice(i, 1);
     else {
       t.likes.push(db.currentUserId);
-      notify(taskId, (me() ? me().name : 'มีคน') + ' ถูกใจงานนี้', db.currentUserId);
+      notify(taskId, (me() ? me().name : 'มีคน') + ' ถูกใจงานนี้', db.currentUserId, null, 'activity');
     }
     commit();
   }
@@ -1802,8 +1854,15 @@
       if (t.followers.indexOf(u) < 0) t.followers.push(u);
     });
     var actor = me();
+    /* คนที่ถูกพูดถึงกับคนที่แค่ติดตาม ต้องแยกชนิดกัน
+     * เพราะคนปิด "ความเห็นใหม่" ทิ้งได้ แต่ไม่มีใครอยากพลาดตอนถูกเรียกชื่อ */
+    if (mentioned.length) {
+      notify(taskId, (actor ? actor.name : 'มีคน') + ' พูดถึงคุณในความเห็น',
+        db.currentUserId, mentioned, 'mention',
+        (t.followers || []).filter(function (uid2) { return mentioned.indexOf(uid2) < 0; }));
+    }
     notify(taskId, (actor ? actor.name : 'มีคน') + ' แสดงความเห็น',
-      db.currentUserId, mentioned);
+      db.currentUserId, [], 'comment', mentioned);
     commit();
   }
 
@@ -2558,6 +2617,77 @@
     commit();
   }
 
+  /* ---------- ค่าที่ตั้งไว้ของแต่ละคน ----------
+   *
+   * เก็บที่ตัวผู้ใช้ ไม่ใช่ที่ db.settings เพราะพอเข้าโหมดทีมแล้วฐานข้อมูลเป็นก้อนเดียว
+   * ถ้าเก็บรวม คนหนึ่งเปลี่ยนธีมเป็นมืด ทุกคนจะมืดตาม
+   */
+  var PREF_DEFAULTS = {
+    theme: 'auto',
+    lang: null,               // null = เดาจากเบราว์เซอร์
+    landing: 'home',          // home | mytasks | inbox
+    firstDay: 'auto',         // auto | sun | mon
+    compact: false,
+    rowNumbers: false,
+    shortcuts: true,
+    confirmDelete: true
+  };
+
+  function pref(key) {
+    var u = me();
+    if (u && u.prefs && key in u.prefs && u.prefs[key] !== undefined) return u.prefs[key];
+    if (db.settings && key in db.settings) return db.settings[key];   // ข้อมูลเก่า
+    return PREF_DEFAULTS[key];
+  }
+
+  function setPref(key, value) {
+    var u = me();
+    if (!u) return;
+    u.prefs = u.prefs || {};
+    u.prefs[key] = value;
+    commit();
+  }
+
+  function setNotifyPref(kind, on) {
+    var u = me();
+    if (!u) return;
+    u.prefs = u.prefs || {};
+    u.prefs.notify = u.prefs.notify || {};
+    u.prefs.notify[kind] = !!on;
+    commit();
+  }
+
+  /** แก้โปรไฟล์ของตัวเอง ชื่อว่างไม่ได้ เพราะชื่อคือสิ่งที่คนอื่นใช้เรียกในระบบ */
+  function updateProfile(patch) {
+    var u = me();
+    if (!u) return null;
+    ['name', 'title', 'dept', 'about', 'color'].forEach(function (k) {
+      if (k in patch && patch[k] !== undefined) u[k] = patch[k];
+    });
+    if (!u.name || !u.name.trim()) u.name = 'ผู้ใช้';
+    commit();
+    return u;
+  }
+
+  /* ---------- สถานะไม่อยู่ ----------
+   *
+   * หมดอายุเองตามวันที่ ไม่ต้องมีใครมาปิด
+   * ถ้าต้องกดปิดเอง คนส่วนใหญ่จะลืม แล้วป้าย "ไม่อยู่" จะค้างจนไม่มีใครเชื่ออีก
+   */
+  function setAway(until, note) {
+    var u = me();
+    if (!u) return;
+    u.away = until ? { until: until, note: note || '' } : null;
+    audit(until ? 'user.away' : 'user.back', u.name, until || null);
+    commit();
+  }
+
+  function isAway(userId) {
+    var u = user(userId);
+    if (!u || !u.away || !u.away.until) return false;
+    return u.away.until >= today();
+  }
+
   /* ---------- backup ---------- */
 
   function exportJSON() { return JSON.stringify(db, null, 2); }
@@ -2653,6 +2783,8 @@
     setProjectVisibility: setProjectVisibility, setProjectLocked: setProjectLocked,
     setProjectMember: setProjectMember, removeProjectMember: removeProjectMember,
     isAdmin: isAdmin, setRole: setRole, can: can, role: role, adminCount: adminCount,
+    NOTIFY_KINDS: NOTIFY_KINDS, pref: pref, setPref: setPref, setNotifyPref: setNotifyPref,
+    updateProfile: updateProfile, setAway: setAway, isAway: isAway,
     setActive: setActive, isActive: isActive,
     audit: audit, auditLog: auditLog, auditGroups: auditGroups, auditCsv: auditCsv,
     signedInUsers: signedInUsers, recentActivity: recentActivity,

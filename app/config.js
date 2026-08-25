@@ -8,6 +8,9 @@
  */
 window.OrbitConfig = {
 
+  // ชื่อองค์กรที่แสดงในหน้าตั้งค่า ไม่มีผลกับการเชื่อมต่อ
+  orgName: 'Srichand',
+
   /* ---- Microsoft Entra ID ---- */
 
   // Directory (tenant) ID จากหน้า App registration

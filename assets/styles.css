@@ -201,8 +201,11 @@ a { color: var(--accent); }
   border-radius: var(--radius); width: 100%; text-align: left; color: var(--sidebar-fg);
 }
 .sb-user:hover { background: var(--sidebar-hl); }
-.sb-user .meta { min-width: 0; }
-.sb-user .nm { color: var(--sidebar-on); font-size: 13px; font-weight: 600; }
+.sb-user .meta { min-width: 0; display: flex; flex-direction: column; }
+.sb-user .nm {
+  color: var(--sidebar-on); font-size: 13px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .sb-user .em {
   font-size: 11px; color: var(--sidebar-dim);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -2188,4 +2191,56 @@ button.opt-row:hover { background: var(--bg-sunk); }
 .hproj-sub .st-dot {
   width: 7px; height: 7px; border-radius: 50%; display: inline-block;
   margin-right: 5px; vertical-align: 1px;
+}
+
+/* ---------- เมนูบัญชีและตั้งค่าของฉัน ---------- */
+
+.acct-head { display: flex; gap: 11px; align-items: center; padding: 10px 10px 12px; }
+.acct-head b {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 14.5px; font-weight: 700; letter-spacing: -.01em;
+}
+.acct-head em {
+  display: block; font-style: normal; font-size: 12px;
+  color: var(--fg-soft); margin-top: 1px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px;
+}
+.acct-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none;
+}
+.acct-dot.away { background: var(--warn); }
+.pop .acct-away { font-size: 13px; color: var(--fg-soft); }
+
+/* จุดบอกว่าไม่อยู่ วางมุมขวาล่างของวงกลมชื่อ */
+.avatar.is-away { position: relative; }
+.avatar.is-away::after {
+  content: ''; position: absolute; right: -1px; bottom: -1px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--warn); border: 2px solid var(--bg);
+}
+.avatar.lg.is-away::after { width: 10px; height: 10px; }
+
+/* ---------- โหมดแน่น ---------- */
+
+body.compact .td { min-height: 34px; padding-top: 4px; padding-bottom: 4px; }
+body.compact .row { padding-top: 5px; padding-bottom: 5px; }
+body.compact .hrow { padding-top: 5px; padding-bottom: 5px; }
+body.compact .tbl-sec { min-height: 34px; }
+body.compact .card { padding: 8px 10px; }
+body.compact .sb-item { padding-top: 6px; padding-bottom: 6px; }
+
+/* ---------- เลขบรรทัด ---------- */
+
+body.rownum .sec-body { counter-reset: rowno; }
+body.rownum .sec-body .td-name::before {
+  counter-increment: rowno;
+  content: counter(rowno);
+  flex: none; min-width: 18px; text-align: right;
+  font-size: 11.5px; color: var(--fg-faint); font-variant-numeric: tabular-nums;
+}
+body.rownum .list-wrap { counter-reset: rowno2; }
+body.rownum .list-wrap .row > .nm::before {
+  counter-increment: rowno2;
+  content: counter(rowno2) '. ';
+  color: var(--fg-faint); font-size: 11.5px;
 }
