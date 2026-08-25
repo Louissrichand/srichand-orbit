@@ -1771,6 +1771,7 @@
     'project.baseline': 'ได้ตั้งเส้นฐานของ',
     'project.baselineClear': 'ได้ลบเส้นฐานของ',
     'project.import': 'ได้นำเข้างานเข้าโปรเจกต์',
+    'project.export': 'ได้ส่งออกงานของโปรเจกต์',
     'system.reset': 'ได้ล้างข้อมูลทั้งหมด',
     'system.export': 'ได้ส่งออกข้อมูล',
     'system.import': 'ได้นำเข้าข้อมูล'

@@ -10,7 +10,7 @@
 
   var KEY = 'orbit.db.v4';
   var LEGACY_KEYS = ['orbit.db.v3', 'orbit.db.v2', 'orbit.db.v1', 'taskflow.db.v1'];   // ชื่อ/เวอร์ชันเดิม
-  var SCHEMA = 4;
+  var SCHEMA = 6;
 
   /* ---------- utilities ---------- */
 
@@ -387,11 +387,12 @@
         (p.fields || []).forEach(function (f) { f.options = normalizeOptions(f.options); });
       });
     }
-    if (d.version < 3) {
-      // เดิม dependsOn เก็บแค่ id ตอนนี้เก็บชนิดความสัมพันธ์มาด้วย
-      d.tasks.forEach(function (t) { t.dependsOn = normalizeDeps(t.dependsOn); });
-      d.version = 3;
-    }
+    /* เดิม dependsOn เก็บแค่ id ตอนนี้เก็บชนิดความสัมพันธ์มาด้วย
+     *
+     * ทำทุกครั้งโดยไม่ดูเลขรุ่น เพราะไฟล์ที่คนส่งมาให้กู้คืนอาจมีเลขรุ่นใหม่
+     * แต่ข้อมูลข้างในเก่า ถ้าข้ามขั้นนี้ ลำดับก่อนหลังจะเป็นสตริงเปล่าที่อ่าน .id ไม่ได้
+     * แล้วทั้งระบบจะมองว่างานไม่มีลำดับเลย โดยไม่มีข้อความเตือนอะไร */
+    d.tasks.forEach(function (t) { t.dependsOn = normalizeDeps(t.dependsOn); });
     /* v5 — บทบาทและเวลาเข้าใช้ล่าสุด สำหรับหน้าผู้ดูแล
      * ผู้ใช้ตัวอย่างจากข้อมูลตั้งต้นจะไม่มี lastSeenAt เลย
      * จึงใช้ฟิลด์นี้แยกคนที่ล็อกอินจริงออกจากคนสมมติได้ */
@@ -644,6 +645,10 @@
         (t.tags || []).join(' · '), blockers, t.notes || ''
       ].map(csvCell).join(','));
     });
+    /* ลงบันทึกไว้ด้วย การเอางานทั้งโปรเจกต์ออกไปเป็นไฟล์คือการนำข้อมูลออกนอกระบบ
+     * ผู้ดูแลต้องตอบได้ว่าใครเอาอะไรออกไปเมื่อไร */
+    audit('project.export', p.name, 'ส่งออก ' + (lines.length - 1) + ' งานเป็น CSV');
+    commit();
     return '﻿' + lines.join('\r\n');
   }
 
@@ -1498,13 +1503,33 @@
     return found;
   }
 
-  function log(taskId, text) {
+  /** แจ้งเฉพาะคนที่ระบุ ไม่กระจายไปหาผู้ติดตาม
+   *
+   * ใช้กับข้อความที่พูดกับคนคนเดียว เช่น "มอบหมายงานนี้ให้คุณ" หรือ "พูดถึงคุณ"
+   * ถ้าส่งผ่าน notify() ปกติ ผู้ติดตามทุกคนจะได้ข้อความที่ขึ้นต้นว่า "ให้คุณ"
+   * ทั้งที่ไม่ได้เกี่ยวกับเขา
+   */
+  function notifyOnly(taskId, userIds, text, kind) {
+    (userIds || []).forEach(function (target) {
+      if (!target || target === db.currentUserId) return;
+      if (!user(target)) return;
+      if (!wantsNotify(target, kind)) return;
+      db.notifications.push({
+        id: uid('n'), userId: target, taskId: taskId, text: text, kind: kind || null,
+        createdAt: new Date().toISOString(), read: false, archived: false
+      });
+    });
+  }
+
+  /** @param exclude รายชื่อคนที่ไม่ต้องแจ้ง เพราะได้รับแจ้งแบบเจาะจงกว่านี้ไปแล้ว */
+  function log(taskId, text, exclude) {
     db.stories.push({
       id: uid('st'), taskId: taskId, actorId: db.currentUserId,
       type: 'log', text: text, createdAt: new Date().toISOString()
     });
     var actor = me();
-    notify(taskId, (actor ? actor.name : 'มีคน') + ' ' + text, db.currentUserId, null, 'activity');
+    notify(taskId, (actor ? actor.name : 'มีคน') + ' ' + text,
+      db.currentUserId, null, 'activity', exclude);
   }
 
   /* ---------- task mutations ---------- */
@@ -1583,16 +1608,20 @@
     }
     if ('assigneeId' in patch && patch.assigneeId !== t.assigneeId) {
       var u = user(patch.assigneeId);
-      log(id, u ? 'มอบหมายให้ ' + u.name : 'ยกเลิกผู้รับผิดชอบ');
+      /* คนที่เพิ่งได้รับงานไม่ต้องได้บรรทัด "มอบหมายให้ X" ซ้ำอีก
+       * เพราะจะได้บรรทัดเจาะจงว่า "มอบหมายงาน … ให้คุณ" อยู่แล้ว
+       * ถ้าไม่กัน คนที่เคยติดตามงานนี้อยู่แล้วจะเห็นสองบรรทัดสำหรับเรื่องเดียวกัน */
+      log(id, u ? 'มอบหมายให้ ' + u.name : 'ยกเลิกผู้รับผิดชอบ',
+        patch.assigneeId ? [patch.assigneeId] : null);
       if (patch.assigneeId && t.followers.indexOf(patch.assigneeId) < 0) {
         t.followers.push(patch.assigneeId);
       }
       /* แจ้งคนที่เพิ่งได้รับงานเป็นการเฉพาะ แยกจากความเคลื่อนไหวทั่วไป
        * เพราะ "มีงานเข้า" เป็นเรื่องที่คนอยากรู้ทันที ต่างจาก "มีคนเปลี่ยนวัน" */
-      if (patch.assigneeId && patch.assigneeId !== db.currentUserId) {
+      if (patch.assigneeId) {
         var actorA = me();
-        notify(id, (actorA ? actorA.name : 'มีคน') + ' มอบหมายงาน “' + t.name + '” ให้คุณ',
-          db.currentUserId, [patch.assigneeId], 'assigned');
+        notifyOnly(id, [patch.assigneeId],
+          (actorA ? actorA.name : 'มีคน') + ' มอบหมายงาน “' + t.name + '” ให้คุณ', 'assigned');
       }
     }
     if ('dueOn' in patch && patch.dueOn !== t.dueOn) {
@@ -1857,9 +1886,8 @@
     /* คนที่ถูกพูดถึงกับคนที่แค่ติดตาม ต้องแยกชนิดกัน
      * เพราะคนปิด "ความเห็นใหม่" ทิ้งได้ แต่ไม่มีใครอยากพลาดตอนถูกเรียกชื่อ */
     if (mentioned.length) {
-      notify(taskId, (actor ? actor.name : 'มีคน') + ' พูดถึงคุณในความเห็น',
-        db.currentUserId, mentioned, 'mention',
-        (t.followers || []).filter(function (uid2) { return mentioned.indexOf(uid2) < 0; }));
+      notifyOnly(taskId, mentioned,
+        (actor ? actor.name : 'มีคน') + ' พูดถึงคุณในความเห็น', 'mention');
     }
     notify(taskId, (actor ? actor.name : 'มีคน') + ' แสดงความเห็น',
       db.currentUserId, [], 'comment', mentioned);
@@ -2678,7 +2706,9 @@
     var u = me();
     if (!u) return;
     u.away = until ? { until: until, note: note || '' } : null;
-    audit(until ? 'user.away' : 'user.back', u.name, until || null);
+    /* ไม่ใส่ target เพราะเป็นการกระทำกับตัวเอง ชื่อผู้ทำอยู่หน้าบรรทัดแล้ว
+     * ถ้าใส่ด้วยจะอ่านว่า "สมชาย ได้ตั้งสถานะไม่อยู่ สมชาย" */
+    audit(until ? 'user.away' : 'user.back', null, until || null);
     commit();
   }
 

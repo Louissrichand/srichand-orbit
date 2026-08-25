@@ -533,6 +533,7 @@
     'ได้ตั้งเส้นฐานของ': 'set the baseline of',
     'ได้ลบเส้นฐานของ': 'cleared the baseline of',
     'ได้นำเข้างานเข้าโปรเจกต์': 'imported tasks into',
+    'ได้ส่งออกงานของโปรเจกต์': 'exported tasks from',
     'ได้ล้างข้อมูลทั้งหมด': 'cleared all data',
     'ได้ส่งออกข้อมูล': 'exported data', 'ได้นำเข้าข้อมูล': 'imported data',
     'ปิดใช้งาน': 'Disabled', 'รหัสผ่าน': 'Password',

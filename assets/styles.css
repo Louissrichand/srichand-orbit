@@ -2244,3 +2244,11 @@ body.rownum .list-wrap .row > .nm::before {
   content: counter(rowno2) '. ';
   color: var(--fg-faint); font-size: 11.5px;
 }
+
+/* จอแคบ: แถบเครื่องมือ Gantt เหลือแต่ไอคอน ไม่งั้นสูงสามแถวกินพื้นที่ผังไปหมด */
+@media (max-width: 620px) {
+  .g-tb span:not(.g-tb-n) { display: none; }
+  .g-tb { padding: 0 9px; gap: 0; }
+  .g-toolbar .btn { padding: 0 10px; }
+  .g-tb-search input { width: 84px; }
+}

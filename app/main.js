@@ -281,13 +281,17 @@
       ' title="' + L('ดูละเอียดขึ้น') + '">+</button>' +
       '</div>';
 
-    h += '<button class="g-tb' + (nf ? ' on' : '') + '" data-act="g-filter">' + I('filter', 14) +
-      L('ตัวกรอง') + (nf ? '<span class="g-tb-n">' + nf + '</span>' : '') + '</button>';
-    h += '<button class="g-tb' + (v.sort !== 'manual' ? ' on' : '') + '" data-act="g-sort">' +
-      I('arrowUp', 14) + L('เรียง') + '</button>';
-    h += '<button class="g-tb' + (v.group !== 'section' ? ' on' : '') + '" data-act="g-group">' +
-      I('grid', 13) + L('จัดกลุ่ม') + '</button>';
-    h += '<button class="g-tb" data-act="g-options">' + I('settings', 14) + L('ตัวเลือก') + '</button>';
+    /* ป้ายอยู่ใน span เพื่อให้จอแคบซ่อนเฉพาะข้อความ เหลือไอคอนไว้
+     * ถ้าปล่อยเป็นข้อความลอย ๆ จะซ่อนด้วย CSS ไม่ได้ */
+    h += '<button class="g-tb' + (nf ? ' on' : '') + '" data-act="g-filter" title="' + L('ตัวกรอง') +
+      '">' + I('filter', 14) + '<span>' + L('ตัวกรอง') + '</span>' +
+      (nf ? '<span class="g-tb-n">' + nf + '</span>' : '') + '</button>';
+    h += '<button class="g-tb' + (v.sort !== 'manual' ? ' on' : '') + '" data-act="g-sort" title="' +
+      L('เรียง') + '">' + I('arrowUp', 14) + '<span>' + L('เรียง') + '</span></button>';
+    h += '<button class="g-tb' + (v.group !== 'section' ? ' on' : '') + '" data-act="g-group" title="' +
+      L('จัดกลุ่ม') + '">' + I('grid', 13) + '<span>' + L('จัดกลุ่ม') + '</span></button>';
+    h += '<button class="g-tb" data-act="g-options" title="' + L('ตัวเลือก') + '">' +
+      I('settings', 14) + '<span>' + L('ตัวเลือก') + '</span></button>';
 
     if (state.ganttSearch !== null) {
       h += '<div class="g-tb-search">' + I('search', 13) +
@@ -331,6 +335,10 @@
     $opt.classList.remove('open');
     $opt.setAttribute('aria-hidden', 'true');
     $optBack.classList.remove('open');
+    /* ล้างเนื้อในทิ้งด้วย ไม่ใช่แค่ซ่อน
+     * ถ้าปล่อยไว้ ช่องกรอกที่มองไม่เห็นยังอยู่ใน DOM แล้วโค้ดที่ค้นด้วย id
+     * จะไปเจอค่าเก่าของแผงที่ปิดไปแล้ว เหมือนที่ปุ่มบันทึกมุมมองเคยเจอ */
+    $opt.innerHTML = '';
     state.optPage = 'root';
   }
 
@@ -542,6 +550,13 @@
       '<button class="btn btn-ghost btn-sm" data-act="reset-view">' + L('ล้างตัวกรอง') + '</button>' +
       '<span class="grow"></span>' +
       '<button class="btn btn-primary btn-sm" data-act="save-view">' + L('บันทึกมุมมอง') + '</button></div>';
+  }
+
+  /** ความกว้างต่อวันของผัง Gantt ที่วาดอยู่ตอนนี้ */
+  function ganttDayW() {
+    var sc = $view.querySelector('.gantt-scroll');
+    var w = sc && parseFloat(sc.dataset.w);
+    return w > 0 ? w : R.G_ZOOMS.month.w;
   }
 
   function restoreGanttScroll() {
@@ -2384,12 +2399,14 @@
         refreshOpts();
         break;
       case 'save-view': {
-        /* ถ้าแผงตัวเลือกเปิดอยู่ ให้ใช้ชื่อกับไอคอนที่พิมพ์ไว้ในแผง
-         * จะได้ไม่ต้องเด้ง prompt ซ้อนแผงที่มีช่องชื่ออยู่แล้ว */
-        var iEl = document.getElementById('gvName');
+        /* ใช้ชื่อกับไอคอนจากแผงตัวเลือก เฉพาะตอนที่แผงเปิดอยู่จริง
+         * ไม่ใช่แค่มีช่องนั้นอยู่ใน DOM ไม่งั้นกดจากแถบเครื่องมือจะเงียบ ๆ
+         * เอาชื่อเก่าจากแผงที่ปิดไปแล้วมาใช้แล้วทับมุมมองเดิม */
+        var panelOpen = optOpen();
+        var iEl = panelOpen ? document.getElementById('gvName') : null;
         var nm = iEl ? iEl.value.trim() : (prompt(L('ตั้งชื่อมุมมองนี้')) || '').trim();
         if (!nm) { toast(L('ยังไม่ได้ตั้งชื่อมุมมอง')); break; }
-        var icEl = document.getElementById('gvIcon');
+        var icEl = panelOpen ? document.getElementById('gvIcon') : null;
         var ic = icEl ? icEl.value.trim() : '';
         state.viewName = nm;
         if (ic) state.viewIcon = ic;
@@ -3666,8 +3683,10 @@
       width0: parseFloat(bar.style.width) || 0,
       startOn: t.startOn,
       dueOn: t.dueOn,
-      dayW: isG ? (R.G_ZOOMS[state.ganttZoom] || R.G_ZOOMS.month).w
-                : (R.ZOOMS[state.tlZoom] || R.ZOOMS.day),
+      /* ความกว้างต่อวัน อ่านจาก data-w ที่ผังวาดไว้จริง ไม่ใช่ค่าที่เดาจาก state
+       * ระดับซูมของ Gantt ย้ายไปอยู่ในมุมมองแล้ว ถ้าอ่านผิดที่
+       * ลากหนึ่งวันจะกลายเป็นห้าวันโดยไม่มีอะไรฟ้อง */
+      dayW: isG ? ganttDayW() : (R.ZOOMS[state.tlZoom] || R.ZOOMS.day),
       delta: 0,
       moved: false
     };
