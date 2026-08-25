@@ -402,7 +402,7 @@
 
     '” ?\nงานที่อยู่เฉพาะในโปรเจกต์นี้จะถูกลบด้วย': '”?\nTasks that live only here will be deleted too',
 
-    'เอากลับจากคลัง': 'Restore from archive',
+    'เอากลับจากคลัง': 'Restore from archive', 'เก็บโปรเจกต์เข้าคลัง': 'Archive project',
     /* --- ฟิลด์ในตาราง --- */
     'ตัวเลือกเดียว': 'Single-select', 'หลายตัวเลือก': 'Multi-select',
     'ชื่อฟิลด์': 'Field title', 'ชื่อตัวเลือก': 'Option name',
@@ -486,7 +486,7 @@
     'ต้องเหลือผู้ดูแลโปรเจกต์อย่างน้อยหนึ่งคน': 'A project must keep at least one project admin',
     'ไม่มีคนให้เพิ่มแล้ว': 'Everyone has already been added',
     'ล็อกรายชื่อสมาชิกแล้ว': 'Member list locked', 'ปลดล็อกแล้ว': 'Unlocked',
-    'โปรเจกต์ปิด': 'Private project', 'ปิด': 'Private',
+    'โปรเจกต์ปิด': 'Private project',
     'ผู้ดูแลโปรเจกต์': 'Project admin', 'จัดการสมาชิกและลบโปรเจกต์ได้': 'Manage members and delete the project',
     'แก้ไขได้': 'Editor', 'สร้างและแก้งาน จัดโครงสร้างโปรเจกต์ได้': 'Create and edit tasks, change project structure',
     'แสดงความเห็นได้': 'Commenter', 'ดูและคอมเมนต์ได้ แต่แก้งานไม่ได้': 'View and comment, but cannot edit tasks',
@@ -513,19 +513,26 @@
     'หากคิดว่าเป็นความผิดพลาด กรุณาติดต่อฝ่ายเทคโนโลยีสารสนเทศ':
       'If you believe this is a mistake, please contact the IT department.',
     'ระบบ': 'System', 'ความปลอดภัย': 'Security',
-    'เข้าสู่ระบบ': 'signed in', 'เข้าสู่ระบบครั้งแรก': 'signed in for the first time',
-    'ออกจากระบบ': 'signed out', 'ถูกปฏิเสธการเข้าถึง': 'was denied access',
-    'เพิ่มสมาชิก': 'added member', 'ลบสมาชิก': 'removed member',
-    'เปลี่ยนบทบาทของ': 'changed the role of',
-    'ปิดใช้งานบัญชีของ': 'disabled the account of',
-    'เปิดใช้งานบัญชีของ': 'enabled the account of',
-    'สร้างโปรเจกต์': 'created project', 'คัดลอกโปรเจกต์': 'duplicated project',
-    'ลบโปรเจกต์': 'deleted project',
-    'เปลี่ยนความเป็นส่วนตัวของ': 'changed the privacy of',
-    'ล็อกรายชื่อสมาชิกของ': 'locked the member list of',
-    'ปลดล็อกรายชื่อสมาชิกของ': 'unlocked the member list of',
-    'ล้างข้อมูลทั้งหมด': 'cleared all data',
-    'ส่งออกข้อมูล': 'exported data', 'นำเข้าข้อมูล': 'imported data',
+    /* ข้อความในบันทึกการทำงาน ขึ้นต้นด้วย "ได้" ทุกอันเพื่อไม่ให้คีย์ชนกับปุ่ม
+     * ดูคำอธิบายเต็มที่ AUDIT_TEXT ใน render.js */
+    'ได้เข้าสู่ระบบ': 'signed in', 'ได้เข้าสู่ระบบครั้งแรก': 'signed in for the first time',
+    'ได้ออกจากระบบ': 'signed out', 'ถูกปฏิเสธการเข้าถึง': 'was denied access',
+    'ได้เพิ่มสมาชิก': 'added member', 'ได้ลบสมาชิก': 'removed member',
+    'ได้เปลี่ยนบทบาทของ': 'changed the role of',
+    'ได้ปิดใช้งานบัญชีของ': 'disabled the account of',
+    'ได้เปิดใช้งานบัญชีของ': 'enabled the account of',
+    'ได้สร้างโปรเจกต์': 'created project', 'ได้คัดลอกโปรเจกต์': 'duplicated project',
+    'ได้ลบโปรเจกต์': 'deleted project',
+    'ได้เปลี่ยนความเป็นส่วนตัวของ': 'changed the privacy of',
+    'ได้ล็อกรายชื่อสมาชิกของ': 'locked the member list of',
+    'ได้ปลดล็อกรายชื่อสมาชิกของ': 'unlocked the member list of',
+    'ได้ตั้งสิทธิ์ในโปรเจกต์': 'set project access in',
+    'ได้ถอดสมาชิกออกจากโปรเจกต์': 'removed a member from',
+    'ได้ตั้งเส้นฐานของ': 'set the baseline of',
+    'ได้ลบเส้นฐานของ': 'cleared the baseline of',
+    'ได้นำเข้างานเข้าโปรเจกต์': 'imported tasks into',
+    'ได้ล้างข้อมูลทั้งหมด': 'cleared all data',
+    'ได้ส่งออกข้อมูล': 'exported data', 'ได้นำเข้าข้อมูล': 'imported data',
     'ปิดใช้งาน': 'Disabled', 'รหัสผ่าน': 'Password',
     'ปิดใช้งานบัญชี': 'Disable account', 'เปิดใช้งานอีกครั้ง': 'Enable again',
     'ปิดใช้งานบัญชีของ “{name}”?\nเขาจะเข้าระบบไม่ได้ทันที แต่งานที่มอบหมายไว้ยังอยู่ครบ':
@@ -551,13 +558,13 @@
     'แต่ละระดับทำอะไรได้บ้าง': 'What each level can do',
     'จัดการสมาชิก สิทธิ์ และโปรเจกต์ได้ทั้งหมด': 'Manage members, permissions and all projects',
     'สร้างและแก้ไขงานได้ทุกงาน': 'Create and edit any task',
-    'แก้เฉพาะงานของตัวเอง': 'Own tasks only',
-    'สร้างงานใหม่ได้ แต่แก้ได้เฉพาะงานที่ตัวเองรับผิดชอบหรือเป็นคนสร้าง':
-      'Can create tasks, but only edit tasks they are assigned to or created',
+    'บุคคลภายนอก': 'External guest',
+    'เห็นเฉพาะโปรเจกต์ที่ถูกเชิญ สร้างโปรเจกต์เองไม่ได้':
+      'Sees only the projects they are invited to, and cannot create projects',
     'ดูอย่างเดียว': 'View only',
     'เปิดดูได้ทุกอย่าง แก้และแสดงความเห็นไม่ได้': 'Can see everything, but cannot edit or comment',
-    'ระดับ “ดูอย่างเดียว” จะบังคับได้จริงก็ต่อเมื่อตั้งสิทธิ์บนไซต์ SharePoint ของคนนั้นเป็น Read ด้วย':
-      '“View only” is genuinely enforced only if that person’s SharePoint site permission is also set to Read.',
+    'ตอนนี้ระดับ “ดูอย่างเดียว” ยังบังคับได้จริงก็ต่อเมื่อตั้งสิทธิ์บนไซต์ SharePoint ของคนนั้นเป็น Read ด้วย เมื่อย้ายไปฐานข้อมูลแล้ว API จะบังคับให้เอง':
+      '“View only” is, for now, genuinely enforced only if that person’s SharePoint site permission is also set to Read. Once the data moves to the database, the API enforces it.',
     'การเพิ่มหรือลบที่นี่ไม่ได้ให้หรือถอนสิทธิ์เข้าถึงข้อมูล ต้องเพิ่มหรือเอาออกจากไซต์ SharePoint ควบคู่กันเสมอ':
       'Adding or removing here does not grant or revoke access to the data — always do the same on the SharePoint site.',
     'อย่าลืมเพิ่มคนนี้เข้าไซต์ SharePoint ด้วย ไม่งั้นเขาจะล็อกอินเข้ามาแล้วเปิดข้อมูลไม่ได้':
@@ -663,6 +670,53 @@
     'เรียงลำดับ': 'Sorts', 'เรียงตาม': 'Sort by', 'ไม่ได้เรียง': 'None',
     'น้อยไปมาก': 'Ascending', 'มากไปน้อย': 'Descending',
     'จัดกลุ่มตาม': 'Group by',
+
+    /* --- เมนูและการตั้งค่าโปรเจกต์ --- */
+    'ตั้งค่าโปรเจกต์': 'Project settings', 'ตั้งสีและไอคอน': 'Set colour & icon',
+    'คัดลอกลิงก์โปรเจกต์': 'Copy project link', 'คัดลอกโปรเจกต์': 'Duplicate project',
+    'นำเข้างานจาก CSV': 'Import tasks from CSV', 'ส่งออกเป็น CSV': 'Export to CSV',
+    'ส่งออกไฟล์ CSV แล้ว': 'CSV exported', 'คัดลอกลิงก์แล้ว': 'Link copied',
+    'นำเข้าไม่สำเร็จ:': 'Import failed:',
+    'นำเข้า {n} งานแล้ว': 'Imported {n} tasks',
+    'นำเข้า {n} งาน และสร้างคอลัมน์ใหม่ {s} คอลัมน์': 'Imported {n} tasks and created {s} new sections',
+    'บันทึกการตั้งค่าแล้ว': 'Settings saved',
+
+    'รายละเอียดโปรเจกต์': 'Project details', 'ลำดับก่อนหลัง': 'Dependencies',
+    'ตารางวันทำงาน': 'Scheduling',
+    'เจ้าของโปรเจกต์': 'Project owner', 'ยังไม่ระบุ': 'Not set',
+    'กำหนดส่งของโปรเจกต์': 'Project due date',
+    'มุมมองที่เปิดเป็นค่าเริ่มต้น': 'Default view',
+    'คำอธิบายโปรเจกต์': 'Project description',
+    'โปรเจกต์นี้เกี่ยวกับอะไร': 'What is this project about?',
+    'สมาชิกโปรเจกต์': 'Project members',
+
+    'การเลื่อนวันของงานที่พึ่งพากัน': 'Dependency date shifting',
+    'เลือกว่าเมื่อเลื่อนงานหนึ่ง งานที่ผูกลำดับไว้กับมันควรขยับตามอย่างไร':
+      'Choose how tasks linked by a dependency shift when you move one of them.',
+    'กินระยะห่าง': 'Consume buffer',
+    'ขยับงานที่รออยู่เฉพาะตอนที่วันชนกันจริง ระยะห่างที่เว้นไว้ทำหน้าที่เป็นกันชน':
+      'Dependent tasks move only when the dates actually collide — the gap you left acts as a buffer.',
+    'รักษาระยะห่าง': 'Maintain buffer',
+    'ขยับงานที่พึ่งพากันด้วยระยะเท่ากับที่งานต้นทางขยับ ระยะห่างเดิมคงอยู่เท่าเดิม':
+      'Linked tasks move by the same number of days, so the gap between them stays exactly as it was.',
+    'ไม่ขยับ': 'None',
+    'ปล่อยให้วันของงานอื่นอยู่ที่เดิม แม้จะทับซ้อนกับงานที่เพิ่งเลื่อน':
+      'Leave every other task where it is, even if the dates now overlap.',
+    'เฉพาะงานที่รออยู่ข้างหน้า': 'For downstream dependent tasks only',
+    'งานที่พึ่งพากันทั้งสองทาง': 'For all dependent tasks',
+    'ทุกโหมดคงระยะเวลาของงานไว้เท่าเดิม คือเลื่อนทั้งช่วง ไม่ยืดไม่หด และไม่แตะงานที่ทำเสร็จแล้ว':
+      'Every mode keeps each task’s duration unchanged — the whole bar slides, it never stretches — and completed tasks are never touched.',
+
+    'กำหนดวันทำงานของโปรเจกต์ เวลาระบบเลื่อนวันให้อัตโนมัติจะได้ไม่ไปตกวันหยุด':
+      'Set the project’s working days so automatic date shifts do not land on a non-working day.',
+    'วันทำงาน': 'Work days', 'ทุกวัน (ไม่มีวันหยุด)': 'Every day',
+    'จันทร์ – ศุกร์': 'Monday – Friday', 'จันทร์ – เสาร์': 'Monday – Saturday',
+    'ตอนนี้มี {n} งานที่ครบกำหนดตรงวันหยุด ระบบไม่ย้ายให้เอง เพราะวันที่คนตั้งไว้เองต้องเคารพไว้ก่อน':
+      '{n} tasks are currently due on a non-working day. Orbit does not move them for you — a date a person set by hand is left alone.',
+    'ไม่มีงานไหนครบกำหนดตรงวันหยุด': 'No task is due on a non-working day',
+    'วันทำงานของโปรเจกต์': 'Project work days',
+    'หรือพิมพ์อีโมจิเอง': 'Or type an emoji',
+
 
     /* --- ชื่อเดือน / วัน --- */
     '__monthsShort': 'Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec',

@@ -32,11 +32,14 @@ CREATE TABLE dbo.users (
     display_name    NVARCHAR(200)     NOT NULL,
     job_title       NVARCHAR(200)     NULL,
     avatar_color    CHAR(7)           NOT NULL DEFAULT '#796eff',
-    org_role        VARCHAR(10)       NOT NULL DEFAULT 'member', -- admin | member | guest
+    org_role        VARCHAR(10)       NOT NULL DEFAULT 'member', -- admin | member | guest | viewer
     is_active       BIT               NOT NULL DEFAULT 1,
     last_seen_at    DATETIME2(0)      NULL,                      -- NULL = ยังไม่เคยล็อกอิน
     created_at      DATETIME2(0)      NOT NULL DEFAULT SYSUTCDATETIME(),
-    CONSTRAINT ck_users_role CHECK (org_role IN ('admin','member','guest'))
+    /* ชุดนี้ต้องตรงกับ ROLES ใน app/store.js เสมอ
+       guest  = บุคคลภายนอก เห็นเฉพาะโปรเจกต์ที่ถูกเชิญ
+       viewer = ดูอย่างเดียวทั้งองค์กร เห็นเท่า member แต่แก้ไม่ได้เลย */
+    CONSTRAINT ck_users_role CHECK (org_role IN ('admin','member','guest','viewer'))
 );
 CREATE UNIQUE INDEX ux_users_email ON dbo.users(email);
 GO
@@ -53,7 +56,7 @@ GO
 
 /* ---------------------------------------------------------------
    โปรเจกต์
-   visibility = org      เห็นได้ทั้งองค์กร (ยกเว้น guest)
+   visibility = org      เห็นได้ทั้งองค์กร (ยกเว้น guest · viewer เห็นได้แต่แก้ไม่ได้)
               = private  เห็นเฉพาะคนใน project_members
    is_locked = 1  สมาชิกเชิญคนเพิ่มเองไม่ได้ ต้องผ่านผู้ดูแลระบบ
    --------------------------------------------------------------- */
@@ -327,11 +330,15 @@ GO
    =============================================================
 
    คืนรายการโปรเจกต์ที่ผู้ใช้คนนี้เห็นได้ พร้อมระดับสิทธิ์
-   กติกา
+   กติกา — เรียงตามลำดับ ข้อที่อยู่บนกว่าชนะ
      - ผู้ดูแลระบบเห็นทุกโปรเจกต์ ระดับ admin
+     - "ดูอย่างเดียว" เห็นเท่าที่ member เห็น แต่ได้ระดับ view เสมอ
+       เป็นเพดาน ไม่ใช่ค่าเริ่มต้น ถูกเชิญเข้าโปรเจกต์ด้วยระดับ edit ก็ยังได้แค่ view
      - เป็นสมาชิกโปรเจกต์ ได้ระดับตามที่กำหนดไว้
      - โปรเจกต์เปิด และไม่ใช่บุคคลภายนอก ได้ระดับ edit
      - นอกนั้นไม่เห็นเลย
+
+   ตรงกับ projectAccess() ใน app/store.js ทีละข้อ แก้ที่ไหนต้องแก้อีกที่ด้วย
    ============================================================= */
 CREATE FUNCTION dbo.fn_VisibleProjects (@user_id UNIQUEIDENTIFIER)
 RETURNS TABLE
@@ -342,6 +349,7 @@ RETURN
         p.id AS project_id,
         CASE
             WHEN u.org_role = 'admin'      THEN 'admin'
+            WHEN u.org_role = 'viewer'     THEN 'view'
             WHEN pm.access IS NOT NULL     THEN pm.access
             ELSE 'edit'
         END AS access

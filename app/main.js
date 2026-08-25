@@ -382,8 +382,15 @@
     if (page === 'deps') {
       h += optHead(L('การจัดตารางและเส้นฐาน'), true);
       h += '<div class="opt-body">';
-      h += optToggle('g-autosched', L('เลื่อนงานที่รออยู่ให้อัตโนมัติ'), v.gAutoSchedule,
-        L('เมื่อเลื่อนงานหนึ่ง งานที่รอต่อจากมันจะถูกดันตามให้ลำดับยังถูกต้อง ไม่ดึงงานที่เว้นระยะไว้กลับมาชิด และไม่แตะงานที่ทำเสร็จแล้ว'));
+      /* โหมดการเลื่อนวันเป็นของโปรเจกต์ ไม่ใช่ของมุมมองส่วนตัว
+       * ถ้าให้แต่ละคนตั้งเอง วันที่จะขยับไม่เหมือนกันแล้วแต่ว่าใครลาก */
+      var ds = p.depShift || { mode: 'consume', scope: 'downstream' };
+      var dsLabel = (S.DEP_SHIFT.filter(function (m) { return m.id === ds.mode; })[0] || {}).label;
+      h += optRow('project-settings', 'repeat', L('การเลื่อนวันของงานที่พึ่งพากัน'),
+        L(dsLabel || ''), true, ' data-id="' + esc(id) + '" data-tab="deps"');
+      h += optRow('project-settings', 'calendar', L('วันทำงานของโปรเจกต์'),
+        L((S.WORK_DAYS.filter(function (w) { return w.id === p.workDays; })[0] || {}).label || ''),
+        true, ' data-id="' + esc(id) + '" data-tab="scheduling"');
       h += '<div class="opt-sep"></div>';
       h += '<div class="opt-base">' + I('calendar', 15) +
         '<span class="grow">' + (p.baseline
@@ -488,7 +495,9 @@
     h += '<div class="opt-sep"></div>';
     h += optRow('g-opt-page', 'pencil', L('รูปแบบการแสดงผล'), '', true, ' data-page="layout"');
     h += optRow('g-opt-page', 'repeat', L('การจัดตารางและเส้นฐาน'),
-      v.gAutoSchedule ? L('อัตโนมัติ') : '', true, ' data-page="deps"');
+      L(((S.DEP_SHIFT.filter(function (m) {
+        return m.id === ((p.depShift && p.depShift.mode) || 'consume');
+      })[0]) || {}).label || ''), true, ' data-page="deps"');
     h += '<div class="opt-row"><span class="ic-wrap">' + I('search', 15) + '</span>' +
       '<span class="grow">' + L('ระดับการซูม') + '</span>' +
       optSelect('g-zoom-set', S.GANTT_ZOOMS.map(function (x) { return [x.id, L(x.label)]; }), v.gZoom) +
@@ -1038,22 +1047,186 @@
     var a = S.PROJECT_ACCESS.filter(function (x) { return x.id === id; })[0];
     return a ? a.label : id;
   }
-  function projectMenuModal(projectId) {
+  /* ---------- เมนูจัดการโปรเจกต์ ----------
+   *
+   * เป็นเมนูลอย ไม่ใช่หน้าต่างซ้อน เพราะเกินครึ่งของรายการเป็นทางผ่านไปหน้าอื่นอยู่แล้ว
+   * ถ้าเปิดเป็นหน้าต่างจะต้องปิดสองชั้นทุกครั้งกว่าจะถึงของจริง
+   */
+  function projectMenu(projectId) {
     var p = S.project(projectId);
-    var h = '<h2>' + R.esc(p.icon) + ' ' + R.esc(p.name) + '</h2>';
-    h += '<div style="display:flex;flex-direction:column;gap:8px">' +
-      '<button class="btn" data-act="project-access" data-id="' + R.esc(projectId) + '">' + I('shield', 14) + ' ' + L('ใครเข้าถึงโปรเจกต์นี้ได้') + (p.visibility === 'private' ? ' <span class="chip">' + L('ปิด') + '</span>' : '') + '</button>' +
-      '<button class="btn" data-act="edit-project" data-id="' + R.esc(projectId) + '">' + I('pencil', 14) + ' ' + L('แก้ไขชื่อ / สี / ไอคอน') + '</button>' +
-      '<button class="btn" data-act="update-status" data-id="' + R.esc(projectId) + '">' + I('flag', 14) + ' ' + L('อัปเดตสถานะโปรเจกต์') + '</button>' +
-      '<button class="btn" data-act="manage-fields" data-id="' + R.esc(projectId) + '">' + I('filter', 14) + ' ' + L('จัดการฟิลด์') + '</button>' +
-      '<button class="btn" data-act="reset-cols" data-id="' + R.esc(projectId) + '">' + I('arrowLeft', 14) + ' ' + L('คืนความกว้างคอลัมน์เดิม') + '</button>' +
-      '<button class="btn" data-act="manage-rules" data-id="' + R.esc(projectId) + '">' + I('repeat', 14) + ' ' + L('กฎอัตโนมัติ') + '</button>' +
-      '<button class="btn" data-act="dup-project" data-id="' + R.esc(projectId) + '">' + I('copy', 14) + ' ' + L('คัดลอกเป็นเทมเพลต') + '</button>' +
-      '<button class="btn" data-act="toggle-archive" data-id="' + R.esc(projectId) + '">' +
-      (p.archived ? I('arrowLeft', 14) + ' ' + L('เอากลับจากคลัง') : I('archive', 14) + ' ' + L('เก็บเข้าคลัง')) + '</button>' +
-      '<button class="btn btn-danger" data-act="delete-project" data-id="' + R.esc(projectId) + '">' + I('trash', 14) + ' ' + L('ลบโปรเจกต์') + '</button>' +
-      '</div>';
-    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
+    var d = ' data-id="' + R.esc(projectId) + '"';
+    var h = '';
+    function item(act, icon, label, extra) {
+      return '<button data-act="' + act + '"' + d + (extra || '') + '>' +
+        I(icon, 14) + '<span class="grow">' + label + '</span></button>';
+    }
+    h += item('project-settings', 'settings', L('ตั้งค่าโปรเจกต์'));
+    h += item('project-access', 'shield', L('ใครเข้าถึงโปรเจกต์นี้ได้')) ;
+    h += item('project-look', 'pencil', L('ตั้งสีและไอคอน'));
+    h += '<div class="pop-sep"></div>';
+    h += item('update-status', 'flag', L('อัปเดตสถานะโปรเจกต์'));
+    h += item('copy-project-link', 'link', L('คัดลอกลิงก์โปรเจกต์'));
+    h += item('dup-project', 'copy', L('คัดลอกโปรเจกต์'));
+    h += '<div class="pop-sep"></div>';
+    h += item('manage-fields', 'filter', L('จัดการฟิลด์'));
+    h += item('manage-rules', 'repeat', L('กฎอัตโนมัติ'));
+    h += item('reset-cols', 'arrowLeft', L('คืนความกว้างคอลัมน์เดิม'));
+    h += '<div class="pop-sep"></div>';
+    h += item('import-csv', 'archive', L('นำเข้างานจาก CSV'));
+    h += item('export-csv', 'send', L('ส่งออกเป็น CSV'));
+    h += '<div class="pop-sep"></div>';
+    h += item('toggle-archive', p.archived ? 'arrowLeft' : 'archive',
+      p.archived ? L('เอากลับจากคลัง') : L('เก็บโปรเจกต์เข้าคลัง'));
+    h += '<button class="danger" data-act="delete-project"' + d + '>' +
+      I('trash', 14) + '<span class="grow">' + L('ลบโปรเจกต์') + '</span></button>';
+    return h;
+  }
+
+  /* ---------- ตั้งค่าโปรเจกต์ ---------- */
+
+  var PRJ_TABS = [
+    ['details',   'รายละเอียดโปรเจกต์'],
+    ['deps',      'ลำดับก่อนหลัง'],
+    ['scheduling', 'ตารางวันทำงาน']
+  ];
+
+  function projectSettingsModal(projectId, tab) {
+    var p = S.project(projectId);
+    if (!p) return '';
+    tab = tab || 'details';
+    var d = ' data-id="' + R.esc(projectId) + '"';
+
+    var h = '<h2>' + L('ตั้งค่าโปรเจกต์') + '</h2>';
+    h += '<div class="prj-set"><nav class="prj-tabs">';
+    PRJ_TABS.forEach(function (t) {
+      h += '<button class="' + (tab === t[0] ? 'on' : '') +
+        '" data-act="project-settings"' + d + ' data-tab="' + t[0] + '">' + L(t[1]) + '</button>';
+    });
+    h += '</nav><div class="prj-pane">';
+
+    if (tab === 'details') {
+      h += '<div class="prj-2col">';
+      h += '<div class="field"><label>' + L('ชื่อโปรเจกต์') + '</label>' +
+        '<input id="psName" value="' + R.esc(p.name) + '"></div>';
+      h += '<div class="field"><label>' + L('เจ้าของโปรเจกต์') + '</label><select id="psOwner">' +
+        '<option value="">' + L('ยังไม่ระบุ') + '</option>';
+      S.db.users.forEach(function (u) {
+        h += '<option value="' + R.esc(u.id) + '"' + (p.owner === u.id ? ' selected' : '') +
+          '>' + R.esc(u.name) + '</option>';
+      });
+      h += '</select></div>';
+      h += '<div class="field"><label>' + L('กำหนดส่งของโปรเจกต์') + '</label>' +
+        '<input id="psDue" type="date" value="' + R.esc(p.dueOn || '') + '"></div>';
+      h += '<div class="field"><label>' + L('มุมมองที่เปิดเป็นค่าเริ่มต้น') + '</label><select id="psView">';
+      R.projectTabs().forEach(function (v) {
+        h += '<option value="' + v[0] + '"' + ((p.defaultView || 'list') === v[0] ? ' selected' : '') +
+          '>' + R.esc(v[1]) + '</option>';
+      });
+      h += '</select></div>';
+      h += '</div>';
+      h += '<div class="field"><label>' + L('คำอธิบายโปรเจกต์') + '</label>' +
+        '<textarea id="psDesc" rows="4" placeholder="' + L('โปรเจกต์นี้เกี่ยวกับอะไร') + '">' +
+        R.esc(p.description || '') + '</textarea></div>';
+
+      var st = S.projectStats(projectId);
+      h += '<div class="prj-facts">' +
+        '<span>' + L('งานทั้งหมด') + ' <b>' + st.total + '</b></span>' +
+        '<span>' + L('เสร็จแล้ว') + ' <b>' + st.done + '</b></span>' +
+        '<span>' + L('เลยกำหนด') + ' <b>' + st.overdue + '</b></span>' +
+        '<span>' + L('สมาชิกโปรเจกต์') + ' <b>' + S.projectMembers(projectId).length + '</b></span>' +
+        '</div>';
+      h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+        '<button class="btn btn-primary" data-act="save-project-details"' + d + '>' + L('บันทึก') + '</button></div>';
+    }
+
+    if (tab === 'deps') {
+      var cur = p.depShift || { mode: 'consume', scope: 'downstream' };
+      h += '<h3 class="prj-h">' + L('การเลื่อนวันของงานที่พึ่งพากัน') + '</h3>';
+      h += '<p class="prj-note">' +
+        L('เลือกว่าเมื่อเลื่อนงานหนึ่ง งานที่ผูกลำดับไว้กับมันควรขยับตามอย่างไร') + '</p>';
+      S.DEP_SHIFT.forEach(function (m) {
+        h += '<label class="prj-radio' + (cur.mode === m.id ? ' on' : '') + '">' +
+          '<input type="radio" name="depmode" value="' + m.id + '" data-act="set-depmode"' + d +
+          (cur.mode === m.id ? ' checked' : '') + '>' +
+          '<span><b>' + L(m.label) + '</b><em>' + L(m.desc) + '</em></span></label>';
+        if (m.id === 'maintain' && cur.mode === 'maintain') {
+          h += '<div class="prj-sub">' +
+            '<label class="prj-radio' + (cur.scope === 'downstream' ? ' on' : '') + '">' +
+            '<input type="radio" name="depscope" value="downstream" data-act="set-depscope"' + d +
+            (cur.scope === 'downstream' ? ' checked' : '') + '>' +
+            '<span>' + L('เฉพาะงานที่รออยู่ข้างหน้า') + '</span></label>' +
+            '<label class="prj-radio' + (cur.scope === 'all' ? ' on' : '') + '">' +
+            '<input type="radio" name="depscope" value="all" data-act="set-depscope"' + d +
+            (cur.scope === 'all' ? ' checked' : '') + '>' +
+            '<span>' + L('งานที่พึ่งพากันทั้งสองทาง') + '</span></label></div>';
+        }
+      });
+      h += '<p class="prj-note">' +
+        L('ทุกโหมดคงระยะเวลาของงานไว้เท่าเดิม คือเลื่อนทั้งช่วง ไม่ยืดไม่หด และไม่แตะงานที่ทำเสร็จแล้ว') +
+        '</p>';
+      h += '<div class="modal-acts"><button class="btn btn-primary" data-act="close-modal">' + L('ปิด') + '</button></div>';
+    }
+
+    if (tab === 'scheduling') {
+      h += '<h3 class="prj-h">' + L('ตารางวันทำงาน') + '</h3>';
+      h += '<p class="prj-note">' +
+        L('กำหนดวันทำงานของโปรเจกต์ เวลาระบบเลื่อนวันให้อัตโนมัติจะได้ไม่ไปตกวันหยุด') + '</p>';
+      h += '<div class="field" style="max-width:260px"><label>' + L('วันทำงาน') + '</label>' +
+        '<select data-act="set-workdays"' + d + '>';
+      S.WORK_DAYS.forEach(function (w) {
+        h += '<option value="' + w.id + '"' + (p.workDays === w.id ? ' selected' : '') +
+          '>' + L(w.label) + '</option>';
+      });
+      h += '</select></div>';
+      if (p.workDays !== 'all') {
+        var off = S.tasksInProject(projectId).filter(function (x) {
+          return x.task.dueOn && !S.isWorkday(x.task.dueOn, p.workDays);
+        }).length;
+        h += '<div class="prj-warn">' + I('alert', 15) + '<span>' +
+          (off ? L('ตอนนี้มี {n} งานที่ครบกำหนดตรงวันหยุด ระบบไม่ย้ายให้เอง เพราะวันที่คนตั้งไว้เองต้องเคารพไว้ก่อน', { n: off })
+               : L('ไม่มีงานไหนครบกำหนดตรงวันหยุด')) + '</span></div>';
+      }
+      h += '<div class="modal-acts"><button class="btn btn-primary" data-act="close-modal">' + L('ปิด') + '</button></div>';
+    }
+
+    h += '</div></div>';
+    return h;
+  }
+
+  /* ---------- สีและไอคอนของโปรเจกต์ ---------- */
+
+  var PROJECT_ICONS = (
+    '📁 🚀 📅 ⚙️ 🎯 💡 🧪 🧴 🧼 🏭 📦 🛒 💰 📈 📊 📝 🗂 🔍 🎨 📷 ' +
+    '🎬 📣 🤝 🏆 ⭐ ❤️ 🔧 🧭 🌏 🏢 🧾 ✅ ⏰ 🔔 🧩 🛠 🥇 🍃 💎 🔥'
+  ).split(' ');
+
+  function projectLookModal(projectId) {
+    var p = S.project(projectId);
+    if (!p) return '';
+    var h = '<h2>' + L('ตั้งสีและไอคอน') + '</h2>';
+    h += '<div class="look-prev"><span class="look-ic" id="lookPrev" style="background:' +
+      R.esc(p.color) + '22">' + R.esc(p.icon) + '</span><b>' + R.esc(p.name) + '</b></div>';
+
+    h += '<label class="opt-lbl">' + L('สี') + '</label><div class="swatch-pick" id="pColors">';
+    S.PALETTE.forEach(function (c) {
+      h += '<button type="button" data-color="' + c + '" class="' + (c === p.color ? 'on' : '') +
+        '" style="background:' + c + '"></button>';
+    });
+    h += '</div>';
+
+    h += '<label class="opt-lbl">' + L('ไอคอน') + '</label><div class="icon-pick" id="pIcons">';
+    PROJECT_ICONS.forEach(function (em) {
+      h += '<button type="button" data-icon="' + R.esc(em) + '" class="' +
+        (em === p.icon ? 'on' : '') + '">' + em + '</button>';
+    });
+    h += '</div>';
+    h += '<div class="field" style="max-width:170px;margin-top:12px"><label>' +
+      L('หรือพิมพ์อีโมจิเอง') + '</label><input id="pIcon" value="' + R.esc(p.icon) +
+      '" maxlength="4"></div>';
+
+    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="save-project-look" data-id="' + R.esc(projectId) +
+      '">' + L('บันทึก') + '</button></div>';
     return h;
   }
 
@@ -1432,15 +1605,51 @@
     downloadDirect(json, filename);
   }
 
-  function downloadDirect(json, filename) {
-    var blob = new Blob([json], { type: 'application/json' });
+  /** ยิงไฟล์ให้เบราว์เซอร์ดาวน์โหลด ใช้ได้กับทุกชนิดข้อความ */
+  function downloadText(text, filename, mime) {
+    var blob = new Blob([text], { type: mime || 'text/plain;charset=utf-8' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = filename;
     document.body.appendChild(a);
     a.click();
     setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+
+  /** ชื่อไฟล์ที่ Windows ยอมรับ — ตัดอักขระที่ใช้ในชื่อไฟล์ไม่ได้ทิ้ง */
+  function safeFileName(name) {
+    return String(name || 'orbit').replace(/[\\/:*?"<>|]/g, '-').trim().slice(0, 60) ||
+           'orbit';
+  }
+
+  function downloadDirect(json, filename) {
+    downloadText(json, filename, 'application/json');
     toast(L('ดาวน์โหลดไฟล์สำรองแล้ว'));
+  }
+
+  /** เลือกไฟล์ CSV แล้วนำเข้าเป็นงานใหม่ในโปรเจกต์ที่เปิดอยู่ */
+  function pickCsvFile(projectId) {
+    var inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = '.csv,text/csv';
+    inp.addEventListener('change', function () {
+      var f = inp.files[0];
+      if (!f) return;
+      var fr = new FileReader();
+      fr.onload = function () {
+        try {
+          var res = S.importTasksCsv(projectId, fr.result);
+          renderAll();
+          toast(res.sections
+            ? L('นำเข้า {n} งาน และสร้างคอลัมน์ใหม่ {s} คอลัมน์', { n: res.tasks, s: res.sections })
+            : L('นำเข้า {n} งานแล้ว', { n: res.tasks }), L('ย้อนกลับ'), 'undo');
+        } catch (err) {
+          toast(L('นำเข้าไม่สำเร็จ:') + ' ' + err.message);
+        }
+      };
+      fr.readAsText(f, 'utf-8');
+    });
+    inp.click();
   }
 
   function doImport() {
@@ -1528,7 +1737,9 @@
       'manage-rules', 'add-rule', 'delete-rule',
       'manage-templates', 'delete-template', 'save-template', 'use-template',
       'save-view', 'delete-view', 'reset-cols',
-      'g-set-baseline', 'g-clear-baseline'
+      'g-set-baseline', 'g-clear-baseline',
+      'save-project-details', 'set-depmode', 'set-depscope', 'set-workdays',
+      'project-look', 'save-project-look', 'import-csv'
     ]);
     put('write', [
       'delete-task', 'dup-task', 'bulk-complete', 'bulk-reopen', 'bulk-due',
@@ -1552,7 +1763,7 @@
     return map;
   })();
 
-  /** งานที่คำสั่งนี้กำลังจะแก้ ใช้ตัดสินสิทธิ์ระดับ "แก้เฉพาะงานของตัวเอง" */
+  /** งานที่คำสั่งนี้กำลังจะแก้ ใช้ตรวจสิทธิ์ของโปรเจกต์ที่งานชิ้นนั้นอยู่ */
   function actTaskId(el) {
     var d = el.dataset.id;
     if (d && d.indexOf('t_') === 0) return d;
@@ -1857,14 +2068,6 @@
         vc.gCols[ck] = !vc.gCols[ck];
         renderViewBody();
         refreshOpts();
-        break;
-      }
-      case 'g-autosched': {
-        var va = viewFor(state.route.id);
-        va.gAutoSchedule = !va.gAutoSchedule;
-        refreshOpts();
-        toast(va.gAutoSchedule ? L('เปิดการเลื่อนงานที่รออยู่ให้อัตโนมัติแล้ว')
-                               : L('ปิดการเลื่อนอัตโนมัติแล้ว'));
         break;
       }
       case 'g-basetoggle': {
@@ -2255,7 +2458,82 @@
         toast(L('สร้างโปรเจกต์แล้ว'));
         break;
       }
-      case 'project-menu': openModal(projectMenuModal(id)); break;
+      case 'project-menu':
+        if (popIsOpenFor(el)) { closePops(); break; }
+        openPop(el, projectMenu(id || state.route.id));
+        break;
+
+      case 'project-settings':
+        closePops();
+        openModal(projectSettingsModal(id || state.route.id, el.dataset.tab), true);
+        break;
+      case 'save-project-details': {
+        S.updateProject(id, {
+          name: document.getElementById('psName').value.trim() || S.project(id).name,
+          owner: document.getElementById('psOwner').value || null,
+          dueOn: document.getElementById('psDue').value || null,
+          defaultView: document.getElementById('psView').value,
+          description: document.getElementById('psDesc').value.trim()
+        });
+        closeModal();
+        renderAll();
+        toast(L('บันทึกการตั้งค่าแล้ว'));
+        break;
+      }
+      case 'set-depmode': {
+        var pm = S.project(id);
+        S.updateProject(id, {
+          depShift: { mode: el.value, scope: (pm.depShift && pm.depShift.scope) || 'downstream' }
+        });
+        openModal(projectSettingsModal(id, 'deps'), true);
+        refreshOpts();
+        break;
+      }
+      case 'set-depscope': {
+        var pm2 = S.project(id);
+        S.updateProject(id, {
+          depShift: { mode: (pm2.depShift && pm2.depShift.mode) || 'maintain', scope: el.value }
+        });
+        openModal(projectSettingsModal(id, 'deps'), true);
+        refreshOpts();
+        break;
+      }
+      /* set-workdays เป็น select จึงรับที่ตัวจัดการ change ไม่ใช่ที่นี่ */
+
+      case 'project-look':
+        closePops();
+        openModal(projectLookModal(id || state.route.id));
+        break;
+      case 'save-project-look': {
+        var lp = S.project(id);
+        var icoEl = document.getElementById('pIcon');
+        S.updateProject(id, {
+          color: pickedColor(lp.color),
+          icon: (icoEl && icoEl.value.trim()) || lp.icon
+        });
+        closeModal();
+        renderAll();
+        break;
+      }
+
+      case 'copy-project-link': {
+        closePops();
+        var lp2 = S.project(id);
+        copyText(global.location.origin + global.location.pathname +
+          '#/project/' + id + '/' + (lp2.defaultView || 'list'), L('คัดลอกลิงก์แล้ว'));
+        break;
+      }
+      case 'export-csv': {
+        closePops();
+        var pe2 = S.project(id);
+        downloadText(S.projectCsv(id), safeFileName(pe2.name) + '.csv', 'text/csv;charset=utf-8');
+        toast(L('ส่งออกไฟล์ CSV แล้ว'));
+        break;
+      }
+      case 'import-csv':
+        closePops();
+        pickCsvFile(id);
+        break;
       /* --- สิทธิ์รายโปรเจกต์ --- */
       case 'project-access': openModal(projectAccessModal(id || state.route.id)); break;
       case 'set-visibility':
@@ -2477,7 +2755,7 @@
         S.ROLES.forEach(function (r) {
           rh += '<button class="role-opt' + (pu && pu.role === r.id ? ' on' : '') +
             '" data-act="set-role" data-id="' + R.esc(id) + '" data-role="' + r.id + '">' +
-            I(r.id === 'admin' ? 'shield' : r.id === 'viewer' ? 'search' : 'users') +
+            I({ admin: 'shield', guest: 'building', viewer: 'search' }[r.id] || 'users') +
             '<span><b>' + L(r.label) + '</b><em>' + L(r.desc) + '</em></span></button>';
         });
         openPop(el, rh);
@@ -2652,11 +2930,28 @@
 
   $modal.addEventListener('click', function (e) {
     var b = e.target.closest ? e.target.closest('#pColors button') : null;
-    if (!b) return;
-    Array.prototype.forEach.call($modal.querySelectorAll('#pColors button'), function (x) {
-      x.classList.remove('on');
-    });
-    b.classList.add('on');
+    if (b) {
+      Array.prototype.forEach.call($modal.querySelectorAll('#pColors button'), function (x) {
+        x.classList.remove('on');
+      });
+      b.classList.add('on');
+      var prevC = document.getElementById('lookPrev');
+      if (prevC) prevC.style.background = b.dataset.color + '22';
+      return;
+    }
+    /* ตารางไอคอน — กดแล้วเติมลงช่องพิมพ์เอง ให้ค่าที่จะบันทึกมีที่เดียว
+     * ไม่งั้นเลือกจากตารางกับพิมพ์เองจะขัดกันว่าอันไหนชนะ */
+    var ic = e.target.closest ? e.target.closest('#pIcons button') : null;
+    if (ic) {
+      Array.prototype.forEach.call($modal.querySelectorAll('#pIcons button'), function (x) {
+        x.classList.remove('on');
+      });
+      ic.classList.add('on');
+      var box = document.getElementById('pIcon');
+      if (box) box.value = ic.dataset.icon;
+      var prevI = document.getElementById('lookPrev');
+      if (prevI) prevI.textContent = ic.dataset.icon;
+    }
   });
 
   /* ---------- change events ---------- */
@@ -2693,6 +2988,15 @@
         renderViewBody();
         return;
       }
+    }
+
+    /* select ในหน้าต่างตั้งค่าโปรเจกต์ ก็ต้องรับที่นี่ด้วยเหตุผลเดียวกัน */
+    if (act === 'set-workdays') {
+      S.updateProject(el.dataset.id, { workDays: el.value });
+      openModal(projectSettingsModal(el.dataset.id, 'scheduling'), true);
+      renderViewBody();
+      refreshOpts();
+      return;
     }
 
     if (act === 'nf-type') {
@@ -3189,13 +3493,20 @@
     }
     S.updateTask(drag2.id, patch);
 
-    /* งานที่รอต่อจากงานนี้ต้องขยับตาม ถ้าผู้ใช้เปิดโหมดจัดตารางอัตโนมัติไว้
+    /* งานที่พึ่งพากันต้องขยับตามโหมดที่โปรเจกต์ตั้งไว้
      * ทำหลัง updateTask เพื่อให้ snapshot ของ undo ครอบทั้งการเลื่อนต้นทางและปลายทาง
-     * กด Ctrl+Z ครั้งเดียวจึงกลับมาทั้งชุด ไม่ใช่ต้องกดทีละงาน */
+     * กด Ctrl+Z ครั้งเดียวจึงกลับมาทั้งชุด ไม่ใช่ต้องกดทีละงาน
+     * ส่งเฉพาะระยะที่เลื่อนจริง ๆ (role move) เพราะการยืดหด ระยะเลื่อนคือศูนย์ */
     var chain = [];
-    if (state.route.type === 'project' && state.route.view === 'gantt' &&
-        viewFor(state.route.id).gAutoSchedule) {
-      chain = S.autoSchedule(drag2.id);
+    if (state.route.type === 'project') {
+      var pd = S.project(state.route.id);
+      var ds2 = (pd && pd.depShift) || { mode: 'consume', scope: 'downstream' };
+      /* ยืดหดไม่ใช่การเลื่อน จึงไม่มีระยะให้รักษา ใช้กติกากินระยะห่างแทน
+       * คือแก้เฉพาะจุดที่ชนกันจริง ไม่ลากงานอื่นไปทั้งสาย */
+      var mode2 = (ds2.mode === 'maintain' && drag2.role !== 'move') ? 'consume' : ds2.mode;
+      chain = S.autoSchedule(drag2.id, d, {
+        mode: mode2, scope: ds2.scope, workDays: pd ? pd.workDays : 'all'
+      });
     }
     renderViewBody();
     toast(chain.length

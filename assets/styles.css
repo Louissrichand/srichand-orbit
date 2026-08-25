@@ -1334,7 +1334,7 @@ body.col-resizing .col-resize::after { background: var(--accent); }
  */
 .pop {
   position: fixed; top: auto; left: auto; right: auto;
-  z-index: 200; min-width: 210px; max-height: 340px; overflow-y: auto;
+  z-index: 200; min-width: 210px; max-height: min(70vh, 540px); overflow-y: auto;
   background: var(--bg-raise); border: 1px solid var(--line);
   border-radius: var(--radius); box-shadow: var(--shadow-lg); padding: 5px;
 }
@@ -2036,4 +2036,94 @@ button.opt-row:hover { background: var(--bg-sunk); }
   .g-tb-spacer { flex-basis: 0; }
   .g-tb-search input { width: 110px; }
   .g-legendbar { padding: 6px 14px; }
+}
+
+/* ---------- เมนูจัดการโปรเจกต์ ---------- */
+
+.pop-sep { height: 1px; background: var(--line); margin: 4px 6px; }
+.pop button .grow { flex: 1; min-width: 0; }
+.pop button svg { color: var(--fg-soft); flex: none; }
+.pop button.danger { color: var(--danger); }
+.pop button.danger svg { color: var(--danger); }
+.pop button.danger:hover { background: var(--danger-bg); }
+
+/* ---------- หน้าต่างตั้งค่าโปรเจกต์ ---------- */
+
+.prj-set { display: flex; gap: 20px; align-items: flex-start; min-height: 300px; }
+.prj-tabs {
+  flex: 0 0 172px; display: flex; flex-direction: column; gap: 2px;
+  border-right: 1px solid var(--line); padding-right: 14px;
+}
+.prj-tabs button {
+  text-align: left; padding: 8px 10px; border-radius: var(--radius);
+  font-size: 14px; color: var(--fg-soft);
+}
+.prj-tabs button:hover { background: var(--bg-sunk); color: var(--fg); }
+.prj-tabs button.on { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+
+.prj-pane { flex: 1; min-width: 0; }
+.prj-2col { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0 16px; }
+.prj-h { margin: 0 0 6px; font-size: 15px; font-weight: 700; }
+.prj-note { font-size: 13px; color: var(--fg-soft); line-height: 1.65; margin: 0 0 14px; }
+
+.prj-radio {
+  display: flex; gap: 11px; align-items: flex-start; cursor: pointer;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius);
+  margin-bottom: 8px;
+}
+.prj-radio:hover { background: var(--bg-sunk); }
+.prj-radio.on { border-color: var(--accent); background: var(--accent-bg); }
+.prj-radio input { margin-top: 3px; flex: none; accent-color: var(--accent); }
+.prj-radio b { display: block; font-size: 14px; font-weight: 600; }
+.prj-radio em {
+  display: block; font-style: normal; font-size: 12.5px;
+  color: var(--fg-soft); line-height: 1.55; margin-top: 3px;
+}
+.prj-sub { margin: -4px 0 10px 26px; }
+.prj-sub .prj-radio { padding: 7px 11px; margin-bottom: 5px; font-size: 13.5px; }
+
+.prj-facts {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px;
+}
+.prj-facts span {
+  font-size: 12.5px; color: var(--fg-soft); background: var(--bg-sunk);
+  border-radius: 999px; padding: 5px 12px;
+}
+.prj-facts b { color: var(--fg); font-weight: 700; }
+
+.prj-warn {
+  display: flex; gap: 9px; align-items: flex-start; margin-top: 14px;
+  background: var(--warn-bg); color: var(--warn-fg);
+  padding: 11px 13px; border-radius: var(--radius); font-size: 13px; line-height: 1.6;
+}
+.prj-warn svg { flex: none; margin-top: 1px; }
+
+/* ---------- สีและไอคอน ---------- */
+
+.look-prev { display: flex; align-items: center; gap: 11px; margin-bottom: 16px; }
+.look-ic {
+  width: 42px; height: 42px; border-radius: 10px; display: grid; place-items: center;
+  font-size: 21px; flex: none;
+}
+.look-prev b { font-size: 15px; }
+
+.icon-pick {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+  gap: 4px; max-height: 190px; overflow-y: auto;
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 6px;
+}
+.icon-pick button {
+  height: 36px; border-radius: 8px; font-size: 18px; line-height: 1;
+  display: grid; place-items: center;
+}
+.icon-pick button:hover { background: var(--bg-sunk); }
+.icon-pick button.on { background: var(--accent-bg); outline: 2px solid var(--accent); outline-offset: -2px; }
+
+@media (max-width: 720px) {
+  .prj-set { flex-direction: column; gap: 12px; }
+  .prj-tabs {
+    flex: none; width: 100%; flex-direction: row; overflow-x: auto;
+    border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 8px;
+  }
+  .prj-tabs button { white-space: nowrap; }
 }

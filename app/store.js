@@ -396,6 +396,10 @@
       if (!p.visibility) p.visibility = 'org';   // ของเดิมทุกโปรเจกต์เปิดให้ทุกคน
       if (!('locked' in p)) p.locked = false;
       if (!('baseline' in p)) p.baseline = null; // เส้นฐานของ Gantt ยังไม่เคยตั้ง
+      if (!('owner' in p)) p.owner = null;
+      if (!('dueOn' in p)) p.dueOn = null;
+      if (!p.depShift) p.depShift = { mode: 'consume', scope: 'downstream' };
+      if (!p.workDays) p.workDays = 'all';
       (p.savedViews || []).forEach(function (v) { v.view = fillView(v.view); });
     });
     d.users.forEach(function (u) {
@@ -580,6 +584,168 @@
     var s = String(v == null ? '' : v);
     return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   }
+
+  /* ---------- ส่งออก / นำเข้างานเป็น CSV ----------
+   *
+   * หัวคอลัมน์ใช้ชื่อเดียวกับที่ Asana ส่งออก คนที่ย้ายมาจึงเอาไฟล์จาก Asana
+   * มาเข้าที่นี่ได้เลยโดยไม่ต้องแก้หัวตาราง และไฟล์ที่ออกจากที่นี่ก็กลับเข้า Asana ได้
+   */
+  var CSV_COLS = [
+    'Task ID', 'Name', 'Section/Column', 'Assignee', 'Assignee Email',
+    'Start Date', 'Due Date', 'Priority', 'Type', 'Completed At',
+    'Tags', 'Blocked By', 'Notes'
+  ];
+
+  function projectCsv(projectId) {
+    var p = project(projectId);
+    if (!p) return '';
+    var secName = {};
+    p.sections.forEach(function (s) { secName[s.id] = s.name; });
+
+    var lines = [CSV_COLS.join(',')];
+    tasksInProject(projectId).forEach(function (x) {
+      var t = x.task;
+      var u = user(t.assigneeId);
+      var blockers = (t.dependsOn || []).map(function (d) {
+        var b = task(d.id);
+        return b ? b.name + ' (' + (d.type || 'FS') + ')' : '';
+      }).filter(Boolean).join(' · ');
+      lines.push([
+        t.id, t.name, secName[x.membership.sectionId] || '',
+        u ? u.name : '', u ? u.email : '',
+        t.startOn || '', t.dueOn || '',
+        t.priority === 'none' ? '' : t.priority,
+        t.type, t.completedAt || '',
+        (t.tags || []).join(' · '), blockers, t.notes || ''
+      ].map(csvCell).join(','));
+    });
+    return '﻿' + lines.join('\r\n');
+  }
+
+  /** แยกบรรทัด CSV ทีละเซลล์ รองรับเครื่องหมายคำพูดและจุลภาคในเนื้อความ */
+  function parseCsv(text) {
+    var rows = [], row = [], cell = '', q = false;
+    text = String(text).replace(/^﻿/, '');
+    for (var i = 0; i < text.length; i++) {
+      var c = text[i];
+      if (q) {
+        if (c === '"') {
+          if (text[i + 1] === '"') { cell += '"'; i++; }
+          else q = false;
+        } else cell += c;
+        continue;
+      }
+      if (c === '"') { q = true; continue; }
+      if (c === ',') { row.push(cell); cell = ''; continue; }
+      if (c === '\r') continue;
+      if (c === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; continue; }
+      cell += c;
+    }
+    if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+    return rows.filter(function (r) { return r.some(function (v) { return v.trim() !== ''; }); });
+  }
+
+  /** หา index ของคอลัมน์จากชื่อหัวตาราง รองรับหลายชื่อที่หมายถึงอย่างเดียวกัน */
+  function colIndex(head, names) {
+    for (var i = 0; i < head.length; i++) {
+      var h = head[i].trim().toLowerCase();
+      for (var j = 0; j < names.length; j++) {
+        if (h === names[j].toLowerCase()) return i;
+      }
+    }
+    return -1;
+  }
+
+  /**
+   * นำเข้างานจาก CSV เข้าโปรเจกต์ที่เปิดอยู่
+   *
+   * ไม่แตะงานเดิมเลย ทุกแถวสร้างเป็นงานใหม่เสมอ
+   * เพราะการเดาว่าแถวไหนคืองานเดิมจากชื่ออย่างเดียวเสี่ยงเขียนทับของจริง
+   * ถ้ามีชื่อคอลัมน์ Section/Column ที่ยังไม่มีในโปรเจกต์ จะสร้างคอลัมน์ให้ใหม่
+   */
+  function importTasksCsv(projectId, text) {
+    var p = project(projectId);
+    if (!p) throw new Error('ไม่พบโปรเจกต์');
+    var rows = parseCsv(text);
+    if (rows.length < 2) throw new Error('ไฟล์ว่างหรือไม่มีบรรทัดข้อมูล');
+
+    var head = rows[0];
+    var iName  = colIndex(head, ['Name', 'Task Name', 'ชื่องาน']);
+    if (iName < 0) throw new Error('ไม่พบคอลัมน์ Name');
+    var iSec   = colIndex(head, ['Section/Column', 'Section', 'คอลัมน์']);
+    var iAss   = colIndex(head, ['Assignee', 'ผู้รับผิดชอบ']);
+    var iMail  = colIndex(head, ['Assignee Email']);
+    var iStart = colIndex(head, ['Start Date', 'วันเริ่ม']);
+    var iDue   = colIndex(head, ['Due Date', 'กำหนดส่ง']);
+    var iPrio  = colIndex(head, ['Priority', 'ความสำคัญ']);
+    var iType  = colIndex(head, ['Type', 'ชนิดงาน']);
+    var iTags  = colIndex(head, ['Tags', 'แท็ก']);
+    var iNotes = colIndex(head, ['Notes', 'Description', 'รายละเอียด']);
+
+    snapshot('นำเข้างานจาก CSV');
+
+    var byName = {}, byMail = {};
+    db.users.forEach(function (u) {
+      byName[u.name.trim().toLowerCase()] = u.id;
+      if (u.email) byMail[u.email.trim().toLowerCase()] = u.id;
+    });
+    var secByName = {};
+    p.sections.forEach(function (s) { secByName[s.name.trim().toLowerCase()] = s.id; });
+
+    function cell(r, i) { return i >= 0 && r[i] != null ? String(r[i]).trim() : ''; }
+    function isoOrNull(v) { return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null; }
+
+    var made = 0, newSections = 0;
+    for (var r = 1; r < rows.length; r++) {
+      var row = rows[r];
+      var name = cell(row, iName);
+      if (!name) continue;
+
+      var secId = p.sections[0].id;
+      var secLabel = cell(row, iSec);
+      if (secLabel) {
+        var key = secLabel.toLowerCase();
+        if (!secByName[key]) {
+          var ns = { id: uid('s'), name: secLabel };
+          p.sections.push(ns);
+          secByName[key] = ns.id;
+          newSections++;
+        }
+        secId = secByName[key];
+      }
+
+      var who = byMail[cell(row, iMail).toLowerCase()] ||
+                byName[cell(row, iAss).toLowerCase()] || null;
+      var prio = cell(row, iPrio).toLowerCase();
+      if (['urgent', 'high', 'medium', 'low'].indexOf(prio) < 0) prio = 'none';
+      var type = cell(row, iType).toLowerCase();
+      if (['task', 'milestone', 'approval'].indexOf(type) < 0) type = 'task';
+
+      var t = blankTask({
+        name: name,
+        notes: cell(row, iNotes),
+        assigneeId: who,
+        startOn: isoOrNull(cell(row, iStart)),
+        dueOn: isoOrNull(cell(row, iDue)),
+        priority: prio,
+        type: type,
+        tags: cell(row, iTags) ? cell(row, iTags).split(/[·,;]/).map(function (s) {
+          return s.trim();
+        }).filter(Boolean) : [],
+        createdBy: db.currentUserId
+      });
+      db.tasks.push(t);
+      db.memberships.push({
+        id: uid('m'), taskId: t.id, projectId: projectId,
+        sectionId: secId, position: nextPosition(projectId, secId)
+      });
+      made++;
+    }
+
+    audit('project.import', p.name, 'นำเข้า ' + made + ' งาน');
+    commit();
+    return { tasks: made, sections: newSections };
+  }
   /* ---------- undo ---------- */
 
   var undoStack = [];   // อยู่ในหน่วยความจำเท่านั้น ไม่ persist
@@ -728,14 +894,51 @@
 
   /* ---------- จัดตารางอัตโนมัติ ----------
    *
-   * เลื่อนงานที่รออยู่ให้ตามหลังงานที่เพิ่งขยับ เดินไปข้างหน้าตามสายพึ่งพา
+   * มีสามโหมด ตรงกับที่ Asana ให้เลือก เพราะสามแบบนี้ตอบคนละคำถาม
    *
-   * ดันเฉพาะงานที่เริ่มเร็วเกินกติกาเท่านั้น ไม่ดึงงานที่อยู่ห่างกลับมาให้ชิด
-   * เพราะระยะห่างที่คนตั้งใจเว้นไว้ (รอผลแล็บ รออนุมัติ) จะหายไปหมด
-   * และคงระยะเวลาเดิมของแต่ละงานไว้ คือเลื่อนทั้งแท่ง ไม่ใช่ยืดหรือหด
+   *   consume  — กินระยะห่าง ขยับเฉพาะตอนที่ชนกันจริง
+   *              ระยะที่เว้นไว้ทำหน้าที่เป็นกันชน ถูกกินไปก่อนจนหมดค่อยดันงานถัดไป
+   *   maintain — รักษาระยะห่าง ขยับงานที่พึ่งพากันด้วยระยะเท่ากับที่ต้นทางขยับ
+   *              ระยะห่างเดิมคงอยู่เป๊ะ ใช้เมื่อระยะนั้นมีความหมาย เช่นรอผลแล็บ 7 วัน
+   *   none     — ไม่ขยับอะไรเลย
    *
-   * งานที่ทำเสร็จแล้วไม่ถูกเลื่อน เพราะวันที่ของมันคือสิ่งที่เกิดขึ้นจริงไปแล้ว
+   * โหมด maintain เลือกได้อีกว่าจะขยับเฉพาะงานที่รออยู่ข้างหน้า
+   * หรือขยับงานที่อยู่ข้างหลังด้วย (ดึงงานต้นน้ำตามไปด้วย)
+   *
+   * ทุกโหมดคงระยะเวลาเดิมของแต่ละงานไว้ คือเลื่อนทั้งแท่ง ไม่ใช่ยืดหรือหด
+   * และไม่แตะงานที่ทำเสร็จแล้ว เพราะวันที่ของมันคือสิ่งที่เกิดขึ้นจริงไปแล้ว
    */
+
+  var WORK_DAYS = [
+    { id: 'all',     label: 'ทุกวัน (ไม่มีวันหยุด)' },
+    { id: 'mon-fri', label: 'จันทร์ – ศุกร์' },
+    { id: 'mon-sat', label: 'จันทร์ – เสาร์' }
+  ];
+
+  var DEP_SHIFT = [
+    { id: 'consume',  label: 'กินระยะห่าง',
+      desc: 'ขยับงานที่รออยู่เฉพาะตอนที่วันชนกันจริง ระยะห่างที่เว้นไว้ทำหน้าที่เป็นกันชน' },
+    { id: 'maintain', label: 'รักษาระยะห่าง',
+      desc: 'ขยับงานที่พึ่งพากันด้วยระยะเท่ากับที่งานต้นทางขยับ ระยะห่างเดิมคงอยู่เท่าเดิม' },
+    { id: 'none',     label: 'ไม่ขยับ',
+      desc: 'ปล่อยให้วันของงานอื่นอยู่ที่เดิม แม้จะทับซ้อนกับงานที่เพิ่งเลื่อน' }
+  ];
+
+  function isWorkday(iso, mode) {
+    if (!mode || mode === 'all') return true;
+    var d = new Date(iso + 'T00:00:00').getDay();       // 0 = อาทิตย์
+    if (mode === 'mon-fri') return d >= 1 && d <= 5;
+    if (mode === 'mon-sat') return d >= 1 && d <= 6;
+    return true;
+  }
+
+  /** เลื่อนไปวันทำงานถัดไป ถ้าวันที่ให้มาเป็นวันหยุด */
+  function nextWorkday(iso, mode) {
+    var d = iso, guard = 0;
+    while (!isWorkday(d, mode) && guard++ < 14) d = addDays(d, 1);
+    return d;
+  }
+
   function requiredShift(pred, succ, type) {
     var ps = pred.startOn || pred.dueOn;
     var pe = pred.dueOn || pred.startOn;
@@ -748,26 +951,77 @@
     return daysBetween(ss, addDays(pe, 1));                     // FS: เริ่มหลังงานก่อนจบ
   }
 
-  function autoSchedule(startId) {
-    var queue = [startId], moved = {}, guard = 0;
+  /** เลื่อนงานทั้งแท่งไปกี่วัน แล้วหลบวันหยุดถ้าโปรเจกต์กำหนดวันทำงานไว้ */
+  function slide(t, days, work) {
+    if (!days) return false;
+    var s = t.startOn ? addDays(t.startOn, days) : null;
+    var d = t.dueOn ? addDays(t.dueOn, days) : null;
+    if (work && work !== 'all') {
+      /* หลบทั้งแท่งไปพร้อมกัน ไม่ยืดงาน ถ้าเลื่อนแค่ปลายด้านเดียวระยะเวลาจะเพี้ยน */
+      var anchor = s || d;
+      var moved = daysBetween(anchor, nextWorkday(anchor, work));
+      if (moved) {
+        if (s) s = addDays(s, moved);
+        if (d) d = addDays(d, moved);
+      }
+    }
+    t.startOn = s;
+    t.dueOn = d;
+    return true;
+  }
+
+  /**
+   * @param startId  งานที่ผู้ใช้เพิ่งเลื่อน
+   * @param delta    เลื่อนไปกี่วัน (บวก = ไปข้างหน้า) ใช้เฉพาะโหมด maintain
+   * @param opts     { mode, scope, workDays }
+   * @returns        รายชื่อ id ของงานที่ถูกขยับตาม
+   */
+  function autoSchedule(startId, delta, opts) {
+    opts = opts || {};
+    var mode = opts.mode || 'consume';
+    if (mode === 'none') return [];
+    var scope = opts.scope || 'downstream';
+    var work = opts.workDays || 'all';
+
+    var moved = {}, guard = 0;
+    var queue = [startId];
+    var seen = {};
+    seen[startId] = true;
+
     while (queue.length && guard++ < 3000) {
       var id = queue.shift();
-      var pred = task(id);
-      if (!pred) continue;
+      var cur = task(id);
+      if (!cur) continue;
+
       /* eslint-disable no-loop-func */
+      /* งานที่รอ id นี้อยู่ = อยู่ข้างหน้า */
       db.tasks.forEach(function (t) {
-        if (t.completed) return;
+        if (t.completed || t.id === startId) return;
         var dep = (t.dependsOn || []).filter(function (d) { return d.id === id; })[0];
         if (!dep) return;
-        var shift = requiredShift(pred, t, dep.type || 'FS');
-        if (shift <= 0) return;
-        if (t.startOn) t.startOn = addDays(t.startOn, shift);
-        if (t.dueOn) t.dueOn = addDays(t.dueOn, shift);
-        moved[t.id] = true;
-        queue.push(t.id);
+        /* โหมดรักษาระยะห่างขยับด้วยระยะคงที่ ถ้างานหนึ่งรอสองงานที่อยู่ในสายเดียวกัน
+         * แล้วขยับซ้ำ มันจะเลื่อนไปไกลเป็นสองเท่า จึงต้องขยับได้ครั้งเดียวต่อรอบ
+         * ส่วนโหมดกินระยะห่างคำนวณใหม่ทุกครั้งอยู่แล้ว ขยับซ้ำก็ได้ผลลัพธ์เดิม */
+        if (mode === 'maintain' && moved[t.id]) return;
+        var by = mode === 'maintain' ? delta : requiredShift(cur, t, dep.type || 'FS');
+        if (mode === 'consume' && by <= 0) return;
+        if (!by) return;
+        if (slide(t, by, work)) { moved[t.id] = true; }
+        if (!seen[t.id]) { seen[t.id] = true; queue.push(t.id); }
       });
+
+      /* งานที่ id นี้รออยู่ = อยู่ข้างหลัง ขยับเฉพาะโหมดรักษาระยะห่างแบบทั้งสองทาง */
+      if (mode === 'maintain' && scope === 'all') {
+        (cur.dependsOn || []).forEach(function (d) {
+          var b = task(d.id);
+          if (!b || b.completed || b.id === startId || moved[b.id]) return;
+          if (slide(b, delta, work)) { moved[b.id] = true; }
+          if (!seen[b.id]) { seen[b.id] = true; queue.push(b.id); }
+        });
+      }
       /* eslint-enable no-loop-func */
     }
+
     var list = Object.keys(moved);
     if (list.length) commit();
     return list;
@@ -1006,7 +1260,6 @@
       gColorBy: 'theme',
       gCols: { due: true, blockedBy: true, duration: false, blocking: false },
       gSubtasks: 'collapsed',
-      gAutoSchedule: false,
       gShowBaseline: false
     };
   }
@@ -1620,6 +1873,11 @@
       defaultView: attrs.defaultView || 'list',
       sections: (attrs.sections || ['ค้างอยู่', 'กำลังทำ', 'เสร็จแล้ว'])
         .map(function (n) { return { id: uid('s'), name: n }; }),
+      owner: attrs.owner || db.currentUserId,
+      dueOn: attrs.dueOn || null,
+      depShift: { mode: 'consume', scope: 'downstream' },
+      workDays: 'all',
+      baseline: null,
       fields: [], status: null, rules: [], savedViews: [], colWidths: {}
     };
     db.projects.push(p);
@@ -2033,14 +2291,18 @@
     var m = (db.projectMembers || []).filter(function (x) {
       return x.projectId === projectId && x.userId === uid;
     })[0];
-    if (m) return m.access;
 
-    /* โปรเจกต์เปิด ให้สิทธิ์แก้ไขตามบทบาทองค์กร ยกเว้นบุคคลภายนอก
-     * ที่ต้องถูกเชิญเป็นรายโปรเจกต์เสมอ */
-    if (p.visibility !== 'private' && u.role !== 'guest') {
-      return u.role === 'limited' ? 'edit' : 'edit';
-    }
-    return null;
+    /* ด่านแรก เห็นโปรเจกต์นี้ไหม
+     * โปรเจกต์ปิดต้องเป็นสมาชิกเท่านั้น ส่วนบุคคลภายนอกต้องถูกเชิญเป็นรายโปรเจกต์เสมอ
+     * แม้เป็นโปรเจกต์ที่เปิดให้ทั้งองค์กรก็ยังไม่เห็น */
+    if (!m && (p.visibility === 'private' || u.role === 'guest')) return null;
+
+    /* ด่านสอง เห็นแล้วทำอะไรได้
+     * "ดูอย่างเดียว" เป็นเพดาน ไม่ใช่ค่าเริ่มต้น ถูกเชิญมาด้วยสิทธิ์ edit ก็ยังแก้ไม่ได้
+     * ตรงกับ ROLE_CAPS ที่ can() ใช้ และกับ fn_VisibleProjects ฝั่งฐานข้อมูล */
+    if (u.role === 'viewer') return 'view';
+
+    return m ? m.access : 'edit';
   }
 
   /** โปรเจกต์ที่คนนี้เห็นได้ ใช้แทน activeProjects ทุกที่ที่แสดงรายการ */
@@ -2136,16 +2398,22 @@
       desc: 'จัดการสมาชิก สิทธิ์ และโปรเจกต์ได้ทั้งหมด' },
     { id: 'member',  label: 'สมาชิก',
       desc: 'สร้างและแก้ไขงานได้ทุกงาน' },
-    { id: 'limited', label: 'แก้เฉพาะงานของตัวเอง',
-      desc: 'สร้างงานใหม่ได้ แต่แก้ได้เฉพาะงานที่ตัวเองรับผิดชอบหรือเป็นคนสร้าง' },
+    { id: 'guest',   label: 'บุคคลภายนอก',
+      desc: 'เห็นเฉพาะโปรเจกต์ที่ถูกเชิญ สร้างโปรเจกต์เองไม่ได้' },
     { id: 'viewer',  label: 'ดูอย่างเดียว',
       desc: 'เปิดดูได้ทุกอย่าง แก้และแสดงความเห็นไม่ได้' }
   ];
 
+  /* บทบาทองค์กรเป็น "เพดาน" ไม่ใช่ค่าเริ่มต้น สิทธิ์รายโปรเจกต์ยกให้เกินเพดานไม่ได้
+   * guest  ทำงานได้เท่า member แต่ไม่มี structure จึงสร้างหรือแก้โครงสร้างโปรเจกต์ไม่ได้
+   *        และเห็นเฉพาะโปรเจกต์ที่ถูกเชิญ ดูที่ projectAccess
+   * viewer ไม่มี cap ใดเลย จึงแก้ไม่ได้แม้ถูกเชิญเข้าโปรเจกต์ด้วยสิทธิ์ edit
+   *
+   * ชุดนี้ต้องตรงกับ ck_users_role ใน db/schema.sql เสมอ */
   var ROLE_CAPS = {
     admin:   ['manage', 'structure', 'write', 'comment'],
     member:  ['structure', 'write', 'comment'],
-    limited: ['writeOwn', 'comment'],
+    guest:   ['write', 'comment'],
     viewer:  []
   };
 
@@ -2165,14 +2433,7 @@
   function can(cap, taskId) {
     if (!isActive()) return false;
     var caps = ROLE_CAPS[role()] || [];
-    var orgOk = caps.indexOf(cap) >= 0;
-
-    if (!orgOk && cap === 'write' && caps.indexOf('writeOwn') >= 0) {
-      var t = taskId && task(taskId);
-      orgOk = !taskId || !t ||
-              t.assigneeId === db.currentUserId || t.createdBy === db.currentUserId;
-    }
-    if (!orgOk) return false;
+    if (caps.indexOf(cap) < 0) return false;
 
     if (taskId && (cap === 'write' || cap === 'comment')) {
       var need = cap === 'comment' ? 'comment' : 'edit';
@@ -2291,6 +2552,9 @@
     PALETTE: PALETTE,
     DUE_FILTERS: DUE_FILTERS, SORTS: SORTS, GROUPS: GROUPS,
     GANTT_ZOOMS: GANTT_ZOOMS, COLOR_BYS: COLOR_BYS, GANTT_COLS: GANTT_COLS,
+    WORK_DAYS: WORK_DAYS, DEP_SHIFT: DEP_SHIFT,
+    projectCsv: projectCsv, importTasksCsv: importTasksCsv,
+    isWorkday: isWorkday, nextWorkday: nextWorkday,
 
     get db() { return db; },
     storageKind: storage.kind,
