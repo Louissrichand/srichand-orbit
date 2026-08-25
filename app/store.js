@@ -395,6 +395,8 @@
     d.projects.forEach(function (p) {
       if (!p.visibility) p.visibility = 'org';   // ของเดิมทุกโปรเจกต์เปิดให้ทุกคน
       if (!('locked' in p)) p.locked = false;
+      if (!('baseline' in p)) p.baseline = null; // เส้นฐานของ Gantt ยังไม่เคยตั้ง
+      (p.savedViews || []).forEach(function (v) { v.view = fillView(v.view); });
     });
     d.users.forEach(function (u) {
       if (!('active' in u)) u.active = true;      // ปิดใช้งานได้โดยไม่ต้องลบทิ้ง
@@ -677,6 +679,100 @@
     });
   }
 
+  /** จำนวนวันของงาน นับทั้งวันเริ่มและวันจบ งานวันเดียวจึงเท่ากับ 1 ไม่ใช่ 0 */
+  function taskDuration(t) {
+    if (!t) return null;
+    if (!t.startOn && !t.dueOn) return null;
+    if (!t.startOn || !t.dueOn) return 1;
+    return Math.abs(daysBetween(t.startOn, t.dueOn)) + 1;
+  }
+
+  /* ---------- เส้นฐาน (baseline) ----------
+   *
+   * เก็บวันที่ของทุกงานไว้ ณ วันที่กดตั้ง ไว้เทียบว่าตอนนี้หลุดจากแผนเดิมไปเท่าไร
+   * เก็บที่ตัวโปรเจกต์ ไม่ใช่ที่มุมมอง เพราะเป็นข้อเท็จจริงร่วมของทีม
+   * ไม่ใช่ความชอบส่วนตัวของคนดู
+   */
+  function setBaseline(projectId) {
+    var p = project(projectId);
+    if (!p) return false;
+    snapshot('ตั้งเส้นฐาน');
+    var map = {};
+    tasksInProject(projectId).forEach(function (x) {
+      var t = x.task;
+      if (!t.startOn && !t.dueOn) return;
+      map[t.id] = { startOn: t.startOn, dueOn: t.dueOn };
+    });
+    p.baseline = { at: new Date().toISOString(), tasks: map };
+    audit('project.baseline', p.name, 'จำนวนงานที่บันทึก ' + Object.keys(map).length);
+    commit();
+    return true;
+  }
+
+  function clearBaseline(projectId) {
+    var p = project(projectId);
+    if (!p || !p.baseline) return false;
+    snapshot('ลบเส้นฐาน');
+    p.baseline = null;
+    audit('project.baselineClear', p.name);
+    commit();
+    return true;
+  }
+
+  /** วันตามเส้นฐานของงานหนึ่ง คืน null ถ้างานนี้ยังไม่อยู่ในเส้นฐาน */
+  function baselineOf(projectId, taskId) {
+    var p = project(projectId);
+    if (!p || !p.baseline) return null;
+    return p.baseline.tasks[taskId] || null;
+  }
+
+  /* ---------- จัดตารางอัตโนมัติ ----------
+   *
+   * เลื่อนงานที่รออยู่ให้ตามหลังงานที่เพิ่งขยับ เดินไปข้างหน้าตามสายพึ่งพา
+   *
+   * ดันเฉพาะงานที่เริ่มเร็วเกินกติกาเท่านั้น ไม่ดึงงานที่อยู่ห่างกลับมาให้ชิด
+   * เพราะระยะห่างที่คนตั้งใจเว้นไว้ (รอผลแล็บ รออนุมัติ) จะหายไปหมด
+   * และคงระยะเวลาเดิมของแต่ละงานไว้ คือเลื่อนทั้งแท่ง ไม่ใช่ยืดหรือหด
+   *
+   * งานที่ทำเสร็จแล้วไม่ถูกเลื่อน เพราะวันที่ของมันคือสิ่งที่เกิดขึ้นจริงไปแล้ว
+   */
+  function requiredShift(pred, succ, type) {
+    var ps = pred.startOn || pred.dueOn;
+    var pe = pred.dueOn || pred.startOn;
+    var ss = succ.startOn || succ.dueOn;
+    var se = succ.dueOn || succ.startOn;
+    if (!ps || !ss) return 0;
+    if (type === 'SS') return daysBetween(ss, ps);              // เริ่มพร้อมกันหรือหลัง
+    if (type === 'FF') return daysBetween(se, pe);              // จบพร้อมกันหรือหลัง
+    if (type === 'SF') return daysBetween(se, ps);              // จบหลังงานก่อนเริ่ม
+    return daysBetween(ss, addDays(pe, 1));                     // FS: เริ่มหลังงานก่อนจบ
+  }
+
+  function autoSchedule(startId) {
+    var queue = [startId], moved = {}, guard = 0;
+    while (queue.length && guard++ < 3000) {
+      var id = queue.shift();
+      var pred = task(id);
+      if (!pred) continue;
+      /* eslint-disable no-loop-func */
+      db.tasks.forEach(function (t) {
+        if (t.completed) return;
+        var dep = (t.dependsOn || []).filter(function (d) { return d.id === id; })[0];
+        if (!dep) return;
+        var shift = requiredShift(pred, t, dep.type || 'FS');
+        if (shift <= 0) return;
+        if (t.startOn) t.startOn = addDays(t.startOn, shift);
+        if (t.dueOn) t.dueOn = addDays(t.dueOn, shift);
+        moved[t.id] = true;
+        queue.push(t.id);
+      });
+      /* eslint-enable no-loop-func */
+    }
+    var list = Object.keys(moved);
+    if (list.length) commit();
+    return list;
+  }
+
   /** เห็นงานนี้ได้ไหม
    *
    * กติกาเดียวกับ can() คือถ้างานอยู่หลายโปรเจกต์ เห็นได้โปรเจกต์เดียวก็พอ
@@ -873,11 +969,64 @@
     { id: 'none',     label: 'ไม่จัดกลุ่ม' }
   ];
 
+  /* ---------- ตัวเลือกเฉพาะของ Gantt ---------- */
+
+  var GANTT_ZOOMS = [
+    { id: 'day',     label: 'วัน' },
+    { id: 'week',    label: 'สัปดาห์' },
+    { id: 'month',   label: 'เดือน' },
+    { id: 'quarter', label: 'ไตรมาส' },
+    { id: 'half',    label: 'ครึ่งปี' },
+    { id: 'year',    label: 'ปี' }
+  ];
+
+  var COLOR_BYS = [
+    { id: 'theme',    label: 'สีของโปรเจกต์' },
+    { id: 'priority', label: 'ความสำคัญ' },
+    { id: 'assignee', label: 'ผู้รับผิดชอบ' },
+    { id: 'type',     label: 'ชนิดงาน' },
+    { id: 'approval', label: 'สถานะอนุมัติ' },
+    { id: 'progress', label: 'ความคืบหน้า' }
+  ];
+
+  var GANTT_COLS = [
+    { id: 'due',       label: 'กำหนดส่ง' },
+    { id: 'blockedBy', label: 'รออะไรอยู่' },
+    { id: 'duration',  label: 'ระยะเวลา' },
+    { id: 'blocking',  label: 'บล็อกงานอะไร' }
+  ];
+
   function defaultView() {
     return {
       assignee: '', priority: '', tag: '', due: 'any',
-      showCompleted: true, sort: 'manual', sortDir: 'asc', group: 'section'
+      showCompleted: true, sort: 'manual', sortDir: 'asc', group: 'section',
+
+      /* --- Gantt --- */
+      gZoom: 'month',
+      gColorBy: 'theme',
+      gCols: { due: true, blockedBy: true, duration: false, blocking: false },
+      gSubtasks: 'collapsed',
+      gAutoSchedule: false,
+      gShowBaseline: false
     };
+  }
+
+  /** เติมคีย์ที่ยังไม่มีให้มุมมองเก่า
+   *
+   * มุมมองที่ผู้ใช้บันทึกไว้ก่อนมีตัวเลือก Gantt จะขาดคีย์ใหม่ทั้งหมด
+   * ถ้าไม่เติม พอโหลดมุมมองนั้นแล้ว Gantt จะอ่านค่า undefined แล้วหน้าพัง
+   */
+  function fillView(v) {
+    var base = defaultView();
+    if (!v) return base;
+    Object.keys(base).forEach(function (k) {
+      if (!(k in v)) v[k] = base[k];
+    });
+    v.gCols = v.gCols || base.gCols;
+    Object.keys(base.gCols).forEach(function (k) {
+      if (!(k in v.gCols)) v.gCols[k] = base.gCols[k];
+    });
+    return v;
   }
 
   function matchesFilter(t, f) {
@@ -1681,9 +1830,17 @@
 
   /* ---------- saved views ---------- */
 
-  function saveView(projectId, name, view) {
+  function saveView(projectId, name, view, icon) {
     var p = project(projectId);
-    p.savedViews.push({ id: uid('v'), name: name, view: clone(view) });
+    /* ชื่อซ้ำให้ทับของเดิม ไม่งั้นกดบันทึกสองครั้งจะได้มุมมองชื่อเดียวกันสองอัน
+     * แล้วผู้ใช้จะแยกไม่ออกว่าอันไหนใหม่ */
+    var old = p.savedViews.filter(function (v) { return v.name === name; })[0];
+    if (old) {
+      old.view = clone(view);
+      if (icon) old.icon = icon;
+    } else {
+      p.savedViews.push({ id: uid('v'), name: name, icon: icon || '📊', view: clone(view) });
+    }
     commit();
   }
 
@@ -2133,6 +2290,7 @@
     RECUR_FREQ: RECUR_FREQ, DEP_TYPES: DEP_TYPES,
     PALETTE: PALETTE,
     DUE_FILTERS: DUE_FILTERS, SORTS: SORTS, GROUPS: GROUPS,
+    GANTT_ZOOMS: GANTT_ZOOMS, COLOR_BYS: COLOR_BYS, GANTT_COLS: GANTT_COLS,
 
     get db() { return db; },
     storageKind: storage.kind,
@@ -2155,7 +2313,10 @@
     assignedByMe: assignedByMe, myCompleted: myCompleted,
     dueSoonCount: dueSoonCount, homeStats: homeStats,
     inbox: inbox, unreadCount: unreadCount,
-    defaultView: defaultView, viewGroups: viewGroups, matchesFilter: matchesFilter,
+    defaultView: defaultView, fillView: fillView,
+    viewGroups: viewGroups, matchesFilter: matchesFilter,
+    taskDuration: taskDuration, autoSchedule: autoSchedule,
+    setBaseline: setBaseline, clearBaseline: clearBaseline, baselineOf: baselineOf,
     sortItems: sortItems, projectStats: projectStats,
 
     createTask: createTask, updateTask: updateTask, deleteTask: deleteTask,

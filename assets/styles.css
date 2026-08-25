@@ -835,7 +835,7 @@ kbd {
 .g-right { flex: 0 0 auto; position: relative; }
 
 .g-lhead, .g-lrow {
-  display: grid; grid-template-columns: 22px 1fr 118px 170px;
+  display: grid; grid-template-columns: var(--gtpl, 22px 1fr 118px 170px);
   align-items: center; gap: 6px; height: 34px; padding: 0 8px 0 4px;
   border-bottom: 1px solid var(--line-soft);
 }
@@ -1848,4 +1848,192 @@ ul.audit em { display: block; font-style: normal; font-size: 12px; color: var(--
 @media (max-width: 420px) {
   .hproj-grid { grid-template-columns: minmax(0, 1fr); }
   .hchip { display: none; }
+}
+
+/* ---------- แถบเครื่องมือ Gantt ----------
+ *
+ * ซ้าย = ทำกับงาน  ขวา = ทำกับมุมมอง
+ * แยกด้วยช่องว่างยืดหยุ่นตรงกลาง ไม่ใช้เส้นคั่น เพราะแถวนี้มีของเยอะอยู่แล้ว
+ */
+
+.g-toolbar {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 8px 20px; border-bottom: 1px solid var(--line); background: var(--bg);
+}
+.g-tb-spacer { flex: 1 1 40px; }
+
+.g-nav { display: inline-flex; align-items: center; gap: 2px; }
+.g-nav button {
+  height: 28px; min-width: 28px; padding: 0 6px; border-radius: var(--radius);
+  color: var(--fg-soft); display: grid; place-items: center;
+}
+.g-nav button:hover { background: var(--bg-sunk); color: var(--fg); }
+.g-nav .g-today-btn { font-size: 13px; font-weight: 600; padding: 0 10px; }
+
+.g-zoomctl {
+  display: inline-flex; align-items: center; gap: 2px; margin-right: 4px;
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 1px;
+}
+.g-zoomctl .lbl {
+  font-size: 13px; color: var(--fg-soft); padding: 4px 8px;
+  border-radius: 6px; cursor: pointer; white-space: nowrap;
+}
+.g-zoomctl .lbl:hover { background: var(--bg-sunk); color: var(--fg); }
+.g-zoomctl button {
+  width: 26px; height: 26px; border-radius: 6px; font-size: 15px; line-height: 1;
+  color: var(--fg-soft); display: grid; place-items: center;
+}
+.g-zoomctl button:hover:not([disabled]) { background: var(--bg-sunk); color: var(--fg); }
+.g-zoomctl button[disabled] { opacity: .35; cursor: default; }
+
+.g-tb {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px;
+  border-radius: var(--radius); font-size: 13px; color: var(--fg-soft); white-space: nowrap;
+}
+.g-tb svg { color: var(--fg-faint); }
+.g-tb:hover { background: var(--bg-sunk); color: var(--fg); }
+.g-tb:hover svg { color: var(--fg-soft); }
+.g-tb.on { color: var(--accent); background: var(--accent-bg); }
+.g-tb.on svg { color: var(--accent); }
+.g-tb.icon { padding: 0 8px; }
+.g-tb-n {
+  min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px;
+  background: var(--accent); color: #fff; font-size: 11px; font-weight: 700;
+  display: grid; place-items: center;
+}
+.g-tb-caret { padding: 0 6px; }
+
+.g-tb-search {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px;
+  border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--bg);
+}
+.g-tb-search svg { color: var(--fg-faint); flex: none; }
+.g-tb-search input {
+  border: 0; background: none; font-size: 13px; width: 150px; color: var(--fg);
+}
+.g-tb-search input::-webkit-search-cancel-button { display: none; }
+.g-tb-search button { color: var(--fg-faint); display: grid; place-items: center; }
+.g-tb-search button:hover { color: var(--fg); }
+
+.g-legendbar { padding: 6px 20px; border-bottom: 1px solid var(--line-soft); background: var(--bg-sunk); }
+.g-legend { display: flex; flex-wrap: wrap; gap: 12px; }
+.g-lg { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg-soft); }
+.g-lg i { width: 10px; height: 10px; border-radius: 3px; display: block; }
+
+/* --- คอลัมน์ที่เพิ่มเข้ามา --- */
+.g-c-duration { font-size: 12px; color: var(--fg-soft); white-space: nowrap; }
+.g-lrow.g-sub .g-nm { color: var(--fg-soft); }
+.g-lrow.g-dim { opacity: .38; }
+.g-lrow.g-hit { background: var(--accent-bg); }
+.g-bar.g-dim, .g-ms.g-dim { opacity: .22; }
+
+/* --- เส้นฐาน --- */
+.g-base {
+  position: absolute; height: 5px; border-radius: 3px;
+  background: var(--fg-faint); opacity: .38; pointer-events: auto;
+}
+
+.pop-gap { display: inline-block; width: 11px; }
+
+/* ---------- แผงตัวเลือกมุมมอง ---------- */
+
+.opt-panel { --drawer-w: 380px; }
+.opt-head {
+  display: flex; align-items: center; gap: 8px; flex: 0 0 auto;
+  padding: 14px 16px; border-bottom: 1px solid var(--line);
+}
+.opt-head h2 { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -.01em; flex: 1; }
+.opt-back, .opt-close {
+  width: 30px; height: 30px; border-radius: var(--radius);
+  display: grid; place-items: center; color: var(--fg-soft);
+}
+.opt-back:hover, .opt-close:hover { background: var(--bg-sunk); color: var(--fg); }
+
+.opt-body { flex: 1; overflow-y: auto; padding: 14px 16px 20px; }
+.opt-foot {
+  display: flex; align-items: center; gap: 8px; flex: 0 0 auto;
+  padding: 12px 16px; border-top: 1px solid var(--line);
+}
+.opt-foot .grow { flex: 1; }
+
+.opt-lbl {
+  display: block; font-size: 12px; font-weight: 600; color: var(--fg-soft);
+  margin: 12px 0 5px;
+}
+.opt-body > .opt-lbl:first-child { margin-top: 0; }
+
+.opt-select {
+  width: 100%; height: 34px; padding: 0 8px; font-size: 13.5px;
+  border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--bg); color: var(--fg);
+}
+.opt-row .opt-select { width: auto; max-width: 150px; height: 30px; font-size: 13px; }
+
+.opt-row {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 10px 8px; border-radius: var(--radius); text-align: left; font-size: 14px;
+}
+button.opt-row:hover { background: var(--bg-sunk); }
+.opt-row .grow { flex: 1; min-width: 0; }
+.opt-row .val { font-size: 12.5px; color: var(--fg-faint); white-space: nowrap; }
+.opt-row > svg, .opt-row .ic-wrap { color: var(--fg-soft); flex: none; display: inline-flex; }
+
+.opt-sep { height: 1px; background: var(--line); margin: 10px 0; }
+
+.opt-toggle { display: flex; align-items: flex-start; gap: 12px; padding: 10px 8px; }
+.opt-toggle .grow { flex: 1; min-width: 0; }
+.opt-toggle b { display: block; font-size: 14px; font-weight: 600; }
+.opt-toggle em {
+  display: block; font-style: normal; font-size: 12.5px;
+  color: var(--fg-soft); line-height: 1.55; margin-top: 3px;
+}
+.switch {
+  flex: none; width: 38px; height: 22px; border-radius: 999px; margin-top: 1px;
+  background: var(--line-strong); position: relative; transition: background .15s;
+}
+.switch i {
+  position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.25);
+}
+.switch.on { background: var(--accent); }
+.switch.on i { transform: translateX(16px); }
+
+.opt-note { font-size: 12.5px; color: var(--fg-soft); line-height: 1.6; margin: 12px 0 0; }
+.opt-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+
+.opt-base {
+  display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--fg-soft);
+  background: var(--bg-sunk); border-radius: var(--radius); padding: 10px 12px;
+}
+.opt-base .grow { flex: 1; }
+
+.opt-namerow { display: flex; gap: 10px; align-items: flex-end; }
+.opt-namerow .grow { flex: 1; min-width: 0; }
+.opt-icon, .opt-name {
+  height: 34px; padding: 0 9px; font-size: 14px;
+  border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--bg); color: var(--fg);
+}
+.opt-icon { width: 46px; text-align: center; font-size: 17px; }
+.opt-name { width: 100%; }
+
+.opt-views { display: flex; flex-direction: column; gap: 2px; }
+.opt-view { display: flex; align-items: center; gap: 4px; }
+.opt-view .grow {
+  flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0;
+  padding: 8px; border-radius: var(--radius); font-size: 13.5px; text-align: left;
+}
+.opt-view .grow:hover { background: var(--bg-sunk); }
+.opt-view .em { font-size: 15px; }
+.opt-view .x {
+  width: 26px; height: 26px; border-radius: var(--radius);
+  display: grid; place-items: center; color: var(--fg-faint);
+}
+.opt-view .x:hover { background: var(--danger-bg); color: var(--danger); }
+
+@media (max-width: 860px) {
+  .g-toolbar { padding: 8px 14px; }
+  .g-tb-spacer { flex-basis: 0; }
+  .g-tb-search input { width: 110px; }
+  .g-legendbar { padding: 6px 14px; }
 }

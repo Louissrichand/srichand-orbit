@@ -5,6 +5,7 @@
   'use strict';
 
   var S = global.Store, R = global.Render, L = global.I18N.t, I = global.Icons.icon;
+  var esc = function (s) { return R.esc(s); };
 
   var $sidebar = document.getElementById('sidebar');
   var $topbar  = document.getElementById('topbar');
@@ -25,9 +26,12 @@
     sel: {},                 // งานที่ถูกเลือกไว้ (id -> true)
     views: {},               // ตัวกรองต่อโปรเจกต์
     tlZoom: 'day',           // ระดับซูมของไทม์ไลน์
-    ganttZoom: 'month',
     ganttCollapsed: {},
     ganttScroll: null,
+    ganttSearch: null,       // null = ยังไม่เปิดช่องค้นหา, '' = เปิดแต่ยังไม่พิมพ์
+    optPage: 'root',         // หน้าย่อยที่เปิดอยู่ในแผงตัวเลือก Gantt
+    viewName: 'Gantt',
+    viewIcon: '📊',
     tlScrollLeft: null,      // ตำแหน่งเลื่อนไทม์ไลน์ (null = ให้เลื่อนไปวันนี้เอง)
     suppressHash: false,
     auditFilter: { group: '', q: '' }   // ตัวกรองบันทึกการทำงานในหน้าผู้ดูแล
@@ -35,7 +39,9 @@
 
   function viewFor(projectId) {
     if (!state.views[projectId]) state.views[projectId] = S.defaultView();
-    return state.views[projectId];
+    /* มุมมองที่โหลดมาจากที่บันทึกไว้อาจเก่ากว่าตัวเลือกที่มีตอนนี้ เติมคีย์ที่ขาดทุกครั้ง
+     * ถูกกว่าการไล่เช็ค undefined ทีละจุดตอนวาด */
+    return S.fillView(state.views[projectId]);
   }
 
   var $scrim = document.getElementById('sbScrim');
@@ -186,8 +192,8 @@
       var v = viewFor(r.id);
       if (r.view === 'board') body = R.boardView(r.id, v, state.sel);
       else if (r.view === 'timeline') body = R.timelineView(r.id, v, state.tlZoom);
-      else if (r.view === 'gantt') body = ganttToolbar() +
-        R.ganttView(r.id, v, state.ganttZoom, state.ganttCollapsed);
+      else if (r.view === 'gantt') body = ganttToolbar(r.id, v) +
+        R.ganttView(r.id, v, state.ganttCollapsed, state.ganttSearch);
       else if (r.view === 'calendar') body = R.calendarView(r.id, state.calOffset);
       else if (r.view === 'dashboard') body = R.dashboardView(r.id);
       else body = R.listView(r.id, v, state.sel);
@@ -205,6 +211,9 @@
       body = R.searchView(r.q, state.sel);
     }
 
+    // ออกจาก Gantt แล้วแผงตัวเลือกไม่มีความหมายอีก ปล่อยค้างไว้จะบังหน้าจอเปล่า ๆ
+    if (!(r.type === 'project' && r.view === 'gantt') && optOpen()) closeOpts();
+
     // เก็บตำแหน่งเลื่อนไทม์ไลน์ไว้ก่อน re-render ไม่งั้นจอจะเด้งกลับต้นทุกครั้งที่ลาก
     var prevScroll = $view.querySelector('.tl-scroll');
     if (prevScroll) state.tlScrollLeft = prevScroll.scrollLeft;
@@ -217,22 +226,306 @@
     restoreGanttScroll();
   }
 
-  /** แถบเครื่องมือเหนือ Gantt */
-  function ganttToolbar() {
-    var zooms = [['day', L('วัน')], ['week', L('สัปดาห์')], ['month', L('เดือน')], ['quarter', L('ไตรมาส')]];
-    var h = '<div class="g-toolbar"><div class="segmented">';
-    zooms.forEach(function (z) {
-      h += '<button data-act="g-zoom" data-v="' + z[0] + '" class="' +
-        (state.ganttZoom === z[0] ? 'on' : '') + '">' + z[1] + '</button>';
-    });
+  /* ---------- แถบเครื่องมือ Gantt ----------
+   *
+   * ซ้าย = สิ่งที่ทำกับงาน (เพิ่มงาน เลื่อนดูช่วงเวลา)
+   * ขวา = สิ่งที่ทำกับมุมมอง (ซูม กรอง เรียง จัดกลุ่ม ตัวเลือก บันทึก)
+   * แยกสองฝั่งแบบเดียวกับ Asana เพราะคนที่ย้ายมาจะหาปุ่มเจอทันทีโดยไม่ต้องกวาดตา
+   */
+  function zoomLabel(id) {
+    var z = S.GANTT_ZOOMS.filter(function (x) { return x.id === id; })[0];
+    return z ? L(z.label) : id;
+  }
+
+  /** จำนวนตัวกรองที่เปิดใช้อยู่ ใช้ขึ้นตัวเลขบนปุ่ม ไม่งั้นคนลืมว่ากรองอะไรค้างไว้ */
+  function activeFilterCount(v) {
+    var n = 0;
+    if (v.assignee) n++;
+    if (v.priority) n++;
+    if (v.tag) n++;
+    if (v.due && v.due !== 'any') n++;
+    if (!v.showCompleted) n++;
+    return n;
+  }
+
+  function ganttToolbar(projectId, v) {
+    var p = S.project(projectId);
+    var nf = activeFilterCount(v);
+    var zi = S.GANTT_ZOOMS.map(function (x) { return x.id; }).indexOf(v.gZoom);
+
+    var h = '<div class="g-toolbar">';
+
+    /* --- ฝั่งซ้าย ---
+     * ปุ่มเพิ่มงานอยู่บนแถบบนอยู่แล้ว ไม่ใส่ซ้ำตรงนี้ ปุ่มเดียวกันสองที่ทำให้คนลังเลว่าต่างกันไหม */
+    h += '<div class="g-nav">' +
+      '<button data-act="g-pan" data-d="-1" title="' + L('เลื่อนไปทางซ้าย') + '">' + I('arrowLeft', 14) + '</button>' +
+      '<button class="g-today-btn" data-act="g-today">' + L('วันนี้') + '</button>' +
+      '<button data-act="g-pan" data-d="1" title="' + L('เลื่อนไปทางขวา') + '">' + I('arrowRight', 14) + '</button>' +
+      '</div>';
+
+    h += '<div class="g-tb-spacer"></div>';
+
+    /* --- ฝั่งขวา --- */
+    h += '<div class="g-zoomctl">' +
+      '<span class="lbl" data-act="g-zoom-menu" role="button" tabindex="0">' + esc(zoomLabel(v.gZoom)) + '</span>' +
+      '<button data-act="g-zoom-step" data-d="1"' + (zi >= S.GANTT_ZOOMS.length - 1 ? ' disabled' : '') +
+      ' title="' + L('ดูช่วงกว้างขึ้น') + '">&minus;</button>' +
+      '<button data-act="g-zoom-step" data-d="-1"' + (zi <= 0 ? ' disabled' : '') +
+      ' title="' + L('ดูละเอียดขึ้น') + '">+</button>' +
+      '</div>';
+
+    h += '<button class="g-tb' + (nf ? ' on' : '') + '" data-act="g-filter">' + I('filter', 14) +
+      L('ตัวกรอง') + (nf ? '<span class="g-tb-n">' + nf + '</span>' : '') + '</button>';
+    h += '<button class="g-tb' + (v.sort !== 'manual' ? ' on' : '') + '" data-act="g-sort">' +
+      I('arrowUp', 14) + L('เรียง') + '</button>';
+    h += '<button class="g-tb' + (v.group !== 'section' ? ' on' : '') + '" data-act="g-group">' +
+      I('grid', 13) + L('จัดกลุ่ม') + '</button>';
+    h += '<button class="g-tb" data-act="g-options">' + I('settings', 14) + L('ตัวเลือก') + '</button>';
+
+    if (state.ganttSearch !== null) {
+      h += '<div class="g-tb-search">' + I('search', 13) +
+        '<input id="gSearch" type="search" data-act="g-search-input" placeholder="' +
+        L('ค้นหาในผัง') + '" value="' + esc(state.ganttSearch) + '">' +
+        '<button data-act="g-search-close" title="' + L('ปิด') + '">' + I('close', 12) + '</button></div>';
+    } else {
+      h += '<button class="g-tb icon" data-act="g-search-open" title="' + L('ค้นหาในผัง') +
+        '">' + I('search', 14) + '</button>';
+    }
+
+    h += '<button class="btn btn-sm" data-act="save-view">' + L('บันทึกมุมมอง') + '</button>';
+    if (p.savedViews.length) {
+      h += '<button class="btn btn-sm g-tb-caret" data-act="g-views-menu" title="' +
+        L('มุมมองที่บันทึกไว้') + '">' + I('chevronDown', 13) + '</button>';
+    }
     h += '</div>';
-    h += '<button class="btn btn-sm" data-act="g-today">' + L('ไปวันนี้') + '</button>';
-    h += '<button class="btn btn-sm btn-ghost" data-act="g-expand-all">' + L('ขยายทุกกลุ่ม') + '</button>';
-    h += '<button class="btn btn-sm btn-ghost" data-act="g-collapse-all">' + L('ย่อทุกกลุ่ม') + '</button>';
-    h += '<span class="g-hint">' + L('ลากแท่ง = เลื่อนวัน · ลากขอบ = ยืด/หด ·') + ' ' +
-      L('ลากจุดวงกลมปลายแท่งไปอีกงาน = สร้างลำดับ · คลิกเส้น = ลบลำดับ') + '</span>';
-    h += '</div>';
+
+    var legend = R.ganttLegend(p, v.gColorBy);
+    if (legend) h += '<div class="g-legendbar">' + legend + '</div>';
     return h;
+  }
+
+  /* ---------- แผงตัวเลือกของ Gantt ---------- */
+
+  var $opt     = document.getElementById('optPanel');
+  var $optBack = document.getElementById('optBackdrop');
+
+  function optOpen() { return !!$opt && $opt.classList.contains('open'); }
+
+  function openOpts(page) {
+    if (page) state.optPage = page;
+    $opt.innerHTML = optPanelHtml();
+    $opt.classList.add('open');
+    $opt.setAttribute('aria-hidden', 'false');
+    $optBack.classList.add('open');
+  }
+
+  function closeOpts() {
+    if (!$opt) return;
+    $opt.classList.remove('open');
+    $opt.setAttribute('aria-hidden', 'true');
+    $optBack.classList.remove('open');
+    state.optPage = 'root';
+  }
+
+  /** วาดแผงใหม่ถ้ากำลังเปิดอยู่ ใช้หลังแก้ค่าจากที่อื่น ค่าในแผงจะได้ไม่ค้างของเก่า */
+  function refreshOpts() { if (optOpen()) $opt.innerHTML = optPanelHtml(); }
+
+  function optRow(act, icon, label, value, arrow, extra) {
+    return '<button class="opt-row" data-act="' + act + '"' + (extra || '') + '>' +
+      I(icon, 15) + '<span class="grow">' + esc(label) + '</span>' +
+      (value ? '<span class="val">' + esc(value) + '</span>' : '') +
+      (arrow ? I('chevronRight', 13) : '') + '</button>';
+  }
+
+  function optToggle(act, label, on, desc, extra) {
+    return '<div class="opt-toggle"><div class="grow"><b>' + esc(label) + '</b>' +
+      (desc ? '<em>' + esc(desc) + '</em>' : '') + '</div>' +
+      '<button class="switch' + (on ? ' on' : '') + '" data-act="' + act + '"' +
+      (extra || '') + ' role="switch" aria-checked="' + (on ? 'true' : 'false') + '"><i></i></button></div>';
+  }
+
+  function optSelect(act, options, current, extra) {
+    var h = '<select class="opt-select" data-act="' + act + '"' + (extra || '') + '>';
+    options.forEach(function (o) {
+      h += '<option value="' + esc(o[0]) + '"' + (current === o[0] ? ' selected' : '') +
+        '>' + esc(o[1]) + '</option>';
+    });
+    return h + '</select>';
+  }
+
+  function optHead(title, back) {
+    return '<div class="opt-head">' +
+      (back ? '<button class="opt-back" data-act="g-opt-page" data-page="root" title="' +
+        L('ย้อนกลับ') + '">' + I('arrowLeft', 16) + '</button>' : '') +
+      '<h2>' + esc(title) + '</h2>' +
+      (back ? '' : '<button class="opt-close" data-act="g-opt-close" title="' + L('ปิด') +
+        '">' + I('close', 16) + '</button>') + '</div>';
+  }
+
+  function optPanelHtml() {
+    var id = state.route.id;
+    var p = S.project(id);
+    if (!p) return '';
+    var v = viewFor(id);
+    var page = state.optPage || 'root';
+    var h = '';
+
+    if (page === 'layout') {
+      h += optHead(L('รูปแบบการแสดงผล'), true);
+      h += '<div class="opt-body"><label class="opt-lbl">' + L('ระบายสีแท่งงานตาม') + '</label>' +
+        optSelect('g-colorby', S.COLOR_BYS.map(function (x) { return [x.id, L(x.label)]; }), v.gColorBy) +
+        '<p class="opt-note">' + L('สีช่วยให้กวาดตาแล้วเห็นภาพรวมทันที เช่น เลือก “ความคืบหน้า” แล้วแท่งแดงคืองานที่เลยกำหนด') + '</p>' +
+        '</div>';
+      return h + optFoot();
+    }
+
+    if (page === 'deps') {
+      h += optHead(L('การจัดตารางและเส้นฐาน'), true);
+      h += '<div class="opt-body">';
+      h += optToggle('g-autosched', L('เลื่อนงานที่รออยู่ให้อัตโนมัติ'), v.gAutoSchedule,
+        L('เมื่อเลื่อนงานหนึ่ง งานที่รอต่อจากมันจะถูกดันตามให้ลำดับยังถูกต้อง ไม่ดึงงานที่เว้นระยะไว้กลับมาชิด และไม่แตะงานที่ทำเสร็จแล้ว'));
+      h += '<div class="opt-sep"></div>';
+      h += '<div class="opt-base">' + I('calendar', 15) +
+        '<span class="grow">' + (p.baseline
+          ? esc(L('ตั้งเส้นฐานไว้เมื่อ {when}', { when: R.fmtWhen(p.baseline.at) }))
+          : L('ยังไม่ได้ตั้งเส้นฐาน')) + '</span></div>';
+      h += optToggle('g-basetoggle', L('แสดงเส้นฐาน'), v.gShowBaseline,
+        p.baseline ? L('เส้นจาง ๆ ใต้แท่งคือแผนเดิม เทียบแล้วรู้ทันทีว่าหลุดไปกี่วัน')
+                   : L('ต้องตั้งเส้นฐานก่อนจึงจะแสดงได้'));
+      h += '<div class="opt-acts">' +
+        '<button class="btn btn-sm" data-act="g-set-baseline">' +
+        (p.baseline ? L('ตั้งเส้นฐานใหม่จากวันปัจจุบัน') : L('ตั้งเส้นฐานจากวันปัจจุบัน')) + '</button>' +
+        (p.baseline ? '<button class="btn btn-sm btn-ghost" data-act="g-clear-baseline">' +
+          L('ลบเส้นฐาน') + '</button>' : '') + '</div>';
+      h += '<p class="opt-note">' + L('เส้นฐานคือภาพถ่ายวันที่ของทุกงาน ณ ตอนที่กด ใช้ตอบคำถามว่า “แผนเดิมบอกว่าเสร็จวันไหน” ตั้งใหม่ได้ทุกเมื่อ แต่ของเดิมจะถูกทับ') + '</p>';
+      h += '</div>';
+      return h + optFoot();
+    }
+
+    if (page === 'cols') {
+      h += optHead(L('แสดง/ซ่อนคอลัมน์'), true);
+      h += '<div class="opt-body"><p class="opt-note" style="margin-top:0">' +
+        L('เลือกคอลัมน์ที่จะแสดงในตารางฝั่งซ้าย') + '</p>';
+      S.GANTT_COLS.forEach(function (c) {
+        h += optToggle('g-col', L(c.label), !!v.gCols[c.id], '', ' data-col="' + c.id + '"');
+      });
+      h += '</div>';
+      return h + optFoot();
+    }
+
+    if (page === 'filters') {
+      h += optHead(L('ตัวกรอง'), true);
+      h += '<div class="opt-body">';
+      h += '<label class="opt-lbl">' + L('ผู้รับผิดชอบ') + '</label>' +
+        optSelect('f-assignee', [['', L('ทุกคน')]].concat(S.db.users.map(function (u) {
+          return [u.id, u.name];
+        })), v.assignee);
+      h += '<label class="opt-lbl">' + L('ความสำคัญ') + '</label>' +
+        optSelect('f-priority', [['', L('ทั้งหมด')]].concat(S.PRIORITIES.map(function (x) {
+          return [x.id, L(x.label)];
+        })), v.priority);
+      var tags = S.allTags();
+      if (tags.length) {
+        h += '<label class="opt-lbl">' + L('แท็ก') + '</label>' +
+          optSelect('f-tag', [['', L('ทั้งหมด')]].concat(tags.map(function (t) {
+            return [t, t];
+          })), v.tag);
+      }
+      h += '<label class="opt-lbl">' + L('กำหนดส่ง') + '</label>' +
+        optSelect('f-due', S.DUE_FILTERS.map(function (x) { return [x.id, L(x.label)]; }), v.due);
+      h += '<div class="opt-sep"></div>';
+      h += optToggle('f-completed', L('แสดงงานที่เสร็จแล้ว'), v.showCompleted);
+      h += '<div class="opt-acts"><button class="btn btn-sm btn-ghost" data-act="reset-view">' +
+        L('ล้างตัวกรอง') + '</button></div>';
+      h += '</div>';
+      return h + optFoot();
+    }
+
+    if (page === 'sorts') {
+      h += optHead(L('เรียงลำดับ'), true);
+      var sortOpts = S.SORTS.map(function (x) { return [x.id, L(x.label)]; })
+        .concat(p.fields.map(function (f) { return ['field:' + f.id, f.name]; }));
+      h += '<div class="opt-body"><label class="opt-lbl">' + L('เรียงตาม') + '</label>' +
+        optSelect('f-sort', sortOpts, v.sort);
+      if (v.sort !== 'manual') {
+        h += '<div class="opt-acts"><button class="btn btn-sm" data-act="f-sortdir">' +
+          I(v.sortDir === 'desc' ? 'arrowDown' : 'arrowUp', 13) + ' ' +
+          (v.sortDir === 'desc' ? L('มากไปน้อย') : L('น้อยไปมาก')) + '</button></div>';
+      }
+      h += '</div>';
+      return h + optFoot();
+    }
+
+    if (page === 'groups') {
+      h += optHead(L('จัดกลุ่ม'), true);
+      h += '<div class="opt-body"><label class="opt-lbl">' + L('จัดกลุ่มตาม') + '</label>' +
+        optSelect('f-group', S.GROUPS.map(function (x) { return [x.id, L(x.label)]; }), v.group);
+      h += '<div class="opt-acts">' +
+        '<button class="btn btn-sm btn-ghost" data-act="g-expand-all">' + L('ขยายทุกกลุ่ม') + '</button>' +
+        '<button class="btn btn-sm btn-ghost" data-act="g-collapse-all">' + L('ย่อทุกกลุ่ม') + '</button>' +
+        '</div></div>';
+      return h + optFoot();
+    }
+
+    /* ---- หน้าหลัก ---- */
+    var hidden = S.GANTT_COLS.filter(function (c) { return !v.gCols[c.id]; }).length;
+    var sortLab = v.sort === 'manual' ? L('ไม่ได้เรียง')
+      : (S.SORTS.filter(function (x) { return x.id === v.sort; })[0] || {}).label;
+    if (sortLab && v.sort !== 'manual') {
+      var ff = p.fields.filter(function (f) { return 'field:' + f.id === v.sort; })[0];
+      sortLab = ff ? ff.name : L(sortLab);
+    }
+    var groupLab = (S.GROUPS.filter(function (x) { return x.id === v.group; })[0] || {}).label;
+
+    h += optHead('Gantt');
+    h += '<div class="opt-body">';
+    h += '<div class="opt-namerow">' +
+      '<div><label class="opt-lbl">' + L('ไอคอน') + '</label>' +
+      '<input class="opt-icon" id="gvIcon" maxlength="2" value="' + esc(state.viewIcon || '📊') + '"></div>' +
+      '<div class="grow"><label class="opt-lbl">' + L('ชื่อมุมมอง') + '</label>' +
+      '<input class="opt-name" id="gvName" value="' + esc(state.viewName || 'Gantt') + '"></div></div>';
+
+    h += '<div class="opt-sep"></div>';
+    h += optRow('g-opt-page', 'pencil', L('รูปแบบการแสดงผล'), '', true, ' data-page="layout"');
+    h += optRow('g-opt-page', 'repeat', L('การจัดตารางและเส้นฐาน'),
+      v.gAutoSchedule ? L('อัตโนมัติ') : '', true, ' data-page="deps"');
+    h += '<div class="opt-row"><span class="ic-wrap">' + I('search', 15) + '</span>' +
+      '<span class="grow">' + L('ระดับการซูม') + '</span>' +
+      optSelect('g-zoom-set', S.GANTT_ZOOMS.map(function (x) { return [x.id, L(x.label)]; }), v.gZoom) +
+      '</div>';
+
+    h += '<div class="opt-sep"></div>';
+    h += optRow('g-opt-page', 'grid', L('แสดง/ซ่อนคอลัมน์'),
+      hidden ? L('ซ่อนอยู่ {n}', { n: hidden }) : L('แสดงครบ'), true, ' data-page="cols"');
+    h += optRow('g-opt-page', 'filter', L('ตัวกรอง'),
+      activeFilterCount(v) ? L('ใช้อยู่ {n}', { n: activeFilterCount(v) }) : L('ไม่มี'), true, ' data-page="filters"');
+    h += optRow('g-opt-page', 'arrowUp', L('เรียงลำดับ'), sortLab || L('ไม่ได้เรียง'), true, ' data-page="sorts"');
+    h += optRow('g-opt-page', 'hash', L('จัดกลุ่ม'), L(groupLab || ''), true, ' data-page="groups"');
+    h += '<div class="opt-row"><span class="ic-wrap">' + I('subtask', 15) + '</span>' +
+      '<span class="grow">' + L('งานย่อย') + '</span>' +
+      optSelect('g-subtasks', [['collapsed', L('ซ่อนไว้')], ['expanded', L('กางออก')]], v.gSubtasks) +
+      '</div>';
+
+    if (p.savedViews.length) {
+      h += '<div class="opt-sep"></div><label class="opt-lbl">' + L('มุมมองที่บันทึกไว้') + '</label>';
+      h += '<div class="opt-views">';
+      p.savedViews.forEach(function (sv) {
+        h += '<div class="opt-view"><button class="grow" data-act="load-view" data-id="' + esc(sv.id) + '">' +
+          '<span class="em">' + esc(sv.icon || '📊') + '</span>' + esc(sv.name) + '</button>' +
+          '<button class="x" data-act="delete-view" data-id="' + esc(sv.id) + '" title="' +
+          L('ลบมุมมอง') + '">' + I('close', 12) + '</button></div>';
+      });
+      h += '</div>';
+    }
+    h += '</div>';
+    return h + optFoot();
+  }
+
+  function optFoot() {
+    return '<div class="opt-foot">' +
+      '<button class="btn btn-ghost btn-sm" data-act="reset-view">' + L('ล้างตัวกรอง') + '</button>' +
+      '<span class="grow"></span>' +
+      '<button class="btn btn-primary btn-sm" data-act="save-view">' + L('บันทึกมุมมอง') + '</button></div>';
   }
 
   function restoreGanttScroll() {
@@ -247,7 +540,11 @@
     var line = $view.querySelector('.g-today');
     if (!sc || !line) return;
     var x = parseFloat(line.style.left) || 0;
-    sc.scrollLeft = Math.max(0, x + R.G_LEFT - sc.clientWidth / 2);
+    /* R.G_LEFT เป็นฟังก์ชัน ไม่ใช่ตัวเลข บวกตรง ๆ จะได้สตริงแล้ว scrollLeft กลายเป็น NaN
+     * วัดจากแผงซ้ายจริงแทน แม่นกว่าด้วยเพราะคอลัมน์เปิดปิดได้ */
+    var pane = $view.querySelector('.g-left');
+    var lw = pane ? pane.getBoundingClientRect().width : 0;
+    sc.scrollLeft = Math.max(0, x + lw - sc.clientWidth / 2);
     state.ganttScroll = { x: sc.scrollLeft, y: sc.scrollTop };
   }
 
@@ -709,7 +1006,7 @@
         h += '<div class="pa-note">' + I('shield', 14) + '<span>' +
           L('โปรเจกต์นี้ถูกล็อก เฉพาะผู้ดูแลระบบเท่านั้นที่เพิ่มหรือถอดสมาชิกได้') + '</span></div>';
       } else if (canManage) {
-        h += '<div class="field" style="margin-top:12px"><label>' + L('เพิ่มสมาชิก') + '</label>' +
+        h += '<div class="field" style="margin-top:12px"><label>' + L('เพิ่มสมาชิกใหม่') + '</label>' +
           '<select id="paUser">';
         S.db.users.filter(function (u) {
           return u.active !== false &&
@@ -843,7 +1140,7 @@
   /** เพิ่มรายชื่อไว้ล่วงหน้า ใช้ตอนอยากมอบหมายงานก่อนเจ้าตัวล็อกอินครั้งแรก */
   function addMemberModal() {
     var picker = canPickPeople();
-    var h = '<h2>' + L('เพิ่มสมาชิก') + '</h2>';
+    var h = '<h2>' + L('เพิ่มสมาชิกใหม่') + '</h2>';
 
     h += '<div class="field"><label>' + L('บทบาทที่จะให้') + '</label><select id="uRole">';
     S.ROLES.forEach(function (r) {
@@ -1230,7 +1527,8 @@
       'opt-color', 'set-opt-color',
       'manage-rules', 'add-rule', 'delete-rule',
       'manage-templates', 'delete-template', 'save-template', 'use-template',
-      'save-view', 'delete-view', 'reset-cols'
+      'save-view', 'delete-view', 'reset-cols',
+      'g-set-baseline', 'g-clear-baseline'
     ]);
     put('write', [
       'delete-task', 'dup-task', 'bulk-complete', 'bulk-reopen', 'bulk-due',
@@ -1319,6 +1617,7 @@
     if ($scrim && e.target === $scrim) { closeSidebar(); return; }
     if (e.target === $mdBack) { closeModal(); return; }
     if (e.target === $dwBack) { closeDrawer(); return; }
+    if (e.target === $optBack) { closeOpts(); return; }
     if (!el) return;
 
     var act = el.dataset.act;
@@ -1376,6 +1675,7 @@
         var vd = viewFor(state.route.id);
         vd.sortDir = (vd.sortDir === 'desc') ? 'asc' : 'desc';
         renderAll();
+        refreshOpts();
         break;
       }
 
@@ -1494,15 +1794,129 @@
       }
 
       /* --- gantt --- */
-      case 'g-zoom':
-        state.ganttZoom = el.dataset.v;
+      case 'g-zoom-step': {
+        var ids = S.GANTT_ZOOMS.map(function (x) { return x.id; });
+        var vz = viewFor(state.route.id);
+        var at = ids.indexOf(vz.gZoom);
+        var next = at + (parseInt(el.dataset.d, 10) || 0);
+        if (next < 0 || next >= ids.length) break;
+        vz.gZoom = ids[next];
+        state.ganttScroll = null;      // ซูมแล้วพิกัดเดิมไม่มีความหมาย ให้กลับไปที่วันนี้
+        renderViewBody();
+        refreshOpts();
+        break;
+      }
+      case 'g-zoom-menu': {
+        if (popIsOpenFor(el)) { closePops(); break; }
+        var vzm = viewFor(state.route.id);
+        var zh = '';
+        S.GANTT_ZOOMS.forEach(function (z) {
+          zh += '<button data-act="g-zoom-pick" data-v="' + z.id + '">' +
+            (vzm.gZoom === z.id ? R.ICON.check + ' ' : '<span class="pop-gap"></span>') +
+            L(z.label) + '</button>';
+        });
+        openPop(el, zh);
+        break;
+      }
+      case 'g-zoom-pick':
+        closePops();
+        viewFor(state.route.id).gZoom = el.dataset.v;
         state.ganttScroll = null;
         renderViewBody();
+        refreshOpts();
         break;
+
       case 'g-today':
         state.ganttScroll = null;
         scrollGanttToToday();
         break;
+      case 'g-pan': {
+        var scp = $view.querySelector('.gantt-scroll');
+        if (!scp) break;
+        scp.scrollLeft += (parseInt(el.dataset.d, 10) || 1) * Math.round(scp.clientWidth * 0.7);
+        state.ganttScroll = { x: scp.scrollLeft, y: scp.scrollTop };
+        break;
+      }
+
+      /* ตัวกรอง เรียง จัดกลุ่ม เปิดเป็นหน้าย่อยของแผงเดียวกัน
+       * ไม่แยกเป็นเมนูลอย เพราะสามอย่างนี้มักปรับต่อเนื่องกัน ถ้าเป็นเมนูลอยจะต้องเปิดปิดทีละอัน */
+      case 'g-filter':  openOpts('filters'); break;
+      case 'g-sort':    openOpts('sorts');   break;
+      case 'g-group':   openOpts('groups');  break;
+      case 'g-options': openOpts('root');    break;
+      case 'g-opt-page':
+        state.optPage = el.dataset.page || 'root';
+        openOpts();
+        break;
+      case 'g-opt-close': closeOpts(); break;
+
+      /* g-colorby / g-subtasks / g-zoom-set เป็น select จึงรับที่ตัวจัดการ change ไม่ใช่ที่นี่ */
+      case 'g-col': {
+        var vc = viewFor(state.route.id);
+        var ck = el.dataset.col;
+        vc.gCols[ck] = !vc.gCols[ck];
+        renderViewBody();
+        refreshOpts();
+        break;
+      }
+      case 'g-autosched': {
+        var va = viewFor(state.route.id);
+        va.gAutoSchedule = !va.gAutoSchedule;
+        refreshOpts();
+        toast(va.gAutoSchedule ? L('เปิดการเลื่อนงานที่รออยู่ให้อัตโนมัติแล้ว')
+                               : L('ปิดการเลื่อนอัตโนมัติแล้ว'));
+        break;
+      }
+      case 'g-basetoggle': {
+        var vb = viewFor(state.route.id);
+        var pb2 = S.project(state.route.id);
+        if (!pb2.baseline && !vb.gShowBaseline) { toast(L('ยังไม่ได้ตั้งเส้นฐาน')); break; }
+        vb.gShowBaseline = !vb.gShowBaseline;
+        renderViewBody();
+        refreshOpts();
+        break;
+      }
+      case 'g-set-baseline': {
+        var pbs = S.project(state.route.id);
+        if (pbs.baseline &&
+            !confirm(L('ตั้งเส้นฐานใหม่? แผนเดิมที่บันทึกไว้จะถูกทับ'))) break;
+        S.setBaseline(state.route.id);
+        viewFor(state.route.id).gShowBaseline = true;
+        renderViewBody();
+        refreshOpts();
+        toast(L('ตั้งเส้นฐานแล้ว'), L('ย้อนกลับ'), 'undo');
+        break;
+      }
+      case 'g-clear-baseline':
+        if (!confirm(L('ลบเส้นฐานที่บันทึกไว้?'))) break;
+        S.clearBaseline(state.route.id);
+        viewFor(state.route.id).gShowBaseline = false;
+        renderViewBody();
+        refreshOpts();
+        toast(L('ลบเส้นฐานแล้ว'), L('ย้อนกลับ'), 'undo');
+        break;
+
+      case 'g-search-open':
+        state.ganttSearch = '';
+        renderViewBody();
+        var gsi = document.getElementById('gSearch');
+        if (gsi) gsi.focus();
+        break;
+      case 'g-search-close':
+        state.ganttSearch = null;
+        renderViewBody();
+        break;
+      case 'g-views-menu': {
+        if (popIsOpenFor(el)) { closePops(); break; }
+        var pv = S.project(state.route.id);
+        var vh = '';
+        pv.savedViews.forEach(function (sv) {
+          vh += '<button data-act="load-view" data-id="' + esc(sv.id) + '">' +
+            esc(sv.icon || '📊') + ' ' + esc(sv.name) + '</button>';
+        });
+        openPop(el, vh);
+        break;
+      }
       case 'g-toggle-sec': {
         var gk = el.dataset.key;
         if (state.ganttCollapsed[gk]) delete state.ganttCollapsed[gk];
@@ -1551,28 +1965,49 @@
         var v1 = viewFor(state.route.id);
         v1.showCompleted = !v1.showCompleted;
         renderAll();
+        refreshOpts();
         break;
       }
       case 'reset-view':
         state.views[state.route.id] = S.defaultView();
         renderAll();
+        refreshOpts();
         break;
       case 'save-view': {
-        var nm = prompt(L('ตั้งชื่อมุมมองนี้'));
-        if (!nm || !nm.trim()) break;
-        S.saveView(state.route.id, nm.trim(), viewFor(state.route.id));
+        /* ถ้าแผงตัวเลือกเปิดอยู่ ให้ใช้ชื่อกับไอคอนที่พิมพ์ไว้ในแผง
+         * จะได้ไม่ต้องเด้ง prompt ซ้อนแผงที่มีช่องชื่ออยู่แล้ว */
+        var iEl = document.getElementById('gvName');
+        var nm = iEl ? iEl.value.trim() : (prompt(L('ตั้งชื่อมุมมองนี้')) || '').trim();
+        if (!nm) { toast(L('ยังไม่ได้ตั้งชื่อมุมมอง')); break; }
+        var icEl = document.getElementById('gvIcon');
+        var ic = icEl ? icEl.value.trim() : '';
+        state.viewName = nm;
+        if (ic) state.viewIcon = ic;
+        S.saveView(state.route.id, nm, viewFor(state.route.id), ic || state.viewIcon);
+        renderViewBody();
+        refreshOpts();
         toast(L('บันทึกมุมมองแล้ว'));
         break;
       }
       case 'load-view': {
+        closePops();
         var p2 = S.project(state.route.id);
         var sv = p2.savedViews.filter(function (x) { return x.id === id; })[0];
-        if (sv) { state.views[state.route.id] = S.clone(sv.view); renderAll(); }
+        if (sv) {
+          state.views[state.route.id] = S.fillView(S.clone(sv.view));
+          state.viewName = sv.name;
+          state.viewIcon = sv.icon || '📊';
+          state.ganttScroll = null;
+          renderAll();
+          refreshOpts();
+        }
         break;
       }
       case 'delete-view':
         e.stopPropagation();
         S.deleteSavedView(state.route.id, id);
+        renderViewBody();
+        refreshOpts();
         break;
 
       /* --- task basics --- */
@@ -2242,7 +2677,22 @@
       if (act === 'f-sort') { v.sort = el.value; v.sortDir = 'asc'; }
       if (act === 'f-group') v.group = el.value;
       renderAll();
+      refreshOpts();
       return;
+    }
+
+    /* select ของ Gantt ยิง change ไม่ใช่ click จึงต้องรับที่นี่
+     * ถ้าไปพึ่ง switch ของ click จะไม่มีวันถูกเรียก */
+    if (state.route.type === 'project' && state.route.view === 'gantt') {
+      var gv = viewFor(state.route.id);
+      if (act === 'g-colorby')  { gv.gColorBy  = el.value; renderViewBody(); return; }
+      if (act === 'g-subtasks') { gv.gSubtasks = el.value; renderViewBody(); return; }
+      if (act === 'g-zoom-set') {
+        gv.gZoom = el.value;
+        state.ganttScroll = null;
+        renderViewBody();
+        return;
+      }
     }
 
     if (act === 'nf-type') {
@@ -2312,6 +2762,20 @@
       return;
     }
 
+    /* ค้นในผัง Gantt เป็นการเน้นแถว ไม่ใช่การกรองออก
+     * ถ้ากรองออกจะเห็นแท่งลอย ๆ ไม่มีบริบทว่างานนั้นอยู่ช่วงไหนของแผน */
+    if (e.target.id === 'gSearch') {
+      var gq = e.target.value;
+      clearTimeout(gSearchTimer);
+      gSearchTimer = setTimeout(function () {
+        state.ganttSearch = gq;
+        renderViewBody();
+        var gi2 = document.getElementById('gSearch');
+        if (gi2) { gi2.focus(); gi2.setSelectionRange(gq.length, gq.length); }
+      }, 180);
+      return;
+    }
+
     if (e.target.id === 'searchInput') {
       var q = e.target.value;
       clearTimeout(searchTimer);
@@ -2332,6 +2796,7 @@
   });
 
   var searchTimer = null;
+  var gSearchTimer = null;
 
   /* ---------- keyboard ---------- */
 
@@ -2390,6 +2855,7 @@
     if (e.key === 'Escape') {
       if ($mdBack.classList.contains('open')) { closeModal(); return; }
       if (document.querySelector('.pop')) { closePops(); return; }
+      if (optOpen()) { closeOpts(); return; }
       if (document.getElementById('sidebar').classList.contains('open')) { closeSidebar(); return; }
       if (selCount()) { clearSelUI(); return; }
       if (state.openTaskId) closeDrawer();
@@ -2528,7 +2994,9 @@
         e.preventDefault();
         e.stopPropagation();
         colDrag = {
-          pane: pane, key: 'gLeft', startX: e.clientX,
+          pane: pane, key: grip.dataset.col || 'gLeft',
+          extra: parseInt(grip.dataset.extra, 10) || 0,   // คอลัมน์อื่นกว้างรวมเท่าไร
+          startX: e.clientX,
           w0: pane.getBoundingClientRect().width
         };
         document.body.classList.add('col-resizing');
@@ -2667,7 +3135,9 @@
       document.body.classList.remove('col-resizing');
       if (d.last && Math.abs(d.last - d.w0) > 1) {
         lastDragEnd = Date.now();
-        S.setColWidth(state.route.id, d.key, d.last);
+        /* ค่าที่เก็บคือความกว้างของช่องชื่อ ไม่ใช่ความกว้างรวมของแผงซ้าย
+         * ต้องหักคอลัมน์อื่นออกก่อน ไม่งั้นพอเปิดคอลัมน์เพิ่มแผงจะโตซ้ำซ้อน */
+        S.setColWidth(state.route.id, d.key, Math.max(120, d.last - (d.extra || 0)));
       }
       return;
     }
@@ -2718,7 +3188,19 @@
       patch.dueOn = nd;
     }
     S.updateTask(drag2.id, patch);
-    toast(L('เลื่อนวันแล้ว'), L('ย้อนกลับ'), 'undo');
+
+    /* งานที่รอต่อจากงานนี้ต้องขยับตาม ถ้าผู้ใช้เปิดโหมดจัดตารางอัตโนมัติไว้
+     * ทำหลัง updateTask เพื่อให้ snapshot ของ undo ครอบทั้งการเลื่อนต้นทางและปลายทาง
+     * กด Ctrl+Z ครั้งเดียวจึงกลับมาทั้งชุด ไม่ใช่ต้องกดทีละงาน */
+    var chain = [];
+    if (state.route.type === 'project' && state.route.view === 'gantt' &&
+        viewFor(state.route.id).gAutoSchedule) {
+      chain = S.autoSchedule(drag2.id);
+    }
+    renderViewBody();
+    toast(chain.length
+      ? L('เลื่อนวันแล้ว และดันงานที่รออยู่ต่ออีก {n} งาน', { n: chain.length })
+      : L('เลื่อนวันแล้ว'), L('ย้อนกลับ'), 'undo');
   });
 
   /* ---------- drag & drop (การ์ดและแถว) ---------- */

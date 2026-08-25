@@ -1205,7 +1205,7 @@
       return '<div class="empty"><div class="big">🔍</div>' + L('ไม่พบงานที่ตรงกับ “') + esc(q) + '”</div>';
     }
     var h = '<div class="list-wrap">';
-    h += '<div class="bucket-head">' + L('พบ') + ' <span class="n">' + res.length + '</span> ' + L('รายการ') + '</div>';
+    h += '<div class="bucket-head">' + L('พบ {n} รายการ', { n: '<span class="n">' + res.length + '</span>' }) + '</div>';
     res.forEach(function (t) {
       h += taskRow(t, { showProject: true, selectable: true, selected: !!sel[t.id] });
     });
@@ -1741,7 +1741,7 @@
     h += '<section class="admin-sec"><h3>' + L('สมาชิกและสิทธิ์') +
       '<span class="admin-count">' + db.users.length + ' ' + L('คน') + '</span>' +
       '<button class="btn btn-sm btn-primary" data-act="add-user">' + I('plus', 13) + ' ' +
-      L('เพิ่มสมาชิก') + '</button></h3>';
+      L('เพิ่มสมาชิกใหม่') + '</button></h3>';
 
     if (team) {
       h += '<div class="admin-demo">' + I('alert', 15) + '<div>' +
@@ -1804,7 +1804,7 @@
      * แยกจากกิจกรรมของงาน เพราะตอบคำถามคนละแบบ
      * อันนี้ตอบว่า "ใครทำอะไรกับระบบ" ไว้ให้ผู้ดูแลไล่ย้อนหลังได้ */
     h += '<section class="admin-sec"><h3>' + L('บันทึกการทำงาน') +
-      '<span class="admin-count">' + (db.audit || []).length + ' ' + L('รายการ') + '</span>' +
+      '<span class="admin-count">' + L('{n} รายการ', { n: (db.audit || []).length }) + '</span>' +
       '<button class="btn btn-sm" data-act="audit-csv">' + I('archive', 13) + ' ' +
       L('ส่งออก CSV') + '</button></h3>';
 

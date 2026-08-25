@@ -238,7 +238,6 @@
     'เว้นว่างถ้าไม่ต้องการ': 'Leave blank to skip', 'เพิ่มกฎ': 'Add rule',
     'เพิ่มกฎแล้ว': 'Rule added',
     'ทำเครื่องหมายเสร็จ': 'mark complete',
-    'มอบหมายให้ {who}': 'assign to {who}',
     'ตั้งความสำคัญเป็น {p}': 'set priority to {p}',
     'ติดแท็ก {tag}': 'add tag {tag}',
 
@@ -249,7 +248,7 @@
     '{n} งานย่อย': '{n} subtasks',
 
     /* --- สมาชิก --- */
-    'เพิ่มสมาชิก': 'Add member', 'ชื่อ': 'Name', 'อีเมล': 'Email',
+    'เพิ่มสมาชิกใหม่': 'Add member', 'ชื่อ': 'Name', 'อีเมล': 'Email',
     'ลบสมาชิกคนนี้?': 'Remove this member?', 'สลับผู้ใช้': 'Switch user',
     'สลับเป็น {who} แล้ว': 'Switched to {who}', 'ใส่ชื่อก่อน': 'Enter a name first',
 
@@ -499,7 +498,8 @@
     'ล็อกโปรเจกต์': 'locked project', 'ปลดล็อกโปรเจกต์': 'unlocked project',
     'ตั้งสิทธิ์ในโปรเจกต์': 'Set project access',
     'ถอดสมาชิกออกจากโปรเจกต์': 'Remove project member',
-    'บันทึกการทำงาน': 'Activity log', 'รายการ': 'entries',
+    'บันทึกการทำงาน': 'Activity log',
+    '{n} รายการ': '{n} entries', 'พบ {n} รายการ': 'Found {n}',
     'ส่งออก CSV': 'Export CSV', 'ทั้งหมด': 'All',
     'ค้นหาในบันทึก…': 'Search the log…',
     'ยังไม่มีบันทึกที่ตรงกับเงื่อนไข': 'No entries match this filter',
@@ -546,7 +546,7 @@
     'เพิ่มด้วยข้อมูลที่กรอก': 'Add from the fields above',
     'กรอกอีเมลให้ตรงกับบัญชีบริษัท ไม่งั้นตอนเจ้าตัวล็อกอินจะกลายเป็นคนละรายการ':
       'Use their exact work email — otherwise they will appear as a separate person when they sign in.',
-    'เพิ่มสมาชิก': 'Add member', 'ยังไม่เคยเข้าใช้': 'Never signed in',
+    'ยังไม่เคยเข้าใช้': 'Never signed in',
     'ลบออกจากรายชื่อ': 'Remove from list',
     'แต่ละระดับทำอะไรได้บ้าง': 'What each level can do',
     'จัดการสมาชิก สิทธิ์ และโปรเจกต์ได้ทั้งหมด': 'Manage members, permissions and all projects',
@@ -604,7 +604,7 @@
     '{n} งานครบกำหนดใน 7 วัน': '{n} due in 7 days',
     '{n} เพื่อนร่วมงาน': '{n} collaborators',
     'กำลังจะถึง': 'Upcoming', 'เลยกำหนด ({n})': 'Overdue ({n})',
-    'เสร็จแล้ว': 'Completed', 'สัปดาห์นี้ ({n})': 'This week ({n})',
+    'สัปดาห์นี้ ({n})': 'This week ({n})',
     'งานที่ฉันมอบหมาย': 'Tasks I’ve assigned',
     'ดูทั้งหมด': 'See all', 'ดูโปรเจกต์ทั้งหมด': 'Browse projects',
     'งานใกล้ครบกำหนด {n} งาน': '{n} due soon',
@@ -614,6 +614,55 @@
     'ยังไม่ได้มอบหมายงานให้ใคร': 'You have not assigned any tasks yet',
     'ยังไม่มีโปรเจกต์': 'No projects yet',
     'เปิดหน้านี้เป็นหน้าแรกทุกครั้ง': 'Open this page on start',
+
+    /* --- แถบเครื่องมือ Gantt --- */
+    'ตัวกรอง': 'Filter', 'ตัวเลือก': 'Options', 'ค้นหาในผัง': 'Search this chart',
+    'มุมมองที่บันทึกไว้': 'Saved views', 'ยังไม่ได้ตั้งชื่อมุมมอง': 'Name the view first',
+    'เลื่อนไปทางซ้าย': 'Scroll left', 'เลื่อนไปทางขวา': 'Scroll right',
+    'ดูช่วงกว้างขึ้น': 'Zoom out', 'ดูละเอียดขึ้น': 'Zoom in',
+    'ครึ่งปี': 'Half-year', 'ปี': 'Years',
+    'ระดับการซูม': 'Zoom', 'อัตโนมัติ': 'On',
+    'ซ่อนไว้': 'Collapsed', 'กางออก': 'Expanded',
+    'ชื่อมุมมอง': 'View name',
+    'รูปแบบการแสดงผล': 'Layout options', 'ระบายสีแท่งงานตาม': 'Color tasks by',
+    'สีของโปรเจกต์': 'Theme color', 'สถานะอนุมัติ': 'Approval status',
+    'ความคืบหน้า': 'Progress',
+    'สีช่วยให้กวาดตาแล้วเห็นภาพรวมทันที เช่น เลือก “ความคืบหน้า” แล้วแท่งแดงคืองานที่เลยกำหนด':
+      'Color makes the whole plan readable at a glance — pick “Progress” and every red bar is a task past its due date.',
+    'การจัดตารางและเส้นฐาน': 'Dependency settings',
+    'เลื่อนงานที่รออยู่ให้อัตโนมัติ': 'Auto-schedule dependent tasks',
+    'เมื่อเลื่อนงานหนึ่ง งานที่รอต่อจากมันจะถูกดันตามให้ลำดับยังถูกต้อง ไม่ดึงงานที่เว้นระยะไว้กลับมาชิด และไม่แตะงานที่ทำเสร็จแล้ว':
+      'When you move a task, everything waiting on it shifts along so the sequence still holds. Gaps you left on purpose are kept, and completed tasks are never moved.',
+    'เปิดการเลื่อนงานที่รออยู่ให้อัตโนมัติแล้ว': 'Auto-scheduling on',
+    'ปิดการเลื่อนอัตโนมัติแล้ว': 'Auto-scheduling off',
+    'เลื่อนวันแล้ว และดันงานที่รออยู่ต่ออีก {n} งาน': 'Dates moved · {n} dependent tasks shifted',
+    'ตั้งเส้นฐานไว้เมื่อ {when}': 'Baseline set {when}',
+    'ยังไม่ได้ตั้งเส้นฐาน': 'No baseline yet',
+    'แสดงเส้นฐาน': 'Show baseline',
+    'เส้นจาง ๆ ใต้แท่งคือแผนเดิม เทียบแล้วรู้ทันทีว่าหลุดไปกี่วัน':
+      'The faint line under each bar is the original plan — the gap is how far it has slipped.',
+    'ต้องตั้งเส้นฐานก่อนจึงจะแสดงได้': 'Set a baseline first',
+    'ตั้งเส้นฐานจากวันปัจจุบัน': 'Set baseline from today’s dates',
+    'ตั้งเส้นฐานใหม่จากวันปัจจุบัน': 'Reset baseline to today’s dates',
+    'ลบเส้นฐาน': 'Clear baseline',
+    'เส้นฐานคือภาพถ่ายวันที่ของทุกงาน ณ ตอนที่กด ใช้ตอบคำถามว่า “แผนเดิมบอกว่าเสร็จวันไหน” ตั้งใหม่ได้ทุกเมื่อ แต่ของเดิมจะถูกทับ':
+      'A baseline is a snapshot of every task’s dates at the moment you press it — it answers “what did the original plan say?”. You can reset it any time, but the previous one is overwritten.',
+    'ตั้งเส้นฐานใหม่? แผนเดิมที่บันทึกไว้จะถูกทับ':
+      'Reset the baseline? The plan saved earlier will be overwritten.',
+    'ลบเส้นฐานที่บันทึกไว้?': 'Delete the saved baseline?',
+    'ตั้งเส้นฐานแล้ว': 'Baseline set', 'ลบเส้นฐานแล้ว': 'Baseline cleared',
+    'แผนเดิม': 'Original plan',
+    'ช้ากว่าแผน {n} วัน': '{n} days behind plan',
+    'เร็วกว่าแผน {n} วัน': '{n} days ahead of plan',
+    'แสดง/ซ่อนคอลัมน์': 'Show/hide columns',
+    'เลือกคอลัมน์ที่จะแสดงในตารางฝั่งซ้าย': 'Choose which columns appear in the table on the left',
+    'ระยะเวลา': 'Duration', 'บล็อกงานอะไร': 'Blocking', '{n} วัน': '{n} days',
+    'ซ่อนอยู่ {n}': '{n} hidden', 'แสดงครบ': 'All shown',
+    'ใช้อยู่ {n}': '{n} active', 'ไม่มี': 'None',
+    'แสดงงานที่เสร็จแล้ว': 'Show completed tasks',
+    'เรียงลำดับ': 'Sorts', 'เรียงตาม': 'Sort by', 'ไม่ได้เรียง': 'None',
+    'น้อยไปมาก': 'Ascending', 'มากไปน้อย': 'Descending',
+    'จัดกลุ่มตาม': 'Group by',
 
     /* --- ชื่อเดือน / วัน --- */
     '__monthsShort': 'Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec',
