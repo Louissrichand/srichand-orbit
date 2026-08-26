@@ -862,6 +862,36 @@
     '{n} โปรเจกต์': '{n} projects',
     'แก้คำอธิบาย': 'Edit description',
 
+    /* --- ข้อความบันทึกความเคลื่อนไหวของงาน --- */
+    'ตั้งกำหนดส่ง {d}': 'set the due date to {d}',
+    'เปลี่ยนสถานะอนุมัติเป็น “{s}”': 'set the approval to “{s}”',
+    'ย้ายไปคอลัมน์ {c}': 'moved it to {c}',
+    'เพิ่มเข้าโปรเจกต์ {p}': 'added it to {p}',
+    'รอ “{t}” ให้เสร็จก่อน': 'set it to wait for “{t}”',
+    'แนบ “{f}”': 'attached “{f}”',
+    'รับช่วงงานต่อจาก {who}': 'took this over from {who}',
+    'ยกเลิกผู้รับผิดชอบ เดิมเป็นของ {who}': 'unassigned it — previously {who}',
+
+    /* --- รายละเอียดในบันทึกการทำงาน --- */
+    'ส่งออก {n} งานเป็น CSV': 'exported {n} tasks to CSV',
+    'นำเข้า {n} งาน': 'imported {n} tasks',
+    'จำนวนงานที่บันทึก {n}': '{n} tasks captured',
+    'มีโปรเจกต์อยู่ {n} โปรเจกต์ ซึ่งยังอยู่ครบ': 'held {n} projects, all of which remain',
+    '{email} · บทบาท {role}': '{email} · role {role}',
+    'เปลี่ยนเป็น {v}': 'changed to {v}',
+    'โอนให้ {who} จำนวน {n} งาน': 'handed {n} tasks to {who}',
+    'ปล่อยว่างไว้ จำนวน {n} งาน': 'left {n} tasks unassigned',
+    'คัดลอกจากโปรเจกต์เดิม': 'copied from an existing project',
+    'งานที่อยู่เฉพาะโปรเจกต์นี้ถูกลบไปด้วย': 'tasks that lived only here were deleted too',
+    'ล้างข้อมูลทั้งหมดและเริ่มใหม่': 'cleared everything and started over',
+
+    /* --- ข้อความในกล่องข้อความ --- */
+    'มอบหมายงาน “{t}” ให้คุณ': 'assigned “{t}” to you',
+    'งาน “{t}” พร้อมทำต่อแล้ว': '“{t}” is ready to move on',
+    'พูดถึงคุณในความเห็น': 'mentioned you in a comment',
+    'โอนงานที่ยังไม่เสร็จ {n} งาน จาก {who} มาให้คุณ':
+      'handed you {n} open tasks from {who}',
+
     /* --- ชื่อเดือน / วัน --- */
     '__monthsShort': 'Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec',
     '__monthsFull': 'January,February,March,April,May,June,July,August,September,October,November,December',

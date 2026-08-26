@@ -107,6 +107,10 @@
            global.I18N.year(d.getFullYear()) + ' ' + fmtTime(d);
   }
 
+  /** ข้อความบันทึกความเคลื่อนไหว แปลตอนแสดง
+   *  ข้อมูลเก่าที่เก็บเป็นประโยคไว้แล้วยังอ่านได้ เพราะ L() คืนค่าเดิมเมื่อไม่เจอคีย์ */
+  function storyText(s) { return L(s.text, s.params || undefined); }
+
   /** ป้ายเวลา ย่อไว้ให้อ่านเร็ว แต่ชี้ค้างแล้วเห็นวันเวลาเต็ม */
   function whenTag(isoTs, cls) {
     return '<span class="' + (cls || 'when') + '" title="' + esc(fmtExact(isoTs)) + '">' +
@@ -1409,7 +1413,7 @@
         avatar(a.actor, 'sm') +
         '<span class="hact-body"><span class="hact-txt"><strong>' +
         esc(a.actor ? a.actor.name : '?') + '</strong> ' +
-        esc(a.story.type === 'comment' ? L('แสดงความเห็น') : a.story.text) + '</span>' +
+        esc(a.story.type === 'comment' ? L('แสดงความเห็น') : storyText(a.story)) + '</span>' +
         '<span class="hact-sub" title="' + esc(fmtExact(a.story.createdAt)) + '">' +
         esc(a.taskName || '') + ' · ' + esc(fmtWhen(a.story.createdAt)) +
         '</span></span></div>';
@@ -1475,7 +1479,8 @@
       h += '<div class="nrow' + (n.read ? '' : ' unread') + '" data-act="open-notif" data-id="' +
         esc(n.id) + '" data-task="' + esc(n.taskId) + '">';
       h += n.read ? '<span style="width:8px;flex:0 0 8px"></span>' : '<span class="unread-dot"></span>';
-      h += '<div class="body"><div class="txt">' + esc(n.text) + '</div>' +
+      var ntxt = n.key ? (n.actorName ? n.actorName + ' ' : '') + L(n.key, n.params || undefined) : n.text;
+      h += '<div class="body"><div class="txt">' + esc(ntxt) + '</div>' +
         '<div class="sub" title="' + esc(fmtExact(n.createdAt)) + '">' +
         esc(t ? t.name : L('(งานถูกลบแล้ว)')) + ' · ' +
         esc(fmtWhen(n.createdAt)) + '</div></div>';
@@ -1840,7 +1845,7 @@
           '<div class="txt">' + mentionize(s.text) + '</div></div></div>';
       } else {
         h += '<div class="story log">' + avatar(actor, 'sm') +
-          '<div class="txt">' + esc(actor ? actor.name : '?') + ' ' + esc(s.text) +
+          '<div class="txt">' + esc(actor ? actor.name : '?') + ' ' + esc(storyText(s)) +
           whenTag(s.createdAt) + '</div></div>';
       }
     });
@@ -2247,7 +2252,7 @@
           I(auditIcon(r.action), 14) + '</span><div>' +
           '<b>' + esc(who ? who.name : '—') + '</b> ' + esc(L(auditText(r.action))) +
           (r.target ? ' <u>' + esc(r.target) + '</u>' : '') +
-          (r.detail ? '<span class="d">' + esc(r.detail) + '</span>' : '') +
+          (r.detail ? '<span class="d">' + esc(L(r.detail, r.detailParams || undefined)) + '</span>' : '') +
           '<em title="' + esc(fmtExact(r.at)) + '">' + esc(fmtWhen(r.at)) + '</em></div></li>';
       });
       h += '</ul>';
@@ -2268,7 +2273,7 @@
       acts.forEach(function (a) {
         h += '<li><span class="dot"></span><div>' +
           '<b>' + esc(a.actor ? a.actor.name : '?') + '</b> ' +
-          esc(a.story.type === 'comment' ? L('แสดงความเห็น') : a.story.text);
+          esc(a.story.type === 'comment' ? L('แสดงความเห็น') : storyText(a.story));
         if (a.taskName) {
           h += ' <a href="#/task/' + esc(a.story.taskId) + '">' + esc(a.taskName) + '</a>';
         }

@@ -559,7 +559,11 @@
    */
   var AUDIT_MAX = 2000;    // เก็บเท่าที่จำเป็น ไม่ให้ไฟล์บวมไม่มีที่สิ้นสุด
 
-  function audit(action, target, detail) {
+  /**
+   * @param detail       คีย์คำแปล ไม่ใช่ประโยคสำเร็จรูป จะได้อ่านได้ทั้งสองภาษา
+   * @param detailParams ค่าแทนที่ในคีย์
+   */
+  function audit(action, target, detail, detailParams) {
     if (!db.audit) db.audit = [];
     db.audit.push({
       id: uid('a'),
@@ -567,7 +571,8 @@
       actorId: db.currentUserId,
       action: action,                       // เช่น user.role, project.delete
       target: target || null,               // ชื่อหรือรหัสของสิ่งที่ถูกกระทำ
-      detail: detail || null
+      detail: detail || null,
+      detailParams: detailParams || null
     });
     if (db.audit.length > AUDIT_MAX) {
       db.audit = db.audit.slice(-AUDIT_MAX);
@@ -656,7 +661,7 @@
     });
     /* ลงบันทึกไว้ด้วย การเอางานทั้งโปรเจกต์ออกไปเป็นไฟล์คือการนำข้อมูลออกนอกระบบ
      * ผู้ดูแลต้องตอบได้ว่าใครเอาอะไรออกไปเมื่อไร */
-    audit('project.export', p.name, 'ส่งออก ' + (lines.length - 1) + ' งานเป็น CSV');
+    audit('project.export', p.name, 'ส่งออก {n} งานเป็น CSV', { n: lines.length - 1 });
     commit();
     return '﻿' + lines.join('\r\n');
   }
@@ -781,7 +786,7 @@
       made++;
     }
 
-    audit('project.import', p.name, 'นำเข้า ' + made + ' งาน');
+    audit('project.import', p.name, 'นำเข้า {n} งาน', { n: made });
     commit();
     return { tasks: made, sections: newSections };
   }
@@ -955,7 +960,7 @@
       map[t.id] = { startOn: t.startOn, dueOn: t.dueOn };
     });
     p.baseline = { at: new Date().toISOString(), tasks: map };
-    audit('project.baseline', p.name, 'จำนวนงานที่บันทึก ' + Object.keys(map).length);
+    audit('project.baseline', p.name, 'จำนวนงานที่บันทึก {n}', { n: Object.keys(map).length });
     commit();
     return true;
   }
@@ -1569,7 +1574,8 @@
     return !!n[kind];
   }
 
-  function notify(taskId, text, exceptUserId, extraUserIds, kind, excludeIds) {
+  function notify(taskId, text, exceptUserId, extraUserIds, kind, excludeIds,
+                  key, params, actor) {
     var t = task(taskId);
     if (!t) return;
     var targets = {};
@@ -1582,6 +1588,10 @@
       if (!wantsNotify(target, kind)) return;
       db.notifications.push({
         id: uid('n'), userId: target, taskId: taskId, text: text,
+        /* เก็บคีย์ไว้ด้วยเมื่อมี กล่องข้อความจะได้แปลตอนอ่าน
+         * ไม่ใช่ค้างภาษาของคนที่ทำให้เกิดการแจ้งเตือน */
+        key: key || null, params: params || null,
+        actorName: actor ? actor.name : null,
         kind: kind || null,
         createdAt: new Date().toISOString(), read: false, archived: false
       });
@@ -1603,27 +1613,58 @@
    * ถ้าส่งผ่าน notify() ปกติ ผู้ติดตามทุกคนจะได้ข้อความที่ขึ้นต้นว่า "ให้คุณ"
    * ทั้งที่ไม่ได้เกี่ยวกับเขา
    */
-  function notifyOnly(taskId, userIds, text, kind) {
+  /**
+   * @param noActor ข้อความบางแบบพูดถึงตัวงาน ไม่ใช่การกระทำของใคร
+   *                เช่น "งาน X พร้อมทำต่อแล้ว" เติมชื่อคนข้างหน้าแล้วอ่านไม่รู้เรื่อง
+   */
+  function notifyOnly(taskId, userIds, key, kind, params, noActor) {
+    var actor = noActor ? null : me();
     (userIds || []).forEach(function (target) {
       if (!target || target === db.currentUserId) return;
       if (!user(target)) return;
       if (!wantsNotify(target, kind)) return;
       db.notifications.push({
-        id: uid('n'), userId: target, taskId: taskId, text: text, kind: kind || null,
+        id: uid('n'), userId: target, taskId: taskId,
+        text: fill(key, params), kind: kind || null,
+        key: key, params: params || null,
+        actorName: actor ? actor.name : null,
         createdAt: new Date().toISOString(), read: false, archived: false
       });
     });
   }
 
   /** @param exclude รายชื่อคนที่ไม่ต้องแจ้ง เพราะได้รับแจ้งแบบเจาะจงกว่านี้ไปแล้ว */
-  function log(taskId, text, exclude) {
+  /**
+   * บันทึกความเคลื่อนไหวของงาน
+   *
+   * เก็บเป็น "คีย์ + ค่าแทนที่" ไม่ใช่ประโยคสำเร็จรูป
+   * ประโยคที่ประกอบเสร็จแล้วจะติดภาษาของคนที่ทำตอนนั้นไปตลอด
+   * ทีมสองภาษาเปิดงานเดียวกันแล้วเห็นประวัติคนละภาษากัน ซึ่งอ่านไม่รู้เรื่องทั้งคู่
+   * เก็บเป็นคีย์แล้วแปลตอนแสดง ทุกคนจึงอ่านประวัติเดียวกันในภาษาของตัวเอง
+   *
+   * ข้อมูลเก่าที่เก็บเป็นประโยคไว้แล้วยังแสดงได้ เพราะ L() คืนค่าเดิมเมื่อไม่เจอคีย์
+   */
+  function log(taskId, key, params, exclude) {
     db.stories.push({
       id: uid('st'), taskId: taskId, actorId: db.currentUserId,
-      type: 'log', text: text, createdAt: new Date().toISOString()
+      type: 'log', text: key, params: params || null,
+      createdAt: new Date().toISOString()
     });
     var actor = me();
-    notify(taskId, (actor ? actor.name : 'มีคน') + ' ' + text,
-      db.currentUserId, null, 'activity', exclude);
+    /* ข้อความแจ้งเตือนก็ต้องแปลตอนอ่านเหมือนกัน จึงส่งคีย์กับค่าไปด้วย */
+    notify(taskId, (actor ? actor.name : 'มีคน') + ' ' + fill(key, params),
+      db.currentUserId, null, 'activity', exclude, key, params, actor);
+  }
+
+  /** แทนค่าในคีย์แบบเดียวกับ I18N.t แต่ไม่แปล ใช้กับข้อความสำรองตอนยังไม่รู้ภาษา */
+  function fill(s, p) {
+    var out = String(s);
+    if (p) {
+      Object.keys(p).forEach(function (k) {
+        out = out.split('{' + k + '}').join(p[k]);
+      });
+    }
+    return out;
   }
 
   /* ---------- task mutations ---------- */
@@ -1694,8 +1735,8 @@
         blocking(id).forEach(function (b) {
           var others = blockers(b.id).filter(function (x) { return x.id !== id; });
           if (!others.length) {
-            notify(b.id, 'งาน “' + b.name + '” พร้อมทำต่อแล้ว', db.currentUserId,
-              b.assigneeId ? [b.assigneeId] : [], 'unblock');
+            notifyOnly(b.id, b.assigneeId ? [b.assigneeId] : [],
+              'งาน “{t}” พร้อมทำต่อแล้ว', 'unblock', { t: b.name }, true);
           }
         });
       }
@@ -1705,7 +1746,7 @@
       /* คนที่เพิ่งได้รับงานไม่ต้องได้บรรทัด "มอบหมายให้ X" ซ้ำอีก
        * เพราะจะได้บรรทัดเจาะจงว่า "มอบหมายงาน … ให้คุณ" อยู่แล้ว
        * ถ้าไม่กัน คนที่เคยติดตามงานนี้อยู่แล้วจะเห็นสองบรรทัดสำหรับเรื่องเดียวกัน */
-      log(id, u ? 'มอบหมายให้ ' + u.name : 'ยกเลิกผู้รับผิดชอบ',
+      log(id, u ? 'มอบหมายให้ {who}' : 'ยกเลิกผู้รับผิดชอบ', u ? { who: u.name } : null,
         patch.assigneeId ? [patch.assigneeId] : null);
       if (patch.assigneeId && t.followers.indexOf(patch.assigneeId) < 0) {
         t.followers.push(patch.assigneeId);
@@ -1715,15 +1756,16 @@
       if (patch.assigneeId) {
         var actorA = me();
         notifyOnly(id, [patch.assigneeId],
-          (actorA ? actorA.name : 'มีคน') + ' มอบหมายงาน “' + t.name + '” ให้คุณ', 'assigned');
+          'มอบหมายงาน “{t}” ให้คุณ', 'assigned', { t: t.name });
       }
     }
     if ('dueOn' in patch && patch.dueOn !== t.dueOn) {
-      log(id, patch.dueOn ? 'ตั้งกำหนดส่ง ' + patch.dueOn : 'ลบกำหนดส่ง');
+      log(id, patch.dueOn ? 'ตั้งกำหนดส่ง {d}' : 'ลบกำหนดส่ง',
+        patch.dueOn ? { d: patch.dueOn } : null);
     }
     if ('approval' in patch && patch.approval !== t.approval) {
       var st = APPROVAL_STATES.filter(function (x) { return x.id === patch.approval; })[0];
-      if (st) log(id, 'เปลี่ยนสถานะอนุมัติเป็น “' + st.label + '”');
+      if (st) log(id, 'เปลี่ยนสถานะอนุมัติเป็น “{s}”', { s: st.label });
     }
 
     Object.keys(patch).forEach(function (k) { t[k] = patch[k]; });
@@ -1823,7 +1865,7 @@
     var changedSection = m.sectionId !== toSectionId;
     if (changedSection) {
       var s = section(projectId, toSectionId);
-      if (s) log(taskId, 'ย้ายไปคอลัมน์ ' + s.name);
+      if (s) log(taskId, 'ย้ายไปคอลัมน์ {c}', { c: s.name });
     }
     m.sectionId = toSectionId;
     m.position = newPos;
@@ -1864,7 +1906,7 @@
       sectionId: sid, position: nextPosition(projectId, sid)
     };
     db.memberships.push(m);
-    log(taskId, 'เพิ่มเข้าโปรเจกต์ ' + p.name);
+    log(taskId, 'เพิ่มเข้าโปรเจกต์ {p}', { p: p.name });
     commit();
     return m;
   }
@@ -1904,7 +1946,7 @@
     if (dependsOnDeep(blockerId, taskId)) return false;
     snapshot('เพิ่มลำดับก่อนหลัง');
     t.dependsOn.push({ id: blockerId, type: type || 'FS' });
-    log(taskId, 'รอ “' + task(blockerId).name + '” ให้เสร็จก่อน');
+    log(taskId, 'รอ “{t}” ให้เสร็จก่อน', { t: task(blockerId).name });
     commit();
     return true;
   }
@@ -1952,7 +1994,7 @@
     if (!t || !name) return;
     snapshot('แนบไฟล์');
     t.attachments.push({ id: uid('a'), name: name, url: url || '' });
-    log(taskId, 'แนบ “' + name + '”');
+    log(taskId, 'แนบ “{f}”', { f: name });
     commit();
   }
 
@@ -1980,11 +2022,10 @@
     /* คนที่ถูกพูดถึงกับคนที่แค่ติดตาม ต้องแยกชนิดกัน
      * เพราะคนปิด "ความเห็นใหม่" ทิ้งได้ แต่ไม่มีใครอยากพลาดตอนถูกเรียกชื่อ */
     if (mentioned.length) {
-      notifyOnly(taskId, mentioned,
-        (actor ? actor.name : 'มีคน') + ' พูดถึงคุณในความเห็น', 'mention');
+      notifyOnly(taskId, mentioned, 'พูดถึงคุณในความเห็น', 'mention');
     }
     notify(taskId, (actor ? actor.name : 'มีคน') + ' แสดงความเห็น',
-      db.currentUserId, [], 'comment', mentioned);
+      db.currentUserId, [], 'comment', mentioned, 'แสดงความเห็น', null, actor);
     commit();
   }
 
@@ -2122,7 +2163,7 @@
     db.portfolios = db.portfolios.filter(function (x) { return x.id !== id; });
     /* ลบกล่องไม่ได้ลบของข้างใน โปรเจกต์ทุกอันยังอยู่ครบ
      * ถ้าลบตามไปด้วยจะเป็นการทำลายงานจริงเพราะแค่จัดกลุ่มผิด */
-    audit('portfolio.delete', f.name, 'มีโปรเจกต์อยู่ ' + f.projectIds.length + ' โปรเจกต์ ซึ่งยังอยู่ครบ');
+    audit('portfolio.delete', f.name, 'มีโปรเจกต์อยู่ {n} โปรเจกต์ ซึ่งยังอยู่ครบ', { n: f.projectIds.length });
     commit();
     return true;
   }
@@ -2586,7 +2627,7 @@
     };
     snapshot('เพิ่มสมาชิก');
     db.users.push(u);
-    audit("user.add", u.name, u.email + " · บทบาท " + u.role);
+    audit("user.add", u.name, '{email} · บทบาท {role}', { email: u.email, role: u.role });
     commit();
     return u;
   }
@@ -2864,7 +2905,7 @@
     if (u.role === 'admin' && newRole !== 'admin' && adminCount() <= 1) return false;
     snapshot('เปลี่ยนบทบาท');
     u.role = newRole;
-    audit("user.role", u.name, "เปลี่ยนเป็น " + newRole);
+    audit("user.role", u.name, 'เปลี่ยนเป็น {v}', { v: newRole });
     commit();
     return true;
   }
@@ -2917,8 +2958,8 @@
       if (to && (t.followers || []).indexOf(to.id) < 0) t.followers.push(to.id);
       db.stories.push({
         id: uid('st'), taskId: t.id, actorId: db.currentUserId, type: 'log',
-        text: to ? 'รับช่วงงานต่อจาก ' + from.name
-                 : 'ยกเลิกผู้รับผิดชอบ เดิมเป็นของ ' + from.name,
+        text: to ? 'รับช่วงงานต่อจาก {who}' : 'ยกเลิกผู้รับผิดชอบ เดิมเป็นของ {who}',
+        params: { who: from.name },
         createdAt: new Date().toISOString()
       });
     });
@@ -2927,11 +2968,12 @@
      * คนที่รับช่วงงานสามสิบงานไม่ควรเจอสามสิบแถวในกล่องข้อความ */
     if (to) {
       notifyOnly(list[0].id, [to.id],
-        (actor ? actor.name : 'มีคน') + ' โอนงานที่ยังไม่เสร็จ ' + list.length +
-        ' งาน จาก ' + from.name + ' มาให้คุณ', 'assigned');
+        'โอนงานที่ยังไม่เสร็จ {n} งาน จาก {who} มาให้คุณ', 'assigned',
+        { n: list.length, who: from.name });
     }
     audit('user.handover', from.name,
-      (to ? 'โอนให้ ' + to.name : 'ปล่อยว่างไว้') + ' จำนวน ' + list.length + ' งาน');
+      to ? 'โอนให้ {who} จำนวน {n} งาน' : 'ปล่อยว่างไว้ จำนวน {n} งาน',
+      to ? { who: to.name, n: list.length } : { n: list.length });
     commit();
     return list.length;
   }
