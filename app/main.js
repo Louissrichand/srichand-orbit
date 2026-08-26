@@ -160,9 +160,12 @@
     if (type === 'project' && seg[1]) {
       var p = S.project(seg[1]);
       if (!p) return null;
-      var v = seg[2] || p.defaultView || 'list';
-      var ok = R.TAB_IDS.indexOf(v) >= 0;
-      return { route: { type: 'project', id: seg[1], view: ok ? v : 'list' }, taskId: taskId };
+      /* ยอมเฉพาะมุมมองที่โปรเจกต์นี้เปิดอยู่ ลิงก์เก่าที่ชี้ไปมุมมองที่ถูกปิดแล้ว
+       * ต้องตกไปมุมมองแรกที่เหลือ ไม่ใช่เปิดมาแล้วเจอหน้าว่าง */
+      var okViews = S.projectViews(seg[1]);
+      var v = seg[2] || p.defaultView || okViews[0];
+      if (okViews.indexOf(v) < 0) v = okViews[0];
+      return { route: { type: 'project', id: seg[1], view: v }, taskId: taskId };
     }
     if (type === 'portfolio' && seg[1]) {
       if (!S.portfolio(seg[1])) return null;
@@ -849,7 +852,10 @@
   function goProject(id, view) {
     var p = S.project(id);
     if (!p) return;
-    state.route = { type: 'project', id: id, view: view || p.defaultView || 'list' };
+    var okViews = S.projectViews(id);
+    var v = view || p.defaultView || okViews[0];
+    if (okViews.indexOf(v) < 0) v = okViews[0];
+    state.route = { type: 'project', id: id, view: v };
     state.calOffset = 0;
     state.tlScrollLeft = null;
     clearSel();
@@ -1283,9 +1289,11 @@
       h += '<div class="field"><label>' + L('กำหนดส่งของโปรเจกต์') + '</label>' +
         '<input id="psDue" type="date" value="' + R.esc(p.dueOn || '') + '"></div>';
       h += '<div class="field"><label>' + L('มุมมองที่เปิดเป็นค่าเริ่มต้น') + '</label><select id="psView">';
-      R.projectTabs().forEach(function (v) {
-        h += '<option value="' + v[0] + '"' + ((p.defaultView || 'list') === v[0] ? ' selected' : '') +
-          '>' + R.esc(v[1]) + '</option>';
+      S.PROJECT_VIEWS.filter(function (v) {
+        return S.projectViews(projectId).indexOf(v.id) >= 0;
+      }).forEach(function (v) {
+        h += '<option value="' + v.id + '"' + ((p.defaultView || 'list') === v.id ? ' selected' : '') +
+          '>' + R.esc(L(v.label)) + '</option>';
       });
       h += '</select></div>';
       h += '</div>';
@@ -1405,6 +1413,28 @@
       '<button class="btn btn-danger" data-act="delete-task" data-id="' + R.esc(taskId) + '">' + I('trash', 14) + ' ' + L('ลบงาน') + '</button>' +
       '</div>';
     h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
+    return h;
+  }
+
+  /** เมนูเพิ่มและลดมุมมองของโปรเจกต์
+   *
+   * เมนูเดียวทำทั้งสองอย่าง เพราะคนที่กดปุ่มบวกมักไม่รู้ว่าเอาออกได้ที่ไหน
+   * ถ้าแยกกันคนละที่ คนจะเพิ่มจนแท็บรกแล้วหาทางเอาออกไม่เจอ
+   */
+  function viewMenu(projectId) {
+    var on = S.projectViews(projectId);
+    var h = '<div class="pop-note">' + L('เลือกมุมมองที่จะให้แสดงเป็นแท็บ') + '</div>';
+    S.PROJECT_VIEWS.forEach(function (v) {
+      var isOn = on.indexOf(v.id) >= 0;
+      var last = isOn && on.length <= 1;
+      h += '<button class="vw-opt' + (isOn ? ' on' : '') + '" data-act="toggle-view" data-id="' +
+        R.esc(projectId) + '" data-view="' + v.id + '"' + (last ? ' disabled' : '') +
+        ' title="' + (last ? L('ต้องเหลืออย่างน้อยหนึ่งมุมมอง') : '') + '">' +
+        I(v.icon, 15) +
+        '<span class="grow"><b>' + R.esc(L(v.label)) + '</b>' +
+        '<em>' + R.esc(L(v.desc)) + '</em></span>' +
+        (isOn ? R.ICON.check : '') + '</button>';
+    });
     return h;
   }
 
@@ -2127,10 +2157,11 @@
 
   function doUndo() {
     if (!S.canUndo()) { toast(L('ไม่มีอะไรให้ย้อนกลับ')); return; }
-    var label = S.undo();
+    S.undo();
+    var u = S.undoLabel();
     clearSel();
     if (state.openTaskId && !S.task(state.openTaskId)) state.openTaskId = null;
-    toast(L('ย้อนกลับแล้ว:') + ' ' + label);
+    toast(L('ย้อนกลับแล้ว:') + ' ' + L(u.label, u.params || undefined));
   }
 
   /* ---------- click delegation ---------- */
@@ -2164,7 +2195,7 @@
       'drop-field', 'add-field-picker', 'pick-ftype', 'add-option', 'remove-option',
       'opt-color', 'set-opt-color',
       'manage-rules', 'add-rule', 'delete-rule',
-      'pick-status', 'clear-status',
+      'pick-status', 'clear-status', 'toggle-view',
       'new-portfolio', 'pf-rename', 'pf-desc', 'pf-look', 'save-pf-look', 'pf-delete',
       'pf-add', 'pf-pick', 'pf-remove', 'pf-pick-status', 'pf-clear-status',
       'pf-toggle-project', 'add-to-portfolio',
@@ -2255,7 +2286,8 @@
 
     if (!el || ['pick-assignee', 'pick-priority', 'pick-follower',
          'add-field-picker', 'field-menu', 'opt-color', 'edit-cell',
-         'project-menu', 'status-menu', 'g-zoom-menu', 'g-views-menu', 'pf-menu', 'pf-status'].indexOf(el.dataset.act) < 0) {
+         'project-menu', 'status-menu', 'g-zoom-menu', 'g-views-menu', 'pf-menu', 'pf-status',
+         'view-menu', 'toggle-view'].indexOf(el.dataset.act) < 0) {
       if (!e.target.closest || !e.target.closest('.pop')) closePops();
     }
 
@@ -3136,6 +3168,21 @@
         closeModal();
         break;
       }
+      case 'view-menu':
+        if (popIsOpenFor(el)) { closePops(); break; }
+        openPop(el, viewMenu(id || state.route.id));
+        break;
+      case 'toggle-view': {
+        var vw = el.dataset.view;
+        if (!S.toggleProjectView(id, vw)) { toast(L('ต้องเหลืออย่างน้อยหนึ่งมุมมอง')); break; }
+        /* ถ้าเพิ่งปิดมุมมองที่เปิดค้างอยู่ ต้องย้ายไปมุมมองที่ยังเหลือ ไม่ใช่ปล่อยหน้าว่าง */
+        var left = S.projectViews(id);
+        if (left.indexOf(state.route.view) < 0) state.route.view = left[0];
+        renderAll();
+        openPop(document.querySelector('[data-act="view-menu"]'), viewMenu(id));
+        break;
+      }
+
       case 'status-menu':
         if (popIsOpenFor(el)) { closePops(); break; }
         openPop(el, statusMenu(id || state.route.id));

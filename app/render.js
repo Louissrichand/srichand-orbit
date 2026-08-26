@@ -345,10 +345,18 @@
 
     if (route.type === 'project') {
       h += '<div class="tb-tabs">';
-      projectTabs().forEach(function (v) {
-        h += '<button class="tb-tab' + (route.view === v[0] ? ' active' : '') +
-             '" data-act="set-view" data-view="' + v[0] + '">' + v[1] + '</button>';
+      var onViews = S.projectViews(route.id);
+      S.PROJECT_VIEWS.forEach(function (v) {
+        if (onViews.indexOf(v.id) < 0) return;
+        h += '<button class="tb-tab' + (route.view === v.id ? ' active' : '') +
+             '" data-act="set-view" data-view="' + v.id + '">' + esc(L(v.label)) + '</button>';
       });
+      /* ปุ่มเพิ่มหรือลดมุมมอง เห็นเฉพาะคนที่แก้โครงสร้างโปรเจกต์ได้
+       * คนอื่นเห็นแท็บที่ทีมเลือกไว้เฉย ๆ ไม่ต้องมีปุ่มที่กดแล้วโดนปฏิเสธ */
+      if (S.can('structure') && S.canInProject(route.id, 'edit')) {
+        h += '<button class="tb-addview" data-act="view-menu" data-id="' + esc(route.id) +
+             '" title="' + L('เพิ่มหรือลดมุมมอง') + '">' + I('plus', 15) + '</button>';
+      }
       h += '</div>';
     }
     if (route.type === 'portfolio') {
@@ -2075,6 +2083,8 @@
     'project.unlock': 'ได้ปลดล็อกรายชื่อสมาชิกของ',
     'project.member': 'ได้ตั้งสิทธิ์ในโปรเจกต์',
     'project.member-remove': 'ได้ถอดสมาชิกออกจากโปรเจกต์',
+    'project.viewOn': 'ได้เปิดมุมมองในโปรเจกต์',
+    'project.viewOff': 'ได้ปิดมุมมองในโปรเจกต์',
     'project.baseline': 'ได้ตั้งเส้นฐานของ',
     'project.baselineClear': 'ได้ลบเส้นฐานของ',
     'project.import': 'ได้นำเข้างานเข้าโปรเจกต์',

@@ -416,6 +416,7 @@
       if (!('dueOn' in p)) p.dueOn = null;
       if (!p.depShift) p.depShift = { mode: 'consume', scope: 'downstream' };
       if (!p.workDays) p.workDays = 'all';
+      if (!('views' in p)) p.views = null;   // null = เปิดครบทุกมุมมอง
       p.statusLog = p.statusLog || [];
       (p.savedViews || []).forEach(function (v) { v.view = fillView(v.view); });
     });
@@ -794,8 +795,10 @@
 
   var undoStack = [];   // อยู่ในหน่วยความจำเท่านั้น ไม่ persist
 
-  function snapshot(label) {
-    undoStack.push({ label: label, data: JSON.stringify(db) });
+  /* label คือคีย์คำแปล ไม่ใช่ประโยคสำเร็จรูป — เก็บ params แยกไว้
+   * เพื่อให้ข้อความ "ย้อนกลับแล้ว: …" แปลตามภาษาที่คนอ่านตั้งไว้ ไม่ใช่ภาษาตอนที่กด */
+  function snapshot(label, params) {
+    undoStack.push({ label: label, params: params || null, data: JSON.stringify(db) });
     if (undoStack.length > 25) undoStack.shift();
   }
 
@@ -805,8 +808,13 @@
     db = JSON.parse(s.data);
     dropIndex();
     commit();
+    lastUndo = { label: s.label, params: s.params };
     return s.label;
   }
+
+  /* คีย์กับค่าแทนที่ของการย้อนกลับครั้งล่าสุด ให้ฝั่งหน้าจอเอาไปแปลเอง */
+  var lastUndo = null;
+  function undoLabel() { return lastUndo; }
 
   function canUndo() { return undoStack.length > 0; }
 
@@ -1352,6 +1360,52 @@
     { id: 'none',     label: 'ไม่จัดกลุ่ม' }
   ];
 
+  /* ---------- มุมมองที่โปรเจกต์เปิดใช้ ----------
+   *
+   * เก็บเป็นรายโปรเจกต์เหมือน Asana เพราะแต่ละงานใช้มุมมองไม่เหมือนกัน
+   * ปฏิทินคอนเทนต์แทบไม่ได้ใช้ Gantt ส่วนแผนเปิดตัวสินค้าแทบไม่ได้ใช้บอร์ด
+   * แท็บที่ไม่มีใครกดคือสิ่งรบกวนสายตาที่กินตำแหน่งดีที่สุดของหน้าจอไปเปล่า ๆ
+   */
+  var PROJECT_VIEWS = [
+    { id: 'list',      label: 'รายการ',   icon: 'menu',       desc: 'ตารางงาน จัดกลุ่มและลากสลับลำดับได้' },
+    { id: 'board',     label: 'บอร์ด',    icon: 'grid',       desc: 'คัมบัง ลากงานข้ามคอลัมน์' },
+    { id: 'timeline',  label: 'ไทม์ไลน์', icon: 'bars',       desc: 'วางแผนงานตามช่วงเวลา' },
+    { id: 'gantt',     label: 'Gantt',    icon: 'subtask',    desc: 'ลำดับก่อนหลังและเส้นฐาน' },
+    { id: 'calendar',  label: 'ปฏิทิน',   icon: 'calendar',   desc: 'ดูตามกำหนดส่งรายเดือน' },
+    { id: 'dashboard', label: 'สรุปผล',   icon: 'chart',      desc: 'ตัวเลขรวมและความคืบหน้า' }
+  ];
+
+  /** มุมมองที่โปรเจกต์นี้เปิดอยู่ ไม่เคยตั้ง = เปิดครบทุกมุมมอง */
+  function projectViews(projectId) {
+    var p = project(projectId);
+    var ids = p && p.views;
+    if (!ids || !ids.length) return PROJECT_VIEWS.map(function (v) { return v.id; });
+    /* เรียงตามลำดับมาตรฐานเสมอ ไม่ใช่ตามลำดับที่กดเปิด
+     * ไม่งั้นแท็บจะสลับที่ทุกครั้งที่เพิ่มมุมมอง แล้วคนกดผิดเพราะจำตำแหน่งเดิมไว้ */
+    return PROJECT_VIEWS.map(function (v) { return v.id; })
+      .filter(function (id) { return ids.indexOf(id) >= 0; });
+  }
+
+  /** เปิดหรือปิดมุมมอง คืน false ถ้าปิดไม่ได้เพราะจะไม่เหลือมุมมองเลย */
+  function toggleProjectView(projectId, viewId) {
+    var p = project(projectId);
+    if (!p) return false;
+    var cur = projectViews(projectId);
+    var on = cur.indexOf(viewId) >= 0;
+    if (on && cur.length <= 1) return false;      // ต้องเหลืออย่างน้อยหนึ่งมุมมอง
+    snapshot(on ? 'ปิดมุมมอง' : 'เปิดมุมมอง');
+    p.views = on ? cur.filter(function (x) { return x !== viewId; })
+                 : cur.concat([viewId]);
+    /* มุมมองเริ่มต้นต้องเป็นอันที่ยังเปิดอยู่ ไม่งั้นเปิดโปรเจกต์มาแล้วเจอหน้าว่าง */
+    var left = projectViews(projectId);
+    if (left.indexOf(p.defaultView) < 0) p.defaultView = left[0];
+    /* เก็บชื่อมุมมองเป็นคีย์คำแปล ไม่ใช่ id ดิบ บันทึกจะได้อ่านออกทั้งสองภาษา */
+    var vdef = PROJECT_VIEWS.filter(function (v) { return v.id === viewId; })[0];
+    audit(on ? 'project.viewOff' : 'project.viewOn', p.name, vdef ? vdef.label : viewId);
+    commit();
+    return true;
+  }
+
   /* ---------- ตัวเลือกเฉพาะของ Gantt ---------- */
 
   var GANTT_ZOOMS = [
@@ -1800,7 +1854,7 @@
   }
 
   function deleteTasks(ids) {
-    snapshot('ลบ ' + ids.length + ' งาน');
+    snapshot('ลบ {n} งาน', { n: ids.length });
     ids.forEach(purgeTask);
     commit();
   }
@@ -2048,13 +2102,13 @@
   /* ---------- bulk ---------- */
 
   function bulkUpdate(ids, patch) {
-    snapshot('แก้ ' + ids.length + ' งานพร้อมกัน');
+    snapshot('แก้ {n} งานพร้อมกัน', { n: ids.length });
     ids.forEach(function (id) { updateTask(id, clone(patch), { quiet: true }); });
     commit();
   }
 
   function bulkMove(ids, projectId, sectionId) {
-    snapshot('ย้าย ' + ids.length + ' งาน');
+    snapshot('ย้าย {n} งาน', { n: ids.length });
     ids.forEach(function (id) {
       var m = db.memberships.filter(function (x) {
         return x.taskId === id && x.projectId === projectId;
@@ -3120,6 +3174,8 @@
     PALETTE: PALETTE,
     DUE_FILTERS: DUE_FILTERS, SORTS: SORTS, GROUPS: GROUPS,
     GANTT_ZOOMS: GANTT_ZOOMS, COLOR_BYS: COLOR_BYS, GANTT_COLS: GANTT_COLS,
+    PROJECT_VIEWS: PROJECT_VIEWS, projectViews: projectViews,
+    toggleProjectView: toggleProjectView,
     WORK_DAYS: WORK_DAYS, DEP_SHIFT: DEP_SHIFT,
     projectCsv: projectCsv, importTasksCsv: importTasksCsv,
     isWorkday: isWorkday, nextWorkday: nextWorkday,
@@ -3129,7 +3185,7 @@
     setRemoteSave: setRemoteSave, replaceDb: replaceDb, snapshotJSON: snapshotJSON,
     wipeLocal: wipeLocal,
     onChange: onChange, commit: commit,
-    snapshot: snapshot, undo: undo, canUndo: canUndo,
+    snapshot: snapshot, undo: undo, canUndo: canUndo, undoLabel: undoLabel,
 
     uid: uid, today: today, addDays: addDays, addMonths: addMonths,
     iso: iso, clone: clone, daysBetween: daysBetween,
