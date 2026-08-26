@@ -599,7 +599,9 @@ a { color: var(--accent); }
 .barrow .lbl { flex: 0 0 110px; font-size: 13px; color: var(--fg-soft);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .barrow .track { flex: 1; height: 18px; background: var(--bg-inset); border-radius: 4px; overflow: hidden; }
-.barrow .fill { height: 100%; border-radius: 4px; }
+/* ต้องเป็น block ไม่งั้น span จะเป็น inline แล้วเบราว์เซอร์เมิน width กับ height ทิ้ง
+ * แถบทุกอันในหน้าสรุปผลจึงว่างเปล่ามาตลอด ทั้งที่คำนวณเปอร์เซ็นต์ถูกแล้ว */
+.barrow .fill { display: block; height: 100%; border-radius: 4px; }
 .barrow .val { flex: 0 0 54px; text-align: right; font-size: 12px;
   color: var(--fg-soft); font-variant-numeric: tabular-nums; }
 
@@ -2402,4 +2404,167 @@ body.rownum .list-wrap .row > .nm::before {
   .pf-head span:nth-child(4), .pf-head span:nth-child(5), .pf-head span:nth-child(6),
   .pf-row  span:nth-child(4), .pf-row  span:nth-child(5), .pf-row  span:nth-child(6) { display: none; }
   .pf-tl-nm { flex-basis: 130px; }
+}
+
+/* ---------- พอร์ตโฟลิโอ ----------
+ *
+ * มองจากมุมผู้บริหาร หนึ่งแถวคือหนึ่งโปรเจกต์ ไม่ใช่หนึ่งงาน
+ * ตัวเลขสรุปอยู่บนสุดของทุกแท็บ เพราะเป็นคำตอบที่คนเปิดหน้านี้มาหา
+ */
+
+.pf { padding: 18px 24px 60px; max-width: 1280px; }
+
+.pf-kpis {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px; margin-bottom: 16px;
+}
+.pf-kpis .stat.warn { border-color: var(--warn); background: var(--warn-bg); }
+.pf-kpis .stat.warn .v { color: var(--warn-fg); }
+.pf-kpis .stat.bad { border-color: var(--danger); background: var(--danger-bg); }
+.pf-kpis .stat.bad .v { color: var(--danger); }
+
+.pf-hidden {
+  display: flex; gap: 9px; align-items: flex-start; margin-bottom: 16px;
+  background: var(--bg-sunk); color: var(--fg-soft); border: 1px solid var(--line);
+  padding: 10px 13px; border-radius: var(--radius); font-size: 13px; line-height: 1.6;
+}
+.pf-hidden svg { flex: none; margin-top: 2px; }
+
+/* --- แถบความคืบหน้า --- */
+.pf-bar {
+  flex: 1; min-width: 40px; height: 6px; border-radius: 999px;
+  background: var(--bg-inset); overflow: hidden; display: block;
+}
+.pf-bar > i { display: block; height: 100%; border-radius: 999px; }
+.pf-pct {
+  flex: none; font-size: 12px; color: var(--fg-soft);
+  font-variant-numeric: tabular-nums; min-width: 34px; text-align: right;
+}
+.pf-prog { display: flex; align-items: center; gap: 8px; }
+
+/* --- ตารางรายการ --- */
+.pf-tbl {
+  border: 1px solid var(--line); border-radius: var(--radius-lg);
+  overflow: hidden; background: var(--bg-raise);
+}
+.pf-head, .pf-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2.4fr) 132px minmax(120px, 1fr) 150px 104px 84px 40px;
+  align-items: center; gap: 10px; padding: 10px 14px;
+}
+.pf-head {
+  background: var(--bg-sunk); border-bottom: 1px solid var(--line);
+  font-size: 12px; font-weight: 600; color: var(--fg-soft);
+}
+.pf-row { border-top: 1px solid var(--line-soft); cursor: pointer; font-size: 13.5px; }
+.pf-row:hover { background: var(--bg-sunk); }
+.pf-row > span { min-width: 0; overflow: hidden; }
+
+.pf-nm { display: flex; align-items: center; gap: 10px; }
+.pf-nm .grow { display: flex; flex-direction: column; min-width: 0; }
+.pf-nm b {
+  font-size: 14px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pf-nm em {
+  font-style: normal; font-size: 12px; color: var(--fg-faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pf-owner {
+  font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pf-row > span:nth-child(4) { display: flex; align-items: center; gap: 7px; }
+.pf-none { color: var(--fg-faint); font-size: 12.5px; }
+.pf-bad { color: var(--danger); font-weight: 700; font-variant-numeric: tabular-nums; }
+.pf-row .icon-btn { opacity: 0; }
+.pf-row:hover .icon-btn { opacity: 1; }
+
+.pf-add {
+  display: inline-flex; align-items: center; gap: 7px; margin-top: 12px;
+  padding: 9px 14px; border-radius: var(--radius); font-size: 13.5px; font-weight: 600;
+  color: var(--fg-soft); border: 1px dashed var(--line-strong);
+}
+.pf-add:hover { background: var(--bg-sunk); color: var(--fg); border-color: var(--accent); }
+
+/* --- ไทม์ไลน์ระดับโปรเจกต์ --- */
+.pf-tl {
+  border: 1px solid var(--line); border-radius: var(--radius-lg);
+  overflow: hidden; background: var(--bg-raise);
+}
+.pf-tl-head, .pf-tl-row {
+  display: grid; grid-template-columns: minmax(160px, 260px) 1fr;
+  align-items: center; gap: 14px; padding: 0 16px;
+}
+.pf-tl-head {
+  height: 34px; background: var(--bg-sunk); border-bottom: 1px solid var(--line);
+}
+.pf-tl-row {
+  height: 42px; border-top: 1px solid var(--line-soft); cursor: pointer;
+}
+.pf-tl-row:hover { background: var(--bg-sunk); }
+.pf-tl-nm {
+  display: flex; align-items: center; gap: 8px; min-width: 0;
+  font-size: 13.5px; font-weight: 600;
+}
+.pf-tl-nm .em { flex: none; font-size: 15px; }
+.pf-tl-nm .grow { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-tl-track { position: relative; height: 100%; min-width: 0; }
+
+.pf-tl-mon {
+  position: absolute; top: 9px; font-size: 11px; color: var(--fg-faint);
+  border-left: 1px solid var(--line); padding-left: 5px;
+  overflow: hidden; white-space: nowrap;
+}
+.pf-tl-bar {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  height: 22px; border-radius: 5px; border: 1px solid;
+  display: flex; align-items: center; overflow: hidden; min-width: 4px;
+}
+.pf-tl-bar > i { position: absolute; left: 0; top: 0; bottom: 0; opacity: .55; }
+.pf-tl-bar > b {
+  position: relative; font-size: 10.5px; font-weight: 700; color: var(--fg);
+  padding: 0 6px; white-space: nowrap;
+}
+.pf-tl-nodate {
+  position: absolute; top: 50%; transform: translateY(-50%); left: 0;
+  font-size: 12px; color: var(--fg-faint);
+}
+.pf-tl-today {
+  position: absolute; top: 0; bottom: 0; width: 2px;
+  background: var(--accent); opacity: .5; pointer-events: none;
+}
+
+/* --- สรุปผล --- */
+.pf-risk {
+  display: flex; align-items: center; gap: 10px; padding: 9px 10px;
+  border-radius: var(--radius); cursor: pointer;
+  border-bottom: 1px solid var(--line-soft);
+}
+.pf-risk:last-child { border-bottom: 0; }
+.pf-risk:hover { background: var(--bg-sunk); }
+.pf-risk .em { flex: none; font-size: 16px; }
+.pf-risk .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.pf-risk b {
+  font-size: 13.5px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pf-risk em {
+  font-style: normal; font-size: 12px; color: var(--fg-soft); line-height: 1.5;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pf-risk .pf-bad { flex: none; font-size: 12px; }
+
+@media (max-width: 1000px) {
+  /* ตารางแคบลง ตัดคอลัมน์ที่อ่านจากที่อื่นได้ออกก่อน */
+  .pf-head > :nth-child(4), .pf-row > :nth-child(4),
+  .pf-head > :nth-child(6), .pf-row > :nth-child(6) { display: none; }
+  .pf-head, .pf-row {
+    grid-template-columns: minmax(0, 2fr) 124px minmax(100px, 1fr) 96px 40px;
+  }
+}
+@media (max-width: 860px) {
+  .pf { padding: 14px 14px 60px; }
+  .pf-head > :nth-child(2), .pf-row > :nth-child(2) { display: none; }
+  .pf-head, .pf-row { grid-template-columns: minmax(0, 2fr) minmax(90px, 1fr) 88px 40px; }
+  .pf-tl-head, .pf-tl-row { grid-template-columns: 120px 1fr; gap: 10px; padding: 0 12px; }
 }
