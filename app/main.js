@@ -1457,7 +1457,8 @@
         h += '<div class="st-log-row"><i style="background:' + s.color + '"></i>' +
           '<div><b style="color:' + s.color + '">' + R.esc(L(s.label)) + '</b>' +
           (e.text ? '<em>' + R.esc(e.text) + '</em>' : '') +
-          '<span>' + R.esc(by ? by.name : '?') + ' · ' + R.fmtWhen(e.at) + '</span></div></div>';
+          '<span title="' + R.esc(R.fmtExact(e.at)) + '">' + R.esc(by ? by.name : '?') +
+          ' · ' + R.esc(R.fmtWhen(e.at)) + '</span></div></div>';
       });
       h += '</div>';
     }

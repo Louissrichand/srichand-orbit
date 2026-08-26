@@ -77,13 +77,40 @@
     return '';
   }
 
+  function pad2(n) { return n < 10 ? '0' + n : String(n); }
+
+  /** เวลาแบบ 14:32 */
+  function fmtTime(d) { return pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
+
+  /**
+   * เวลาแบบย่อ อ่านง่ายเวลากวาดตา
+   *
+   * เกินหนึ่งวันแล้วต่อเวลาต่อท้ายวันที่ด้วย เพราะ "24 ส.ค." อย่างเดียว
+   * ตอบไม่ได้ว่าคอมเมนต์นั้นมาก่อนหรือหลังการประชุมเช้าวันนั้น
+   * ซึ่งเป็นสิ่งที่คนย้อนอ่านเธรดต้องการรู้จริง ๆ
+   */
   function fmtWhen(isoTs) {
     var d = new Date(isoTs);
+    if (isNaN(d.getTime())) return '';
     var mins = Math.round((Date.now() - d.getTime()) / 60000);
     if (mins < 1) return L('เมื่อครู่');
     if (mins < 60) return mins + ' ' + L('นาทีที่แล้ว');
     if (mins < 1440) return Math.round(mins / 60) + ' ' + L('ชม.ที่แล้ว');
-    return fmtDate(S.iso(d));
+    return fmtDate(S.iso(d)) + ' ' + fmtTime(d);
+  }
+
+  /** วันและเวลาแบบเต็มไม่กำกวม ใช้เป็น tooltip ของเวลาแบบย่อ */
+  function fmtExact(isoTs) {
+    var d = new Date(isoTs);
+    if (isNaN(d.getTime())) return '';
+    return d.getDate() + ' ' + MONF()[d.getMonth()] + ' ' +
+           global.I18N.year(d.getFullYear()) + ' ' + fmtTime(d);
+  }
+
+  /** ป้ายเวลา ย่อไว้ให้อ่านเร็ว แต่ชี้ค้างแล้วเห็นวันเวลาเต็ม */
+  function whenTag(isoTs, cls) {
+    return '<span class="' + (cls || 'when') + '" title="' + esc(fmtExact(isoTs)) + '">' +
+      esc(fmtWhen(isoTs)) + '</span>';
   }
 
   function prio(id) {
@@ -926,7 +953,7 @@
           var s2 = projectState(e.state);
           h += '<div class="st-trail-row"><i style="background:' + s2.color + '"></i>' +
             '<b style="color:' + s2.color + '">' + esc(L(s2.label)) + '</b>' +
-            '<span>' + esc(fmtWhen(e.at)) + '</span></div>';
+            '<span title="' + esc(fmtExact(e.at)) + '">' + esc(fmtWhen(e.at)) + '</span></div>';
         });
         h += '</div>';
       }
@@ -1383,8 +1410,9 @@
         '<span class="hact-body"><span class="hact-txt"><strong>' +
         esc(a.actor ? a.actor.name : '?') + '</strong> ' +
         esc(a.story.type === 'comment' ? L('แสดงความเห็น') : a.story.text) + '</span>' +
-        '<span class="hact-sub">' + esc(a.taskName || '') + ' · ' +
-        esc(fmtWhen(a.story.createdAt)) + '</span></span></div>';
+        '<span class="hact-sub" title="' + esc(fmtExact(a.story.createdAt)) + '">' +
+        esc(a.taskName || '') + ' · ' + esc(fmtWhen(a.story.createdAt)) +
+        '</span></span></div>';
     });
     h += hcard({
       title: '<span class="hcard-title">' + I('bell', 15) + L('กิจกรรมล่าสุด') + '</span>',
@@ -1448,8 +1476,9 @@
         esc(n.id) + '" data-task="' + esc(n.taskId) + '">';
       h += n.read ? '<span style="width:8px;flex:0 0 8px"></span>' : '<span class="unread-dot"></span>';
       h += '<div class="body"><div class="txt">' + esc(n.text) + '</div>' +
-        '<div class="sub">' + esc(t ? t.name : L('(งานถูกลบแล้ว)')) + ' · ' +
-        fmtWhen(n.createdAt) + '</div></div>';
+        '<div class="sub" title="' + esc(fmtExact(n.createdAt)) + '">' +
+        esc(t ? t.name : L('(งานถูกลบแล้ว)')) + ' · ' +
+        esc(fmtWhen(n.createdAt)) + '</div></div>';
       h += '<span class="acts">' +
         (n.archived ? '' :
           '<button class="btn btn-sm btn-ghost" data-act="archive-notif" data-id="' +
@@ -1807,12 +1836,12 @@
       if (s.type === 'comment') {
         h += '<div class="story">' + avatar(actor) + '<div class="body">' +
           '<div class="who">' + esc(actor ? actor.name : '?') +
-          '<span class="when">' + fmtWhen(s.createdAt) + '</span></div>' +
+          whenTag(s.createdAt) + '</div>' +
           '<div class="txt">' + mentionize(s.text) + '</div></div></div>';
       } else {
         h += '<div class="story log">' + avatar(actor, 'sm') +
           '<div class="txt">' + esc(actor ? actor.name : '?') + ' ' + esc(s.text) +
-          '<span class="when">' + fmtWhen(s.createdAt) + '</span></div></div>';
+          whenTag(s.createdAt) + '</div></div>';
       }
     });
 
@@ -2219,7 +2248,7 @@
           '<b>' + esc(who ? who.name : '—') + '</b> ' + esc(L(auditText(r.action))) +
           (r.target ? ' <u>' + esc(r.target) + '</u>' : '') +
           (r.detail ? '<span class="d">' + esc(r.detail) + '</span>' : '') +
-          '<em>' + esc(fmtWhen(r.at)) + '</em></div></li>';
+          '<em title="' + esc(fmtExact(r.at)) + '">' + esc(fmtWhen(r.at)) + '</em></div></li>';
       });
       h += '</ul>';
       if ((db.audit || []).length > rows.length) {
@@ -2243,7 +2272,7 @@
         if (a.taskName) {
           h += ' <a href="#/task/' + esc(a.story.taskId) + '">' + esc(a.taskName) + '</a>';
         }
-        h += '<em>' + esc(fmtWhen(a.story.createdAt)) + '</em></div></li>';
+        h += '<em title="' + esc(fmtExact(a.story.createdAt)) + '">' + esc(fmtWhen(a.story.createdAt)) + '</em></div></li>';
       });
       h += '</ul>';
     }
@@ -2269,7 +2298,7 @@
     teamReady: teamReady, syncChip: syncChip, syncMenu: syncMenu, disabledScreen: disabledScreen,
     accountBlock: accountBlock, accountMenu: accountMenu, gateScreen: gateScreen,
     esc: esc, avatar: avatar, initials: initials,
-    fmtDate: fmtDate, fmtWhen: fmtWhen,
+    fmtDate: fmtDate, fmtWhen: fmtWhen, fmtExact: fmtExact, whenTag: whenTag,
     prio: prio, taskType: taskType, approvalState: approvalState,
     projectState: projectState, recurLabel: recurLabel,
     MON: MON, MONF: MONF, DOW: DOW, DOWR: DOWR, weekStart: weekStart, YR: YR, ICON: ICON,
