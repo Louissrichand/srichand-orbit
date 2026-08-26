@@ -2364,6 +2364,12 @@
     });
     db.memberships = db.memberships.filter(function (m) { return m.projectId !== id; });
     db.projects = db.projects.filter(function (p) { return p.id !== id; });
+    /* ถอดออกจากพอร์ตโฟลิโอด้วย ไม่งั้นรหัสของโปรเจกต์ที่ลบไปแล้วจะค้างอยู่ตลอดไป
+     * ตอนนี้ยังไม่เห็นผลเพราะการวาดกรองตัวที่หาไม่เจอออก
+     * แต่ข้อมูลที่ชี้ไปหาของที่ไม่มีอยู่จริงคือระเบิดเวลาของบั๊กที่หาสาเหตุยาก */
+    (db.portfolios || []).forEach(function (f) {
+      f.projectIds = f.projectIds.filter(function (pid) { return pid !== id; });
+    });
     commit();
   }
 
