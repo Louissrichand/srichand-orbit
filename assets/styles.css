@@ -914,27 +914,33 @@ button.g-caret:hover { background: var(--bg-inset); color: var(--fg); }
   border-bottom: 1px solid var(--line-soft);
 }
 .g-rrow:hover { background: var(--bg-sunk); }
+/* แถบเดือนสลับ วางก่อนแถวและแท่งในลำดับ DOM จึงอยู่หลังเสมอ */
+.g-mband {
+  position: absolute; top: 0; bottom: 0;
+  background: var(--bg-sunk); opacity: .6; pointer-events: none;
+}
 .g-vline {
   position: absolute; top: 0; bottom: 0; width: 1px;
-  background: var(--line); pointer-events: none;
+  background: var(--line-soft); pointer-events: none;
 }
 
 .g-rollup {
-  position: absolute; height: 7px; border-radius: 3px; opacity: .45;
+  position: absolute; height: 8px; border-radius: 4px; opacity: .35;
   pointer-events: none;
 }
 
 .g-bar {
-  position: absolute; height: 19px; border-radius: 4px;
+  position: absolute; height: 20px; border-radius: 5px;
   display: flex; align-items: center; color: #fff; font-size: 11px;
-  cursor: grab; user-select: none; box-shadow: 0 1px 2px rgba(0,0,0,.18);
+  cursor: grab; user-select: none;
   overflow: visible;
 }
 .g-bartxt {
   flex: 1; padding: 0 3px; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap;
 }
-.g-bar.done { opacity: .45; }
+/* งานที่เสร็จแล้วจางลง เหมือน Asana ยังเห็นว่าอยู่ช่วงไหนแต่ไม่แย่งสายตางานที่ยังค้าง */
+.g-bar.done { opacity: .4; }
 .g-bar.blocked { outline: 2px solid var(--danger); outline-offset: -2px; }
 .g-bar.g-moving { cursor: grabbing; opacity: .85; z-index: 8; box-shadow: var(--shadow-lg); }
 
@@ -972,9 +978,16 @@ button.g-caret:hover { background: var(--bg-inset); color: var(--fg); }
 }
 .g-dep-hit:hover { stroke: var(--danger); opacity: .25; }
 
+/* เส้นวันนี้ มีจุดหัวเส้นแบบเดียวกับ Asana หาตำแหน่งปัจจุบันได้ทันทีที่เปิดผัง */
 .g-today {
   position: absolute; top: 0; bottom: 0; width: 2px;
-  background: var(--accent); opacity: .55; pointer-events: none;
+  background: var(--accent); opacity: .5; pointer-events: none;
+}
+.g-today::before {
+  content: ''; position: absolute; top: -4px; left: 50%;
+  transform: translateX(-50%);
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--accent);
 }
 .g-rubber { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
 .g-rubber-line {

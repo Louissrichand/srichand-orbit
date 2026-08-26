@@ -313,13 +313,24 @@
 
     h += '<div class="g-rows" style="height:' + (rows.length * G_ROW) + 'px">';
 
-    // เส้นแบ่งเดือนจาง ๆ ให้กวาดตาตามได้
-    var gi = 0;
+    /* แถบเดือนสลับสีอ่อน แทนการใช้เส้นแบ่งอย่างเดียว
+     *
+     * เส้นบาง ๆ บอกได้แค่ว่า "ตรงนี้ขึ้นเดือนใหม่" แต่ไม่ช่วยตอนกวาดตาหาว่า
+     * แท่งที่อยู่กลางจอเป็นของเดือนไหน เพราะต้องไล่สายตากลับไปอ่านหัวตารางทุกครั้ง
+     * พื้นสลับสีทำให้เดือนเป็นช่องที่มองเห็นได้ทั้งความสูงของผัง
+     */
+    var gi = 0, mi = 0;
     while (gi < days) {
       var gd = new Date(S.addDays(from, gi) + 'T00:00:00');
       var glen = new Date(gd.getFullYear(), gd.getMonth() + 1, 0).getDate() - gd.getDate() + 1;
+      glen = Math.min(glen, days - gi);
+      if (mi % 2 === 1) {
+        h += '<div class="g-mband" style="left:' + (gi * W) + 'px;width:' +
+          (glen * W) + 'px"></div>';
+      }
       h += '<div class="g-vline" style="left:' + (gi * W) + 'px"></div>';
       gi += glen;
+      mi++;
     }
 
     rows.forEach(function (r, i) {
