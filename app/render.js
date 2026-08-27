@@ -186,11 +186,9 @@
          '<span class="grow">' + L('ปฏิทินรวม') + '</span></button>';
     h += '</div>';
 
-    h += '<div class="sb-section">';
-    h += '<div class="sb-label">' + L('โปรเจกต์') + '<button data-act="new-project" title="' + L('สร้างโปรเจกต์ใหม่') + '">+</button></div>';
-    S.visibleProjects().forEach(function (p) {
+    function projectItem(p) {
       var n = S.tasksInProject(p.id).filter(function (x) { return !x.task.completed; }).length;
-      h += '<button class="sb-item' +
+      return '<button class="sb-item' +
         (route.type === 'project' && route.id === p.id ? ' active' : '') +
         '" data-act="go" data-route="project" data-id="' + esc(p.id) + '">' +
         '<span class="emoji">' + esc(p.icon) + '</span>' +
@@ -198,7 +196,21 @@
         "<span class=\"grow\">" + esc(p.name) + "</span>" +
         (p.visibility === "private" ? "<span class=\"lockmark\" title=\"" + L("โปรเจกต์ปิด") + "\">" + I("shield", 12) + "</span>" : "") +
         (n ? '<span class="count">' + n + '</span>' : '') + '</button>';
-    });
+    }
+
+    /* โปรเจกต์ที่ปักหมุดขึ้นก่อน เพราะพอมีหลายสิบโปรเจกต์
+     * ของที่เปิดจริงทุกวันจะจมอยู่กลางรายการยาว ๆ จนต้องเลื่อนหาทุกครั้ง
+     * ซ่อนหัวข้อนี้ทั้งก้อนถ้ายังไม่มีใครปัก ไม่งั้นแถบซ้ายจะมีหัวข้อว่างเปล่า */
+    var stars = S.starredProjects();
+    if (stars.length) {
+      h += '<div class="sb-section"><div class="sb-label">' + L('ปักหมุดไว้') + '</div>';
+      stars.forEach(function (p) { h += projectItem(p); });
+      h += '</div>';
+    }
+
+    h += '<div class="sb-section">';
+    h += '<div class="sb-label">' + L('โปรเจกต์') + '<button data-act="new-project" title="' + L('สร้างโปรเจกต์ใหม่') + '">+</button></div>';
+    S.visibleProjects().forEach(function (p) { h += projectItem(p); });
     h += '</div>';
 
     /* พอร์ตโฟลิโอ วางไว้ใต้โปรเจกต์เพราะเป็นกล่องที่รวมของด้านบน
@@ -278,8 +290,12 @@
     if (route.type === 'project') {
       var p = S.project(route.id);
       if (!p) return '';
+      var starOn = S.isStarred(p.id);
       h += '<div style="min-width:0"><div class="tb-title"><span class="emoji">' + esc(p.icon) +
-           '</span><span class="nm">' + esc(p.name) + '</span>';
+           '</span><span class="nm">' + esc(p.name) + '</span>' +
+           '<button class="tb-star' + (starOn ? ' on' : '') + '" data-act="toggle-star" data-id="' +
+           esc(p.id) + '" title="' + (starOn ? L('เอาหมุดออก') : L('ปักหมุดไว้บนสุด')) + '">' +
+           (starOn ? global.Icons.iconFilled('star', 16) : I('star', 16)) + '</button>';
       /* ป้ายสถานะเป็นปุ่ม ไม่ใช่ป้ายอ่านอย่างเดียว
        * ที่เดียวกับที่คนอ่านสถานะ คือที่ที่คนอยากแก้สถานะ ไม่ควรบังคับให้ไปหาในเมนู
        * โปรเจกต์ที่ยังไม่เคยรายงานต้องเห็นปุ่มด้วย ไม่งั้นจะไม่มีใครรู้ว่ารายงานได้ */
@@ -1744,6 +1760,66 @@
     return out;
   }
 
+  /* ---------- ข้อความมีรูปแบบในความเห็น ----------
+   *
+   * ความเห็นจริงของทีมคือสรุปประชุม ซึ่งเป็นหัวข้อย่อยซ้อนกันหลายชั้น
+   * เดิมเก็บและแสดงเป็นข้อความเปล่า ทุกอย่างจึงยุบเป็นก้อนเดียวอ่านไม่ออก
+   *
+   * เลือกทำแบบมาร์กดาวน์ย่อ ไม่ใช่ตัวแก้ไขแบบเห็นภาพจริง เพราะสามเหตุผล
+   *   เก็บเป็นข้อความล้วนเหมือนเดิม ค้นหาเจอ ส่งออก CSV แล้วยังอ่านรู้เรื่อง
+   *   วางจากที่อื่นมาแล้วติดรูปแบบมาเลย ขีดนำหน้าคือหัวข้อย่อยอยู่แล้วโดยธรรมชาติ
+   *   ไม่ต้องพึ่ง contenteditable ซึ่งพฤติกรรมต่างกันทุกเบราว์เซอร์
+   *
+   * ทุกอย่างผ่าน esc ก่อนเสมอ แล้วค่อยใส่แท็กที่เราสร้างเอง
+   * ข้อความของผู้ใช้จึงไม่มีทางกลายเป็น HTML ได้
+   */
+  function inlineFmt(s) {
+    var out = mentionize(s);
+    /* ลิงก์ก่อน เพื่อไม่ให้เครื่องหมายในลิงก์โดนตีความเป็นตัวหนา */
+    out = out.replace(/(https?:\/\/[^\s<]+)/g, function (m) {
+      return '<a href="' + m + '" target="_blank" rel="noopener noreferrer">' + m + '</a>';
+    });
+    out = out.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+    out = out.replace(/(^|[\s(])\*([^*\n]+)\*/g, '$1<i>$2</i>');
+    out = out.replace(/`([^`]+)`/g, '<code>$1</code>');
+    return out;
+  }
+
+  /** ระดับการเยื้องของหัวข้อย่อย นับจากช่องว่างหน้าบรรทัด สองช่องเท่ากับหนึ่งชั้น */
+  function bulletDepth(raw) {
+    var lead = raw.match(/^[ \t]*/)[0].replace(/\t/g, '  ');
+    return Math.min(Math.floor(lead.length / 2), 3);
+  }
+
+  function richText(text) {
+    var lines = String(text == null ? '' : text).split('\n');
+    var h = '', listDepth = -1;
+
+    function closeTo(d) {
+      while (listDepth > d) { h += '</ul>'; listDepth--; }
+    }
+
+    lines.forEach(function (raw) {
+      var line = raw.replace(/\s+$/, '');
+      var m = line.match(/^[ \t]*(?:[-*•]|\d+[.)])\s+(.*)$/);
+      if (m) {
+        var d = bulletDepth(raw);
+        if (d > listDepth) { while (listDepth < d) { h += '<ul>'; listDepth++; } }
+        else closeTo(d);
+        h += '<li>' + inlineFmt(m[1]) + '</li>';
+        return;
+      }
+      closeTo(-1);
+      if (!line.trim()) { h += '<div class="rt-gap"></div>'; return; }
+      /* หัวข้อแบบ # ใช้บ่อยเวลาวางสรุปประชุมมาจากที่อื่น */
+      var hd = line.match(/^#{1,3}\s+(.*)$/);
+      h += hd ? '<div class="rt-h">' + inlineFmt(hd[1]) + '</div>'
+              : '<div>' + inlineFmt(line) + '</div>';
+    });
+    closeTo(-1);
+    return '<div class="rt">' + h + '</div>';
+  }
+
   function drawer(taskId, opts) {
     var t = S.task(taskId);
     if (!t) return '';
@@ -2009,7 +2085,22 @@
      */
     var onlyComments = stories.filter(function (s) { return s.type === 'comment'; });
     var tab = (opts && opts.actTab) === 'all' ? 'all' : 'comments';
-    var shown = tab === 'all' ? stories : onlyComments;
+    var shown = (tab === 'all' ? stories : onlyComments).slice();
+
+    /* เรียงเก่าก่อนเป็นค่าตั้งต้น เพราะสรุปประชุมอ่านไล่ตามลำดับเวลาถึงจะได้เรื่อง
+     * แต่งานที่คุยกันยาวเป็นเดือน คนมักอยากเห็นล่าสุดก่อน จึงสลับได้ */
+    var sortNewest = (opts && opts.actSort) === 'newest';
+    if (sortNewest) shown.reverse();
+
+    /* งานที่ถูกแก้บ่อยจะมีบันทึกอัตโนมัติยาวเป็นหางว่าว
+     * ย่อของเก่าไว้ก่อน เหลือไว้เท่าที่ตาเห็นในหน้าจอเดียว
+     * นับเฉพาะแท็บทั้งหมด เพราะแท็บความเห็นแทบไม่มีทางยาวขนาดนั้น */
+    var ACT_MAX = 12;
+    var hiddenN = 0;
+    if (tab === 'all' && !(opts && opts.actAll) && shown.length > ACT_MAX) {
+      hiddenN = shown.length - ACT_MAX;
+      shown = sortNewest ? shown.slice(0, ACT_MAX) : shown.slice(hiddenN);
+    }
 
     h += '<div class="dw-acttabs">' +
       '<button class="dw-acttab' + (tab === 'comments' ? ' on' : '') +
@@ -2018,7 +2109,19 @@
       '</button>' +
       '<button class="dw-acttab' + (tab === 'all' ? ' on' : '') +
       '" data-act="dw-act-tab" data-tab="all">' + L('ความเคลื่อนไหวทั้งหมด') + '</button>' +
+      '<span class="grow"></span>' +
+      '<button class="dw-actsort" data-act="dw-act-sort" title="' +
+      L('สลับลำดับเวลา') + '">' + I(sortNewest ? 'arrowDown' : 'arrowUp', 13) +
+      (sortNewest ? L('ใหม่ก่อน') : L('เก่าก่อน')) + '</button>' +
       '</div>';
+
+    /* ปุ่มกางของเก่าอยู่บนสุดตอนเรียงเก่าก่อน และอยู่ล่างสุดตอนเรียงใหม่ก่อน
+     * ให้ตรงกับทิศที่ของเก่าถูกซ่อนไป ไม่งั้นกดแล้วเนื้อหาจะโผล่คนละทางกับที่คาด */
+    var moreBtn = hiddenN
+      ? '<button class="dw-actmore" data-act="dw-act-more">' +
+        L('แสดงอีก {n} รายการก่อนหน้า', { n: hiddenN }) + '</button>'
+      : '';
+    if (!sortNewest) h += moreBtn;
 
     if (!shown.length) {
       h += '<div class="dw-actempty">' + (tab === 'all'
@@ -2031,20 +2134,23 @@
         h += '<div class="story">' + avatar(actor) + '<div class="body">' +
           '<div class="who">' + esc(actor ? actor.name : '?') +
           whenTag(s.createdAt) + '</div>' +
-          '<div class="txt">' + mentionize(s.text) + '</div></div></div>';
+          '<div class="txt">' + richText(s.text) + '</div></div></div>';
       } else {
         h += '<div class="story log">' + avatar(actor, 'sm') +
           '<div class="txt">' + esc(actor ? actor.name : '?') + ' ' + esc(storyText(s)) +
           whenTag(s.createdAt) + '</div></div>';
       }
     });
+    if (sortNewest) h += moreBtn;
 
     h += '</div>';
 
     h += '<div class="dw-foot"><div class="comment-box">' + avatar(S.me()) +
       '<textarea id="commentInput" placeholder="' + L('เขียนความเห็น… พิมพ์ @ชื่อ เพื่อแจ้งเตือน (Ctrl+Enter ส่ง)') + '"></textarea>' +
       '<button class="btn btn-primary btn-sm" data-act="send-comment" data-id="' +
-      esc(t.id) + '">' + L('ส่ง') + '</button></div></div>';
+      esc(t.id) + '">' + L('ส่ง') + '</button></div>' +
+      '<div class="rt-hint">' + L('ขึ้นต้นด้วย - เพื่อทำหัวข้อย่อย เว้นสองช่องเพื่อย่อยลงอีกชั้น · **ตัวหนา**') +
+      '</div></div>';
 
     return h;
   }

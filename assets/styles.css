@@ -2664,3 +2664,53 @@ button.prof-away:hover { color: var(--accent); }
 .dw-actempty {
   padding: 18px 2px; font-size: 13px; color: var(--fg-faint);
 }
+
+/* ---------- ข้อความมีรูปแบบในความเห็น ---------- */
+
+.rt { font-size: 13.5px; line-height: 1.6; }
+.rt > div { min-height: 1px; }
+.rt .rt-gap { height: 8px; }
+.rt .rt-h { font-weight: 600; margin: 2px 0; }
+.rt ul { margin: 2px 0; padding-left: 18px; }
+.rt ul ul { padding-left: 16px; }
+.rt li { margin: 1px 0; }
+/* ชั้นในใช้จุดคนละแบบ จะได้แยกออกว่าย่อยลงไปกี่ชั้นโดยไม่ต้องนับระยะเยื้อง */
+.rt ul { list-style: disc; }
+.rt ul ul { list-style: circle; }
+.rt ul ul ul { list-style: square; }
+.rt code {
+  font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px;
+  background: var(--bg-inset); padding: 1px 5px; border-radius: 4px;
+}
+.rt a { color: var(--accent); word-break: break-word; }
+.rt b { font-weight: 600; }
+
+.rt-hint {
+  font-size: 11.5px; color: var(--fg-faint); margin: 6px 0 0 42px; line-height: 1.5;
+}
+
+/* ---------- ลำดับและการย่อความเคลื่อนไหว ---------- */
+
+.dw-acttabs .grow { flex: 1; }
+.dw-actsort {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; color: var(--fg-soft); padding: 4px 8px;
+  border-radius: var(--radius); margin-bottom: 4px; white-space: nowrap;
+}
+.dw-actsort:hover { background: var(--bg-sunk); color: var(--fg); }
+.dw-actmore {
+  display: block; width: 100%; text-align: center;
+  font-size: 12.5px; color: var(--accent); padding: 7px;
+  border-radius: var(--radius); margin: 4px 0;
+}
+.dw-actmore:hover { background: var(--accent-bg); }
+
+/* ---------- ปุ่มปักหมุดโปรเจกต์ ---------- */
+
+.tb-star {
+  display: inline-grid; place-items: center; flex: none;
+  width: 26px; height: 26px; border-radius: var(--radius); color: var(--fg-faint);
+}
+.tb-star:hover { background: var(--bg-sunk); color: var(--fg-soft); }
+.tb-star.on { color: var(--warn-fg); }
+.tb-star.on:hover { color: var(--warn-fg); }

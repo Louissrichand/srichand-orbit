@@ -644,7 +644,8 @@
 
   function renderDrawer() {
     if (state.openTaskId && S.task(state.openTaskId)) {
-      $drawer.innerHTML = R.drawer(state.openTaskId, { actTab: state.actTab });
+      $drawer.innerHTML = R.drawer(state.openTaskId,
+        { actTab: state.actTab, actSort: state.actSort, actAll: state.actAll });
       $drawer.classList.add('open');
       $dwBack.classList.add('open');
       $drawer.setAttribute('aria-hidden', 'false');
@@ -873,6 +874,7 @@
      * ถ้าจำแท็บข้ามงาน คนที่เผลอเปิดค้างไว้ที่ความเคลื่อนไหวทั้งหมด
      * จะเจอบันทึกอัตโนมัติกองหนึ่งทุกครั้งที่เปิดงาน แทนที่จะเจอสิ่งที่ทีมคุยกันไว้ */
     state.actTab = 'comments';
+    state.actAll = false;
     renderDrawer();
     syncHash();
   }
@@ -3093,8 +3095,24 @@
         if (!S.removeTaskFromProject(id, projectId)) toast(L('งานต้องอยู่อย่างน้อย 1 โปรเจกต์'));
         break;
 
+      case 'toggle-star': {
+        var onNow = S.toggleStar(id);
+        renderAll();
+        toast(onNow ? L('ปักหมุดไว้บนสุดแล้ว') : L('เอาหมุดออกแล้ว'));
+        break;
+      }
+
       case 'dw-act-tab':
         state.actTab = el.dataset.tab === 'all' ? 'all' : 'comments';
+        state.actAll = false;          // เปลี่ยนแท็บแล้วเริ่มนับใหม่ว่าจะกางของเก่าไหม
+        renderDrawer();
+        break;
+      case 'dw-act-sort':
+        state.actSort = state.actSort === 'newest' ? 'oldest' : 'newest';
+        renderDrawer();
+        break;
+      case 'dw-act-more':
+        state.actAll = true;
         renderDrawer();
         break;
 

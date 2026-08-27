@@ -3137,6 +3137,41 @@
   }
 
   /** แก้โปรไฟล์ของตัวเอง ชื่อว่างไม่ได้ เพราะชื่อคือสิ่งที่คนอื่นใช้เรียกในระบบ */
+  /* ---------- โปรเจกต์ที่ปักหมุดไว้ ----------
+   *
+   * เก็บที่ตัวคน ไม่ใช่ที่โปรเจกต์ เพราะคนละคนทำงานกับโปรเจกต์คนละชุด
+   * ถ้าเก็บที่โปรเจกต์ พอใครปักหมุด แถบข้างของทุกคนจะเปลี่ยนตาม
+   *
+   * พอมีโปรเจกต์หลายสิบ แถบข้างจะยาวจนต้องเลื่อนหาทุกครั้ง
+   * ปักหมุดคือทางลัดไปที่ห้าหกอันที่เปิดจริงทุกวัน
+   */
+  function starred() {
+    var u = me();
+    var ids = (u && u.prefs && u.prefs.starred) || [];
+    /* กรองโปรเจกต์ที่ถูกลบหรือหมดสิทธิ์เห็นออก ไม่งั้นจะมีหมุดค้างชี้ไปที่ว่าง */
+    return ids.filter(function (id) { return !!project(id) && !!projectAccess(id); });
+  }
+
+  function isStarred(projectId) { return starred().indexOf(projectId) >= 0; }
+
+  function toggleStar(projectId) {
+    var u = me();
+    if (!u || !project(projectId)) return false;
+    u.prefs = u.prefs || {};
+    var cur = (u.prefs.starred || []).slice();
+    var i = cur.indexOf(projectId);
+    if (i >= 0) cur.splice(i, 1); else cur.push(projectId);
+    u.prefs.starred = cur;
+    commit();
+    return i < 0;                 // true = เพิ่งปักหมุด
+  }
+
+  /** โปรเจกต์ที่ปักหมุด เรียงตามลำดับที่ปัก */
+  function starredProjects() {
+    return starred().map(function (id) { return project(id); })
+      .filter(function (p) { return p && !p.archived; });
+  }
+
   function updateProfile(patch) {
     var u = me();
     if (!u) return null;
@@ -3368,6 +3403,7 @@
     NOTIFY_KINDS: NOTIFY_KINDS, pref: pref, setPref: setPref, setNotifyPref: setNotifyPref,
     updateProfile: updateProfile, setAway: setAway, isAway: isAway,
     setPhoto: setPhoto, removePhoto: removePhoto,
+    isStarred: isStarred, toggleStar: toggleStar, starredProjects: starredProjects,
     photoBytes: photoBytes, photoTotalBytes: photoTotalBytes,
     PHOTO_PX: PHOTO_PX, PHOTO_MAX_BYTES: PHOTO_MAX_BYTES,
     frequentCollaborators: frequentCollaborators,
