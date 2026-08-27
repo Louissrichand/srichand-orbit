@@ -1765,29 +1765,25 @@
 
   /* ---- แนบไฟล์ ----
    *
-   * เลือกไฟล์จากเครื่องได้จริงแล้ว ไฟล์เล็กเก็บมาทั้งก้อนในตัวข้อมูล
-   * ไฟล์ใหญ่เก็บไม่ไหว เพราะพื้นที่ทั้งหมดที่เบราว์เซอร์ให้มีราวสิบสองเมกะ
-   * ไฟล์เดียวก็กินหมดได้ แล้วงานของทั้งทีมจะบันทึกไม่ลง
+   * เลือกไฟล์จากเครื่องอย่างเดียว ไม่มีทางวางลิงก์แล้ว
+   * ไฟล์ถูกเก็บมาทั้งก้อนในตัวข้อมูล จึงเปิดและดาวน์โหลดกลับได้โดยไม่ต้องพึ่งที่อื่น
    *
-   * จึงบอกไปตรง ๆ ตอนไฟล์เกินเพดาน แล้วเสนอทางที่ใช้ได้จริงคือวางลิงก์จาก SharePoint
-   * ซึ่งเป็นที่เก็บไฟล์จริงของบริษัทอยู่แล้ว ดีกว่าปล่อยให้แนบแล้วพังเงียบ ๆ
+   * แลกมาด้วยเพดานขนาด เพราะพื้นที่ทั้งหมดที่เบราว์เซอร์ให้มีราวสิบสองเมกะ
+   * ถ้าไม่คุม ไฟล์ใหญ่ไฟล์เดียวก็กินหมดแล้วงานของทั้งทีมจะบันทึกไม่ลง
+   * ตั้งไว้สองเมกะซึ่งครอบคลุมเอกสารและรูปที่ใช้กันจริงเกือบทั้งหมด
+   * เกินกว่านั้นบอกไปตรง ๆ ว่าแนบไม่ได้ ดีกว่าปล่อยให้แนบแล้วพังเงียบ ๆ
    */
-  var ATT_MAX_BYTES = 1024 * 1024;     // 1 MB ต่อไฟล์
+  var ATT_MAX_BYTES = 2 * 1024 * 1024;     // 2 MB ต่อไฟล์
 
   function attachmentModal(taskId) {
     return '<h2>' + L('แนบไฟล์') + '</h2>' +
       '<button class="att-drop" data-act="pick-file">' + I('paperclip', 22) +
       '<b>' + L('เลือกไฟล์จากเครื่อง') + '</b>' +
-      '<em>' + L('ไฟล์ไม่เกิน {n} MB เก็บมาทั้งไฟล์ ใหญ่กว่านั้นให้วางลิงก์แทน',
+      '<em>' + L('ไฟล์ไม่เกิน {n} MB ต่อไฟล์ เก็บมาทั้งไฟล์และดาวน์โหลดกลับได้',
         { n: Math.round(ATT_MAX_BYTES / 1048576) }) + '</em></button>' +
       '<input type="file" id="atFile" data-act="att-file" data-id="' + R.esc(taskId) + '" hidden>' +
-      '<div class="att-or"><span>' +
-      L('หรือวางลิงก์จาก SharePoint / OneDrive / Google Drive') + '</span></div>' +
-      '<div class="field"><label>' + L('ชื่อไฟล์') + '</label><input id="atName" placeholder="' + L('เช่น brief.pdf') + '"></div>' +
-      '<div class="field"><label>' + L('ลิงก์') + '</label><input id="atUrl" placeholder="https://…"></div>' +
-      '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
-      '<button class="btn btn-primary" data-act="do-add-attachment" data-id="' + R.esc(taskId) +
-      '">' + L('แนบลิงก์') + '</button></div>';
+      '<div class="modal-acts"><button class="btn" data-act="close-modal">' +
+      L('ยกเลิก') + '</button></div>';
   }
 
   function takeAttachment(inputEl) {
@@ -1796,10 +1792,8 @@
     inputEl.value = '';
     if (!f) return;
     if (f.size > ATT_MAX_BYTES) {
-      toast(L('ไฟล์ใหญ่ {mb} MB เกินเพดาน วางลิงก์แทนได้',
-        { mb: (f.size / 1048576).toFixed(1) }));
-      var nameBox = document.getElementById('atName');
-      if (nameBox) { nameBox.value = f.name; nameBox.focus(); }
+      toast(L('ไฟล์นี้ {mb} MB เกิน {n} MB ที่แนบได้',
+        { mb: (f.size / 1048576).toFixed(1), n: Math.round(ATT_MAX_BYTES / 1048576) }));
       return;
     }
     var fr = new FileReader();
@@ -2174,6 +2168,16 @@
             { n: phN, kb: Math.round(S.photoTotalBytes() / 1024) }) + '</div></div></div>';
       }
 
+      /* ไฟล์แนบเป็นก้อนที่โตเร็วที่สุด เพราะเก็บตัวไฟล์มาทั้งก้อน
+       * ต้องเห็นตัวเลขก่อนพื้นที่เต็ม ไม่ใช่รู้ตอนบันทึกไม่ลงแล้ว */
+      var atT = S.attachTotals();
+      if (atT.count) {
+        h += '<div class="mini-row"><div class="grow"><div>' + L('ไฟล์แนบ') +
+          '</div><div class="sub">' +
+          L('{n} ไฟล์ · รวม {mb} MB',
+            { n: atT.count, mb: (atT.bytes / 1048576).toFixed(1) }) + '</div></div></div>';
+      }
+
       if (S.storageKind === 'memory') {
         h += '<div class="prj-warn">' + I('alert', 15) + '<span><b>' + L('โหมดทดลอง') + '</b> ' +
           L('— เบราว์เซอร์นี้ไม่อนุญาตให้เก็บข้อมูล') + ' ' +
@@ -2522,14 +2526,15 @@
       'edit-type', 'edit-recur', 'edit-recur-n', 'edit-field', 'edit-dep-type',
       'pick-assignee', 'set-assignee', 'pick-priority', 'set-priority', 'set-approval',
       'add-dependency', 'do-add-dependency', 'remove-dependency', 'g-del-dep',
-      'add-attachment', 'do-add-attachment', 'remove-attachment',
+      'add-attachment', 'remove-attachment',
       'add-tag', 'remove-tag',
       'edit-cell', 'cell-set-assignee', 'cell-set-option', 'cell-toggle-option'
     ]);
     put('comment', [
       'send-comment', 'toggle-follow', 'do-follow', 'remove-follower',
       'pick-follower', 'toggle-like', 'react', 'react-menu', 'pick-tag',
-      'pick-file', 'att-file'
+      'pick-file', 'att-file', 'sub-dates', 'sub-assign', 'set-sub-assignee',
+      'sub-start', 'sub-due', 'sub-clear-dates'
     ]);
     return map;
   })();
@@ -2595,7 +2600,8 @@
          'add-field-picker', 'field-menu', 'opt-color', 'edit-cell',
          'project-menu', 'status-menu', 'g-zoom-menu', 'g-views-menu', 'pf-menu', 'pf-status',
          'view-menu', 'toggle-view', 'add-menu', 'react-menu',
-         'add-tag', 'tag-search'].indexOf(el.dataset.act) < 0) {
+         'add-tag', 'tag-search', 'sub-dates', 'sub-assign',
+         'sub-start', 'sub-due'].indexOf(el.dataset.act) < 0) {
       if (!e.target.closest || !e.target.closest('.pop')) closePops();
     }
 
@@ -3143,13 +3149,6 @@
         if (fi2) fi2.click();
         break;
       }
-      case 'do-add-attachment': {
-        var an = document.getElementById('atName').value.trim();
-        if (!an) { toast(L('ใส่ชื่อไฟล์ก่อน')); break; }
-        S.addAttachment(id, an, document.getElementById('atUrl').value.trim());
-        closeModal();
-        break;
-      }
       case 'remove-attachment': S.removeAttachment(id, el.dataset.att); break;
 
       /* --- tags --- */
@@ -3165,6 +3164,50 @@
         var tqi = document.getElementById('tagQ');
         if (tqi) tqi.focus();
         break;
+      /* ตั้งวันของงานย่อยจากแถวนั้นเลย ไม่ต้องเปิดเข้าไปในงานย่อย
+       * เปิดทั้งวันเริ่มและกำหนดส่งพร้อมกัน เพราะคนตั้งสองอย่างนี้พร้อมกันเสมอ */
+      case 'sub-dates': {
+        if (popIsOpenFor(el)) { closePops(); break; }
+        var sd = S.task(id);
+        if (!sd) break;
+        openPop(el,
+          '<div class="subdate">' +
+          '<label>' + L('วันเริ่ม') + '</label>' +
+          '<input type="date" data-act="sub-start" data-id="' + R.esc(id) +
+          '" value="' + R.esc(sd.startOn || '') + '">' +
+          '<label>' + L('กำหนดส่ง') + '</label>' +
+          '<input type="date" data-act="sub-due" data-id="' + R.esc(id) +
+          '" value="' + R.esc(sd.dueOn || '') + '">' +
+          (sd.startOn || sd.dueOn
+            ? '<button class="as-link danger" data-act="sub-clear-dates" data-id="' +
+              R.esc(id) + '">' + L('ล้างวันทั้งสอง') + '</button>'
+            : '') +
+          '</div>');
+        break;
+      }
+      case 'sub-clear-dates':
+        S.updateTask(id, { startOn: null, dueOn: null });
+        closePops();
+        renderAll();
+        break;
+      case 'sub-assign': {
+        if (popIsOpenFor(el)) { closePops(); break; }
+        var ah = '<button data-act="set-sub-assignee" data-id="' + R.esc(id) +
+          '" data-user="">' + R.avatar(null) + ' ' + L('ยังไม่มอบหมาย') + '</button>';
+        S.db.users.forEach(function (u) {
+          ah += '<button data-act="set-sub-assignee" data-id="' + R.esc(id) +
+            '" data-user="' + R.esc(u.id) + '">' + R.avatar(u, 'sm') + ' ' +
+            R.esc(u.name) + '</button>';
+        });
+        openPop(el, ah);
+        break;
+      }
+      case 'set-sub-assignee':
+        S.updateTask(id, { assigneeId: el.dataset.user || null });
+        closePops();
+        renderAll();
+        break;
+
       case 'pick-tag': {
         var pt = S.task(id);
         var nt = (el.dataset.tag || '').trim();
@@ -4088,6 +4131,16 @@
 
     if (act === 'photo-file') { takePhoto(el); return; }
     if (act === 'att-file') { takeAttachment(el); return; }
+
+    /* วันของงานย่อย บันทึกทันทีที่เลือก แล้ววาดใหม่ทั้งหน้าให้แถวอัปเดตตาม
+     * เมนูยังเปิดค้างไว้ เพื่อให้ตั้งอีกวันต่อได้โดยไม่ต้องกดเปิดใหม่ */
+    if (act === 'sub-start' || act === 'sub-due') {
+      var patch = {};
+      patch[act === 'sub-start' ? 'startOn' : 'dueOn'] = el.value || null;
+      S.updateTask(el.dataset.id, patch);
+      renderDrawer();
+      return;
+    }
 
     // ตัวกรอง
     if (act.indexOf('f-') === 0 && state.route.type === 'project') {

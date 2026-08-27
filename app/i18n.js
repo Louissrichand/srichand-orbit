@@ -945,17 +945,18 @@
 
     /* --- แนบไฟล์ --- */
     'เลือกไฟล์จากเครื่อง': 'Choose a file from this computer',
-    'ไฟล์ไม่เกิน {n} MB เก็บมาทั้งไฟล์ ใหญ่กว่านั้นให้วางลิงก์แทน':
-      'Files up to {n} MB are stored in full. Anything larger should be a link instead.',
-    'หรือวางลิงก์จาก SharePoint / OneDrive / Google Drive':
-      'or paste a link from SharePoint / OneDrive / Google Drive',
-    'ลิงก์': 'Link',
-    'แนบลิงก์': 'Attach link',
+    'ไฟล์ไม่เกิน {n} MB ต่อไฟล์ เก็บมาทั้งไฟล์และดาวน์โหลดกลับได้':
+      'Up to {n} MB per file. Files are stored in full and can be downloaded back.',
+    'ไฟล์นี้ {mb} MB เกิน {n} MB ที่แนบได้': 'That file is {mb} MB — the limit is {n} MB.',
     'แนบไฟล์แล้ว': 'File attached',
     'อ่านไฟล์ไม่สำเร็จ': 'That file could not be read',
-    'ไฟล์ใหญ่ {mb} MB เกินเพดาน วางลิงก์แทนได้': 'That file is {mb} MB — too large. Paste a link instead.',
 
     /* --- งานย่อย --- */
+    'ตั้งวันเริ่มและกำหนดส่ง': 'Set start and due date',
+    'มอบหมายงานย่อยนี้': 'Assign this subtask',
+    'ล้างวันทั้งสอง': 'Clear both dates',
+    'ไฟล์แนบ': 'Attachments',
+    '{n} ไฟล์ · รวม {mb} MB': '{n} [n|file|files] 00b7 {mb} MB total',
     'พิมพ์ชื่องานย่อยแล้วกด Enter': 'Type a subtask and press Enter',
 
     /* --- ประกาศของโปรเจกต์ --- */

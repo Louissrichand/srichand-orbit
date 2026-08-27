@@ -2453,11 +2453,24 @@
     // งานย่อย
     h += '<div class="dw-sec-title">' + L('งานย่อย') + ' <span style="color:var(--fg-faint)">' +
       subs.filter(function (s) { return s.completed; }).length + '/' + subs.length + '</span></div>';
+    /* งานย่อยเป็นงานเต็มรูปแบบ ไม่ใช่รายการติ๊กเฉย ๆ
+     * กดที่ชื่อแล้วเปิดแผงรายละเอียดของมันเองซึ่งมีทุกอย่างเหมือนงานปกติ
+     *
+     * ส่วนวันกับผู้รับผิดชอบ ตั้งได้จากแถวนี้เลยโดยไม่ต้องเปิดเข้าไป
+     * เพราะสองอย่างนี้คือสิ่งที่ต้องกรอกทันทีหลังแตกงานย่อยออกมา
+     * ถ้าบังคับให้เปิดเข้าไปทีละอัน การแตกงานสิบชิ้นจะกลายเป็นการเปิดปิดสิบรอบ */
     subs.forEach(function (s) {
+      var when = s.dueOn || s.startOn;
       h += '<div class="sub-row' + (s.completed ? ' done' : '') + '">' + checkbox(s) +
         '<span class="nm" data-act="open-task" data-id="' + esc(s.id) +
         '" style="cursor:pointer">' + esc(s.name) + '</span>' +
-        avatar(S.user(s.assigneeId), 'sm') +
+        '<button class="sub-date' + (when ? ' on' : '') + dueClass(s.dueOn, s.completed) +
+        '" data-act="sub-dates" data-id="' + esc(s.id) + '" title="' +
+        L('ตั้งวันเริ่มและกำหนดส่ง') + '">' + I('calendar', 13) +
+        (when ? '<span>' + esc(fmtDate(when)) + '</span>' : '') + '</button>' +
+        '<button class="sub-who" data-act="sub-assign" data-id="' + esc(s.id) + '" title="' +
+        (s.assigneeId ? esc((S.user(s.assigneeId) || {}).name || '') : L('มอบหมายงานย่อยนี้')) +
+        '">' + avatar(S.user(s.assigneeId), 'sm') + '</button>' +
         '<button class="x" data-act="delete-task" data-id="' + esc(s.id) +
         '" title="' + L('ลบงานย่อยนี้') + '">' + I('close', 13) + '</button></div>';
     });

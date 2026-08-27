@@ -3374,6 +3374,22 @@
     return db.users.reduce(function (n, u) { return n + photoBytes(u.photo); }, 0);
   }
 
+  /** รวมขนาดไฟล์แนบทั้งหมด และนับจำนวนไฟล์
+   *
+   * ไฟล์แนบเป็นก้อนที่โตเร็วที่สุดในระบบ เพราะเก็บตัวไฟล์มาทั้งก้อน
+   * ต้องเห็นตัวเลขได้ก่อนที่พื้นที่จะเต็ม ไม่ใช่รู้ตอนบันทึกไม่ลงแล้ว
+   */
+  function attachTotals() {
+    var n = 0, bytes = 0;
+    db.tasks.forEach(function (t) {
+      (t.attachments || []).forEach(function (a) {
+        n++;
+        bytes += a.size || photoBytes(a.url);
+      });
+    });
+    return { count: n, bytes: bytes };
+  }
+
   /**
    * ตั้งรูปโปรไฟล์ของตัวเอง
    * @returns {{ok:boolean, reason?:string, bytes?:number}}
@@ -3573,7 +3589,7 @@
     projectMessages: projectMessages, addProjectMessage: addProjectMessage,
     deleteProjectMessage: deleteProjectMessage,
     REACTIONS: REACTIONS, toggleReaction: toggleReaction,
-    photoBytes: photoBytes, photoTotalBytes: photoTotalBytes,
+    photoBytes: photoBytes, photoTotalBytes: photoTotalBytes, attachTotals: attachTotals,
     PHOTO_PX: PHOTO_PX, PHOTO_MAX_BYTES: PHOTO_MAX_BYTES,
     frequentCollaborators: frequentCollaborators,
     setActive: setActive, isActive: isActive,

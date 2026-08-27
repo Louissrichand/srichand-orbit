@@ -2964,13 +2964,6 @@ button.prof-away:hover { color: var(--accent); }
 .att-drop em {
   font-style: normal; font-size: 12px; color: var(--fg-soft); line-height: 1.5; max-width: 34ch;
 }
-.att-or {
-  display: flex; align-items: center; gap: 10px; margin: 14px 0 10px;
-  font-size: 12px; color: var(--fg-faint);
-}
-.att-or::before, .att-or::after {
-  content: ''; flex: 1; height: 1px; background: var(--line);
-}
 .att-size { font-size: 11.5px; color: var(--fg-faint); flex: none; }
 
 /* ---------- เพิ่มงานย่อยแบบพิมพ์ทันที ---------- */
@@ -2985,3 +2978,27 @@ button.prof-away:hover { color: var(--accent); }
   color: var(--fg); font: inherit; font-size: 13.5px;
 }
 .sub-add:focus-within { background: var(--bg-sunk); }
+
+/* ---------- ปุ่มวันและผู้รับผิดชอบบนแถวงานย่อย ---------- */
+
+.sub-date {
+  display: inline-flex; align-items: center; gap: 5px; flex: none;
+  padding: 3px 7px; border-radius: var(--radius);
+  font-size: 11.5px; color: var(--fg-faint); white-space: nowrap;
+}
+.sub-date:hover { background: var(--bg-sunk); color: var(--fg-soft); }
+.sub-date.on { color: var(--fg-soft); }
+.sub-date.due-over { color: var(--danger); font-weight: 600; }
+.sub-date.due-today { color: var(--warn-fg); font-weight: 600; }
+.sub-who { display: inline-flex; flex: none; padding: 2px; border-radius: 50%; }
+.sub-who:hover { background: var(--bg-sunk); }
+
+/* เลือกวันเริ่มและกำหนดส่งของงานย่อยในเมนูเดียว */
+.subdate { display: flex; flex-direction: column; gap: 4px; min-width: 190px; padding: 2px; }
+.subdate label { font-size: 11.5px; color: var(--fg-soft); }
+.subdate input {
+  padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--bg-sunk); color: var(--fg); font: inherit; font-size: 13px; outline: none;
+}
+.subdate input:focus { border-color: var(--accent); }
+.subdate .as-link { margin-top: 4px; font-size: 12px; }
