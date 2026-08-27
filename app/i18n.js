@@ -920,6 +920,44 @@
     'เปิดใช้งานบัญชี': 'Enable account',
     'ล้างข้อมูล': 'Clear data',
 
+    /* --- บันทึกความเคลื่อนไหวของงาน --- */
+    'สร้างงานนี้': 'created this task',
+    'เลื่อนกำหนดส่งจาก {a} เป็น {b}': 'moved the due date from {a} to {b}',
+    'เลื่อนวันเริ่มจาก {a} เป็น {b}': 'moved the start date from {a} to {b}',
+    'ตั้งวันเริ่ม {d}': 'set the start date to {d}',
+    'ลบวันเริ่ม': 'cleared the start date',
+    'ตั้งเวลาส่ง {d}': 'set the due time to {d}',
+    'ลบเวลาส่ง': 'cleared the due time',
+    'เปลี่ยนชื่องานจาก “{a}”': 'renamed it from “{a}”',
+    'เปลี่ยนชนิดงานเป็น {p}': 'changed the task type to {p}',
+    'แก้ไขรายละเอียด': 'edited the description',
+    'ลบรายละเอียด': 'cleared the description',
+    'เพิ่มแท็ก {t}': 'added the tag {t}',
+    'เอาแท็ก {t} ออก': 'removed the tag {t}',
+    'ตั้งให้ทำซ้ำ {f}': 'set it to repeat {f}',
+    'เลิกทำซ้ำ': 'turned off repeating',
+    'เอาออกจากโปรเจกต์ {p}': 'removed it from {p}',
+
+    /* --- เลือกแท็ก --- */
+    'พิมพ์เพื่อค้นหาหรือสร้างใหม่': 'Type to search or create',
+    'ยังไม่มีแท็กในระบบ พิมพ์เพื่อสร้างอันแรก': 'No tags yet — type to create the first one',
+    'สร้างแท็ก “{t}”': 'Create the tag “{t}”',
+
+    /* --- แนบไฟล์ --- */
+    'เลือกไฟล์จากเครื่อง': 'Choose a file from this computer',
+    'ไฟล์ไม่เกิน {n} MB เก็บมาทั้งไฟล์ ใหญ่กว่านั้นให้วางลิงก์แทน':
+      'Files up to {n} MB are stored in full. Anything larger should be a link instead.',
+    'หรือวางลิงก์จาก SharePoint / OneDrive / Google Drive':
+      'or paste a link from SharePoint / OneDrive / Google Drive',
+    'ลิงก์': 'Link',
+    'แนบลิงก์': 'Attach link',
+    'แนบไฟล์แล้ว': 'File attached',
+    'อ่านไฟล์ไม่สำเร็จ': 'That file could not be read',
+    'ไฟล์ใหญ่ {mb} MB เกินเพดาน วางลิงก์แทนได้': 'That file is {mb} MB — too large. Paste a link instead.',
+
+    /* --- งานย่อย --- */
+    'พิมพ์ชื่องานย่อยแล้วกด Enter': 'Type a subtask and press Enter',
+
     /* --- ประกาศของโปรเจกต์ --- */
     'ประกาศ': 'Messages',
     'เรื่องของทั้งโปรเจกต์ที่ไม่ได้ผูกกับงานชิ้นไหน': 'Project-wide notes that do not belong to any one task',

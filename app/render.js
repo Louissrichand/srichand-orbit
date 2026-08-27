@@ -114,7 +114,29 @@
 
   /** ข้อความบันทึกความเคลื่อนไหว แปลตอนแสดง
    *  ข้อมูลเก่าที่เก็บเป็นประโยคไว้แล้วยังอ่านได้ เพราะ L() คืนค่าเดิมเมื่อไม่เจอคีย์ */
-  function storyText(s) { return L(s.text, s.params || undefined); }
+  /* วันที่ในบันทึกถูกเก็บเป็นรูปแบบมาตรฐาน 2026-09-03 เพื่อให้เทียบและแปลงได้
+   * แต่คนอ่านต้องการ "3 ก.ย." จึงจัดรูปตอนแสดง ไม่ใช่ตอนเก็บ
+   * ถ้าจัดรูปตอนเก็บ พอสลับภาษาแล้วบันทึกเก่าจะยังเป็นภาษาที่เขียนไว้ตอนนั้น */
+  function storyText(s) {
+    var p = s.params;
+    if (p) {
+      var out = {};
+      Object.keys(p).forEach(function (k) {
+        var v = p[k];
+        out[k] = (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) ? fmtDate(v) : v;
+      });
+      p = out;
+    }
+    return L(s.text, p || undefined);
+  }
+
+  /** ขนาดไฟล์แบบอ่านง่าย */
+  function fmtBytes(n) {
+    if (!n) return '';
+    if (n < 1024) return n + ' B';
+    if (n < 1048576) return Math.round(n / 1024) + ' KB';
+    return (n / 1048576).toFixed(1) + ' MB';
+  }
 
   /** ป้ายเวลา ย่อไว้ให้อ่านเร็ว แต่ชี้ค้างแล้วเห็นวันเวลาเต็ม */
   function whenTag(isoTs, cls) {
@@ -2393,9 +2415,17 @@
       h += '<div style="font-size:13px;color:var(--fg-faint)">' + L('ยังไม่มีไฟล์แนบ') + '</div>';
     }
     t.attachments.forEach(function (a) {
+      /* ไฟล์ที่เลือกมาจากเครื่องถูกเก็บมาทั้งก้อน จึงดาวน์โหลดกลับได้
+       * ส่วนลิงก์เปิดออกไปที่ปลายทาง สองอย่างนี้ใช้แท็ก a เหมือนกันแต่คนละความหมาย
+       * ต่างกันที่ download ซึ่งทำให้ไฟล์ถูกบันทึกด้วยชื่อเดิมแทนที่จะเปิดในแท็บใหม่ */
+      var inline = /^data:/.test(a.url || '');
       h += '<div class="att-row">' + I('paperclip', 14) + '<span class="nm">' +
-        (a.url ? '<a href="' + esc(a.url) + '" target="_blank" rel="noopener">' + esc(a.name) + '</a>'
-               : esc(a.name)) + '</span>' +
+        (a.url
+          ? '<a href="' + esc(a.url) + '"' +
+            (inline ? ' download="' + esc(a.name) + '"' : ' target="_blank" rel="noopener"') +
+            '>' + esc(a.name) + '</a>'
+          : esc(a.name)) + '</span>' +
+        (a.size ? '<span class="att-size">' + esc(fmtBytes(a.size)) + '</span>' : '') +
         '<button class="btn btn-sm btn-ghost" data-act="remove-attachment" data-id="' + esc(t.id) +
         '" data-att="' + esc(a.id) + '" title="' + L('เอาไฟล์แนบนี้ออก') + '">' +
         I('close', 13) + '</button></div>';
@@ -2431,8 +2461,12 @@
         '<button class="x" data-act="delete-task" data-id="' + esc(s.id) +
         '" title="' + L('ลบงานย่อยนี้') + '">' + I('close', 13) + '</button></div>';
     });
-    h += '<button class="add-row" data-act="add-subtask" data-id="' + esc(t.id) +
-      '">+ ' + L('เพิ่มงานย่อย') + '</button>';
+    /* พิมพ์ชื่อแล้วกด Enter ได้เลย ไม่ต้องผ่านกล่อง prompt ของเบราว์เซอร์
+     * ซึ่งบังคับให้หยุดทุกอย่างและพิมพ์ได้ทีละหนึ่งงาน
+     * ช่องนี้ไม่ล้างโฟกัสหลังเพิ่ม จึงพิมพ์รายการยาว ๆ รวดเดียวได้ */
+    h += '<div class="sub-add">' + I('plus', 14) +
+      '<input id="subAdd" data-act="sub-add" data-id="' + esc(t.id) +
+      '" placeholder="' + L('พิมพ์ชื่องานย่อยแล้วกด Enter') + '"></div>';
 
     /* ---- ความเห็นและความเคลื่อนไหว ----
      *

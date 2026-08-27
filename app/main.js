@@ -1457,6 +1457,38 @@
     return h;
   }
 
+  /** เมนูเลือกแท็ก — ของเดิมที่มีอยู่แล้วขึ้นก่อน สร้างใหม่ได้ถ้าพิมพ์คำที่ยังไม่มี */
+  function tagMenu(taskId, q) {
+    var t = S.task(taskId);
+    if (!t) return '';
+    var term = (q || '').trim().toLowerCase();
+    var all = S.allTags().filter(function (x) {
+      return t.tags.indexOf(x) < 0 && (!term || x.toLowerCase().indexOf(term) >= 0);
+    });
+
+    var h = '<div class="tagpick">' +
+      '<input id="tagQ" data-act="tag-search" data-id="' + R.esc(taskId) +
+      '" placeholder="' + L('พิมพ์เพื่อค้นหาหรือสร้างใหม่') + '" value="' + R.esc(q || '') + '">';
+    h += '<div class="tagpick-list">';
+    all.slice(0, 40).forEach(function (x) {
+      h += '<button data-act="pick-tag" data-id="' + R.esc(taskId) + '" data-tag="' +
+        R.esc(x) + '"><span class="chip tag">' + R.esc(x) + '</span></button>';
+    });
+    if (!all.length && !term) {
+      h += '<div class="pop-note">' + L('ยังไม่มีแท็กในระบบ พิมพ์เพื่อสร้างอันแรก') + '</div>';
+    }
+    h += '</div>';
+    /* สร้างใหม่โผล่เฉพาะตอนที่พิมพ์คำที่ยังไม่มีจริง ๆ
+     * ถ้าโชว์ตลอด คนจะเผลอกดสร้างซ้ำกับแท็กที่มีอยู่แล้วแต่สะกดต่างกัน */
+    if (term && S.allTags().indexOf(q.trim()) < 0 && t.tags.indexOf(q.trim()) < 0) {
+      h += '<div class="pop-sep"></div>' +
+        '<button data-act="pick-tag" data-id="' + R.esc(taskId) + '" data-tag="' +
+        R.esc(q.trim()) + '">' + I('plus', 14) +
+        '<span class="grow">' + L('สร้างแท็ก “{t}”', { t: q.trim() }) + '</span></button>';
+    }
+    return h + '</div>';
+  }
+
   function viewMenu(projectId) {
     var on = S.projectViews(projectId);
     var h = '<div class="pop-note">' + L('เลือกมุมมองที่จะให้แสดงเป็นแท็บ') + '</div>';
@@ -1731,15 +1763,54 @@
     return h;
   }
 
+  /* ---- แนบไฟล์ ----
+   *
+   * เลือกไฟล์จากเครื่องได้จริงแล้ว ไฟล์เล็กเก็บมาทั้งก้อนในตัวข้อมูล
+   * ไฟล์ใหญ่เก็บไม่ไหว เพราะพื้นที่ทั้งหมดที่เบราว์เซอร์ให้มีราวสิบสองเมกะ
+   * ไฟล์เดียวก็กินหมดได้ แล้วงานของทั้งทีมจะบันทึกไม่ลง
+   *
+   * จึงบอกไปตรง ๆ ตอนไฟล์เกินเพดาน แล้วเสนอทางที่ใช้ได้จริงคือวางลิงก์จาก SharePoint
+   * ซึ่งเป็นที่เก็บไฟล์จริงของบริษัทอยู่แล้ว ดีกว่าปล่อยให้แนบแล้วพังเงียบ ๆ
+   */
+  var ATT_MAX_BYTES = 1024 * 1024;     // 1 MB ต่อไฟล์
+
   function attachmentModal(taskId) {
-    return '<h2>' + L('แนบไฟล์หรือลิงก์') + '</h2>' +
-      '<p style="font-size:13px;color:var(--fg-soft);margin:0 0 14px">' +
-      L('ระบบยังไม่เก็บตัวไฟล์จริง ให้ใส่ชื่อไฟล์และวางลิงก์จาก SharePoint / OneDrive / Google Drive') + '</p>' +
+    return '<h2>' + L('แนบไฟล์') + '</h2>' +
+      '<button class="att-drop" data-act="pick-file">' + I('paperclip', 22) +
+      '<b>' + L('เลือกไฟล์จากเครื่อง') + '</b>' +
+      '<em>' + L('ไฟล์ไม่เกิน {n} MB เก็บมาทั้งไฟล์ ใหญ่กว่านั้นให้วางลิงก์แทน',
+        { n: Math.round(ATT_MAX_BYTES / 1048576) }) + '</em></button>' +
+      '<input type="file" id="atFile" data-act="att-file" data-id="' + R.esc(taskId) + '" hidden>' +
+      '<div class="att-or"><span>' +
+      L('หรือวางลิงก์จาก SharePoint / OneDrive / Google Drive') + '</span></div>' +
       '<div class="field"><label>' + L('ชื่อไฟล์') + '</label><input id="atName" placeholder="' + L('เช่น brief.pdf') + '"></div>' +
-      '<div class="field"><label>' + L('ลิงก์ (ไม่บังคับ)') + '</label><input id="atUrl" placeholder="https://…"></div>' +
+      '<div class="field"><label>' + L('ลิงก์') + '</label><input id="atUrl" placeholder="https://…"></div>' +
       '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
       '<button class="btn btn-primary" data-act="do-add-attachment" data-id="' + R.esc(taskId) +
-      '">' + L('แนบ') + '</button></div>';
+      '">' + L('แนบลิงก์') + '</button></div>';
+  }
+
+  function takeAttachment(inputEl) {
+    var f = inputEl.files && inputEl.files[0];
+    var tid = inputEl.dataset.id;
+    inputEl.value = '';
+    if (!f) return;
+    if (f.size > ATT_MAX_BYTES) {
+      toast(L('ไฟล์ใหญ่ {mb} MB เกินเพดาน วางลิงก์แทนได้',
+        { mb: (f.size / 1048576).toFixed(1) }));
+      var nameBox = document.getElementById('atName');
+      if (nameBox) { nameBox.value = f.name; nameBox.focus(); }
+      return;
+    }
+    var fr = new FileReader();
+    fr.onload = function () {
+      S.addAttachment(tid, f.name, fr.result, { size: f.size, mime: f.type });
+      closeModal();
+      renderAll();
+      toast(L('แนบไฟล์แล้ว'), L('ย้อนกลับ'), 'undo');
+    };
+    fr.onerror = function () { toast(L('อ่านไฟล์ไม่สำเร็จ')); };
+    fr.readAsDataURL(f);
   }
 
   function templatesModal() {
@@ -2457,7 +2528,8 @@
     ]);
     put('comment', [
       'send-comment', 'toggle-follow', 'do-follow', 'remove-follower',
-      'pick-follower', 'toggle-like', 'react', 'react-menu'
+      'pick-follower', 'toggle-like', 'react', 'react-menu', 'pick-tag',
+      'pick-file', 'att-file'
     ]);
     return map;
   })();
@@ -2522,7 +2594,8 @@
     if (!el || ['pick-assignee', 'pick-priority', 'pick-follower',
          'add-field-picker', 'field-menu', 'opt-color', 'edit-cell',
          'project-menu', 'status-menu', 'g-zoom-menu', 'g-views-menu', 'pf-menu', 'pf-status',
-         'view-menu', 'toggle-view', 'add-menu', 'react-menu'].indexOf(el.dataset.act) < 0) {
+         'view-menu', 'toggle-view', 'add-menu', 'react-menu',
+         'add-tag', 'tag-search'].indexOf(el.dataset.act) < 0) {
       if (!e.target.closest || !e.target.closest('.pop')) closePops();
     }
 
@@ -3065,6 +3138,11 @@
 
       /* --- attachments --- */
       case 'add-attachment': openModal(attachmentModal(id)); break;
+      case 'pick-file': {
+        var fi2 = document.getElementById('atFile');
+        if (fi2) fi2.click();
+        break;
+      }
       case 'do-add-attachment': {
         var an = document.getElementById('atName').value.trim();
         if (!an) { toast(L('ใส่ชื่อไฟล์ก่อน')); break; }
@@ -3075,13 +3153,25 @@
       case 'remove-attachment': S.removeAttachment(id, el.dataset.att); break;
 
       /* --- tags --- */
-      case 'add-tag': {
-        var tg = prompt(L('ชื่อแท็ก'));
-        if (!tg || !tg.trim()) break;
-        var tt2 = S.task(id);
-        if (tt2.tags.indexOf(tg.trim()) < 0) {
-          S.updateTask(id, { tags: tt2.tags.concat([tg.trim()]) });
+      /* ---- แท็ก ----
+       *
+       * เดิมเป็นกล่อง prompt ของเบราว์เซอร์ ต้องพิมพ์ชื่อใหม่ทุกครั้ง
+       * สะกดต่างกันนิดเดียวก็กลายเป็นคนละแท็ก แล้วกรองไม่เจอ
+       * เปลี่ยนเป็นเมนูที่เห็นแท็กที่มีอยู่แล้วทั้งหมด เลือกจากของเดิมได้เลย
+       * และพิมพ์สร้างใหม่ได้ในช่องเดียวกันถ้ายังไม่มี */
+      case 'add-tag':
+        if (popIsOpenFor(el)) { closePops(); break; }
+        openPop(el, tagMenu(id, ''));
+        var tqi = document.getElementById('tagQ');
+        if (tqi) tqi.focus();
+        break;
+      case 'pick-tag': {
+        var pt = S.task(id);
+        var nt = (el.dataset.tag || '').trim();
+        if (pt && nt && pt.tags.indexOf(nt) < 0) {
+          S.updateTask(id, { tags: pt.tags.concat([nt]) });
         }
+        closePops();
         break;
       }
       case 'remove-tag': {
@@ -3997,6 +4087,7 @@
     if (!allowed(act, el)) { renderAll(); return; }   // วาดใหม่เพื่อคืนค่าเดิมให้ช่องกรอก
 
     if (act === 'photo-file') { takePhoto(el); return; }
+    if (act === 'att-file') { takeAttachment(el); return; }
 
     // ตัวกรอง
     if (act.indexOf('f-') === 0 && state.route.type === 'project') {
@@ -4105,6 +4196,18 @@
     /* ค้นในโปรเจกต์ หน่วงไว้ไม่ให้วาดใหม่ทุกตัวอักษร
      * ใน Gantt คำค้นเป็นการเน้นแถว ไม่ใช่กรองออก เพราะถ้ากรองออกจะเห็นแท่งลอย ๆ
      * ไม่มีบริบทว่างานนั้นอยู่ช่วงไหนของแผน — ganttView จัดการส่วนนั้นเอง */
+    /* ค้นแท็กในเมนู วาดเฉพาะรายการข้างใน ไม่ปิดเมนูและไม่เสียโฟกัส */
+    if (e.target.id === 'tagQ') {
+      var tqv = e.target.value;
+      var pop = e.target.closest('.pop');
+      if (pop) {
+        pop.innerHTML = tagMenu(e.target.dataset.id, tqv);
+        var again = document.getElementById('tagQ');
+        if (again) { again.focus(); again.setSelectionRange(tqv.length, tqv.length); }
+      }
+      return;
+    }
+
     if (e.target.id === 'vQ') {
       var gq = e.target.value;
       clearTimeout(gSearchTimer);
@@ -4192,6 +4295,19 @@
 
   document.addEventListener('keydown', function (e) {
     var typing = ['INPUT', 'TEXTAREA', 'SELECT'].indexOf(e.target.tagName) >= 0;
+
+    /* เพิ่มงานย่อยด้วยการกด Enter แล้วช่องยังโฟกัสอยู่
+     * พิมพ์รายการยาว ๆ ต่อได้รวดเดียวโดยไม่ต้องกดปุ่มใหม่ทุกครั้ง */
+    if (e.key === 'Enter' && e.target.id === 'subAdd') {
+      e.preventDefault();
+      var sname = e.target.value.trim();
+      if (!sname) return;
+      S.createTask({ name: sname, parentId: e.target.dataset.id }, null, null);
+      renderAll();
+      var againS = document.getElementById('subAdd');
+      if (againS) { againS.value = ''; againS.focus(); }
+      return;
+    }
 
     if (e.key === 'Escape') {
       if ($mdBack.classList.contains('open')) { closeModal(); return; }

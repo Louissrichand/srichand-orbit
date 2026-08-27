@@ -1837,6 +1837,9 @@
     if (t.followers.indexOf(db.currentUserId) < 0) t.followers.push(db.currentUserId);
     t.createdBy = db.currentUserId;
     db.tasks.push(t);
+    /* บรรทัดแรกของประวัติ ตอบว่าใครสร้างงานนี้เมื่อไหร่
+     * ต้องบันทึกหลัง push แล้ว ไม่งั้น log หาตัวงานไม่เจอ */
+    log(t.id, 'สร้างงานนี้');
     if (projectId && !t.parentId) {
       db.memberships.push({
         id: uid('m'), taskId: t.id, projectId: projectId,
@@ -1915,9 +1918,62 @@
           'มอบหมายงาน “{t}” ให้คุณ', 'assigned', { t: t.name });
       }
     }
+    /* ---- บันทึกการเปลี่ยนแปลงให้ครบทุกช่อง ----
+     *
+     * เดิมบันทึกแค่สี่อย่าง คือทำเสร็จ ผู้รับผิดชอบ กำหนดส่ง และสถานะอนุมัติ
+     * แท็บความเคลื่อนไหวทั้งหมดจึงแทบไม่ต่างจากแท็บความเห็น
+     * ทั้งที่คำถามที่คนเปิดมาดูคือ "ใครเลื่อนวัน และเลื่อนจากเดิมเป็นอะไร"
+     *
+     * เก็บค่าเดิมไว้ด้วย ไม่ใช่แค่ค่าใหม่ เพราะ "เลื่อนจาก 3 ก.ย. เป็น 10 ก.ย."
+     * ตอบได้ในบรรทัดเดียว ส่วน "ตั้งกำหนดส่ง 10 ก.ย." ต้องไล่อ่านย้อนเองว่าเดิมคือวันไหน
+     */
     if ('dueOn' in patch && patch.dueOn !== t.dueOn) {
-      log(id, patch.dueOn ? 'ตั้งกำหนดส่ง {d}' : 'ลบกำหนดส่ง',
-        patch.dueOn ? { d: patch.dueOn } : null);
+      if (patch.dueOn && t.dueOn) {
+        log(id, 'เลื่อนกำหนดส่งจาก {a} เป็น {b}', { a: t.dueOn, b: patch.dueOn });
+      } else {
+        log(id, patch.dueOn ? 'ตั้งกำหนดส่ง {d}' : 'ลบกำหนดส่ง',
+          patch.dueOn ? { d: patch.dueOn } : null);
+      }
+    }
+    if ('startOn' in patch && patch.startOn !== t.startOn) {
+      if (patch.startOn && t.startOn) {
+        log(id, 'เลื่อนวันเริ่มจาก {a} เป็น {b}', { a: t.startOn, b: patch.startOn });
+      } else {
+        log(id, patch.startOn ? 'ตั้งวันเริ่ม {d}' : 'ลบวันเริ่ม',
+          patch.startOn ? { d: patch.startOn } : null);
+      }
+    }
+    if ('dueTime' in patch && patch.dueTime !== t.dueTime) {
+      log(id, patch.dueTime ? 'ตั้งเวลาส่ง {d}' : 'ลบเวลาส่ง',
+        patch.dueTime ? { d: patch.dueTime } : null);
+    }
+    if ('name' in patch && patch.name !== t.name) {
+      log(id, 'เปลี่ยนชื่องานจาก “{a}”', { a: t.name });
+    }
+    if ('priority' in patch && patch.priority !== t.priority) {
+      var pn = PRIORITIES.filter(function (x) { return x.id === patch.priority; })[0];
+      log(id, 'ตั้งความสำคัญเป็น {p}', { p: pn ? pn.label : patch.priority });
+    }
+    if ('type' in patch && patch.type !== t.type) {
+      var tn = TASK_TYPES.filter(function (x) { return x.id === patch.type; })[0];
+      log(id, 'เปลี่ยนชนิดงานเป็น {p}', { p: tn ? tn.label : patch.type });
+    }
+    if ('notes' in patch && (patch.notes || '') !== (t.notes || '')) {
+      log(id, (patch.notes || '').trim() ? 'แก้ไขรายละเอียด' : 'ลบรายละเอียด');
+    }
+    if ('tags' in patch) {
+      var was = t.tags || [], now = patch.tags || [];
+      now.filter(function (x) { return was.indexOf(x) < 0; })
+        .forEach(function (x) { log(id, 'เพิ่มแท็ก {t}', { t: x }); });
+      was.filter(function (x) { return now.indexOf(x) < 0; })
+        .forEach(function (x) { log(id, 'เอาแท็ก {t} ออก', { t: x }); });
+    }
+    if ('recur' in patch) {
+      var rw = t.recur && t.recur.freq, rn2 = patch.recur && patch.recur.freq;
+      if (rw !== rn2) {
+        var rf = RECUR_FREQ.filter(function (x) { return x.id === rn2; })[0];
+        log(id, rn2 ? 'ตั้งให้ทำซ้ำ {f}' : 'เลิกทำซ้ำ', rn2 ? { f: rf ? rf.label : rn2 } : null);
+      }
     }
     if ('approval' in patch && patch.approval !== t.approval) {
       var st = APPROVAL_STATES.filter(function (x) { return x.id === patch.approval; })[0];
@@ -2074,6 +2130,8 @@
     db.memberships = db.memberships.filter(function (m) {
       return !(m.taskId === taskId && m.projectId === projectId);
     });
+    var rp = project(projectId);
+    if (rp) log(taskId, 'เอาออกจากโปรเจกต์ {p}', { p: rp.name });
     commit();
     return true;
   }
@@ -2145,14 +2203,17 @@
     commit();
   }
 
-  function addAttachment(taskId, name, url) {
+  function addAttachment(taskId, name, url, meta) {
     var t = task(taskId);
     if (!t || !name) return;
     snapshot('แนบไฟล์');
     /* เก็บคนแนบและเวลาไว้ด้วย หน้ารวมไฟล์ต้องตอบได้ว่าใครเอามาลงเมื่อไหร่
-     * ไฟล์เก่าที่ไม่มีสองค่านี้ยังแสดงได้ แค่ไม่มีบรรทัดที่มา */
+     * ไฟล์เก่าที่ไม่มีสองค่านี้ยังแสดงได้ แค่ไม่มีบรรทัดที่มา
+     * ส่วน size กับ mime มีเฉพาะไฟล์ที่เลือกมาจากเครื่อง ลิงก์เปล่าไม่มี */
     t.attachments.push({
       id: uid('a'), name: name, url: url || '',
+      size: (meta && meta.size) || null,
+      mime: (meta && meta.mime) || null,
       addedBy: db.currentUserId, addedAt: new Date().toISOString()
     });
     log(taskId, 'แนบ “{f}”', { f: name });

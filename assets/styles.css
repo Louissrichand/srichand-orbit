@@ -2935,3 +2935,53 @@ button.prof-away:hover { color: var(--accent); }
 }
 .dw-morefields:hover { background: var(--bg-sunk); color: var(--fg); }
 .dw-morefields svg { color: var(--fg-faint); }
+
+/* ---------- เลือกแท็ก ---------- */
+
+.tagpick { min-width: 230px; }
+.tagpick > input {
+  width: 100%; padding: 7px 9px; margin-bottom: 6px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--bg-sunk); color: var(--fg); font: inherit; font-size: 13px; outline: none;
+}
+.tagpick > input:focus { border-color: var(--accent); }
+.tagpick-list { max-height: 210px; overflow-y: auto; }
+.tagpick-list button { padding: 4px 6px; }
+.tagpick-list .chip.tag { pointer-events: none; }
+
+/* ---------- แนบไฟล์ ---------- */
+
+.att-drop {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  width: 100%; padding: 22px 16px; margin-bottom: 4px;
+  border: 1.5px dashed var(--line-strong); border-radius: var(--radius-lg);
+  background: var(--bg-sunk); text-align: center;
+}
+.att-drop:hover { border-color: var(--accent); background: var(--accent-bg); }
+.att-drop svg { color: var(--fg-faint); }
+.att-drop:hover svg { color: var(--accent); }
+.att-drop b { font-size: 14px; font-weight: 600; }
+.att-drop em {
+  font-style: normal; font-size: 12px; color: var(--fg-soft); line-height: 1.5; max-width: 34ch;
+}
+.att-or {
+  display: flex; align-items: center; gap: 10px; margin: 14px 0 10px;
+  font-size: 12px; color: var(--fg-faint);
+}
+.att-or::before, .att-or::after {
+  content: ''; flex: 1; height: 1px; background: var(--line);
+}
+.att-size { font-size: 11.5px; color: var(--fg-faint); flex: none; }
+
+/* ---------- เพิ่มงานย่อยแบบพิมพ์ทันที ---------- */
+
+.sub-add {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 4px; border-radius: var(--radius);
+}
+.sub-add svg { color: var(--fg-faint); flex: none; }
+.sub-add input {
+  flex: 1; min-width: 0; border: 0; background: none; outline: none;
+  color: var(--fg); font: inherit; font-size: 13.5px;
+}
+.sub-add:focus-within { background: var(--bg-sunk); }
