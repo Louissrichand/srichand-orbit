@@ -4544,16 +4544,48 @@
 
   global.Orbit = { toast: toast, state: state, render: renderAll };
 
-  /* ไม่มี hash = เปิดแอปสด ให้ไปหน้าที่ผู้ใช้ตั้งไว้ */
-  var boot = readHash();
-  if (!boot) {
-    var land = S.pref('landing');
-    if (land && land !== 'home') state.route = { type: land };
+  /* ---------- หน้าที่จะเปิดตอนเริ่มใช้งาน ----------
+   *
+   * แอปเขียน hash ลง URL ทุกครั้งที่เปลี่ยนหน้าอยู่แล้ว
+   * พอเปิดแอปครั้งถัดไป hash ที่ค้างอยู่จึงเป็นหน้าสุดท้ายที่บังเอิญค้างไว้ตอนปิด
+   * ไม่ใช่หน้าที่ตั้งใจจะไป ถ้าเชื่อ hash ตรง ๆ ค่าที่ตั้งไว้จะไม่มีวันได้ทำงาน
+   * ซึ่งเป็นอาการเดิม คือตั้งค่าแล้วเหมือนปุ่มนั้นไม่ทำอะไรเลย
+   *
+   * แยกสามกรณีตามสิ่งที่คนตั้งใจจริง
+   *   กดรีเฟรช     — อยู่หน้าเดิม เพราะกดเพื่อดูหน้านี้ใหม่ ไม่ใช่เพื่อย้ายหน้า
+   *   ลิงก์เจาะจง  — โปรเจกต์ พอร์ตโฟลิโอ ผลค้นหา หรือลิงก์ที่ชี้ถึงตัวงาน ไปตามลิงก์
+   *                  เพราะมีคนตั้งใจส่งมา หรือเจ้าตัวคั่นหน้าไว้เอง
+   *   เปิดแอปเฉย ๆ — ไปหน้าที่ตั้งไว้ในหน้าตั้งค่า
+   */
+  function isReload() {
+    try {
+      var nav = (global.performance.getEntriesByType('navigation') || [])[0];
+      if (nav) return nav.type === 'reload';
+      /* เบราว์เซอร์เก่ายังไม่มี Navigation Timing แบบใหม่ */
+      return !!(global.performance.navigation && global.performance.navigation.type === 1);
+    } catch (e) { return false; }
   }
-  if (boot) {
+
+  /** hash นี้ชี้ไปที่ของชิ้นใดชิ้นหนึ่งโดยเฉพาะไหม หรือเป็นแค่ชื่อหน้ากว้าง ๆ */
+  function isDeepLink(parsed) {
+    /* ลิงก์ตรงไปที่งาน #/task/t_xxx อ่านด้วย readHash ไม่ได้ จึงต้องดูจาก hash ดิบ
+     * เป็นรูปแบบที่คนคัดลอกส่งกันมากที่สุด ห้ามโดนค่าเริ่มต้นเบียดตก */
+    if ((global.location.hash || '').indexOf('#/task/') === 0) return true;
+    if (!parsed) return false;
+    if (parsed.taskId) return true;
+    return ['project', 'portfolio', 'search', 'profile'].indexOf(parsed.route.type) >= 0;
+  }
+
+  var boot = readHash();
+  var land = S.pref('landing');
+  var useLanding = land && !isReload() && !isDeepLink(boot);
+
+  if (boot && !useLanding) {
     state.route = boot.route;
     state.openTaskId = boot.taskId && S.task(boot.taskId) ? boot.taskId : null;
-  } else if ((global.location.hash || '').indexOf('#/task/') === 0) {
+  } else if (useLanding && land !== 'home') {
+    state.route = { type: land };
+  } else if (!boot && (global.location.hash || '').indexOf('#/task/') === 0) {
     var tid2 = global.location.hash.replace('#/task/', '');
     if (S.task(tid2)) state.openTaskId = tid2;
   }
