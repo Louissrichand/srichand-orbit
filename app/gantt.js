@@ -384,17 +384,19 @@
           '" style="left:' + bx + 'px;width:' + bw + 'px;top:' + (top + 8) +
           'px;background:' + color + '">' +
           '<span class="g-h l" data-role="start" data-tid="' + esc(t.id) + '"></span>' +
-          '<span class="g-bartxt">' + esc(t.name) + '</span>' +
+          '<span class="g-bar-mid"></span>' +
           '<span class="g-h r" data-role="end" data-tid="' + esc(t.id) + '"></span>' +
           '<span class="g-dot l" data-role="link" data-tid="' + esc(t.id) +
           '" data-anchor="start" title="' + L('ลากไปงานอื่นเพื่อสร้างลำดับ') + '">' + '</span>' +
           '<span class="g-dot r" data-role="link" data-tid="' + esc(t.id) +
           '" data-anchor="end" title="' + L('ลากไปงานอื่นเพื่อสร้างลำดับ') + '">' + '</span>' +
           '</div>';
-        if (bw < 90) {
-          h += '<div class="g-barlabel" style="left:' + (bx + bw + 7) + 'px;top:' +
-            (top + 9) + 'px">' + esc(t.name) + '</div>';
-        }
+        /* ชื่องานอยู่ข้างแท่งเสมอ ไม่ยัดลงในแท่ง
+         * เดิมใส่ไว้ทั้งสองที่ พอแท่งแคบกว่าชื่อ ในแท่งจะเหลือแค่ตัวเดียวกับจุดไข่ปลา
+         * แล้วชื่อเต็มก็ยังโผล่ข้างแท่งอยู่ดี กลายเป็นเศษตัวอักษรเกะกะเต็มผัง
+         * ที่เดียวอ่านง่ายกว่า และแท่งกลายเป็นแถบสีล้วนที่กวาดตาดูช่วงเวลาได้เร็วขึ้น */
+        h += '<div class="g-barlabel" style="left:' + (bx + bw + 7) + 'px;top:' +
+          (top + 9) + 'px">' + esc(t.name) + '</div>';
       }
     });
 

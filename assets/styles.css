@@ -1000,10 +1000,9 @@ button.g-caret:hover { background: var(--bg-inset); color: var(--fg); }
   cursor: grab; user-select: none;
   overflow: visible;
 }
-.g-bartxt {
-  flex: 1; padding: 0 3px; overflow: hidden;
-  text-overflow: ellipsis; white-space: nowrap;
-}
+/* ตัวเว้นตรงกลางแท่ง ไม่มีข้อความ มีไว้ให้ที่จับสองข้างไม่ชนกัน
+ * และให้ทั้งแท่งยังลากย้ายได้ ไม่ใช่ลากได้เฉพาะขอบ */
+.g-bar-mid { flex: 1; min-width: 0; }
 /* งานที่เสร็จแล้วจางลง เหมือน Asana ยังเห็นว่าอยู่ช่วงไหนแต่ไม่แย่งสายตางานที่ยังค้าง */
 .g-bar.done { opacity: .4; }
 .g-bar.blocked { outline: 2px solid var(--danger); outline-offset: -2px; }
