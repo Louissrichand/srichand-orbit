@@ -34,11 +34,16 @@
     /* คนที่ตั้งสถานะไม่อยู่ ติดจุดส้มไว้ที่วงกลม
      * คนที่กำลังจะมอบหมายงานให้จะได้เห็นก่อนกด ไม่ใช่รู้ตอนงานเลยกำหนดไปแล้ว */
     var away = S.isAway && S.isAway(u.id);
-    return '<span class="' + cls + (away ? ' is-away' : '') + '" style="background:' +
-      esc(u.color) + '" title="' + esc(u.name) +
+    var tip = esc(u.name) +
       (away ? ' · ' + L('ไม่อยู่ถึง {d}', { d: fmtDate(u.away.until) }) +
-              (u.away.note ? ' · ' + u.away.note : '') : '') +
-      '">' + esc(initials(u.name)) + '</span>';
+              (u.away.note ? ' · ' + u.away.note : '') : '');
+    /* มีรูปก็ใช้รูป ไม่มีก็ตัวย่อบนวงกลมสีเหมือนเดิม
+     * สีพื้นยังใส่ไว้ใต้รูป ระหว่างที่รูปยังไม่ขึ้นจะได้ไม่เป็นช่องโหว่ */
+    return '<span class="' + cls + (away ? ' is-away' : '') +
+      (u.photo ? ' has-photo' : '') + '" style="background:' + esc(u.color) +
+      '" title="' + tip + '">' +
+      (u.photo ? '<img src="' + esc(u.photo) + '" alt="">' : esc(initials(u.name))) +
+      '</span>';
   }
 
   /** วันแรกของสัปดาห์ 0 = อาทิตย์ 1 = จันทร์
@@ -316,6 +321,11 @@
       h += '<div class="tb-title">' + I('bell', 20) + ' ' + L('กล่องข้อความ') + '</div>';
     } else if (route.type === 'calendar') {
       h += '<div class="tb-title">' + I('calendar', 20) + ' ' + L('ปฏิทินรวม') + '</div>';
+    } else if (route.type === 'profile') {
+      var pu = S.user(route.id);
+      h += '<div class="tb-title">' + I('users', 20) + ' ' +
+        (pu && S.me() && pu.id === S.me().id ? L('โปรไฟล์ของฉัน')
+                                             : esc(pu ? pu.name : L('โปรไฟล์'))) + '</div>';
     } else if (route.type === 'admin') {
       h += '<div class="tb-title">' + I('shield', 20) + ' ' + L('ผู้ดูแลระบบ') + '</div>';
     } else if (route.type === 'search') {
@@ -1437,6 +1447,123 @@
     return h;
   }
 
+  /* ---------- หน้าโปรไฟล์ ----------
+   *
+   * เปิดดูของตัวเองก็ได้ ของคนอื่นก็ได้ ใช้โครงเดียวกัน ต่างกันแค่ปุ่มแก้ไข
+   * ที่ให้เปิดของคนอื่นได้เพราะคำถามที่คนถามบ่อยที่สุดเวลาจะสั่งงานใครสักคน
+   * คือ "เขาทำอะไรค้างอยู่บ้าง" ซึ่งเดิมต้องไปไล่หาทีละโปรเจกต์
+   *
+   * รายการงานกรองด้วยสายตาของคนที่เปิดดูเสมอ ไม่ใช่ของเจ้าของโปรไฟล์
+   * เปิดโปรไฟล์หัวหน้าแล้วเห็นงานในโปรเจกต์ลับที่ตัวเองไม่ได้อยู่ด้วยไม่ได้
+   */
+  function profileView(userId) {
+    var u = S.user(userId);
+    if (!u) return '<div class="hempty">' + L('ไม่พบผู้ใช้คนนี้') + '</div>';
+    var isMe = S.me() && u.id === S.me().id;
+    var away = S.isAway(u.id);
+    var b = S.myTasks(u.id);
+    var open = b.overdue.concat(b.today, b.upcoming, b.later, b.nodate);
+
+    var h = '<div class="prof">';
+
+    /* --- หัวโปรไฟล์ --- */
+    h += '<div class="prof-head">' + avatar(u, 'xxl') + '<div class="prof-id">';
+    h += '<h1>' + esc(u.name) +
+      (u.pronouns ? '<small>(' + esc(u.pronouns) + ')</small>' : '') + '</h1>';
+
+    if (away) {
+      h += '<div class="prof-away">' + I('calendar', 14) + '<span>' +
+        esc(L('ไม่อยู่ถึง {d}', { d: fmtDate(u.away.until) })) +
+        (u.away.note ? ' · ' + esc(u.away.note) : '') + '</span></div>';
+    } else if (isMe) {
+      h += '<button class="prof-away as-link" data-act="set-away">' + I('calendar', 14) +
+        '<span>' + L('ตั้งสถานะไม่อยู่') + '</span></button>';
+    }
+
+    h += '<div class="prof-meta">';
+    if (u.title) h += '<span>' + I('building', 14) + esc(u.title) + '</span>';
+    if (u.dept) h += '<span>' + I('users', 14) + esc(u.dept) + '</span>';
+    h += '<span>' + I('signIn', 14) + esc(u.email || '—') + '</span>';
+    if (isMe && !u.about) {
+      h += '<button class="as-link" data-act="open-settings" data-tab="profile">' +
+        I('plus', 14) + L('เพิ่มคำแนะนำตัว') + '</button>';
+    }
+    h += '</div>';
+
+    if (u.about) h += '<p class="prof-about">' + esc(u.about) + '</p>';
+
+    if (isMe) {
+      h += '<button class="btn btn-primary btn-sm" data-act="open-settings" data-tab="profile">' +
+        L('แก้ไขโปรไฟล์') + '</button>';
+    } else if (S.isAdmin()) {
+      h += '<button class="btn btn-sm" data-act="go" data-route="admin">' +
+        L('จัดการในหน้าผู้ดูแล') + '</button>';
+    }
+    h += '</div></div>';
+
+    /* --- สองคอลัมน์ --- */
+    h += '<div class="home-grid">';
+
+    h += hcard({
+      title: I('checkCircle', 16) + '<b>' +
+        (isMe ? L('งานของฉัน') : esc(L('งานของ {name}', { name: u.name }))) + '</b>',
+      action: isMe
+        ? '<button class="btn btn-sm btn-ghost" data-act="go" data-route="mytasks">' +
+          L('ดูทั้งหมด') + '</button>' : '',
+      body: hList(open, isMe ? L('ยังไม่มีงานค้าง')
+                             : L('ไม่มีงานค้างที่คุณมีสิทธิ์เห็น'))
+    });
+
+    var col = S.frequentCollaborators(u.id, 6);
+    var cb = '';
+    if (!col.length) {
+      cb = '<div class="hempty">' +
+        (isMe ? L('ยังไม่มีใครทำงานร่วมกับคุณ') : L('ยังไม่เห็นงานที่ทำร่วมกัน')) + '</div>';
+    } else {
+      col.forEach(function (c) {
+        cb += '<button class="prof-col" data-act="go-profile" data-id="' + esc(c.user.id) + '">' +
+          avatar(c.user, 'md') + '<span class="grow"><b>' + esc(c.user.name) + '</b>' +
+          '<em>' + esc(c.user.title || L('{n} งานร่วมกัน', { n: c.n })) + '</em></span></button>';
+      });
+    }
+    h += hcard({
+      title: I('users', 16) + '<b>' + L('คนที่ทำงานด้วยบ่อย') + '</b>',
+      body: cb
+    });
+
+    /* --- โปรเจกต์ที่อยู่ร่วมกัน --- */
+    var shared = S.visibleProjects().filter(function (p) {
+      return S.projectAccess(p.id, u.id);
+    });
+    var pb = '';
+    if (!shared.length) {
+      pb = '<div class="hempty">' + L('ยังไม่มีโปรเจกต์ที่เห็นร่วมกัน') + '</div>';
+    } else {
+      /* นับงานค้างรายโปรเจกต์รอบเดียว ไม่ใช่กวาดงานทั้งหมดใหม่ทุกแถว */
+      var openPer = {};
+      open.forEach(function (t) {
+        S.projectsOfTask(t.id).forEach(function (x) {
+          openPer[x.project.id] = (openPer[x.project.id] || 0) + 1;
+        });
+      });
+      shared.slice(0, 8).forEach(function (p) {
+        pb += '<button class="prof-col" data-act="go" data-route="project" data-id="' +
+          esc(p.id) + '"><span class="hproj-ic" style="background:' + esc(p.color) + '22">' +
+          esc(p.icon || '•') + '</span><span class="grow"><b>' + esc(p.name) + '</b>' +
+          '<em>' + esc(L('{n} งานที่ยังไม่เสร็จ', { n: openPer[p.id] || 0 })) +
+          '</em></span></button>';
+      });
+    }
+    h += hcard({
+      title: I('grid', 16) + '<b>' +
+        (isMe ? L('โปรเจกต์ของฉัน') : L('โปรเจกต์ที่อยู่ร่วมกัน')) + '</b>',
+      body: pb
+    });
+
+    h += '</div></div>';
+    return h;
+  }
+
   /* ---------- my tasks ---------- */
 
   function myTasksView(sel) {
@@ -1974,8 +2101,11 @@
       h += '<button data-act="go" data-route="admin">' + I('building', 14) +
         '<span class="grow">' + L('องค์กรของฉัน') + '</span></button>';
     }
-    h += '<button data-act="open-settings" data-tab="profile">' + I('users', 14) +
-      '<span class="grow">' + L('โปรไฟล์') + '</span></button>';
+    /* โปรไฟล์พาไปหน้าเต็ม ส่วนตั้งค่าเปิดเป็นหน้าต่างซ้อน แบบเดียวกับ Asana
+     * ที่แยกกันเพราะสองอันตอบคนละคำถาม — หน้าโปรไฟล์คือ "ฉันมีงานอะไรอยู่"
+     * ส่วนตั้งค่าคือ "ฉันอยากเปลี่ยนอะไร" ยัดรวมกันแล้วหาทั้งสองอย่างไม่เจอ */
+    h += '<button data-act="go-profile" data-id="' + esc(me ? me.id : '') + '">' +
+      I('users', 14) + '<span class="grow">' + L('โปรไฟล์') + '</span></button>';
     h += '<button data-act="open-settings" data-tab="general">' + I('settings', 14) +
       '<span class="grow">' + L('ตั้งค่า') + '</span></button>';
 
@@ -2074,6 +2204,8 @@
     'user.enable': 'ได้เปิดใช้งานบัญชีของ',
     'user.handover': 'ได้โอนงานต่อจาก',
     'user.away': 'ได้ตั้งสถานะไม่อยู่',
+    'user.photo': 'ได้เปลี่ยนรูปประจำตัว',
+    'user.photoClear': 'ได้เอารูปประจำตัวออก',
     'user.back': 'ได้ยกเลิกสถานะไม่อยู่',
     'project.create': 'ได้สร้างโปรเจกต์',
     'project.duplicate': 'ได้คัดลอกโปรเจกต์',
@@ -2322,7 +2454,7 @@
     checkbox: checkbox, dueClass: dueClass, badges: badges, depTypeHint: depTypeHint,
     sidebar: sidebar, topbar: topbar, viewbar: viewbar, bulkbar: bulkbar,
     listView: listView, boardView: boardView, timelineView: timelineView,
-    homeView: homeView, dashboardView: dashboardView,
+    homeView: homeView, dashboardView: dashboardView, profileView: profileView,
     portfolioView: portfolioView, PF_TABS: PF_TABS,
     myTasksView: myTasksView, inboxView: inboxView,
     calendarView: calendarView, searchView: searchView, drawer: drawer,

@@ -426,6 +426,8 @@
       if (!('title' in u)) u.title = '';          // ตำแหน่งงาน คนกรอกเอง ไม่ได้ดึงจาก Graph
       if (!('dept' in u)) u.dept = '';
       if (!('about' in u)) u.about = '';
+      if (!('pronouns' in u)) u.pronouns = '';    // คำสรรพนามที่เจ้าตัวอยากให้ใช้
+      if (!('photo' in u)) u.photo = null;        // data URI ย่อแล้ว ดูหมายเหตุที่ setPhoto
       if (!('away' in u)) u.away = null;          // { until, note } ตอนไม่อยู่
       u.prefs = u.prefs || {};
     });
@@ -3111,12 +3113,97 @@
   function updateProfile(patch) {
     var u = me();
     if (!u) return null;
-    ['name', 'title', 'dept', 'about', 'color'].forEach(function (k) {
+    ['name', 'title', 'dept', 'about', 'pronouns', 'color'].forEach(function (k) {
       if (k in patch && patch[k] !== undefined) u[k] = patch[k];
     });
     if (!u.name || !u.name.trim()) u.name = 'ผู้ใช้';
     commit();
     return u;
+  }
+
+  /* ---------- รูปโปรไฟล์ ----------
+   *
+   * เก็บเป็น data URI ในตัวฐานข้อมูลเลย ไม่มีที่เก็บไฟล์แยกให้ใช้ในเวอร์ชันนี้
+   * แลกมาด้วยข้อจำกัดที่ต้องคุมเอง — พื้นที่ในเบราว์เซอร์มีราว 5 MB
+   * ถ้าปล่อยให้อัปรูปจากมือถือดิบ ๆ รูปเดียวก็กินไปสองสามเมกะแล้ว
+   * ฝั่งหน้าจอจึงย่อรูปก่อนส่งมา และที่นี่กันอีกชั้นไม่ให้เกินเพดาน
+   * ต่อให้มีใครเรียกฟังก์ชันนี้ตรง ๆ ก็ยังผ่านด่านเดียวกัน
+   */
+  var PHOTO_PX = 240;          // ด้านยาวสุดหลังย่อ พอสำหรับรูปใหญ่ในหน้าโปรไฟล์
+  var PHOTO_MAX_BYTES = 60000; // ~60 KB ต่อคน 200 คนก็ราว 12 MB ซึ่งเกินโควตาเบราว์เซอร์
+                               // จึงเหมาะกับนำร่อง ตอนย้ายขึ้นฐานข้อมูลค่อยเก็บเป็นไฟล์จริง
+
+  function photoBytes(dataUri) {
+    if (!dataUri) return 0;
+    var i = dataUri.indexOf(',');
+    return i < 0 ? dataUri.length : Math.round((dataUri.length - i - 1) * 3 / 4);
+  }
+
+  /** รวมขนาดรูปโปรไฟล์ทุกคน ใช้โชว์ในหน้าข้อมูลและสำรอง */
+  function photoTotalBytes() {
+    return db.users.reduce(function (n, u) { return n + photoBytes(u.photo); }, 0);
+  }
+
+  /**
+   * ตั้งรูปโปรไฟล์ของตัวเอง
+   * @returns {{ok:boolean, reason?:string, bytes?:number}}
+   */
+  function setPhoto(dataUri) {
+    var u = me();
+    if (!u) return { ok: false, reason: 'ไม่พบผู้ใช้' };
+    if (!/^data:image\/(png|jpeg|webp);base64,/.test(dataUri || '')) {
+      return { ok: false, reason: 'ไฟล์นี้ไม่ใช่รูปภาพที่รองรับ' };
+    }
+    var bytes = photoBytes(dataUri);
+    if (bytes > PHOTO_MAX_BYTES) return { ok: false, reason: 'รูปใหญ่เกินไป', bytes: bytes };
+    snapshot('เปลี่ยนรูปโปรไฟล์');
+    u.photo = dataUri;
+    audit('user.photo', u.name);
+    commit();
+    return { ok: true, bytes: bytes };
+  }
+
+  function removePhoto() {
+    var u = me();
+    if (!u || !u.photo) return false;
+    snapshot('ลบรูปโปรไฟล์');
+    u.photo = null;
+    audit('user.photoClear', u.name);
+    commit();
+    return true;
+  }
+
+  /* ---------- คนที่ทำงานด้วยบ่อย ----------
+   *
+   * นับจากการอยู่ในงานเดียวกันจริง ไม่ใช่จากการอยู่โปรเจกต์เดียวกัน
+   * โปรเจกต์ใหญ่ ๆ มีคนเป็นสิบที่ไม่เคยแตะงานเดียวกันเลย ถ้านับจากโปรเจกต์
+   * รายชื่อจะกลายเป็นทะเบียนพนักงาน ไม่ใช่คนที่คุยด้วยจริง
+   */
+  function frequentCollaborators(userId, limit) {
+    var uid = userId || (me() && me().id);
+    if (!uid) return [];
+    var i = index(), count = {};
+
+    function bump(id) {
+      if (!id || id === uid) return;
+      count[id] = (count[id] || 0) + 1;
+    }
+
+    db.tasks.forEach(function (t) {
+      var people = [t.assigneeId].concat(t.followers || []);
+      (i.storyByTask[t.id] || []).forEach(function (s) { people.push(s.actorId); });
+      if (people.indexOf(uid) < 0) return;
+      /* กรองด้วยสายตาของคนที่กำลังเปิดดู ไม่ใช่ของเจ้าของโปรไฟล์
+       * เปิดโปรไฟล์คนอื่นแล้วเห็นรายชื่อจากงานลับที่ตัวเองเข้าไม่ถึงไม่ได้ */
+      if (!canSeeTask(t.id)) return;
+      people.forEach(bump);
+    });
+
+    return Object.keys(count)
+      .map(function (id) { return { user: user(id), n: count[id] }; })
+      .filter(function (x) { return x.user && x.user.active !== false; })
+      .sort(function (a, b) { return b.n - a.n || a.user.name.localeCompare(b.user.name); })
+      .slice(0, limit || 5);
   }
 
   /* ---------- สถานะไม่อยู่ ----------
@@ -3249,6 +3336,10 @@
     openTasksOf: openTasksOf, handoverTasks: handoverTasks,
     NOTIFY_KINDS: NOTIFY_KINDS, pref: pref, setPref: setPref, setNotifyPref: setNotifyPref,
     updateProfile: updateProfile, setAway: setAway, isAway: isAway,
+    setPhoto: setPhoto, removePhoto: removePhoto,
+    photoBytes: photoBytes, photoTotalBytes: photoTotalBytes,
+    PHOTO_PX: PHOTO_PX, PHOTO_MAX_BYTES: PHOTO_MAX_BYTES,
+    frequentCollaborators: frequentCollaborators,
     setActive: setActive, isActive: isActive,
     audit: audit, auditLog: auditLog, auditGroups: auditGroups, auditCsv: auditCsv,
     signedInUsers: signedInUsers, recentActivity: recentActivity,

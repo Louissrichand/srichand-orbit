@@ -304,7 +304,14 @@ a { color: var(--accent); }
   font-size: 11px; font-weight: 700; letter-spacing: .3px; user-select: none;
 }
 .avatar.sm { width: 20px; height: 20px; flex-basis: 20px; font-size: 9px; }
+.avatar.md { width: 30px; height: 30px; flex-basis: 30px; font-size: 12px; }
 .avatar.lg { width: 34px; height: 34px; flex-basis: 34px; font-size: 13px; }
+.avatar.xl { width: 64px; height: 64px; flex-basis: 64px; font-size: 22px; }
+.avatar.xxl { width: 112px; height: 112px; flex-basis: 112px; font-size: 38px; }
+
+/* รูปจริงทับวงกลมสีให้เต็มพอดี ไม่ยืดไม่บี้ */
+.avatar.has-photo { overflow: hidden; }
+.avatar.has-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .avatar.avatar-empty {
   background: none; border: 1.5px dashed var(--line-strong);
   color: var(--fg-faint); font-size: 13px;
@@ -2449,3 +2456,90 @@ body.rownum .list-wrap .row > .nm::before {
 .pop .vw-opt.on svg { color: var(--accent); }
 .pop .vw-opt[disabled] { opacity: .55; cursor: default; }
 .pop .vw-opt[disabled]:hover { background: none; }
+
+/* ---------- หน้าโปรไฟล์ ---------- */
+
+.prof { padding: 28px 24px 64px; max-width: 1120px; margin: 0 auto; }
+
+.prof-head {
+  display: flex; align-items: flex-start; gap: 24px;
+  padding-bottom: 24px; margin-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+.prof-id { min-width: 0; flex: 1; display: flex; flex-direction: column; align-items: flex-start; }
+.prof-id h1 {
+  margin: 0; font-size: 30px; font-weight: 500;
+  letter-spacing: -.02em; line-height: 1.2;
+}
+.prof-id h1 small {
+  font-size: 15px; font-weight: 400; color: var(--fg-soft); margin-left: 8px;
+}
+
+.prof-away {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-top: 8px; font-size: 13px; color: var(--fg-soft);
+}
+.prof-away svg { flex: none; }
+button.prof-away:hover { color: var(--accent); }
+
+.prof-meta {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px;
+  margin-top: 10px; font-size: 13.5px; color: var(--fg-soft);
+}
+.prof-meta > span, .prof-meta > button {
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0;
+}
+.prof-meta svg { flex: none; color: var(--fg-faint); }
+
+.prof-about {
+  margin: 12px 0 0; font-size: 13.5px; line-height: 1.6;
+  color: var(--fg-soft); max-width: 62ch; white-space: pre-wrap;
+}
+.prof-head .btn { margin-top: 14px; }
+
+/* แถวคนและโปรเจกต์ในการ์ดฝั่งขวา ใช้จังหวะเดียวกับแถวงานในหน้าแรก */
+.prof-col {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 7px 14px; border-radius: var(--radius); text-align: left;
+}
+.prof-col:hover { background: var(--bg-sunk); }
+.prof-col .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.prof-col b {
+  font-size: 13.5px; font-weight: 500;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.prof-col em {
+  font-style: normal; font-size: 12px; color: var(--fg-soft);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ปุ่มที่หน้าตาเป็นลิงก์ ใช้กับการกระทำรองที่ไม่ควรแย่งสายตาปุ่มหลัก */
+.as-link {
+  display: inline-flex; align-items: center; gap: 5px;
+  color: var(--accent); font-size: 13px; padding: 0;
+}
+.as-link:hover { text-decoration: underline; }
+.as-link.danger { color: var(--danger); }
+
+/* ช่องที่แก้ไม่ได้ต้องดูออกตั้งแต่ยังไม่กด ไม่ใช่กดแล้วพิมพ์ไม่ได้แล้วงง */
+.field input[disabled], .field textarea[disabled] {
+  background: var(--bg-sunk); color: var(--fg-soft); cursor: not-allowed;
+}
+
+/* ---------- เลือกรูปในหน้าตั้งค่า ---------- */
+
+.photo-row { display: flex; align-items: center; gap: 16px; margin-bottom: 4px; }
+.photo-row .grow { flex: 1; min-width: 0; }
+.photo-acts { display: flex; align-items: center; gap: 8px; }
+.photo-acts .sep { color: var(--fg-faint); }
+.photo-note {
+  display: block; font-style: normal; font-size: 12px;
+  color: var(--fg-soft); line-height: 1.5; margin-top: 5px;
+}
+
+@media (max-width: 720px) {
+  .prof { padding: 20px 16px 56px; }
+  .prof-head { gap: 16px; }
+  .avatar.xxl { width: 76px; height: 76px; flex-basis: 76px; font-size: 26px; }
+  .prof-id h1 { font-size: 23px; }
+}

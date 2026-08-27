@@ -134,6 +134,7 @@
     if (r.type === 'project') parts = ['project', r.id, r.view];
     else if (r.type === 'portfolio') parts = ['portfolio', r.id, r.view || 'list'];
     else if (r.type === 'search') parts = ['search', encodeURIComponent(r.q)];
+    else if (r.type === 'profile') parts = ['profile', r.id];
     else parts = [r.type];
     if (state.openTaskId) parts.push(state.openTaskId);
     return '#/' + parts.join('/');
@@ -175,6 +176,12 @@
     }
     if (type === 'search' && seg[1]) {
       return { route: { type: 'search', q: decodeURIComponent(seg[1]) }, taskId: taskId };
+    }
+    if (type === 'profile') {
+      /* ไม่ระบุใคร = โปรไฟล์ของตัวเอง ทำให้ลิงก์ #/profile ใช้ได้กับทุกคน */
+      var uid = seg[1] || (S.me() && S.me().id);
+      if (!S.user(uid)) return null;
+      return { route: { type: 'profile', id: uid }, taskId: taskId };
     }
     if (['home', 'mytasks', 'inbox', 'calendar', 'admin'].indexOf(type) >= 0) {
       return { route: { type: type }, taskId: taskId };
@@ -223,6 +230,9 @@
       body = R.inboxView(state.inboxArchived);
     } else if (r.type === 'calendar') {
       body = R.calendarView(null, state.calOffset);
+    } else if (r.type === 'profile') {
+      if (!S.user(r.id)) { state.route = { type: 'home' }; return renderAll(); }
+      body = R.profileView(r.id);
     } else if (r.type === 'admin') {
       // ไม่ใช่ผู้ดูแลก็ไม่ต้องเห็น — เป็นเรื่องความเรียบร้อยของเมนู ไม่ใช่การกันสิทธิ์จริง
       if (!S.isAdmin()) { state.route = { type: 'home' }; return renderAll(); }
@@ -858,6 +868,15 @@
     state.route = { type: 'project', id: id, view: v };
     state.calOffset = 0;
     state.tlScrollLeft = null;
+    clearSel();
+    renderAll();
+  }
+
+  /** เปิดหน้าโปรไฟล์ ไม่ส่ง id = ของตัวเอง */
+  function goProfile(id) {
+    var uid = id || (S.me() && S.me().id);
+    if (!S.user(uid)) return;
+    state.route = { type: 'profile', id: uid };
     clearSel();
     renderAll();
   }
@@ -1819,10 +1838,25 @@
     }
 
     if (tab === 'profile') {
-      h += '<div class="look-prev">' + R.avatar(me, 'lg') +
-        '<div><b>' + R.esc(me ? me.name : '') + '</b>' +
-        '<div style="font-size:12.5px;color:var(--fg-soft)">' +
-        R.esc((me && me.title) || L('ยังไม่ได้ระบุตำแหน่ง')) + '</div></div></div>';
+      /* --- รูปประจำตัว --- */
+      h += '<label class="opt-lbl">' + L('รูปของคุณ') + '</label>';
+      h += '<div class="photo-row">' + R.avatar(me, 'xl') + '<div class="grow">';
+      h += '<div class="photo-acts">' +
+        '<button class="as-link" data-act="pick-photo">' +
+        (me && me.photo ? L('เปลี่ยนรูป') : L('อัปโหลดรูปใหม่')) + '</button>' +
+        (me && me.photo
+          ? '<span class="sep">·</span><button class="as-link danger" data-act="remove-photo">' +
+            L('เอารูปออก') + '</button>' : '') + '</div>';
+      h += '<em class="photo-note">' +
+        L('รูปช่วยให้เพื่อนร่วมงานจำคุณได้เร็วกว่าตัวย่อชื่อ') +
+        (me && me.photo
+          ? ' · ' + L('ตอนนี้ {kb} KB', { kb: Math.round(S.photoBytes(me.photo) / 1024) })
+          : '') + '</em>';
+      /* input ซ่อนไว้ ปุ่มข้างบนเป็นตัวกด — ปุ่มเลือกไฟล์ของเบราว์เซอร์
+       * จัดหน้าตาให้เข้ากับที่เหลือไม่ได้ และเขียนภาษาไทยไม่ได้ด้วย */
+      h += '<input type="file" id="prPhoto" data-act="photo-file" accept="image/*" hidden>';
+      h += '</div></div>';
+
       h += '<label class="opt-lbl">' + L('สีประจำตัว') + '</label>' +
         '<div class="swatch-pick" id="pColors">';
       S.PALETTE.forEach(function (c) {
@@ -1830,11 +1864,14 @@
           (me && c === me.color ? 'on' : '') + '" style="background:' + c + '"></button>';
       });
       h += '</div><p class="prj-note" style="margin-top:6px">' +
-        L('Orbit ใช้ตัวย่อชื่อบนวงกลมสี ไม่ใช้รูปถ่าย รูปถ่ายทำให้ไฟล์ข้อมูลใหญ่ขึ้นมากโดยไม่ช่วยให้หางานเจอเร็วขึ้น') + '</p>';
+        L('ใช้เป็นพื้นหลังตัวย่อชื่อ ตอนที่ยังไม่ได้ใส่รูป และเป็นสีของคุณบนไทม์ไลน์') + '</p>';
 
       h += '<div class="prj-2col" style="margin-top:8px">';
       h += '<div class="field"><label>' + L('ชื่อที่แสดง') + '</label>' +
         '<input id="prName" value="' + R.esc(me ? me.name : '') + '"></div>';
+      h += '<div class="field"><label>' + L('คำสรรพนาม') + '</label>' +
+        '<input id="prPron" value="' + R.esc((me && me.pronouns) || '') +
+        '" placeholder="' + L('เช่น เขา/เธอ หรือ he/him') + '"></div>';
       h += '<div class="field"><label>' + L('ตำแหน่งงาน') + '</label>' +
         '<input id="prTitle" value="' + R.esc((me && me.title) || '') +
         '" placeholder="' + L('เช่น ผู้จัดการฝ่ายพัฒนาธุรกิจ') + '"></div>';
@@ -1917,6 +1954,16 @@
       h += '<div class="mini-row"><div class="grow"><div>' + L('ข้อมูลปัจจุบัน') + '</div><div class="sub">' +
         db.projects.length + ' ' + L('โปรเจกต์ ·') + ' ' + db.tasks.length + ' ' + L('งาน ·') + ' ' +
         db.users.length + ' ' + L('สมาชิก ·') + ' ' + db.notifications.length + ' ' + L('แจ้งเตือน') + '</div></div></div>';
+
+      /* รูปประจำตัวเป็นก้อนใหญ่ก้อนเดียวที่โตตามจำนวนคน ไม่ใช่ตามปริมาณงาน
+       * บอกน้ำหนักไว้ตรงนี้ เผื่อวันที่พื้นที่เริ่มตึงจะได้รู้ว่าอะไรกินที่ */
+      var phN = db.users.filter(function (u) { return !!u.photo; }).length;
+      if (phN) {
+        h += '<div class="mini-row"><div class="grow"><div>' + L('รูปประจำตัว') +
+          '</div><div class="sub">' +
+          L('{n} คนใส่รูปแล้ว · รวม {kb} KB',
+            { n: phN, kb: Math.round(S.photoTotalBytes() / 1024) }) + '</div></div></div>';
+      }
 
       if (S.storageKind === 'memory') {
         h += '<div class="prj-warn">' + I('alert', 15) + '<span><b>' + L('โหมดทดลอง') + '</b> ' +
@@ -2105,6 +2152,56 @@
       fr.readAsText(f, 'utf-8');
     });
     inp.click();
+  }
+
+  /* ---------- รูปประจำตัว ----------
+   *
+   * รูปจากมือถือทุกวันนี้ใบละ 3–5 MB ส่วนพื้นที่ที่เบราว์เซอร์ให้เก็บมีราว 5 MB
+   * ถ้าเก็บไฟล์ดิบ คนแรกที่อัปรูปก็ทำให้ข้อมูลของทั้งทีมบันทึกไม่ลงแล้ว
+   * จึงย่อและครอปเป็นสี่เหลี่ยมจัตุรัสตั้งแต่ในเบราว์เซอร์ก่อนเก็บ
+   * ไล่ลดคุณภาพลงทีละขั้นจนกว่าจะผ่านเพดาน แทนที่จะเดาค่าเดียวแล้วหวังว่าจะพอ
+   */
+  function shrinkPhoto(file, cb) {
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onload = function () {
+      URL.revokeObjectURL(url);
+      var side = Math.min(img.width, img.height);      // ครอปกลางเป็นจัตุรัส
+      var out = S.PHOTO_PX;
+      var cv = document.createElement('canvas');
+      cv.width = cv.height = out;
+      var cx = cv.getContext('2d');
+      cx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2,
+                   side, side, 0, 0, out, out);
+
+      var q = 0.86, data = cv.toDataURL('image/jpeg', q);
+      while (S.photoBytes(data) > S.PHOTO_MAX_BYTES && q > 0.4) {
+        q -= 0.12;
+        data = cv.toDataURL('image/jpeg', q);
+      }
+      cb(null, data);
+    };
+    img.onerror = function () {
+      URL.revokeObjectURL(url);
+      cb(new Error(L('เปิดไฟล์รูปนี้ไม่ได้')));
+    };
+    img.src = url;
+  }
+
+  function takePhoto(inputEl) {
+    var f = inputEl.files && inputEl.files[0];
+    inputEl.value = '';           // เลือกไฟล์เดิมซ้ำต้องยิง change อีกครั้ง
+    if (!f) return;
+    if (f.size > 20 * 1024 * 1024) { toast(L('ไฟล์ใหญ่เกิน 20 MB')); return; }
+    shrinkPhoto(f, function (err, data) {
+      if (err) { toast(err.message); return; }
+      var res = S.setPhoto(data);
+      if (!res.ok) { toast(L(res.reason)); return; }
+      renderAll();
+      openModal(settingsModal('profile'), true);
+      toast(L('เปลี่ยนรูปแล้ว · {kb} KB', { kb: Math.round(res.bytes / 1024) }),
+            L('ย้อนกลับ'), 'undo');
+    });
   }
 
   function doImport() {
@@ -2318,12 +2415,18 @@
           state.route = { type: 'portfolio', id: id, view: 'list' };
           clearSel(); renderAll(); break;
         }
+        if (rt === 'profile') { goProfile(id); break; }
         state.route = { type: rt };
         state.calOffset = 0;
         clearSel();
         renderAll();
         break;
       }
+      case 'go-profile':
+        closePops();
+        closeSidebar();
+        goProfile(id);
+        break;
       /* แท็บบนหน้าแรกเปลี่ยนแค่สิ่งที่แสดง ไม่แตะข้อมูล จึงวาดเฉพาะเนื้อหน้า
        * ไม่ต้อง renderAll ให้แถบซ้ายกะพริบตาม */
       case 'home-tab':
@@ -3531,11 +3634,26 @@
         openModal(settingsModal('notify'), true);
         break;
       }
+      /* --- รูปประจำตัว --- */
+      case 'pick-photo': {
+        var fi = document.getElementById('prPhoto');
+        if (fi) fi.click();
+        break;
+      }
+      case 'remove-photo':
+        if (S.removePhoto()) {
+          renderAll();
+          openModal(settingsModal('profile'), true);
+          toast(L('เอารูปออกแล้ว'), L('ย้อนกลับ'), 'undo');
+        }
+        break;
+
       case 'save-profile': {
         var nmP = document.getElementById('prName').value.trim();
         if (!nmP) { toast(L('ใส่ชื่อก่อน')); break; }
         S.updateProfile({
           name: nmP,
+          pronouns: document.getElementById('prPron').value.trim(),
           title: document.getElementById('prTitle').value.trim(),
           dept: document.getElementById('prDept').value.trim(),
           about: document.getElementById('prAbout').value.trim(),
@@ -3653,6 +3771,8 @@
     if (!el) return;
     var act = el.dataset.act;
     if (!allowed(act, el)) { renderAll(); return; }   // วาดใหม่เพื่อคืนค่าเดิมให้ช่องกรอก
+
+    if (act === 'photo-file') { takePhoto(el); return; }
 
     // ตัวกรอง
     if (act.indexOf('f-') === 0 && state.route.type === 'project') {
