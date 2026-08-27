@@ -920,6 +920,16 @@
     'เปิดใช้งานบัญชี': 'Enable account',
     'ล้างข้อมูล': 'Clear data',
 
+    /* --- สลับบัญชีเพื่อดูมุมของคนอื่น --- */
+    'ใช้ดูว่าคนอื่นเห็นหน้าจอแบบไหน สลับไปบัญชีที่สิทธิ์สูงกว่าตัวเองไม่ได้':
+      'See what someone else sees. You cannot switch into an account with more permissions than your own.',
+    'สลับไปบัญชีที่มีสิทธิ์สูงกว่าตัวเองไม่ได้': 'You cannot switch into an account with more permissions than your own',
+    'บัญชีนี้มีสิทธิ์สูงกว่าคุณ': 'This account has more permissions than you',
+    'ตอนนี้กำลังดูในมุมของคนอื่นอยู่ ต้นทางคือ {name}':
+      'You are currently viewing as someone else. You started from {name}.',
+    'กลับบัญชีนี้': 'Back to this account',
+    'ใช้อยู่': 'Current',
+
     /* --- บันทึกลงเครื่องไม่สำเร็จ --- */
     'บันทึกไม่ลง': 'Not saved',
     'กดเพื่อดูวิธีแก้': 'Tap to see how to fix this',

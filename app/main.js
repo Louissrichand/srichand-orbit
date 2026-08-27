@@ -1771,6 +1771,75 @@
     return h;
   }
 
+  /* ---------- สลับบัญชีเพื่อดูมุมของคนอื่น ----------
+   *
+   * มีไว้ให้ลองดูว่าคนอื่นเห็นหน้าจอแบบไหน ตอนสาธิตและตอนตั้งค่าสิทธิ์
+   * เดิมสลับไปเป็นใครก็ได้ รวมถึงบัญชีผู้ดูแล
+   * สมาชิกธรรมดาจึงกดสองครั้งก็เข้าหน้าผู้ดูแลและโหลดข้อมูลทั้งก้อนออกไปได้
+   * ซึ่งทำให้การซ่อนเมนูผู้ดูแลไม่มีความหมายอะไรเลย
+   *
+   * จึงให้สลับได้เฉพาะบัญชีที่สิทธิ์ไม่สูงกว่าตัวเอง — ดูลงได้ ไต่ขึ้นไม่ได้
+   * แล้วจำต้นทางไว้ใน sessionStorage เพื่อให้มีทางกลับเสมอ
+   * เก็บใน sessionStorage ไม่ใช่ในฐานข้อมูล เพราะเป็นเรื่องของแท็บนี้เท่านั้น
+   * ไม่ควรติดไปกับข้อมูลที่ซิงก์ขึ้นส่วนกลาง
+   *
+   * นี่คือความเรียบร้อย ไม่ใช่กำแพงความปลอดภัย — ข้อมูลทั้งหมดอยู่ในเบราว์เซอร์
+   * คนที่ตั้งใจจริงยังแก้ผ่านเครื่องมือนักพัฒนาได้อยู่ดี ตามที่หน้าผู้ดูแลบอกไว้
+   * แต่การมีปุ่มให้กดสองทีกับการต้องตั้งใจงัด เป็นคนละเรื่องกัน
+   */
+  var ROLE_RANK = { admin: 3, member: 2, guest: 1, viewer: 0 };
+
+  function rankOf(userId) {
+    var u = S.user(userId);
+    return ROLE_RANK[(u && u.role) || 'member'] || 0;
+  }
+
+  function viewAsOrigin() {
+    try { return global.sessionStorage.getItem('orbit.viewAs') || null; }
+    catch (e) { return null; }
+  }
+  function setViewAsOrigin(id) {
+    try {
+      if (id) global.sessionStorage.setItem('orbit.viewAs', id);
+      else global.sessionStorage.removeItem('orbit.viewAs');
+    } catch (e) { /* โหมดไม่ระบุตัวตนห้ามเขียน ก็แค่ไม่มีทางลัดกลับ */ }
+  }
+
+  function canSwitchTo(id) {
+    if (id === viewAsOrigin()) return true;          // กลับบัญชีเดิมได้เสมอ
+    return rankOf(id) <= rankOf(S.db.currentUserId);
+  }
+
+  function switchUserModal() {
+    var origin = viewAsOrigin();
+    var h = '<h2>' + L('สลับผู้ใช้') + '</h2>';
+    h += '<p class="prj-note">' +
+      L('ใช้ดูว่าคนอื่นเห็นหน้าจอแบบไหน สลับไปบัญชีที่สิทธิ์สูงกว่าตัวเองไม่ได้') + '</p>';
+
+    if (origin && S.user(origin)) {
+      h += '<div class="prj-warn">' + I('users', 15) + '<span>' +
+        L('ตอนนี้กำลังดูในมุมของคนอื่นอยู่ ต้นทางคือ {name}',
+          { name: S.user(origin).name }) + '</span></div>';
+    }
+
+    h += '<div style="display:flex;flex-direction:column;gap:6px">';
+    S.db.users.forEach(function (u) {
+      var now = u.id === S.db.currentUserId;
+      var ok = canSwitchTo(u.id);
+      h += '<button class="btn" style="justify-content:flex-start"' +
+        (now || !ok ? ' disabled' : '') +
+        ' data-act="do-switch-user" data-id="' + R.esc(u.id) + '"' +
+        (!ok && !now ? ' title="' + L('บัญชีนี้มีสิทธิ์สูงกว่าคุณ') + '"' : '') + '>' +
+        R.avatar(u) + ' <span class="grow" style="text-align:left">' + R.esc(u.name) +
+        '</span><span style="font-size:12px;color:var(--fg-soft)">' +
+        (now ? L('ใช้อยู่') : (u.id === origin ? L('กลับบัญชีนี้')
+                                              : R.roleLabel(u.role))) + '</span></button>';
+    });
+    h += '</div><div class="modal-acts">' +
+      '<button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
+    return h;
+  }
+
   /* ---------- บันทึกลงเครื่องไม่สำเร็จ ----------
    *
    * บอกสามอย่างตามลำดับที่คนต้องรู้จริง ๆ
@@ -3636,23 +3705,20 @@
         });
         break;
 
-      case 'switch-user': {
-        var uh = '';
-        S.db.users.forEach(function (u) {
-          uh += '<button class="btn" style="justify-content:flex-start" ' +
-            'data-act="do-switch-user" data-id="' + R.esc(u.id) + '">' +
-            R.avatar(u) + ' ' + R.esc(u.name) + '</button>';
-        });
-        openModal('<h2>' + L('สลับผู้ใช้') + '</h2><div style="display:flex;flex-direction:column;gap:6px">' +
-          uh + '</div><div class="modal-acts">' +
-          '<button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>');
+      case 'switch-user':
+        openModal(switchUserModal());
         break;
-      }
-      case 'do-switch-user':
+      case 'do-switch-user': {
+        if (!canSwitchTo(id)) { toast(L('สลับไปบัญชีที่มีสิทธิ์สูงกว่าตัวเองไม่ได้')); break; }
+        /* จำไว้ว่าเริ่มจากใคร จะได้มีทางกลับเสมอ
+         * ไม่งั้นผู้ดูแลที่สลับลงไปดูมุมของสมาชิก จะติดอยู่ข้างล่างและกลับขึ้นมาไม่ได้ */
+        if (!viewAsOrigin()) setViewAsOrigin(S.db.currentUserId);
+        if (id === viewAsOrigin()) setViewAsOrigin(null);
         S.setCurrentUser(id);
         closeModal();
         toast(L('สลับเป็น') + ' ' + S.user(id).name + ' ' + L('แล้ว'));
         break;
+      }
 
       /* --- settings --- */
       case 'show-shortcuts': openModal(shortcutsModal(), true); break;
