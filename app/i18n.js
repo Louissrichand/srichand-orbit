@@ -920,6 +920,33 @@
     'เปิดใช้งานบัญชี': 'Enable account',
     'ล้างข้อมูล': 'Clear data',
 
+    /* --- ประกาศของโปรเจกต์ --- */
+    'ประกาศ': 'Messages',
+    'เรื่องของทั้งโปรเจกต์ที่ไม่ได้ผูกกับงานชิ้นไหน': 'Project-wide notes that do not belong to any one task',
+    'หัวเรื่อง (ไม่ใส่ก็ได้)': 'Subject (optional)',
+    'เขียนประกาศถึงทุกคนในโปรเจกต์นี้…': 'Write a message to everyone on this project…',
+    'ยังไม่มีประกาศ ใช้ที่นี่สำหรับเรื่องที่เป็นของทั้งโปรเจกต์ ไม่ใช่ของงานชิ้นใดชิ้นหนึ่ง':
+      'No messages yet. Use this for things that belong to the whole project rather than one task.',
+    'ลบประกาศนี้': 'Delete this message',
+    'เขียนเนื้อหาก่อน': 'Write something first',
+    'ประกาศแล้ว': 'Message posted',
+    'ลบประกาศแล้ว': 'Message deleted',
+    'ประกาศใหม่ใน {p}': 'posted a message in {p}',
+    'ประกาศใหม่ในโปรเจกต์ที่ฉันอยู่': 'New messages in projects I am on',
+    'เรื่องที่ไม่ได้ผูกกับงานชิ้นไหน เช่น สรุปประชุมหรือเลื่อนกำหนด':
+      'Things not tied to a task, such as meeting notes or a schedule change',
+    'ได้ประกาศในโปรเจกต์': 'posted a message in',
+
+    /* --- หน้ารวมโปรเจกต์ --- */
+    'โปรเจกต์ทั้งหมด': 'All projects',
+    'ดูโปรเจกต์ทั้งหมด': 'See all projects',
+    'ยังไม่มีโปรเจกต์ที่คุณเห็นได้': 'There are no projects you can see yet.',
+
+    /* --- ปุ่มล้างค่าและแผงงานแบบขยาย --- */
+    'เลิกเรียง': 'Clear sorting',
+    'ขยายเต็มจอ': 'Expand',
+    'ย่อกลับ': 'Collapse',
+
     /* --- ภาพรวมโปรเจกต์ --- */
     'ภาพรวม': 'Overview',
     'คำอธิบาย สมาชิก และประวัติการรายงานสถานะ': 'Description, members and status history',

@@ -183,7 +183,7 @@
       if (!S.user(uid)) return null;
       return { route: { type: 'profile', id: uid }, taskId: taskId };
     }
-    if (['home', 'mytasks', 'inbox', 'calendar', 'admin'].indexOf(type) >= 0) {
+    if (['home', 'mytasks', 'inbox', 'calendar', 'admin', 'projects'].indexOf(type) >= 0) {
       return { route: { type: type }, taskId: taskId };
     }
     return null;
@@ -222,6 +222,7 @@
       else if (r.view === 'dashboard') body = R.dashboardView(r.id);
       else if (r.view === 'overview') body = R.overviewView(r.id);
       else if (r.view === 'files') body = R.filesView(r.id);
+      else if (r.view === 'messages') body = R.messagesView(r.id);
       else body = R.listView(r.id, v, state.sel);
     } else if (r.type === 'portfolio') {
       if (!S.portfolio(r.id)) { state.route = { type: 'home' }; return renderAll(); }
@@ -232,6 +233,8 @@
       body = R.inboxView(state.inboxArchived);
     } else if (r.type === 'calendar') {
       body = R.calendarView(null, state.calOffset);
+    } else if (r.type === 'projects') {
+      body = R.projectsView();
     } else if (r.type === 'profile') {
       if (!S.user(r.id)) { state.route = { type: 'home' }; return renderAll(); }
       body = R.profileView(r.id);
@@ -647,7 +650,9 @@
   function renderDrawer() {
     if (state.openTaskId && S.task(state.openTaskId)) {
       $drawer.innerHTML = R.drawer(state.openTaskId,
-        { actTab: state.actTab, actSort: state.actSort, actAll: state.actAll });
+        { actTab: state.actTab, actSort: state.actSort, actAll: state.actAll,
+          wide: state.dwWide });
+      $drawer.classList.toggle('wide', !!state.dwWide);
       $drawer.classList.add('open');
       $dwBack.classList.add('open');
       $drawer.setAttribute('aria-hidden', 'false');
@@ -3104,6 +3109,36 @@
         break;
       }
 
+      case 'toggle-wide':
+        state.dwWide = !state.dwWide;
+        renderDrawer();
+        break;
+
+      case 'clear-sort': {
+        var vs = viewFor(state.route.id);
+        vs.sort = 'manual';
+        vs.sortDir = 'asc';
+        renderAll();
+        refreshOpts();
+        break;
+      }
+
+      case 'post-message': {
+        var mb = document.getElementById('msgBody');
+        var mt = document.getElementById('msgTitle');
+        if (!mb || !mb.value.trim()) { toast(L('เขียนเนื้อหาก่อน')); break; }
+        S.addProjectMessage(id, mt ? mt.value : '', mb.value);
+        renderAll();
+        toast(L('ประกาศแล้ว'));
+        break;
+      }
+      case 'delete-message':
+        if (S.deleteProjectMessage(id, el.dataset.msg)) {
+          renderAll();
+          toast(L('ลบประกาศแล้ว'), L('ย้อนกลับ'), 'undo');
+        }
+        break;
+
       case 'react':
         S.toggleReaction(el.dataset.story, el.dataset.emoji);
         closePops();
@@ -3170,7 +3205,10 @@
       case 'open-notif': {
         S.markRead(id);
         var tid = el.dataset.task;
-        if (S.task(tid)) openTask(tid);
+        if (S.task(tid)) { openTask(tid); break; }
+        /* ประกาศของโปรเจกต์พาไปที่หน้าประกาศของโปรเจกต์นั้น */
+        var npid = el.dataset.project;
+        if (npid && S.project(npid)) goProject(npid, 'messages');
         break;
       }
       case 'archive-notif': e.stopPropagation(); S.archiveNotification(id); break;

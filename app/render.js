@@ -209,7 +209,9 @@
     }
 
     h += '<div class="sb-section">';
-    h += '<div class="sb-label">' + L('โปรเจกต์') + '<button data-act="new-project" title="' + L('สร้างโปรเจกต์ใหม่') + '">+</button></div>';
+    h += '<div class="sb-label"><button class="sb-labelbtn" data-act="go" data-route="projects" title="' +
+      L('ดูโปรเจกต์ทั้งหมด') + '">' + L('โปรเจกต์') + '</button>' +
+      '<button data-act="new-project" title="' + L('สร้างโปรเจกต์ใหม่') + '">+</button></div>';
     S.visibleProjects().forEach(function (p) { h += projectItem(p); });
     h += '</div>';
 
@@ -350,6 +352,8 @@
       h += '<div class="tb-title">' + I('bell', 20) + ' ' + L('กล่องข้อความ') + '</div>';
     } else if (route.type === 'calendar') {
       h += '<div class="tb-title">' + I('calendar', 20) + ' ' + L('ปฏิทินรวม') + '</div>';
+    } else if (route.type === 'projects') {
+      h += '<div class="tb-title">' + I('grid', 20) + ' ' + L('โปรเจกต์ทั้งหมด') + '</div>';
     } else if (route.type === 'profile') {
       var pu = S.user(route.id);
       h += '<div class="tb-title">' + I('users', 20) + ' ' +
@@ -462,11 +466,18 @@
     /* --- ขวา: ตัวกรอง เรียง จัดกลุ่ม ตัวเลือก --- */
     h += '<button class="vtb-btn' + (nf ? ' on' : '') + '" data-act="g-filter" title="' +
       L('ตัวกรอง') + '">' + I('filter', 14) + '<span>' + L('ตัวกรอง') + '</span>' +
-      (nf ? '<span class="vtb-n">' + nf + '</span>' : '') + '</button>';
-    h += '<button class="vtb-btn' + (view.sort !== 'manual' ? ' on' : '') +
+      (nf ? '<span class="vtb-n">' + nf + '</span>' +
+        '<span class="vtb-x" data-act="reset-view" title="' + L('ล้างตัวกรอง') + '">' +
+        I('close', 11) + '</span>' : '') + '</button>';
+    /* ปุ่มที่กำลังทำงานอยู่มีกากบาทล้างค่าในตัว
+     * เดิมต้องเปิดแผงเข้าไปตั้งกลับเป็นค่าเริ่มต้นเอง ทั้งที่สิ่งที่คนอยากทำคือเลิกเรียง */
+    var sortOn = view.sort !== 'manual';
+    h += '<button class="vtb-btn' + (sortOn ? ' on' : '') +
       '" data-act="g-sort" title="' + L('เรียง') + '">' +
       I(view.sortDir === 'desc' ? 'arrowDown' : 'arrowUp', 14) +
-      '<span>' + L('เรียง') + '</span></button>';
+      '<span>' + L('เรียง') + '</span>' +
+      (sortOn ? '<span class="vtb-x" data-act="clear-sort" title="' + L('เลิกเรียง') + '">' +
+        I('close', 11) + '</span>' : '') + '</button>';
     h += '<button class="vtb-btn' + (view.group !== 'section' ? ' on' : '') +
       '" data-act="g-group" title="' + L('จัดกลุ่ม') + '">' +
       I('grid', 13) + '<span>' + L('จัดกลุ่ม') + '</span></button>';
@@ -1124,6 +1135,100 @@
         esc(r.task.name) + '</button></div>';
     });
     return h + '</div>';
+  }
+
+  /* ---------- ประกาศของโปรเจกต์ ----------
+   *
+   * ความเห็นต้องเกาะอยู่กับงานเสมอ แต่บางเรื่องไม่ได้เป็นของงานชิ้นไหนเลย
+   * เช่นสรุปประชุมประจำสัปดาห์ หรือประกาศเลื่อนกำหนดทั้งโปรเจกต์
+   * เดิมต้องไปแปะไว้ในงานสักชิ้นแบบฝืน ๆ แล้วก็หาไม่เจอในภายหลัง
+   */
+  function messagesView(projectId) {
+    var rows = S.projectMessages(projectId);
+    var h = '<div class="msgv">';
+
+    if (S.canInProject(projectId, 'comment')) {
+      h += '<div class="msg-new">' +
+        '<input id="msgTitle" class="inp" placeholder="' + L('หัวเรื่อง (ไม่ใส่ก็ได้)') + '">' +
+        '<textarea id="msgBody" class="inp" rows="3" placeholder="' +
+        L('เขียนประกาศถึงทุกคนในโปรเจกต์นี้…') + '"></textarea>' +
+        '<div class="msg-actions">' +
+        '<span class="rt-hint">' +
+        L('ขึ้นต้นด้วย - เพื่อทำหัวข้อย่อย เว้นสองช่องเพื่อย่อยลงอีกชั้น · **ตัวหนา**') + '</span>' +
+        '<button class="btn btn-primary btn-sm" data-act="post-message" data-id="' +
+        esc(projectId) + '">' + L('ประกาศ') + '</button></div></div>';
+    }
+
+    if (!rows.length) {
+      h += '<div class="ovw-empty" style="padding:24px 2px">' +
+        L('ยังไม่มีประกาศ ใช้ที่นี่สำหรับเรื่องที่เป็นของทั้งโปรเจกต์ ไม่ใช่ของงานชิ้นใดชิ้นหนึ่ง') +
+        '</div>';
+      return h + '</div>';
+    }
+
+    rows.forEach(function (m) {
+      var by = S.user(m.by);
+      var mine = S.me() && m.by === S.me().id;
+      h += '<article class="msg-card">' +
+        '<div class="msg-head">' + avatar(by, 'md') +
+        '<div class="grow">' + (m.title ? '<b>' + esc(m.title) + '</b>' : '') +
+        '<em>' + esc(by ? by.name : '—') + ' · ' + esc(fmtWhen(m.at)) + '</em></div>' +
+        (mine || S.can('manage')
+          ? '<button class="x" data-act="delete-message" data-id="' + esc(projectId) +
+            '" data-msg="' + esc(m.id) + '" title="' + L('ลบประกาศนี้') + '">' +
+            I('close', 13) + '</button>' : '') +
+        '</div><div class="msg-body">' + richText(m.body) + '</div></article>';
+    });
+    return h + '</div>';
+  }
+
+  /* ---------- หน้ารวมโปรเจกต์ทั้งหมด ----------
+   *
+   * แถบซ้ายไล่ได้ทีละอันและยาวขึ้นเรื่อย ๆ ตามจำนวนโปรเจกต์
+   * หน้านี้เอาไว้กวาดตาดูทั้งหมดพร้อมกัน ว่าอันไหนสถานะยังไงและคืบหน้าแค่ไหน
+   */
+  function projectsView() {
+    var all = S.visibleProjects();
+    var h = '<div class="pjx">';
+    h += '<div class="pjx-head">' + I('grid', 17) + '<b>' + L('โปรเจกต์ทั้งหมด') + '</b>' +
+      '<span class="n">' + L('{n} โปรเจกต์', { n: all.length }) + '</span>' +
+      (S.can('structure') ? '<button class="btn btn-sm btn-primary" data-act="new-project">' +
+        I('plus', 13) + ' ' + L('สร้างโปรเจกต์ใหม่') + '</button>' : '') + '</div>';
+
+    if (!all.length) {
+      h += '<div class="ovw-empty">' + L('ยังไม่มีโปรเจกต์ที่คุณเห็นได้') + '</div>';
+      return h + '</div>';
+    }
+
+    h += '<div class="pjx-grid">';
+    all.forEach(function (p) {
+      var s = S.projectStats(p.id);
+      var st = p.status ? projectState(p.status.state) : null;
+      var ppl = projectPeople(p.id);
+      h += '<button class="pjx-card" data-act="go" data-route="project" data-id="' + esc(p.id) + '">';
+      h += '<div class="pjx-top"><span class="hproj-ic" style="background:' + esc(p.color) +
+        '22">' + esc(p.icon) + '</span><span class="grow"><b>' + esc(p.name) + '</b>' +
+        (p.description ? '<em>' + esc(p.description) + '</em>' : '') + '</span>' +
+        (S.isStarred(p.id) ? '<span class="pjx-star">' +
+          global.Icons.iconFilled('star', 14) + '</span>' : '') + '</div>';
+      h += '<div class="pjx-meta">' +
+        (st ? '<span class="status-pill" style="background:' + st.color + '22;color:' + st.color +
+          '"><i style="background:' + st.color + '"></i>' + esc(L(st.label)) + '</span>'
+            : '<span class="pf-none">' + L('ยังไม่รายงาน') + '</span>') +
+        (s.overdue ? '<span class="chip due-over">' +
+          esc(L('{n} งานเลยกำหนด', { n: s.overdue })) + '</span>' : '') + '</div>';
+      h += '<div class="pjx-prog"><span class="track"><span class="fill" style="width:' +
+        (s.total ? Math.round(s.done / s.total * 100) : 0) + '%;background:' + esc(p.color) +
+        '"></span></span><span class="v">' + s.done + '/' + s.total + '</span></div>';
+      if (ppl.length) {
+        h += '<div class="pjx-ppl">';
+        ppl.slice(0, 5).forEach(function (m) { h += avatar(m.user, 'sm'); });
+        if (ppl.length > 5) h += '<span class="tb-more">+' + (ppl.length - 5) + '</span>';
+        h += '</div>';
+      }
+      h += '</button>';
+    });
+    return h + '</div></div>';
   }
 
   function dashboardView(projectId) {
@@ -1788,13 +1893,17 @@
 
     list.forEach(function (n) {
       var t = S.task(n.taskId);
+      /* ประกาศของโปรเจกต์ไม่มีงานให้ชี้ ต้องพาไปที่หน้าประกาศแทน
+       * ไม่งั้นจะขึ้นว่า "งานถูกลบแล้ว" ซึ่งไม่จริงและชวนตกใจ */
+      var np = (!t && n.projectId) ? S.project(n.projectId) : null;
       h += '<div class="nrow' + (n.read ? '' : ' unread') + '" data-act="open-notif" data-id="' +
-        esc(n.id) + '" data-task="' + esc(n.taskId) + '">';
+        esc(n.id) + '" data-task="' + esc(n.taskId) + '"' +
+        (np ? ' data-project="' + esc(np.id) + '"' : '') + '>';
       h += n.read ? '<span style="width:8px;flex:0 0 8px"></span>' : '<span class="unread-dot"></span>';
       var ntxt = n.key ? (n.actorName ? n.actorName + ' ' : '') + L(n.key, n.params || undefined) : n.text;
       h += '<div class="body"><div class="txt">' + esc(ntxt) + '</div>' +
         '<div class="sub" title="' + esc(fmtExact(n.createdAt)) + '">' +
-        esc(t ? t.name : L('(งานถูกลบแล้ว)')) + ' · ' +
+        esc(t ? t.name : (np ? np.name : L('(งานถูกลบแล้ว)'))) + ' · ' +
         esc(fmtWhen(n.createdAt)) + '</div></div>';
       h += '<span class="acts">' +
         (n.archived ? '' :
@@ -2035,6 +2144,11 @@
       '<button class="btn btn-sm btn-ghost" data-act="toggle-follow" data-id="' + esc(t.id) +
       '" title="' + (following ? L('เลิกติดตาม') : L('ติดตาม')) + '">' +
       I('bell') + '</button>' +
+      /* ขยายเต็มจอ สำหรับงานที่มีรายละเอียดยาวหรือคุยกันหลายสิบความเห็น
+       * แผงข้างกว้างคงที่ อ่านสรุปประชุมที่มีหัวข้อย่อยสามชั้นแล้วตัดบรรทัดถี่มาก */
+      '<button class="btn btn-sm btn-ghost" data-act="toggle-wide" title="' +
+      (opts && opts.wide ? L('ย่อกลับ') : L('ขยายเต็มจอ')) + '">' +
+      I(opts && opts.wide ? 'arrowRight' : 'arrowLeft', 14) + '</button>' +
       '<button class="btn btn-sm btn-ghost" data-act="task-menu" data-id="' + esc(t.id) +
       '" title="' + L('เมนู') + '">' + I('more') + '</button>' +
       '<button class="btn btn-sm btn-ghost" data-act="close-drawer" title="' + L('ปิด') + '">' + I('close', 13) + '</button></div>';
@@ -2575,6 +2689,7 @@
     'project.unlock': 'ได้ปลดล็อกรายชื่อสมาชิกของ',
     'project.member': 'ได้ตั้งสิทธิ์ในโปรเจกต์',
     'project.member-remove': 'ได้ถอดสมาชิกออกจากโปรเจกต์',
+    'project.message': 'ได้ประกาศในโปรเจกต์',
     'project.viewOn': 'ได้เปิดมุมมองในโปรเจกต์',
     'project.viewOff': 'ได้ปิดมุมมองในโปรเจกต์',
     'project.baseline': 'ได้ตั้งเส้นฐานของ',
@@ -2816,7 +2931,8 @@
     VIEWS_WITH_TOOLBAR: VIEWS_WITH_TOOLBAR,
     listView: listView, boardView: boardView, timelineView: timelineView,
     homeView: homeView, dashboardView: dashboardView, profileView: profileView,
-    overviewView: overviewView, filesView: filesView,
+    overviewView: overviewView, filesView: filesView, messagesView: messagesView,
+    projectsView: projectsView,
     portfolioView: portfolioView, PF_TABS: PF_TABS,
     myTasksView: myTasksView, inboxView: inboxView,
     calendarView: calendarView, searchView: searchView, drawer: drawer,

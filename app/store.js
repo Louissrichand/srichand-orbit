@@ -418,6 +418,7 @@
       if (!p.workDays) p.workDays = 'all';
       if (!('views' in p)) p.views = null;   // null = เปิดครบทุกมุมมอง
       p.statusLog = p.statusLog || [];
+      p.messages = p.messages || [];         // ประกาศของโปรเจกต์ ไม่ผูกกับงานชิ้นไหน
       (p.savedViews || []).forEach(function (v) { v.view = fillView(v.view); });
     });
     d.users.forEach(function (u) {
@@ -1391,8 +1392,55 @@
     { id: 'gantt',     label: 'Gantt',    icon: 'subtask',    desc: 'ลำดับก่อนหลังและเส้นฐาน' },
     { id: 'calendar',  label: 'ปฏิทิน',   icon: 'calendar',   desc: 'ดูตามกำหนดส่งรายเดือน' },
     { id: 'dashboard', label: 'สรุปผล',   icon: 'chart',      desc: 'ตัวเลขรวมและความคืบหน้า' },
+    { id: 'messages',  label: 'ประกาศ',    icon: 'send',       desc: 'เรื่องของทั้งโปรเจกต์ที่ไม่ได้ผูกกับงานชิ้นไหน' },
     { id: 'files',     label: 'ไฟล์',     icon: 'paperclip',  desc: 'ไฟล์แนบทุกชิ้นในโปรเจกต์รวมไว้ที่เดียว' }
   ];
+
+  /* ---------- ประกาศของโปรเจกต์ ----------
+   *
+   * ความเห็นต้องเกาะอยู่กับงานเสมอ แต่บางเรื่องไม่ได้เป็นของงานชิ้นไหนเลย
+   * เช่น สรุปประชุมประจำสัปดาห์ หรือประกาศเลื่อนกำหนดทั้งโปรเจกต์
+   * เดิมของพวกนี้ต้องไปแปะไว้ในงานสักชิ้นแบบฝืน ๆ แล้วก็หาไม่เจอในภายหลัง
+   */
+  function projectMessages(projectId) {
+    var p = project(projectId);
+    return ((p && p.messages) || []).slice().reverse();   // ใหม่สุดก่อน
+  }
+
+  function addProjectMessage(projectId, title, body) {
+    var p = project(projectId);
+    if (!p || !body || !body.trim()) return null;
+    snapshot('ประกาศในโปรเจกต์');
+    p.messages = p.messages || [];
+    var m = {
+      id: uid('pm'), title: (title || '').trim(), body: body.trim(),
+      by: db.currentUserId, at: new Date().toISOString()
+    };
+    p.messages.push(m);
+
+    /* แจ้งเตือนสมาชิกที่ระบุตัวได้เท่านั้น
+     * โปรเจกต์ที่เปิดให้ทั้งองค์กรไม่มีรายชื่อ ถ้ายิงหาทุกคนจะกลายเป็นสแปมทั้งบริษัท */
+    var mem = projectMembers(projectId)
+      .map(function (x) { return x.userId; })
+      .filter(function (u) { return u !== db.currentUserId; });
+    if (mem.length) {
+      notifyOnly(null, mem, 'ประกาศใหม่ใน {p}', 'message', { p: p.name }, false,
+        { projectId: projectId });
+    }
+    audit('project.message', p.name, m.title || m.body.slice(0, 40));
+    commit();
+    return m;
+  }
+
+  function deleteProjectMessage(projectId, msgId) {
+    var p = project(projectId);
+    if (!p) return false;
+    var before = (p.messages || []).length;
+    snapshot('ลบประกาศ');
+    p.messages = (p.messages || []).filter(function (m) { return m.id !== msgId; });
+    commit();
+    return p.messages.length < before;
+  }
 
   /** ไฟล์แนบทุกชิ้นในโปรเจกต์ พร้อมงานที่มันอยู่ ใหม่สุดก่อน */
   function filesOfProject(projectId) {
@@ -1665,7 +1713,9 @@
     { id: 'unblock',  label: 'งานที่รออยู่พร้อมทำต่อแล้ว',
       desc: 'งานที่บล็อกงานของคุณอยู่ถูกทำเสร็จ' },
     { id: 'activity', label: 'ความเคลื่อนไหวอื่นในงานที่ฉันติดตาม',
-      desc: 'เปลี่ยนวัน เปลี่ยนความสำคัญ ติ๊กว่าเสร็จ และอื่น ๆ' }
+      desc: 'เปลี่ยนวัน เปลี่ยนความสำคัญ ติ๊กว่าเสร็จ และอื่น ๆ' },
+    { id: 'message',  label: 'ประกาศใหม่ในโปรเจกต์ที่ฉันอยู่',
+      desc: 'เรื่องที่ไม่ได้ผูกกับงานชิ้นไหน เช่น สรุปประชุมหรือเลื่อนกำหนด' }
   ];
 
   function wantsNotify(userId, kind) {
@@ -1720,7 +1770,7 @@
    * @param noActor ข้อความบางแบบพูดถึงตัวงาน ไม่ใช่การกระทำของใคร
    *                เช่น "งาน X พร้อมทำต่อแล้ว" เติมชื่อคนข้างหน้าแล้วอ่านไม่รู้เรื่อง
    */
-  function notifyOnly(taskId, userIds, key, kind, params, noActor) {
+  function notifyOnly(taskId, userIds, key, kind, params, noActor, extra) {
     var actor = noActor ? null : me();
     (userIds || []).forEach(function (target) {
       if (!target || target === db.currentUserId) return;
@@ -1728,6 +1778,9 @@
       if (!wantsNotify(target, kind)) return;
       db.notifications.push({
         id: uid('n'), userId: target, taskId: taskId,
+        /* ประกาศของโปรเจกต์ไม่มีงานให้ชี้ เก็บรหัสโปรเจกต์ไว้แทน
+         * กล่องข้อความจะได้พาไปที่หน้าประกาศ ไม่ใช่ขึ้นว่างานถูกลบแล้ว */
+        projectId: (extra && extra.projectId) || null,
         text: fill(key, params), kind: kind || null,
         key: key, params: params || null,
         actorName: actor ? actor.name : null,
@@ -3456,6 +3509,8 @@
     setPhoto: setPhoto, removePhoto: removePhoto,
     isStarred: isStarred, toggleStar: toggleStar, starredProjects: starredProjects,
     filesOfProject: filesOfProject,
+    projectMessages: projectMessages, addProjectMessage: addProjectMessage,
+    deleteProjectMessage: deleteProjectMessage,
     REACTIONS: REACTIONS, toggleReaction: toggleReaction,
     photoBytes: photoBytes, photoTotalBytes: photoTotalBytes,
     PHOTO_PX: PHOTO_PX, PHOTO_MAX_BYTES: PHOTO_MAX_BYTES,

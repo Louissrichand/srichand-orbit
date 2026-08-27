@@ -2835,3 +2835,94 @@ button.prof-away:hover { color: var(--accent); }
   .filesv-task { display: none; }
   .tb-people { display: none; }
 }
+
+/* ---------- ประกาศของโปรเจกต์ ---------- */
+
+.msgv { padding: 22px 24px 64px; max-width: 780px; margin: 0 auto; }
+.msg-new {
+  background: var(--bg-raise); border: 1px solid var(--line);
+  border-radius: var(--radius-lg); padding: 12px; margin-bottom: 20px;
+}
+.msg-new .inp { background: var(--bg-sunk); border-color: var(--line); margin-bottom: 8px; }
+.msg-new textarea.inp { min-height: 70px; }
+.msg-actions { display: flex; align-items: flex-end; gap: 12px; }
+.msg-actions .rt-hint { flex: 1; margin: 0; }
+
+.msg-card {
+  background: var(--bg-raise); border: 1px solid var(--line);
+  border-radius: var(--radius-lg); padding: 14px 16px; margin-bottom: 12px;
+}
+.msg-head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+.msg-head .grow { flex: 1; min-width: 0; }
+.msg-head b { font-size: 14.5px; font-weight: 600; display: block; }
+.msg-head em {
+  font-style: normal; font-size: 11.5px; color: var(--fg-faint); display: block; margin-top: 1px;
+}
+.msg-head .x { color: var(--fg-faint); opacity: 0; padding: 2px; }
+.msg-card:hover .x { opacity: 1; }
+.msg-head .x:hover { color: var(--danger); }
+.msg-body { font-size: 13.5px; line-height: 1.65; }
+
+/* ---------- หน้ารวมโปรเจกต์ ---------- */
+
+.pjx { padding: 22px 24px 64px; max-width: 1180px; margin: 0 auto; }
+.pjx-head {
+  display: flex; align-items: center; gap: 9px; font-size: 15px;
+  padding-bottom: 12px; margin-bottom: 16px; border-bottom: 1px solid var(--line);
+}
+.pjx-head .n { font-size: 12.5px; color: var(--fg-soft); }
+.pjx-head .btn { margin-left: auto; }
+.pjx-grid {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+.pjx-card {
+  background: var(--bg-raise); border: 1px solid var(--line);
+  border-radius: var(--radius-lg); padding: 14px; text-align: left;
+  display: flex; flex-direction: column; gap: 10px; min-width: 0;
+}
+.pjx-card:hover { border-color: var(--line-strong); box-shadow: var(--shadow); }
+.pjx-top { display: flex; align-items: flex-start; gap: 10px; }
+.pjx-top .grow { flex: 1; min-width: 0; }
+.pjx-top b {
+  font-size: 14px; font-weight: 600; display: block;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pjx-top em {
+  font-style: normal; font-size: 12px; color: var(--fg-soft); display: block;
+  margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pjx-star { color: var(--warn-fg); flex: none; }
+.pjx-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pjx-prog { display: flex; align-items: center; gap: 8px; }
+.pjx-prog .track {
+  flex: 1; height: 6px; border-radius: 3px; background: var(--bg-inset); overflow: hidden;
+}
+.pjx-prog .fill { display: block; height: 100%; border-radius: 3px; }
+.pjx-prog .v { font-size: 11.5px; color: var(--fg-soft); font-variant-numeric: tabular-nums; }
+.pjx-ppl { display: flex; align-items: center; }
+.pjx-ppl .avatar + .avatar { margin-left: -6px; }
+.pjx-ppl .avatar { border: 2px solid var(--bg-raise); }
+
+.sb-labelbtn {
+  color: inherit; font: inherit; letter-spacing: inherit; padding: 0;
+  text-transform: inherit;
+}
+.sb-labelbtn:hover { color: var(--fg); text-decoration: underline; }
+
+/* ---------- กากบาทล้างค่าบนปุ่มแถบเครื่องมือ ---------- */
+
+.vtb-x {
+  display: inline-grid; place-items: center; width: 16px; height: 16px;
+  border-radius: 50%; margin-left: 1px; color: inherit; opacity: .65;
+}
+.vtb-x:hover { background: rgba(0,0,0,.12); opacity: 1; }
+
+/* ---------- แผงงานแบบขยาย ---------- */
+
+.drawer.wide { width: min(1080px, 96vw); }
+
+@media (max-width: 900px) {
+  .msgv, .pjx { padding: 18px 16px 56px; }
+  .pjx-grid { grid-template-columns: minmax(0, 1fr); }
+}
