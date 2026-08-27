@@ -3002,3 +3002,12 @@ button.prof-away:hover { color: var(--accent); }
 }
 .subdate input:focus { border-color: var(--accent); }
 .subdate .as-link { margin-top: 4px; font-size: 12px; }
+
+/* ---------- หน้าต่างถาม/ยืนยันของแอปเอง ---------- */
+
+.ask-body {
+  font-size: 13.5px; color: var(--fg-soft); line-height: 1.6;
+  margin: 0 0 16px; white-space: pre-wrap;
+}
+.ask-choices { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
+.ask-choices .btn { justify-content: center; padding: 11px 14px; }

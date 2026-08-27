@@ -801,6 +801,60 @@
   }
   function closeModal() { $mdBack.classList.remove('open'); $modal.innerHTML = ''; }
 
+  /* ---------- ถามผู้ใช้ด้วยหน้าต่างของแอปเอง ----------
+   *
+   * เดิมใช้ prompt() กับ confirm() ของเบราว์เซอร์ ซึ่งพังเงียบในหลายที่
+   * หน้าเว็บที่รันใน iframe แบบ sandbox โดยไม่ได้เปิดสิทธิ์ allow-modals
+   * จะถูกเบราว์เซอร์เมินคำสั่งพวกนี้ทั้งหมด ไม่มี error ไม่มีอะไรขึ้น
+   * prompt() คืน null แล้วโค้ดก็ break ทิ้ง ปุ่มจึงกดแล้วไม่เกิดอะไรเลย
+   * ส่วน confirm() คืน false ทำให้ทุกปุ่มที่มีคำถามยืนยันกลายเป็นปุ่มตาย
+   *
+   * ใช้หน้าต่างของแอปเองแทน นอกจากทำงานได้ทุกที่แล้วยังแปลภาษาได้
+   * และหน้าตาเข้าชุดกับที่เหลือ ต่างจากกล่องของเบราว์เซอร์ที่บังคับใช้ภาษาระบบ
+   */
+  var pendingAsk = null;
+  var askChoiceFns = [];
+
+  function askText(title, value, onOk, opts) {
+    opts = opts || {};
+    pendingAsk = onOk;
+    openModal('<h2>' + R.esc(title) + '</h2>' +
+      (opts.note ? '<p class="prj-note">' + R.esc(opts.note) + '</p>' : '') +
+      '<div class="field"><input id="askInput" type="' + (opts.type || 'text') + '" value="' +
+      R.esc(value == null ? '' : value) + '" placeholder="' + R.esc(opts.placeholder || '') + '"></div>' +
+      '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="ask-ok">' +
+      R.esc(opts.ok || L('ตกลง')) + '</button></div>');
+  }
+
+  function askConfirm(title, body, onOk, opts) {
+    opts = opts || {};
+    pendingAsk = onOk;
+    openModal('<h2>' + R.esc(title) + '</h2>' +
+      (body ? '<p class="ask-body">' + R.esc(body) + '</p>' : '') +
+      '<div class="modal-acts"><button class="btn" data-act="close-modal">' +
+      L('ยกเลิก') + '</button>' +
+      '<button class="btn ' + (opts.safe ? 'btn-primary' : 'btn-danger') +
+      '" data-act="ask-ok">' + R.esc(opts.ok || L('ยืนยัน')) + '</button></div>');
+  }
+
+  /** ถามแบบหลายทางเลือก ใช้ตอนที่ "ยกเลิก" ไม่ใช่คำตอบตรงข้ามของ "ตกลง" */
+  function askChoice(title, body, choices) {
+    pendingAsk = null;
+    askChoiceFns = [];
+    var h = '<h2>' + R.esc(title) + '</h2>' +
+      (body ? '<p class="ask-body">' + R.esc(body) + '</p>' : '') +
+      '<div class="ask-choices">';
+    choices.forEach(function (c, i) {
+      askChoiceFns[i] = c.run;
+      h += '<button class="btn' + (c.primary ? ' btn-primary' : '') +
+        '" data-act="ask-choice" data-i="' + i + '">' + R.esc(c.label) + '</button>';
+    });
+    h += '</div><div class="modal-acts"><button class="btn" data-act="close-modal">' +
+      L('ยกเลิก') + '</button></div>';
+    openModal(h);
+  }
+
   /* ---------- popover ---------- */
 
   function closePops() {
@@ -2760,15 +2814,19 @@
         closePops();
         var pf = S.project(state.route.id).fields
           .filter(function (x) { return x.id === el.dataset.field; })[0];
-        var nn2 = prompt(L('เปลี่ยนชื่อฟิลด์'), pf ? pf.name : '');
-        if (nn2 && nn2.trim()) S.renameField(state.route.id, el.dataset.field, nn2.trim());
+        var fid2 = el.dataset.field, pid2 = state.route.id;
+        askText(L('เปลี่ยนชื่อฟิลด์'), pf ? pf.name : '', function (v) {
+          if (v) S.renameField(pid2, fid2, v);
+        });
         break;
       }
       case 'drop-field': {
         closePops();
-        if (!confirm(L('ลบฟิลด์นี้? ค่าที่กรอกไว้ทั้งหมดจะหายด้วย'))) break;
-        S.deleteField(state.route.id, el.dataset.field);
-        toast(L('ลบฟิลด์แล้ว'));
+        var dfPid = state.route.id, dfFid = el.dataset.field;
+        askConfirm(L('ลบฟิลด์นี้?'), L('ค่าที่กรอกไว้ทั้งหมดจะหายไปด้วย'), function () {
+          S.deleteField(dfPid, dfFid);
+          toast(L('ลบฟิลด์แล้ว'));
+        }, { ok: L('ลบฟิลด์') });
         break;
       }
 
@@ -2871,22 +2929,29 @@
       }
       case 'g-set-baseline': {
         var pbs = S.project(state.route.id);
-        if (pbs.baseline &&
-            !confirm(L('ตั้งเส้นฐานใหม่? แผนเดิมที่บันทึกไว้จะถูกทับ'))) break;
-        S.setBaseline(state.route.id);
-        viewFor(state.route.id).gShowBaseline = true;
-        renderViewBody();
-        refreshOpts();
-        toast(L('ตั้งเส้นฐานแล้ว'), L('ย้อนกลับ'), 'undo');
+        var blPid = state.route.id;
+        var doBaseline = function () {
+          S.setBaseline(blPid);
+          viewFor(blPid).gShowBaseline = true;
+          renderViewBody();
+          refreshOpts();
+          toast(L('ตั้งเส้นฐานแล้ว'), L('ย้อนกลับ'), 'undo');
+        };
+        if (pbs.baseline) {
+          askConfirm(L('ตั้งเส้นฐานใหม่?'), L('แผนเดิมที่บันทึกไว้จะถูกทับ'), doBaseline,
+            { ok: L('ตั้งใหม่') });
+        } else doBaseline();
         break;
       }
       case 'g-clear-baseline':
-        if (!confirm(L('ลบเส้นฐานที่บันทึกไว้?'))) break;
-        S.clearBaseline(state.route.id);
-        viewFor(state.route.id).gShowBaseline = false;
-        renderViewBody();
-        refreshOpts();
-        toast(L('ลบเส้นฐานแล้ว'), L('ย้อนกลับ'), 'undo');
+        var cbPid = state.route.id;
+        askConfirm(L('ลบเส้นฐานที่บันทึกไว้?'), '', function () {
+          S.clearBaseline(cbPid);
+          viewFor(cbPid).gShowBaseline = false;
+          renderViewBody();
+          refreshOpts();
+          toast(L('ลบเส้นฐานแล้ว'), L('ย้อนกลับ'), 'undo');
+        }, { ok: L('ลบเส้นฐานนี้') });
         break;
 
       /* คำค้นเก็บอยู่ในมุมมอง ไม่ใช่ใน state ชั่วคราว
@@ -2940,9 +3005,11 @@
       case 'g-del-dep': {
         var gb = S.task(el.dataset.blocker), gt = S.task(id);
         if (!gb || !gt) break;
-        if (!confirm(L('ลบลำดับ “') + gb.name + '” → “' + gt.name + '” ?')) break;
-        S.removeDependency(id, el.dataset.blocker);
-        toast(L('ลบลำดับแล้ว'), L('ย้อนกลับ'), 'undo');
+        var ddTid = id, ddBid = el.dataset.blocker;
+        askConfirm(L('ลบลำดับก่อนหลังนี้?'), gb.name + ' → ' + gt.name, function () {
+          S.removeDependency(ddTid, ddBid);
+          toast(L('ลบลำดับแล้ว'), L('ย้อนกลับ'), 'undo');
+        }, { ok: L('ลบลำดับ') });
         break;
       }
 
@@ -2982,8 +3049,20 @@
          * เอาชื่อเก่าจากแผงที่ปิดไปแล้วมาใช้แล้วทับมุมมองเดิม */
         var panelOpen = optOpen();
         var iEl = panelOpen ? document.getElementById('gvName') : null;
-        var nm = iEl ? iEl.value.trim() : (prompt(L('ตั้งชื่อมุมมองนี้')) || '').trim();
-        if (!nm) { toast(L('ยังไม่ได้ตั้งชื่อมุมมอง')); break; }
+        var nm = iEl ? iEl.value.trim() : '';
+        if (!nm) {
+          /* กดจากแถบเครื่องมือโดยไม่ได้เปิดแผง ยังไม่มีชื่อ ต้องถามก่อน */
+          var svPid = state.route.id;
+          askText(L('ตั้งชื่อมุมมองนี้'), '', function (v) {
+            if (!v) { toast(L('ยังไม่ได้ตั้งชื่อมุมมอง')); return; }
+            state.viewName = v;
+            S.saveView(svPid, v, viewFor(svPid), state.viewIcon);
+            renderViewBody();
+            refreshOpts();
+            toast(L('บันทึกมุมมองแล้ว'));
+          });
+          break;
+        }
         var icEl = panelOpen ? document.getElementById('gvIcon') : null;
         var ic = icEl ? icEl.value.trim() : '';
         state.viewName = nm;
@@ -3044,11 +3123,12 @@
         break;
       }
       case 'save-template': {
-        var tn = prompt(L('ชื่อเทมเพลต'), S.task(id).name);
-        if (!tn || !tn.trim()) break;
-        S.saveTaskTemplate(id, tn.trim());
-        closeModal();
-        toast(L('บันทึกเป็นเทมเพลตแล้ว'));
+        var tplId = id;
+        askText(L('ชื่อเทมเพลต'), S.task(id).name, function (v) {
+          if (!v) return;
+          S.saveTaskTemplate(tplId, v);
+          toast(L('บันทึกเป็นเทมเพลตแล้ว'));
+        });
         break;
       }
       case 'delete-task': {
@@ -3062,19 +3142,40 @@
         toast(L('ลบงานแล้ว'), L('ย้อนกลับ'), 'undo');
         break;
       }
+      case 'ask-ok': {
+        var fn = pendingAsk;
+        var val = (document.getElementById('askInput') || {}).value;
+        pendingAsk = null;
+        closeModal();
+        if (fn) fn(val == null ? null : String(val).trim());
+        break;
+      }
+      case 'ask-choice': {
+        var cf = askChoiceFns[+el.dataset.i];
+        askChoiceFns = [];
+        closeModal();
+        if (cf) cf();
+        break;
+      }
+
       case 'quick-add': {
-        var qn = prompt(L('ชื่องานใหม่'));
-        if (!qn || !qn.trim()) break;
         var qp = S.project(state.route.id);
-        var nt = S.createTask({ name: qn.trim() }, qp.id, qp.sections[0].id);
-        openTask(nt.id);
+        if (!qp) break;
+        askText(L('ชื่องานใหม่'), '', function (v) {
+          if (!v) return;
+          var nt = S.createTask({ name: v }, qp.id, qp.sections[0].id);
+          openTask(nt.id);
+        }, { ok: L('เพิ่มงาน') });
         break;
       }
       case 'inline-add': inlineAdd(el, sectionId); break;
       case 'add-subtask': {
-        var sn2 = prompt(L('ชื่องานย่อย'));
-        if (!sn2 || !sn2.trim()) break;
-        S.createTask({ name: sn2.trim(), parentId: id }, null, null);
+        var parentId = id;
+        askText(L('ชื่องานย่อย'), '', function (v) {
+          if (!v) return;
+          S.createTask({ name: v, parentId: parentId }, null, null);
+          renderAll();
+        });
         break;
       }
 
@@ -3320,18 +3421,22 @@
       case 'bulk-complete': S.bulkUpdate(selectedIds(), { completed: true }); clearSel(); break;
       case 'bulk-reopen': S.bulkUpdate(selectedIds(), { completed: false }); clearSel(); break;
       case 'bulk-due': {
-        var bd = prompt(L('กำหนดส่งใหม่ (ปปปป-ดด-วว) เว้นว่างเพื่อลบ'), S.today());
-        if (bd === null) break;
-        S.bulkUpdate(selectedIds(), { dueOn: bd.trim() || null });
-        clearSel();
+        var bulkIds = selectedIds();
+        askText(L('กำหนดส่งใหม่'), S.today(), function (v) {
+          S.bulkUpdate(bulkIds, { dueOn: v || null });
+          clearSel();
+          renderAll();
+        }, { type: 'date', note: L('เว้นว่างไว้เพื่อลบกำหนดส่งของงานที่เลือก') });
         break;
       }
       case 'bulk-delete': {
         var ids = selectedIds();
-        if (!confirm(L('ลบ') + ' ' + ids.length + ' ' + L('งาน?'))) break;
-        S.deleteTasks(ids);
-        clearSel();
-        toast(L('ลบแล้ว'), L('ย้อนกลับ'), 'undo');
+        askConfirm(L('ลบ {n} งาน?', { n: ids.length }), '', function () {
+          S.deleteTasks(ids);
+          clearSel();
+          renderAll();
+          toast(L('ลบแล้ว'), L('ย้อนกลับ'), 'undo');
+        }, { ok: L('ลบ') });
         break;
       }
       case 'bulk-clear': clearSelUI(); break;
@@ -3356,20 +3461,28 @@
 
       /* --- sections --- */
       case 'add-section': {
-        var sn3 = prompt(L('ชื่อคอลัมน์ใหม่'));
-        if (sn3 && sn3.trim()) S.addSection(state.route.id, sn3.trim());
+        var secPid = state.route.id;
+        askText(L('ชื่อคอลัมน์ใหม่'), '', function (v) {
+          if (v) S.addSection(secPid, v);
+        });
         break;
       }
       case 'rename-section': {
         var cur = S.section(state.route.id, sectionId);
-        var nn = prompt(L('เปลี่ยนชื่อคอลัมน์'), cur ? cur.name : '');
-        if (nn && nn.trim()) S.renameSection(state.route.id, sectionId, nn.trim());
+        var rsPid = state.route.id, rsSec = sectionId;
+        askText(L('เปลี่ยนชื่อคอลัมน์'), cur ? cur.name : '', function (v) {
+          if (v) S.renameSection(rsPid, rsSec, v);
+        });
         break;
       }
-      case 'delete-section':
-        if (!confirm(L('ลบคอลัมน์นี้? งานข้างในจะย้ายไปคอลัมน์แรก'))) break;
-        if (!S.deleteSection(state.route.id, sectionId)) toast(L('ต้องเหลืออย่างน้อย 1 คอลัมน์'));
+      case 'delete-section': {
+        var dsPid = state.route.id, dsSec = sectionId;
+        askConfirm(L('ลบคอลัมน์นี้?'), L('งานข้างในจะย้ายไปคอลัมน์แรก'), function () {
+          if (!S.deleteSection(dsPid, dsSec)) toast(L('ต้องเหลืออย่างน้อย 1 คอลัมน์'));
+          else renderAll();
+        }, { ok: L('ลบคอลัมน์นี้') });
         break;
+      }
       case 'move-section':
         S.moveSection(state.route.id, sectionId, parseInt(el.dataset.delta, 10));
         break;
@@ -3399,12 +3512,13 @@
 
       /* --- พอร์ตโฟลิโอ --- */
       case 'new-portfolio': {
-        var pfn = prompt(L('ชื่อพอร์ตโฟลิโอ'), L('พอร์ตโฟลิโอใหม่'));
-        if (!pfn || !pfn.trim()) break;
-        var nf = S.createPortfolio({ name: pfn.trim() });
-        state.route = { type: 'portfolio', id: nf.id, view: 'list' };
-        renderAll();
-        toast(L('สร้างพอร์ตโฟลิโอแล้ว'));
+        askText(L('ชื่อพอร์ตโฟลิโอ'), L('พอร์ตโฟลิโอใหม่'), function (v) {
+          if (!v) return;
+          var nf = S.createPortfolio({ name: v });
+          state.route = { type: 'portfolio', id: nf.id, view: 'list' };
+          renderAll();
+          toast(L('สร้างพอร์ตโฟลิโอแล้ว'));
+        }, { ok: L('สร้างพอร์ตโฟลิโอ') });
         break;
       }
       case 'pf-menu':
@@ -3414,15 +3528,21 @@
       case 'pf-rename': {
         closePops();
         var pf1 = S.portfolio(id);
-        var nn = prompt(L('ชื่อพอร์ตโฟลิโอ'), pf1 ? pf1.name : '');
-        if (nn && nn.trim()) { S.updatePortfolio(id, { name: nn.trim() }); renderAll(); }
+        var pfRid = id;
+        askText(L('ชื่อพอร์ตโฟลิโอ'), pf1 ? pf1.name : '', function (v) {
+          if (v) { S.updatePortfolio(pfRid, { name: v }); renderAll(); }
+        });
         break;
       }
       case 'pf-desc': {
         closePops();
         var pf2 = S.portfolio(id);
-        var dd = prompt(L('คำอธิบายพอร์ตโฟลิโอ'), pf2 ? pf2.description : '');
-        if (dd !== null) { S.updatePortfolio(id, { description: dd.trim() }); renderAll(); }
+        var pfDid = id;
+        askText(L('คำอธิบายพอร์ตโฟลิโอ'), pf2 ? pf2.description : '', function (v) {
+          if (v === null) return;
+          S.updatePortfolio(pfDid, { description: v });
+          renderAll();
+        });
         break;
       }
       case 'pf-look': closePops(); openModal(portfolioLookModal(id)); break;
@@ -3441,12 +3561,14 @@
         closePops();
         var pf3 = S.portfolio(id);
         if (!pf3) break;
-        if (!confirm(L('ลบพอร์ตโฟลิโอ “{name}”?\nโปรเจกต์ข้างในจะยังอยู่ครบ ลบแค่กล่องที่ใช้จัดกลุ่ม',
-          { name: pf3.name }))) break;
-        S.deletePortfolio(id);
-        state.route = { type: 'home' };
-        renderAll();
-        toast(L('ลบพอร์ตโฟลิโอแล้ว'), L('ย้อนกลับ'), 'undo');
+        var dpfId = id;
+        askConfirm(L('ลบพอร์ตโฟลิโอ “{name}”?', { name: pf3.name }),
+          L('โปรเจกต์ข้างในจะยังอยู่ครบ ลบแค่กล่องที่ใช้จัดกลุ่ม'), function () {
+            S.deletePortfolio(dpfId);
+            state.route = { type: 'home' };
+            renderAll();
+            toast(L('ลบพอร์ตโฟลิโอแล้ว'), L('ย้อนกลับ'), 'undo');
+          }, { ok: L('ลบพอร์ตโฟลิโอ') });
         break;
       }
       case 'pf-add': closePops(); openModal(portfolioAddModal(el.dataset.pf || state.route.id)); break;
@@ -3606,13 +3728,16 @@
         break;
       case 'drop-member': {
         var dm = S.user(el.dataset.user);
-        if (!confirm(L('ถอด “{name}” ออกจากโปรเจกต์นี้?', { name: dm ? dm.name : '' }))) break;
-        if (!S.removeProjectMember(id, el.dataset.user)) {
-          toast(L('ต้องเหลือผู้ดูแลโปรเจกต์อย่างน้อยหนึ่งคน'));
-          break;
-        }
-        openModal(projectAccessModal(id));
-        renderAll();
+        var dmPid = id, dmUid = el.dataset.user;
+        askConfirm(L('ถอด “{name}” ออกจากโปรเจกต์นี้?', { name: dm ? dm.name : '' }), '',
+          function () {
+            if (!S.removeProjectMember(dmPid, dmUid)) {
+              toast(L('ต้องเหลือผู้ดูแลโปรเจกต์อย่างน้อยหนึ่งคน'));
+              return;
+            }
+            openModal(projectAccessModal(dmPid));
+            renderAll();
+          }, { ok: L('ถอดออก') });
         break;
       }
 
@@ -3684,21 +3809,30 @@
         break;
       }
       case 'dup-project': {
-        var withTasks = confirm(L('คัดลอกงานทั้งหมดไปด้วยหรือไม่?\n\nตกลง = คัดลอกงานด้วย\nยกเลิก = เอาแค่โครงคอลัมน์และฟิลด์'));
-        var dp2 = S.duplicateProject(id, withTasks);
-        closeModal();
-        if (dp2) goProject(dp2.id);
-        toast(L('คัดลอกโปรเจกต์แล้ว'));
+        var dupId = id;
+        var runDup = function (withTasks) {
+          var dp2 = S.duplicateProject(dupId, withTasks);
+          if (dp2) goProject(dp2.id);
+          toast(L('คัดลอกโปรเจกต์แล้ว'));
+        };
+        /* สามทางเลือกจริง ๆ ไม่ใช่ตกลงกับยกเลิก
+         * ของเดิมยัดสองความหมายลงในปุ่มยกเลิก ซึ่งอ่านแล้วเดาไม่ออก */
+        askChoice(L('คัดลอกโปรเจกต์'), L('จะเอางานทั้งหมดไปด้วยไหม'), [
+          { label: L('คัดลอกงานไปด้วย'), primary: true, run: function () { runDup(true); } },
+          { label: L('เอาแค่โครงคอลัมน์และฟิลด์'), run: function () { runDup(false); } }
+        ]);
         break;
       }
       case 'delete-project': {
-        var dp = S.project(id);
-        if (!confirm(L('ลบโปรเจกต์ “') + dp.name + L('” ?\nงานที่อยู่เฉพาะในโปรเจกต์นี้จะถูกลบด้วย'))) break;
-        S.deleteProject(id);
-        closeModal();
-        state.route = { type: 'home' };
-        renderAll();
-        toast(L('ลบโปรเจกต์แล้ว'), L('ย้อนกลับ'), 'undo');
+        var dp = S.project(id), dpId = id;
+        if (!dp) break;
+        askConfirm(L('ลบโปรเจกต์ “{name}”?', { name: dp.name }),
+          L('งานที่อยู่เฉพาะในโปรเจกต์นี้จะถูกลบด้วย'), function () {
+            S.deleteProject(dpId);
+            state.route = { type: 'home' };
+            renderAll();
+            toast(L('ลบโปรเจกต์แล้ว'), L('ย้อนกลับ'), 'undo');
+          }, { ok: L('ลบโปรเจกต์') });
         break;
       }
 
@@ -3786,11 +3920,13 @@
       case 'remove-user': {
         var ru = S.user(id);
         if (!ru) break;
-        if (!confirm(L('เอา “{name}” ออกจากรายชื่อ?\nงานที่มอบหมายไว้จะกลายเป็นยังไม่มอบหมาย',
-          { name: ru.name }))) break;
-        if (!S.removeUser(id)) { toast(L('ลบคนนี้ไม่ได้')); break; }
-        renderAll();
-        toast(L('เอาออกจากรายชื่อแล้ว'), L('ย้อนกลับ'), 'undo');
+        var ruId = id;
+        askConfirm(L('เอา “{name}” ออกจากรายชื่อ?', { name: ru.name }),
+          L('งานที่มอบหมายไว้จะกลายเป็นยังไม่มอบหมาย'), function () {
+            if (!S.removeUser(ruId)) { toast(L('ลบคนนี้ไม่ได้')); return; }
+            renderAll();
+            toast(L('เอาออกจากรายชื่อแล้ว'), L('ย้อนกลับ'), 'undo');
+          }, { ok: L('เอาออก') });
         break;
       }
       /* --- จัดการบัญชีและบันทึกการทำงาน --- */
@@ -3800,11 +3936,13 @@
         /* มีงานค้างอยู่ ต้องตัดสินใจเรื่องงานก่อน ไม่ใช่ปิดแล้วค่อยไปตามหาทีหลัง
          * งานที่ผูกกับบัญชีที่เข้าไม่ได้จะเงียบไปจนกว่าจะเลยกำหนด */
         if (S.openTasksOf(id).length) { openModal(handoverModal(id, true)); break; }
-        if (!confirm(L('ปิดใช้งานบัญชีของ “{name}”?\nเขาจะเข้าระบบไม่ได้ทันที แต่งานที่มอบหมายไว้ยังอยู่ครบ',
-          { name: du.name }))) break;
-        if (!S.setActive(id, false)) { toast(L('ปิดบัญชีนี้ไม่ได้')); break; }
-        renderAll();
-        toast(L('ปิดใช้งานบัญชีแล้ว'), L('ย้อนกลับ'), 'undo');
+        var duId = id;
+        askConfirm(L('ปิดใช้งานบัญชีของ “{name}”?', { name: du.name }),
+          L('เขาจะเข้าระบบไม่ได้ทันที แต่งานที่มอบหมายไว้ยังอยู่ครบ'), function () {
+            if (!S.setActive(duId, false)) { toast(L('ปิดบัญชีนี้ไม่ได้')); return; }
+            renderAll();
+            toast(L('ปิดใช้งานบัญชีแล้ว'), L('ย้อนกลับ'), 'undo');
+          }, { ok: L('ปิดใช้งานบัญชี') });
         break;
       }
       case 'handover': openModal(handoverModal(id, false)); break;
@@ -4066,13 +4204,14 @@
         break;
       }
       case 'reset':
-        if (!confirm(L('ล้างข้อมูลทั้งหมดและเริ่มใหม่?\nแนะนำให้ดาวน์โหลดสำรองก่อน'))) break;
-        S.reset();
-        closeModal();
-        state.route = { type: 'home' };
-        state.openTaskId = null;
-        clearSel();
-        renderAll();
+        askConfirm(L('ล้างข้อมูลทั้งหมดและเริ่มใหม่?'),
+          L('ทุกอย่างจะหายถาวร แนะนำให้ดาวน์โหลดสำรองก่อน'), function () {
+            S.reset();
+            state.route = { type: 'home' };
+            state.openTaskId = null;
+            clearSel();
+            renderAll();
+          }, { ok: L('ล้างทั้งหมด') });
         break;
 
       case 'undo': doUndo(); break;
@@ -4351,6 +4490,14 @@
 
     /* เพิ่มงานย่อยด้วยการกด Enter แล้วช่องยังโฟกัสอยู่
      * พิมพ์รายการยาว ๆ ต่อได้รวดเดียวโดยไม่ต้องกดปุ่มใหม่ทุกครั้ง */
+    /* กด Enter ในช่องของหน้าต่างถาม เท่ากับกดปุ่มตกลง */
+    if (e.key === 'Enter' && e.target.id === 'askInput') {
+      e.preventDefault();
+      var okBtn = document.querySelector('[data-act="ask-ok"]');
+      if (okBtn) okBtn.click();
+      return;
+    }
+
     if (e.key === 'Enter' && e.target.id === 'subAdd') {
       e.preventDefault();
       var sname = e.target.value.trim();
@@ -4409,10 +4556,9 @@
       else if (k === 'q' && state.route.type === 'project') {
         var qp2 = S.project(state.route.id);
         if (!S.can('write')) { denyToast(); return; }
-        var qn2 = prompt(L('ชื่องานใหม่'));
-        if (qn2 && qn2.trim()) {
-          openTask(S.createTask({ name: qn2.trim() }, qp2.id, qp2.sections[0].id).id);
-        }
+        askText(L('ชื่องานใหม่'), '', function (v) {
+          if (v) openTask(S.createTask({ name: v }, qp2.id, qp2.sections[0].id).id);
+        }, { ok: L('เพิ่มงาน') });
       } else if (k === 'm' && state.openTaskId) {
         if (!S.can('write', state.openTaskId)) { denyToast(); return; }
         S.updateTask(state.openTaskId, { assigneeId: S.db.currentUserId });
@@ -4434,11 +4580,12 @@
       e.preventDefault();
       if (!S.can('write')) { denyToast(); return; }
       var ids2 = selectedIds();
-      if (confirm(L('ลบ') + ' ' + ids2.length + ' ' + L('งาน?'))) {
+      askConfirm(L('ลบ {n} งาน?', { n: ids2.length }), '', function () {
         S.deleteTasks(ids2);
         clearSel();
+        renderAll();
         toast(L('ลบแล้ว'), L('ย้อนกลับ'), 'undo');
-      }
+      }, { ok: L('ลบ') });
     }
   });
 
