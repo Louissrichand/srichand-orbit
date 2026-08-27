@@ -2543,3 +2543,10 @@ button.prof-away:hover { color: var(--accent); }
   .avatar.xxl { width: 76px; height: 76px; flex-basis: 76px; font-size: 26px; }
   .prof-id h1 { font-size: 23px; }
 }
+
+/* รายการคำแนะนำในหน้าต่างแจ้งปัญหา */
+.prj-list {
+  margin: 4px 0 0; padding-left: 18px;
+  font-size: 12.5px; color: var(--fg-soft); line-height: 1.7;
+}
+.prj-list li { margin-bottom: 2px; }

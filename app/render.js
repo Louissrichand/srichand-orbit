@@ -333,6 +333,7 @@
     }
 
     h += '<div class="tb-spacer"></div>';
+    h += saveChip();
     h += syncChip();
     h += '<div class="search">' + ICON.search +
          '<input id="searchInput" type="search" placeholder="' + L('ค้นหางาน…  (/)') + '" value="' +
@@ -1656,9 +1657,9 @@
 
     var h = '<div class="cal">';
     h += '<div class="cal-head">' +
-      '<button class="btn btn-sm" data-act="cal-prev">' + I('arrowLeft', 14) + '</button>' +
+      '<button class="btn btn-sm" data-act="cal-prev" title="' + L('เดือนก่อนหน้า') + '">' + I('arrowLeft', 14) + '</button>' +
       '<strong style="font-size:15px">' + MONF()[month] + ' ' + YR(year) + '</strong>' +
-      '<button class="btn btn-sm" data-act="cal-next">' + I('arrowRight', 14) + '</button>' +
+      '<button class="btn btn-sm" data-act="cal-next" title="' + L('เดือนถัดไป') + '">' + I('arrowRight', 14) + '</button>' +
       '<button class="btn btn-sm btn-ghost" data-act="cal-today">' + L('วันนี้') + '</button></div>';
 
     h += '<div class="cal-grid">';
@@ -1844,7 +1845,8 @@
         esc(x.project.color) + '"></span>' + esc(x.project.name) +
         (sec ? ' · ' + esc(sec.name) : '') +
         (homes.length > 1 ? '<button data-act="unhome" data-id="' + esc(t.id) +
-          '" data-project="' + esc(x.project.id) + '">' + I('close', 13) + '</button>' : '') + '</span>';
+          '" data-project="' + esc(x.project.id) + '" title="' +
+          L('เอางานออกจากโปรเจกต์นี้') + '">' + I('close', 13) + '</button>' : '') + '</span>';
     });
     h += '<button class="btn btn-sm btn-ghost" data-act="add-home" data-id="' + esc(t.id) +
       '">+ ' + L('เพิ่มโปรเจกต์') + '</button></div></div>';
@@ -1854,7 +1856,7 @@
     t.tags.forEach(function (tg) {
       h += '<span class="chip tag" style="margin:0 5px 5px 0">' + esc(tg) +
         '<button data-act="remove-tag" data-id="' + esc(t.id) + '" data-tag="' + esc(tg) +
-        '">' + I('close', 13) + '</button></span>';
+        '" title="' + L('เอาแท็กออก') + '">' + I('close', 13) + '</button></span>';
     });
     h += '<button class="btn btn-sm btn-ghost" data-act="add-tag" data-id="' + esc(t.id) +
       '">+ ' + L('แท็ก') + '</button></div></div>';
@@ -1917,7 +1919,8 @@
             '>' + esc(L(d.label)) + '</option>';
         }).join('') + '</select>' +
         '<button class="btn btn-sm btn-ghost" data-act="remove-dependency" data-id="' + esc(t.id) +
-        '" data-blocker="' + esc(b.id) + '">' + I('close', 13) + '</button></div>';
+        '" data-blocker="' + esc(b.id) + '" title="' + L('เอาลำดับก่อนหลังนี้ออก') +
+        '">' + I('close', 13) + '</button></div>';
     });
     blocks.forEach(function (b) {
       h += '<div class="dep-row"><span class="dot" style="background:var(--fg-faint)"></span>' +
@@ -1938,7 +1941,8 @@
         (a.url ? '<a href="' + esc(a.url) + '" target="_blank" rel="noopener">' + esc(a.name) + '</a>'
                : esc(a.name)) + '</span>' +
         '<button class="btn btn-sm btn-ghost" data-act="remove-attachment" data-id="' + esc(t.id) +
-        '" data-att="' + esc(a.id) + '">' + I('close', 13) + '</button></div>';
+        '" data-att="' + esc(a.id) + '" title="' + L('เอาไฟล์แนบนี้ออก') + '">' +
+        I('close', 13) + '</button></div>';
     });
 
     // ผู้ติดตาม
@@ -1951,7 +1955,8 @@
       if (!fu) return;
       h += '<span class="chip">' + avatar(fu, 'sm') + esc(fu.name) +
         '<button data-act="remove-follower" data-id="' + esc(t.id) + '" data-user="' +
-        esc(fid) + '">' + I('close', 13) + '</button></span>';
+        esc(fid) + '" title="' + L('เอาผู้ติดตามคนนี้ออก') + '">' +
+        I('close', 13) + '</button></span>';
     });
     if (!t.followers.length) h += '<span style="font-size:13px;color:var(--fg-faint)">' + L('ยังไม่มี') + '</span>';
     h += '</div></div>';
@@ -1964,7 +1969,8 @@
         '<span class="nm" data-act="open-task" data-id="' + esc(s.id) +
         '" style="cursor:pointer">' + esc(s.name) + '</span>' +
         avatar(S.user(s.assigneeId), 'sm') +
-        '<button class="x" data-act="delete-task" data-id="' + esc(s.id) + '">' + I('close', 13) + '</button></div>';
+        '<button class="x" data-act="delete-task" data-id="' + esc(s.id) +
+        '" title="' + L('ลบงานย่อยนี้') + '">' + I('close', 13) + '</button></div>';
     });
     h += '<button class="add-row" data-act="add-subtask" data-id="' + esc(t.id) +
       '">+ ' + L('เพิ่มงานย่อย') + '</button>';
@@ -2025,6 +2031,18 @@
     return '<button class="sync-chip ' + look[2] + '" data-act="sync-menu" title="' +
       esc(tip) + '">' + I(look[0], 15) +
       '<span class="sync-txt">' + L(look[1]) + '</span></button>';
+  }
+
+  /** ป้ายเตือนตอนบันทึกลงเครื่องไม่สำเร็จ — ค้างไว้จนกว่าจะบันทึกได้
+   *
+   * ต้องอยู่บนแถบบนซึ่งเห็นตลอดเวลา ไม่ใช่ข้อความลอยที่หายไปในสามวินาที
+   * เพราะระหว่างที่บันทึกไม่ลง ทุกอย่างที่ทำต่อจากนั้นจะหายเมื่อปิดหน้า */
+  function saveChip() {
+    var err = S.saveError && S.saveError();
+    if (!err) return '';
+    return '<button class="sync-chip bad" data-act="save-error" title="' +
+      L('กดเพื่อดูวิธีแก้') + '">' + I('alert', 15) +
+      '<span class="sync-txt">' + L('บันทึกไม่ลง') + '</span></button>';
   }
 
   /** เนื้อหาเมนูที่เปิดจากป้ายสถานะ */

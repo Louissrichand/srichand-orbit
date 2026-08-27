@@ -528,14 +528,29 @@
     suppressRemote = false;
   }
 
+  /* ---------- สถานะการบันทึกลงเครื่อง ----------
+   *
+   * เดิมบันทึกไม่ลงแล้วขึ้นข้อความลอยแค่แวบเดียว
+   * ซึ่งแย่กว่าไม่บอกเลย เพราะคนทำงานต่อไปเรื่อย ๆ โดยเชื่อว่างานถูกเก็บแล้ว
+   * กว่าจะรู้ตัวคือตอนรีเฟรชหน้าแล้วงานหายทั้งวัน
+   * จึงเก็บเป็นสถานะค้างไว้ ให้หน้าจอขึ้นป้ายเตือนจนกว่าจะบันทึกได้อีกครั้ง
+   */
+  var saveError = null;
+  function saveError_() { return saveError; }
+
   function persist() {
     try {
       storage.set(JSON.stringify(db));
+      saveError = null;
     } catch (e) {
       console.error('บันทึกไม่สำเร็จ', e);
-      if (global.Orbit && global.Orbit.toast) {
-        global.Orbit.toast('บันทึกไม่สำเร็จ — พื้นที่เก็บข้อมูลเต็ม');
-      }
+      /* เต็มจริง ๆ กับพังด้วยเหตุอื่น ต้องบอกคนละอย่าง
+       * เพราะทางแก้ต่างกัน อันหนึ่งต้องลดของ อีกอันต้องเปลี่ยนเบราว์เซอร์ */
+      saveError = {
+        kind: /quota|exceed/i.test(e.name + ' ' + e.message) ? 'full' : 'other',
+        at: new Date().toISOString(),
+        bytes: JSON.stringify(db).length
+      };
     }
     if (remoteSave && !suppressRemote) remoteSave();
   }
@@ -3130,8 +3145,11 @@
    * ต่อให้มีใครเรียกฟังก์ชันนี้ตรง ๆ ก็ยังผ่านด่านเดียวกัน
    */
   var PHOTO_PX = 240;          // ด้านยาวสุดหลังย่อ พอสำหรับรูปใหญ่ในหน้าโปรไฟล์
-  var PHOTO_MAX_BYTES = 60000; // ~60 KB ต่อคน 200 คนก็ราว 12 MB ซึ่งเกินโควตาเบราว์เซอร์
-                               // จึงเหมาะกับนำร่อง ตอนย้ายขึ้นฐานข้อมูลค่อยเก็บเป็นไฟล์จริง
+  var PHOTO_MAX_BYTES = 32000; /* วัดโควตาจริงของ Chrome ได้ราว 12 MB ต่อโดเมน
+     * ข้อมูลงานของ 200 คนกินไปแล้วราว 1.4 MB
+     * ตั้งเพดานไว้ 32 KB ต่อคน กรณีแย่ที่สุดคือทุกคนใส่รูปเต็มเพดาน
+     * รวมแล้วราว 6.5 MB ยังเหลือที่ให้งานโตต่อได้อีกเท่าตัว
+     * ที่ 240px คุณภาพระดับนี้ยังคมพอสำหรับรูปใหญ่ในหน้าโปรไฟล์ */
 
   function photoBytes(dataUri) {
     if (!dataUri) return 0;
@@ -3273,6 +3291,7 @@
     wipeLocal: wipeLocal,
     onChange: onChange, commit: commit,
     snapshot: snapshot, undo: undo, canUndo: canUndo, undoLabel: undoLabel,
+    saveError: saveError_,
 
     uid: uid, today: today, addDays: addDays, addMonths: addMonths,
     iso: iso, clone: clone, daysBetween: daysBetween,

@@ -920,6 +920,37 @@
     'เปิดใช้งานบัญชี': 'Enable account',
     'ล้างข้อมูล': 'Clear data',
 
+    /* --- บันทึกลงเครื่องไม่สำเร็จ --- */
+    'บันทึกไม่ลง': 'Not saved',
+    'กดเพื่อดูวิธีแก้': 'Tap to see how to fix this',
+    'บันทึกลงเครื่องนี้ไม่สำเร็จ': 'Could not save to this computer',
+    'บันทึกได้ตามปกติแล้ว': 'Saving works again',
+    'ลองบันทึกอีกครั้งแล้วผ่าน ไม่ต้องทำอะไรเพิ่ม': 'The next save went through — nothing more to do.',
+    'งานที่แก้หลังจากนี้ยังอยู่บนหน้าจอ แต่': 'Anything you change from now on stays on screen but ',
+    'จะหายทันทีที่ปิดหรือรีเฟรชหน้า': 'will be lost the moment you close or refresh the page',
+    'พื้นที่เก็บข้อมูลของเบราว์เซอร์เต็ม ตอนนี้ข้อมูลมีขนาด {mb} MB':
+      'The browser storage is full. The data is currently {mb} MB.',
+    'เบราว์เซอร์นี้ไม่ยอมให้เก็บข้อมูล มักเกิดกับโหมดไม่ระบุตัวตนหรือเครื่องที่ตั้งค่าห้ามเก็บคุกกี้':
+      'This browser refuses to store data — usually private browsing, or a machine set to block site data.',
+    'ดาวน์โหลดสำรองเดี๋ยวนี้': 'Download a backup now',
+    'สิ่งที่ควรทำตอนนี้ คัดลอกงานที่เพิ่งแก้ไปเก็บไว้ที่อื่นก่อน แล้วแจ้งผู้ดูแลระบบ':
+      'Copy whatever you just changed somewhere safe, then tell your administrator.',
+    'จากนั้นลดขนาดข้อมูลลง เช่น': 'Then bring the data size down, for example:',
+    'รูปประจำตัวรวมกัน {kb} KB — เอารูปที่ไม่จำเป็นออกได้ที่ตั้งค่า':
+      'Profile photos take {kb} KB — remove the ones you do not need under Settings',
+    'เก็บโปรเจกต์ที่จบแล้วเข้าคลัง': 'Archive projects that are finished',
+    'ล้างข้อมูลเบราว์เซอร์ของเว็บอื่นที่ไม่ได้ใช้': 'Clear stored data for other sites you do not use',
+
+    /* --- ชื่อกำกับปุ่มที่เป็นไอคอนล้วน --- */
+    'เดือนก่อนหน้า': 'Previous month',
+    'เดือนถัดไป': 'Next month',
+    'เอางานออกจากโปรเจกต์นี้': 'Remove this task from the project',
+    'เอาแท็กออก': 'Remove tag',
+    'เอาลำดับก่อนหลังนี้ออก': 'Remove this dependency',
+    'เอาผู้ติดตามคนนี้ออก': 'Remove this follower',
+    'ลบงานย่อยนี้': 'Delete this subtask',
+    'เอาไฟล์แนบนี้ออก': 'Remove this attachment',
+
     /* --- หน้าโปรไฟล์และรูปประจำตัว --- */
     'โปรไฟล์ของฉัน': 'My profile',
     'ไม่พบผู้ใช้คนนี้': 'This person was not found',
