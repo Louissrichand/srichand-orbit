@@ -325,9 +325,11 @@
         h += '</button>';
       }
 
-      h += '</div>' +
-        (p.description ? '<div class="tb-desc">' + esc(p.description) + '</div>' : '') +
-        '</div>';
+      /* คำอธิบายโปรเจกต์ไม่อยู่บนแถบบนแล้ว
+       * มันยาวกว่าที่แถบบนรับไหว จึงถูกตัดกลางประโยคจนอ่านไม่ได้ความอยู่ดี
+       * และกินความสูงของทุกหน้าตลอดเวลา ทั้งที่อ่านครั้งเดียวก็พอ
+       * ตอนนี้อ่านเต็ม ๆ ได้ที่แท็บภาพรวม ซึ่งเป็นที่ของมันจริง ๆ */
+      h += '</div></div>';
     } else if (route.type === 'portfolio') {
       var f = S.portfolio(route.id);
       if (!f) return '';
@@ -526,7 +528,7 @@
       h += '<span class="approval-pill" style="background:' + a.color + '22;color:' + a.color +
         '">' + esc(L(a.label)) + '</span>';
     }
-    if (!t.completed && !(opts && opts.slim) && S.isBlocked(t.id)) {
+    if (!t.completed && S.isBlocked(t.id)) {
       h += '<span class="chip blocked" title="' + L('รองานอื่นให้เสร็จก่อน') + '">' + I('blocked', 11) + ' ' + L('ถูกบล็อก') + '</span>';
     }
     if (t.recur) h += '<span class="chip recur" title="' + L('ทำซ้ำ') + '">' + I('repeat', 11) + ' ' + esc(recurLabel(t.recur)) + '</span>';
@@ -546,7 +548,7 @@
           esc(x.project.color) + '"></span>' + esc(x.project.name) + '</span>';
       });
     }
-    if (t.dueOn && !(opts && opts.slim)) {
+    if (t.dueOn) {
       h += '<span class="chip' + dueClass(t.dueOn, t.completed) + '">' + fmtDate(t.dueOn) +
         (t.dueTime ? ' ' + esc(t.dueTime) : '') + '</span>';
     }
@@ -591,13 +593,17 @@
       foot += '<span class="chip" style="background:' + pr.color + '22;color:' + pr.color +
         '"><span class="swatch" style="background:' + pr.color + '"></span>' + L(pr.label) + '</span>';
     }
-    /* การ์ดบอร์ดตัดป้าย "ถูกบล็อก" กับกำหนดส่งออก เหลือความสำคัญเป็นป้ายสถานะเดียว
-     * บอร์ดมีไว้ดูว่างานไหนอยู่ขั้นไหน ไม่ใช่ดูว่าครบกำหนดเมื่อไหร่
-     * วันที่อ่านได้จากรายการ ไทม์ไลน์ และปฏิทิน ซึ่งเรียงตามเวลาอยู่แล้ว
+    /* การ์ดบอร์ดเหลือความสำคัญเป็นป้ายเดียว ไม่มีแท็ก ตัวนับ หรือสถานะอื่นเลย
      *
-     * ส่วนงานที่ถูกบล็อกเปลี่ยนไปบอกด้วยแถบแดงที่ขอบซ้ายการ์ดแทน
-     * ถ้าเอาป้ายออกเฉย ๆ ข้อมูลนี้จะหายไปจากบอร์ดทั้งใบ ซึ่งเป็นคนละเรื่องกับการลดความรก */
-    foot += badges(t, { showProject: opts.showProject, slim: true }) + avatar(u, 'sm');
+     * บอร์ดมีไว้กวาดตาดูว่างานไหนอยู่ขั้นไหน ชื่องานคือสิ่งที่ต้องอ่าน
+     * ป้ายห้าหกใบใต้ชื่อทำให้การ์ดสูงขึ้นเท่าตัวและแย่งสายตาไปจากชื่อ
+     * ของที่ตัดออกไปอ่านได้ครบในแผงรายละเอียด ซึ่งห่างไปแค่คลิกเดียว
+     *
+     * ที่ยังเหลือไว้เพราะไม่ได้กินพื้นที่เพิ่ม
+     *   ช่องติ๊กของหมุดหมายเป็นสี่เหลี่ยมข้าวหลามตัดอยู่แล้ว
+     *   งานที่ถูกบล็อกมีแถบแดงที่ขอบซ้ายการ์ด
+     *   รูปผู้รับผิดชอบอยู่ท้ายแถวเดียวกับความสำคัญ */
+    foot += avatar(u, 'sm');
     h += '<div class="foot">' + foot + '</div></div>';
     return h;
   }
