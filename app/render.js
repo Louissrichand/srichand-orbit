@@ -340,7 +340,11 @@
          esc(route.type === 'search' ? route.q : '') + '"></div>';
 
     if (route.type === 'project') {
-      h += '<button class="btn btn-primary" data-act="quick-add">' + L('+ เพิ่มงาน') + '</button>';
+      /* มุมมองที่มีแถบเครื่องมือ มีปุ่มเพิ่มงานอยู่ที่นั่นแล้ว
+       * ปุ่มเดียวกันสองที่ทำให้คนลังเลว่าสองอันนี้ต่างกันไหม เหลือไว้ที่เดียว */
+      if (VIEWS_WITH_TOOLBAR.indexOf(route.view) < 0) {
+        h += '<button class="btn btn-primary" data-act="quick-add">' + L('+ เพิ่มงาน') + '</button>';
+      }
       h += '<button class="btn btn-ghost" data-act="project-menu" data-id="' +
            esc(route.id) + '" title="' + L('เมนูโปรเจกต์') + '">' + I('more') + '</button>';
     } else if (route.type === 'inbox') {
@@ -383,86 +387,79 @@
 
   /* ---------- view bar ---------- */
 
-  function viewbar(projectId, view) {
+  /* มุมมองที่มีแถบเครื่องมือของตัวเอง ต้องตรงกับที่ renderTopbar ตัดสินใจ */
+  var VIEWS_WITH_TOOLBAR = ['list', 'board', 'timeline', 'gantt', 'calendar'];
+
+  /** จำนวนตัวกรองที่เปิดอยู่ ใช้ติดตัวเลขบนปุ่มให้รู้ว่ากำลังกรองอยู่กี่ชั้น */
+  function filterCount(v) {
+    var n = 0;
+    if (v.assignee) n++;
+    if (v.priority) n++;
+    if (v.tag) n++;
+    if (v.due && v.due !== 'any') n++;
+    if (!v.showCompleted) n++;
+    return n;
+  }
+
+  /* ---------- แถบเครื่องมือของมุมมอง ----------
+   *
+   * เดิมกางตัวเลือกทั้งหมดเป็นแถวยาว ผู้รับผิดชอบ ความสำคัญ แท็ก กำหนดส่ง เรียง จัดกลุ่ม
+   * เจ็ดกล่องเรียงกันตลอดเวลา ทั้งที่วันปกติแทบไม่ได้แตะเลยสักอัน
+   * กินพื้นที่แนวตั้งสองแถวและดึงสายตาไปจากตัวงานซึ่งเป็นของจริงที่มาดู
+   *
+   * ยุบเป็นปุ่มสี่ปุ่มแบบ Asana เปิดเป็นแผงเมื่อจะใช้จริง
+   * ปุ่มไหนมีค่าเปิดอยู่จะเน้นสีและติดจำนวนไว้ จึงยังรู้สถานะได้โดยไม่ต้องกางทุกอย่าง
+   * ช่องค้นหาเป็นไอคอนก่อน กดแล้วค่อยกางออก เพราะไม่ได้ใช้ทุกครั้งที่เปิดหน้า
+   */
+  function viewToolbar(projectId, view, opts) {
     var p = S.project(projectId);
     if (!p) return '';
-    var h = '<div class="viewbar">';
+    opts = opts || {};
+    var nf = filterCount(view);
+    var h = '<div class="vtb">';
 
-    h += '<div class="vb-item"><label>' + L('ผู้รับผิดชอบ') + '</label><select data-act="f-assignee" class="' +
-      (view.assignee ? 'on' : '') + '"><option value="">' + L('ทุกคน') + '</option>';
-    S.db.users.forEach(function (u) {
-      h += '<option value="' + esc(u.id) + '"' + (view.assignee === u.id ? ' selected' : '') +
-        '>' + esc(u.name) + '</option>';
-    });
-    h += '</select></div>';
-
-    h += '<div class="vb-item"><label>' + L('ความสำคัญ') + '</label><select data-act="f-priority" class="' +
-      (view.priority ? 'on' : '') + '"><option value="">' + L('ทั้งหมด') + '</option>';
-    S.PRIORITIES.forEach(function (x) {
-      h += '<option value="' + x.id + '"' + (view.priority === x.id ? ' selected' : '') +
-        '>' + esc(L(x.label)) + '</option>';
-    });
-    h += '</select></div>';
-
-    var tags = S.allTags();
-    if (tags.length) {
-      h += '<div class="vb-item"><label>' + L('แท็ก') + '</label><select data-act="f-tag" class="' +
-        (view.tag ? 'on' : '') + '"><option value="">' + L('ทั้งหมด') + '</option>';
-      tags.forEach(function (tg) {
-        h += '<option value="' + esc(tg) + '"' + (view.tag === tg ? ' selected' : '') +
-          '>' + esc(tg) + '</option>';
-      });
-      h += '</select></div>';
+    /* --- ซ้าย: เพิ่มงาน --- */
+    if (S.can('write')) {
+      h += '<div class="vtb-add">' +
+        '<button class="btn btn-sm btn-primary" data-act="quick-add">' +
+        I('plus', 13) + ' ' + L('เพิ่มงาน') + '</button>' +
+        '<button class="btn btn-sm btn-primary vtb-caret" data-act="add-menu" data-id="' +
+        esc(projectId) + '" title="' + L('วิธีเพิ่มงานแบบอื่น') + '">' +
+        I('chevronDown', 13) + '</button></div>';
     }
 
-    h += '<div class="vb-item"><label>' + L('กำหนดส่ง') + '</label><select data-act="f-due" class="' +
-      (view.due !== 'any' ? 'on' : '') + '">';
-    S.DUE_FILTERS.forEach(function (x) {
-      h += '<option value="' + x.id + '"' + (view.due === x.id ? ' selected' : '') +
-        '>' + esc(L(x.label)) + '</option>';
-    });
-    h += '</select></div>';
+    h += (opts.left || '') + '<div class="vtb-spacer"></div>' + (opts.right || '');
 
-    h += '<button class="vb-toggle' + (view.showCompleted ? '' : ' on') +
-      '" data-act="f-completed">' + (view.showCompleted ? L('☑ แสดงงานที่เสร็จ') : L('☐ ซ่อนงานที่เสร็จ')) +
-      '</button>';
+    /* --- ขวา: ตัวกรอง เรียง จัดกลุ่ม ตัวเลือก --- */
+    h += '<button class="vtb-btn' + (nf ? ' on' : '') + '" data-act="g-filter" title="' +
+      L('ตัวกรอง') + '">' + I('filter', 14) + '<span>' + L('ตัวกรอง') + '</span>' +
+      (nf ? '<span class="vtb-n">' + nf + '</span>' : '') + '</button>';
+    h += '<button class="vtb-btn' + (view.sort !== 'manual' ? ' on' : '') +
+      '" data-act="g-sort" title="' + L('เรียง') + '">' +
+      I(view.sortDir === 'desc' ? 'arrowDown' : 'arrowUp', 14) +
+      '<span>' + L('เรียง') + '</span></button>';
+    h += '<button class="vtb-btn' + (view.group !== 'section' ? ' on' : '') +
+      '" data-act="g-group" title="' + L('จัดกลุ่ม') + '">' +
+      I('grid', 13) + '<span>' + L('จัดกลุ่ม') + '</span></button>';
+    h += '<button class="vtb-btn" data-act="g-options" title="' + L('ตัวเลือก') + '">' +
+      I('settings', 14) + '<span>' + L('ตัวเลือก') + '</span></button>';
 
-    h += '<div class="vb-item"><label>' + L('เรียง') + '</label><select data-act="f-sort" class="' +
-      (view.sort !== 'manual' ? 'on' : '') + '">';
-    S.SORTS.forEach(function (x) {
-      h += '<option value="' + x.id + '"' + (view.sort === x.id ? ' selected' : '') +
-        '>' + esc(L(x.label)) + '</option>';
-    });
-    p.fields.forEach(function (f) {
-      var k = 'field:' + f.id;
-      h += '<option value="' + esc(k) + '"' + (view.sort === k ? ' selected' : '') +
-        '>' + esc(f.name) + '</option>';
-    });
-    h += '</select>';
-    if (view.sort !== 'manual') {
-      h += '<button class="vb-toggle on" data-act="f-sortdir" title="' +
-        L('สลับทิศการเรียง') + '">' +
-        I(view.sortDir === 'desc' ? 'arrowDown' : 'arrowUp', 13) + '</button>';
+    /* --- ค้นหา --- */
+    if (view.q) {
+      h += '<div class="vtb-search open">' + I('search', 13) +
+        '<input id="vQ" type="search" data-act="f-q" placeholder="' +
+        L('ค้นหาในโปรเจกต์นี้') + '" value="' + esc(view.q) + '">' +
+        '<button data-act="f-q-clear" title="' + L('ล้างคำค้น') + '">' +
+        I('close', 12) + '</button></div>';
+    } else {
+      h += '<button class="vtb-btn icon" data-act="f-q-open" title="' +
+        L('ค้นหาในโปรเจกต์นี้') + '">' + I('search', 14) + '</button>';
     }
-    h += '</div>';
 
-    h += '<div class="vb-item"><label>' + L('จัดกลุ่ม') + '</label><select data-act="f-group" class="' +
-      (view.group !== 'section' ? 'on' : '') + '">';
-    S.GROUPS.forEach(function (x) {
-      h += '<option value="' + x.id + '"' + (view.group === x.id ? ' selected' : '') +
-        '>' + esc(L(x.label)) + '</option>';
-    });
-    h += '</select></div>';
-
-    h += '<div class="vb-spacer"></div>';
-
-    p.savedViews.forEach(function (v) {
-      h += '<button class="savedview" data-act="load-view" data-id="' + esc(v.id) + '">' +
-        esc(v.name) + '<span data-act="delete-view" data-id="' + esc(v.id) +
-        '" title="' + L('ลบมุมมอง') + '">✕' + '</span></button>';
-    });
-    h += '<button class="btn btn-sm btn-ghost" data-act="save-view">' + L('บันทึกมุมมอง') + '</button>';
-    h += '<button class="btn btn-sm btn-ghost" data-act="reset-view">' + L('ล้างตัวกรอง') + '</button>';
+    if (p.savedViews.length) {
+      h += '<button class="vtb-btn icon" data-act="g-views-menu" title="' +
+        L('มุมมองที่บันทึกไว้') + '">' + I('star', 14) + '</button>';
+    }
     h += '</div>';
     return h;
   }
@@ -2470,7 +2467,8 @@
     TAB_IDS: TAB_IDS, projectTabs: projectTabs, ZOOMS: ZOOMS, ROW_H: ROW_H,
 
     checkbox: checkbox, dueClass: dueClass, badges: badges, depTypeHint: depTypeHint,
-    sidebar: sidebar, topbar: topbar, viewbar: viewbar, bulkbar: bulkbar,
+    sidebar: sidebar, topbar: topbar, viewToolbar: viewToolbar, filterCount: filterCount, bulkbar: bulkbar,
+    VIEWS_WITH_TOOLBAR: VIEWS_WITH_TOOLBAR,
     listView: listView, boardView: boardView, timelineView: timelineView,
     homeView: homeView, dashboardView: dashboardView, profileView: profileView,
     portfolioView: portfolioView, PF_TABS: PF_TABS,

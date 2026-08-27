@@ -324,27 +324,6 @@ a { color: var(--accent); }
 
 /* ---------- view bar (filter / sort / group) ---------- */
 
-.viewbar {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  padding: 10px 24px; border-bottom: 1px solid var(--line);
-  background: var(--bg-sunk);
-}
-.vb-item { display: flex; align-items: center; gap: 5px; }
-.vb-item > label { font-size: 12px; color: var(--fg-soft); }
-.vb-item select {
-  border: 1px solid var(--line); background: var(--bg); color: var(--fg);
-  border-radius: 14px; padding: 4px 9px; font-size: 13px; outline: none;
-  max-width: 160px;
-}
-.vb-item select:focus { border-color: var(--accent); }
-.vb-item select.on { border-color: var(--accent); color: var(--accent-dk); font-weight: 600; }
-.vb-toggle {
-  display: flex; align-items: center; gap: 6px; font-size: 13px;
-  color: var(--fg-soft); padding: 4px 9px; border-radius: 14px;
-  border: 1px solid var(--line); background: var(--bg);
-}
-.vb-toggle.on { border-color: var(--accent); color: var(--accent-dk); }
-.vb-spacer { flex: 1; }
 
 .savedview {
   display: inline-flex; align-items: center; gap: 5px; font-size: 13px;
@@ -910,7 +889,7 @@ kbd {
   .sidebar.open { transform: none; }
   .drawer { width: 100vw; }
   .search { width: 140px; }
-  .list-wrap, .viewbar, .dash, .inbox-wrap { padding-left: 14px; padding-right: 14px; }
+  .list-wrap, .vtb, .dash, .inbox-wrap { padding-left: 14px; padding-right: 14px; }
   .board { padding-left: 14px; padding-right: 14px; }
 }
 
@@ -1080,10 +1059,7 @@ button.g-caret:hover { background: var(--bg-inset); color: var(--fg); }
   fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 3;
 }
 
-.g-toolbar {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  padding: 8px 24px; border-bottom: 1px solid var(--line); background: var(--bg-sunk);
-}
+
 .g-hint { font-size: 12px; color: var(--fg-soft); }
 
 /* ชนิดความสัมพันธ์ในแผงรายละเอียด */
@@ -1133,7 +1109,6 @@ button.g-caret:hover { background: var(--bg-inset); color: var(--fg); }
   .g-c-dep { display: none; }
 
   .dash-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .vb-item select { max-width: 120px; }
   .bulkbar { bottom: 12px; padding: 8px 10px; gap: 6px; }
 }
 
@@ -1243,11 +1218,6 @@ button.g-caret:hover { background: var(--bg-inset); color: var(--fg); }
 /* ปุ่มในเมนูโปรเจกต์/งาน: ชิดซ้าย เรียงเป็นรายการ */
 .modal .btn { justify-content: flex-start; height: 38px; }
 .modal-acts .btn { justify-content: center; }
-
-/* ---- แถบกรอง ---- */
-.viewbar { padding: 9px 24px; gap: 7px; }
-.vb-item > label { font-size: 11.5px; }
-.vb-item select, .vb-toggle { height: 28px; border-radius: 7px; font-size: 12.5px; }
 
 /* ---- ตาราง Gantt ---- */
 .g-lhead { font-size: 11.5px; letter-spacing: .3px; text-transform: uppercase; }
@@ -1960,11 +1930,24 @@ ul.audit em { display: block; font-style: normal; font-size: 12px; color: var(--
  * แยกด้วยช่องว่างยืดหยุ่นตรงกลาง ไม่ใช้เส้นคั่น เพราะแถวนี้มีของเยอะอยู่แล้ว
  */
 
-.g-toolbar {
-  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-  padding: 8px 20px; border-bottom: 1px solid var(--line); background: var(--bg);
+/* แถวเดียวเสมอ ไม่ตัดบรรทัด เพราะถ้าตัดแล้วความสูงจะเปลี่ยนไปมาระหว่างสลับมุมมอง
+ * ตำแหน่งปุ่มขยับตามจนกดพลาด จอแคบจึงเลื่อนแนวนอนแทนการตัดบรรทัด */
+.vtb {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 20px; border-bottom: 1px solid var(--line); background: var(--bg);
+  overflow-x: auto; scrollbar-width: none;
 }
-.g-tb-spacer { flex: 1 1 40px; }
+.vtb::-webkit-scrollbar { display: none; }
+.vtb > * { flex: none; }
+.vtb-spacer { flex: 1 1 auto; min-width: 8px; }
+
+/* ปุ่มเพิ่มงานกับลูกศร ติดกันเป็นปุ่มเดียวที่มีสองส่วน */
+.vtb-add { display: inline-flex; align-items: stretch; }
+.vtb-add .btn:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+.vtb-add .vtb-caret {
+  border-radius: 0 var(--radius) var(--radius) 0; padding: 0 7px;
+  border-left: 1px solid rgba(255,255,255,.28);
+}
 
 .g-nav { display: inline-flex; align-items: center; gap: 2px; }
 .g-nav button {
@@ -1990,34 +1973,34 @@ ul.audit em { display: block; font-style: normal; font-size: 12px; color: var(--
 .g-zoomctl button:hover:not([disabled]) { background: var(--bg-sunk); color: var(--fg); }
 .g-zoomctl button[disabled] { opacity: .35; cursor: default; }
 
-.g-tb {
+.vtb-btn {
   display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px;
   border-radius: var(--radius); font-size: 13px; color: var(--fg-soft); white-space: nowrap;
 }
-.g-tb svg { color: var(--fg-faint); }
-.g-tb:hover { background: var(--bg-sunk); color: var(--fg); }
-.g-tb:hover svg { color: var(--fg-soft); }
-.g-tb.on { color: var(--accent); background: var(--accent-bg); }
-.g-tb.on svg { color: var(--accent); }
-.g-tb.icon { padding: 0 8px; }
-.g-tb-n {
+.vtb-btn svg { color: var(--fg-faint); }
+.vtb-btn:hover { background: var(--bg-sunk); color: var(--fg); }
+.vtb-btn:hover svg { color: var(--fg-soft); }
+.vtb-btn.on { color: var(--accent); background: var(--accent-bg); }
+.vtb-btn.on svg { color: var(--accent); }
+.vtb-btn.icon { padding: 0 8px; }
+.vtb-n {
   min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px;
   background: var(--accent); color: #fff; font-size: 11px; font-weight: 700;
   display: grid; place-items: center;
 }
-.g-tb-caret { padding: 0 6px; }
+.vtb-caret { padding: 0 6px; }
 
-.g-tb-search {
+.vtb-search {
   display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px;
   border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--bg);
 }
-.g-tb-search svg { color: var(--fg-faint); flex: none; }
-.g-tb-search input {
+.vtb-search svg { color: var(--fg-faint); flex: none; }
+.vtb-search input {
   border: 0; background: none; font-size: 13px; width: 150px; color: var(--fg);
 }
-.g-tb-search input::-webkit-search-cancel-button { display: none; }
-.g-tb-search button { color: var(--fg-faint); display: grid; place-items: center; }
-.g-tb-search button:hover { color: var(--fg); }
+.vtb-search input::-webkit-search-cancel-button { display: none; }
+.vtb-search button { color: var(--fg-faint); display: grid; place-items: center; }
+.vtb-search button:hover { color: var(--fg); }
 
 .g-legendbar { padding: 6px 20px; border-bottom: 1px solid var(--line-soft); background: var(--bg-sunk); }
 .g-legend { display: flex; flex-wrap: wrap; gap: 12px; }
@@ -2139,9 +2122,9 @@ button.opt-row:hover { background: var(--bg-sunk); }
 .opt-view .x:hover { background: var(--danger-bg); color: var(--danger); }
 
 @media (max-width: 860px) {
-  .g-toolbar { padding: 8px 14px; }
-  .g-tb-spacer { flex-basis: 0; }
-  .g-tb-search input { width: 110px; }
+  .vtb { padding: 8px 14px; }
+  .vtb-spacer { flex-basis: 0; }
+  .vtb-search input { width: 110px; }
   .g-legendbar { padding: 6px 14px; }
 }
 
@@ -2351,10 +2334,10 @@ body.rownum .list-wrap .row > .nm::before {
 
 /* จอแคบ: แถบเครื่องมือ Gantt เหลือแต่ไอคอน ไม่งั้นสูงสามแถวกินพื้นที่ผังไปหมด */
 @media (max-width: 620px) {
-  .g-tb span:not(.g-tb-n) { display: none; }
-  .g-tb { padding: 0 9px; gap: 0; }
-  .g-toolbar .btn { padding: 0 10px; }
-  .g-tb-search input { width: 84px; }
+  .vtb-btn span:not(.vtb-n) { display: none; }
+  .vtb-btn { padding: 0 9px; gap: 0; }
+  .vtb .btn { padding: 0 10px; }
+  .vtb-search input { width: 84px; }
 }
 
 /* ---------- โอนงานต่อ ---------- */

@@ -920,6 +920,13 @@
     'เปิดใช้งานบัญชี': 'Enable account',
     'ล้างข้อมูล': 'Clear data',
 
+    /* --- แถบเครื่องมือของมุมมอง --- */
+    'วิธีเพิ่มงานแบบอื่น': 'Other ways to add',
+    'เพิ่มงานเปล่า': 'Add a blank task',
+    'เพิ่มจากเทมเพลต': 'Add from a template',
+    'ค้นหาในโปรเจกต์นี้': 'Search in this project',
+    'ล้างคำค้น': 'Clear search',
+
     /* --- สลับบัญชีเพื่อดูมุมของคนอื่น --- */
     'ใช้ดูว่าคนอื่นเห็นหน้าจอแบบไหน สลับไปบัญชีที่สิทธิ์สูงกว่าตัวเองไม่ได้':
       'See what someone else sees. You cannot switch into an account with more permissions than your own.',

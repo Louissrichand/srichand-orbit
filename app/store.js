@@ -1452,7 +1452,7 @@
 
   function defaultView() {
     return {
-      assignee: '', priority: '', tag: '', due: 'any',
+      assignee: '', priority: '', tag: '', due: 'any', q: '',
       showCompleted: true, sort: 'manual', sortDir: 'asc', group: 'section',
 
       /* --- Gantt --- */
@@ -1487,6 +1487,18 @@
     if (f.priority && t.priority !== f.priority) return false;
     if (f.tag && t.tags.indexOf(f.tag) < 0) return false;
     if (!f.showCompleted && t.completed) return false;
+    /* ค้นในชื่อ รายละเอียด แท็ก และชื่อผู้รับผิดชอบ
+     * ที่รวมชื่อคนด้วยเพราะ "งานของสมชายในโปรเจกต์นี้" เป็นสิ่งที่คนพิมพ์หากันจริง
+     * โดยไม่ต้องไปเปิดตัวกรองผู้รับผิดชอบอีกที */
+    if (f.q) {
+      var q = f.q.trim().toLowerCase();
+      if (q) {
+        var au = user(t.assigneeId);
+        var hay = (t.name + ' ' + (t.notes || '') + ' ' + (t.tags || []).join(' ') +
+                   ' ' + (au ? au.name : '')).toLowerCase();
+        if (hay.indexOf(q) < 0) return false;
+      }
+    }
     if (f.due && f.due !== 'any') {
       var td = today();
       if (f.due === 'none' && t.dueOn) return false;

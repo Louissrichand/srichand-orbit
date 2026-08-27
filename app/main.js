@@ -216,8 +216,8 @@
       var v = viewFor(r.id);
       if (r.view === 'board') body = R.boardView(r.id, v, state.sel);
       else if (r.view === 'timeline') body = R.timelineView(r.id, v, state.tlZoom);
-      else if (r.view === 'gantt') body = ganttToolbar(r.id, v) +
-        R.ganttView(r.id, v, state.ganttCollapsed, state.ganttSearch);
+      else if (r.view === 'gantt') body = ganttLegendBar(r.id, v) +
+        R.ganttView(r.id, v, state.ganttCollapsed, v.q);
       else if (r.view === 'calendar') body = R.calendarView(r.id, state.calOffset);
       else if (r.view === 'dashboard') body = R.dashboardView(r.id);
       else body = R.listView(r.id, v, state.sel);
@@ -278,65 +278,14 @@
     return n;
   }
 
-  function ganttToolbar(projectId, v) {
+  /* แถบสีอธิบายผัง Gantt — ส่วนควบคุมย้ายไปอยู่บนแถบเครื่องมือร่วมแล้ว
+   * เหลือไว้แค่คำอธิบายสี ซึ่งต้องอยู่ติดกับตัวผังถึงจะอ่านคู่กันได้ */
+  function ganttLegendBar(projectId, v) {
     var p = S.project(projectId);
-    var nf = activeFilterCount(v);
-    var zi = S.GANTT_ZOOMS.map(function (x) { return x.id; }).indexOf(v.gZoom);
-
-    var h = '<div class="g-toolbar">';
-
-    /* --- ฝั่งซ้าย ---
-     * ปุ่มเพิ่มงานอยู่บนแถบบนอยู่แล้ว ไม่ใส่ซ้ำตรงนี้ ปุ่มเดียวกันสองที่ทำให้คนลังเลว่าต่างกันไหม */
-    h += '<div class="g-nav">' +
-      '<button data-act="g-pan" data-d="-1" title="' + L('เลื่อนไปทางซ้าย') + '">' + I('arrowLeft', 14) + '</button>' +
-      '<button class="g-today-btn" data-act="g-today">' + L('วันนี้') + '</button>' +
-      '<button data-act="g-pan" data-d="1" title="' + L('เลื่อนไปทางขวา') + '">' + I('arrowRight', 14) + '</button>' +
-      '</div>';
-
-    h += '<div class="g-tb-spacer"></div>';
-
-    /* --- ฝั่งขวา --- */
-    h += '<div class="g-zoomctl">' +
-      '<span class="lbl" data-act="g-zoom-menu" role="button" tabindex="0">' + esc(zoomLabel(v.gZoom)) + '</span>' +
-      '<button data-act="g-zoom-step" data-d="1"' + (zi >= S.GANTT_ZOOMS.length - 1 ? ' disabled' : '') +
-      ' title="' + L('ดูช่วงกว้างขึ้น') + '">&minus;</button>' +
-      '<button data-act="g-zoom-step" data-d="-1"' + (zi <= 0 ? ' disabled' : '') +
-      ' title="' + L('ดูละเอียดขึ้น') + '">+</button>' +
-      '</div>';
-
-    /* ป้ายอยู่ใน span เพื่อให้จอแคบซ่อนเฉพาะข้อความ เหลือไอคอนไว้
-     * ถ้าปล่อยเป็นข้อความลอย ๆ จะซ่อนด้วย CSS ไม่ได้ */
-    h += '<button class="g-tb' + (nf ? ' on' : '') + '" data-act="g-filter" title="' + L('ตัวกรอง') +
-      '">' + I('filter', 14) + '<span>' + L('ตัวกรอง') + '</span>' +
-      (nf ? '<span class="g-tb-n">' + nf + '</span>' : '') + '</button>';
-    h += '<button class="g-tb' + (v.sort !== 'manual' ? ' on' : '') + '" data-act="g-sort" title="' +
-      L('เรียง') + '">' + I('arrowUp', 14) + '<span>' + L('เรียง') + '</span></button>';
-    h += '<button class="g-tb' + (v.group !== 'section' ? ' on' : '') + '" data-act="g-group" title="' +
-      L('จัดกลุ่ม') + '">' + I('grid', 13) + '<span>' + L('จัดกลุ่ม') + '</span></button>';
-    h += '<button class="g-tb" data-act="g-options" title="' + L('ตัวเลือก') + '">' +
-      I('settings', 14) + '<span>' + L('ตัวเลือก') + '</span></button>';
-
-    if (state.ganttSearch !== null) {
-      h += '<div class="g-tb-search">' + I('search', 13) +
-        '<input id="gSearch" type="search" data-act="g-search-input" placeholder="' +
-        L('ค้นหาในผัง') + '" value="' + esc(state.ganttSearch) + '">' +
-        '<button data-act="g-search-close" title="' + L('ปิด') + '">' + I('close', 12) + '</button></div>';
-    } else {
-      h += '<button class="g-tb icon" data-act="g-search-open" title="' + L('ค้นหาในผัง') +
-        '">' + I('search', 14) + '</button>';
-    }
-
-    h += '<button class="btn btn-sm" data-act="save-view">' + L('บันทึกมุมมอง') + '</button>';
-    if (p.savedViews.length) {
-      h += '<button class="btn btn-sm g-tb-caret" data-act="g-views-menu" title="' +
-        L('มุมมองที่บันทึกไว้') + '">' + I('chevronDown', 13) + '</button>';
-    }
-    h += '</div>';
-
     var legend = R.ganttLegend(p, v.gColorBy);
-    if (legend) h += '<div class="g-legendbar">' + legend + '</div>';
-    return h;
+    return legend ? '<div class="g-legendbar">' + legend + '</div>' : '';
   }
+
 
   /* ---------- แผงตัวเลือกของ Gantt ---------- */
 
@@ -522,36 +471,48 @@
     }
     var groupLab = (S.GROUPS.filter(function (x) { return x.id === v.group; })[0] || {}).label;
 
-    h += optHead('Gantt');
+    var vw = state.route.view || 'list';
+    var vdef = (S.PROJECT_VIEWS.filter(function (x) { return x.id === vw; })[0]) || {};
+    var vname = L(vdef.label || 'Gantt');
+    var isG = vw === 'gantt';
+
+    h += optHead(vname);
     h += '<div class="opt-body">';
     h += '<div class="opt-namerow">' +
       '<div><label class="opt-lbl">' + L('ไอคอน') + '</label>' +
       '<input class="opt-icon" id="gvIcon" maxlength="2" value="' + esc(state.viewIcon || '📊') + '"></div>' +
       '<div class="grow"><label class="opt-lbl">' + L('ชื่อมุมมอง') + '</label>' +
-      '<input class="opt-name" id="gvName" value="' + esc(state.viewName || 'Gantt') + '"></div></div>';
+      '<input class="opt-name" id="gvName" value="' + esc(state.viewName || vname) + '"></div></div>';
 
-    h += '<div class="opt-sep"></div>';
-    h += optRow('g-opt-page', 'pencil', L('รูปแบบการแสดงผล'), '', true, ' data-page="layout"');
-    h += optRow('g-opt-page', 'repeat', L('การจัดตารางและเส้นฐาน'),
-      L(((S.DEP_SHIFT.filter(function (m) {
-        return m.id === ((p.depShift && p.depShift.mode) || 'consume');
-      })[0]) || {}).label || ''), true, ' data-page="deps"');
-    h += '<div class="opt-row"><span class="ic-wrap">' + I('search', 15) + '</span>' +
-      '<span class="grow">' + L('ระดับการซูม') + '</span>' +
-      optSelect('g-zoom-set', S.GANTT_ZOOMS.map(function (x) { return [x.id, L(x.label)]; }), v.gZoom) +
-      '</div>';
-
-    h += '<div class="opt-sep"></div>';
-    h += optRow('g-opt-page', 'grid', L('แสดง/ซ่อนคอลัมน์'),
-      hidden ? L('ซ่อนอยู่ {n}', { n: hidden }) : L('แสดงครบ'), true, ' data-page="cols"');
+    /* กลุ่มนี้เป็นของผัง Gantt ล้วน เส้นฐาน ระดับการซูม และคอลัมน์ในตารางซ้าย
+     * มุมมองอื่นไม่มีของพวกนี้ ถ้าโชว์ไว้จะกลายเป็นปุ่มที่กดแล้วไม่มีอะไรเปลี่ยน */
+    if (isG) {
+      h += '<div class="opt-sep"></div>';
+      h += optRow('g-opt-page', 'pencil', L('รูปแบบการแสดงผล'), '', true, ' data-page="layout"');
+      h += optRow('g-opt-page', 'repeat', L('การจัดตารางและเส้นฐาน'),
+        L(((S.DEP_SHIFT.filter(function (m) {
+          return m.id === ((p.depShift && p.depShift.mode) || 'consume');
+        })[0]) || {}).label || ''), true, ' data-page="deps"');
+      h += '<div class="opt-row"><span class="ic-wrap">' + I('search', 15) + '</span>' +
+        '<span class="grow">' + L('ระดับการซูม') + '</span>' +
+        optSelect('g-zoom-set', S.GANTT_ZOOMS.map(function (x) { return [x.id, L(x.label)]; }), v.gZoom) +
+        '</div>';
+      h += '<div class="opt-sep"></div>';
+      h += optRow('g-opt-page', 'grid', L('แสดง/ซ่อนคอลัมน์'),
+        hidden ? L('ซ่อนอยู่ {n}', { n: hidden }) : L('แสดงครบ'), true, ' data-page="cols"');
+    } else {
+      h += '<div class="opt-sep"></div>';
+    }
     h += optRow('g-opt-page', 'filter', L('ตัวกรอง'),
       activeFilterCount(v) ? L('ใช้อยู่ {n}', { n: activeFilterCount(v) }) : L('ไม่มี'), true, ' data-page="filters"');
     h += optRow('g-opt-page', 'arrowUp', L('เรียงลำดับ'), sortLab || L('ไม่ได้เรียง'), true, ' data-page="sorts"');
     h += optRow('g-opt-page', 'hash', L('จัดกลุ่ม'), L(groupLab || ''), true, ' data-page="groups"');
-    h += '<div class="opt-row"><span class="ic-wrap">' + I('subtask', 15) + '</span>' +
-      '<span class="grow">' + L('งานย่อย') + '</span>' +
-      optSelect('g-subtasks', [['collapsed', L('ซ่อนไว้')], ['expanded', L('กางออก')]], v.gSubtasks) +
-      '</div>';
+    if (isG) {
+      h += '<div class="opt-row"><span class="ic-wrap">' + I('subtask', 15) + '</span>' +
+        '<span class="grow">' + L('งานย่อย') + '</span>' +
+        optSelect('g-subtasks', [['collapsed', L('ซ่อนไว้')], ['expanded', L('กางออก')]], v.gSubtasks) +
+        '</div>';
+    }
 
     if (p.savedViews.length) {
       h += '<div class="opt-sep"></div><label class="opt-lbl">' + L('มุมมองที่บันทึกไว้') + '</label>';
@@ -621,11 +582,35 @@
 
   function renderTopbar() {
     var html = R.topbar(state.route);
+    /* แถบเครื่องมือเดียวใช้ทุกมุมมอง ปุ่มจึงอยู่ที่เดิมเสมอไม่ว่าจะสลับไปมุมมองไหน
+     * Gantt เพิ่มปุ่มเลื่อนช่วงเวลากับซูมเข้ามาทางซ้าย เพราะเป็นของเฉพาะผังนั้น */
     if (state.route.type === 'project' && S.project(state.route.id) &&
-        ['list', 'board', 'timeline'].indexOf(state.route.view) >= 0) {
-      html += R.viewbar(state.route.id, viewFor(state.route.id));
+        R.VIEWS_WITH_TOOLBAR.indexOf(state.route.view) >= 0) {
+      html += R.viewToolbar(state.route.id, viewFor(state.route.id),
+        state.route.view === 'gantt' ? ganttExtras(viewFor(state.route.id)) : null);
     }
     $topbar.innerHTML = html;
+  }
+
+  /** ปุ่มที่มีเฉพาะใน Gantt แทรกเข้าไปในแถบเครื่องมือร่วม */
+  function ganttExtras(v) {
+    var zi = S.GANTT_ZOOMS.map(function (x) { return x.id; }).indexOf(v.gZoom);
+    return {
+      left: '<div class="g-nav">' +
+        '<button data-act="g-pan" data-d="-1" title="' + L('เลื่อนไปทางซ้าย') + '">' +
+        I('arrowLeft', 14) + '</button>' +
+        '<button class="g-today-btn" data-act="g-today">' + L('วันนี้') + '</button>' +
+        '<button data-act="g-pan" data-d="1" title="' + L('เลื่อนไปทางขวา') + '">' +
+        I('arrowRight', 14) + '</button></div>',
+      right: '<div class="g-zoomctl">' +
+        '<span class="lbl" data-act="g-zoom-menu" role="button" tabindex="0">' +
+        R.esc(zoomLabel(v.gZoom)) + '</span>' +
+        '<button data-act="g-zoom-step" data-d="1"' +
+        (zi >= S.GANTT_ZOOMS.length - 1 ? ' disabled' : '') +
+        ' title="' + L('ดูช่วงกว้างขึ้น') + '">&minus;</button>' +
+        '<button data-act="g-zoom-step" data-d="-1"' + (zi <= 0 ? ' disabled' : '') +
+        ' title="' + L('ดูละเอียดขึ้น') + '">+</button></div>'
+    };
   }
 
   function renderAll(skipHash) {
@@ -1440,6 +1425,24 @@
    * เมนูเดียวทำทั้งสองอย่าง เพราะคนที่กดปุ่มบวกมักไม่รู้ว่าเอาออกได้ที่ไหน
    * ถ้าแยกกันคนละที่ คนจะเพิ่มจนแท็บรกแล้วหาทางเอาออกไม่เจอ
    */
+  /* เมนูข้างปุ่มเพิ่มงาน — รวมวิธีเพิ่มงานแบบอื่นที่เดิมกระจายอยู่ในเมนูโปรเจกต์
+   * ปุ่มหลักยังทำสิ่งที่คนต้องการเก้าในสิบครั้ง คือเพิ่มงานเปล่าหนึ่งงาน
+   * ส่วนที่นาน ๆ ใช้ทีอย่างเทมเพลตกับนำเข้าไฟล์ อยู่หลังลูกศรไม่ให้เกะกะ */
+  function addMenu(projectId) {
+    var h = '<button data-act="quick-add">' + I('plus', 15) +
+      '<span class="grow">' + L('เพิ่มงานเปล่า') + '</span></button>';
+    if (S.can('structure')) {
+      h += '<button data-act="manage-templates">' + I('star', 15) +
+        '<span class="grow">' + L('เพิ่มจากเทมเพลต') + '</span></button>';
+      h += '<button data-act="add-section">' + I('grid', 15) +
+        '<span class="grow">' + L('เพิ่มคอลัมน์') + '</span></button>';
+      h += '<div class="pop-sep"></div>';
+      h += '<button data-act="import-csv" data-id="' + R.esc(projectId) + '">' +
+        I('arrowUp', 15) + '<span class="grow">' + L('นำเข้างานจาก CSV') + '</span></button>';
+    }
+    return h;
+  }
+
   function viewMenu(projectId) {
     var on = S.projectViews(projectId);
     var h = '<div class="pop-note">' + L('เลือกมุมมองที่จะให้แสดงเป็นแท็บ') + '</div>';
@@ -2505,7 +2508,7 @@
     if (!el || ['pick-assignee', 'pick-priority', 'pick-follower',
          'add-field-picker', 'field-menu', 'opt-color', 'edit-cell',
          'project-menu', 'status-menu', 'g-zoom-menu', 'g-views-menu', 'pf-menu', 'pf-status',
-         'view-menu', 'toggle-view'].indexOf(el.dataset.act) < 0) {
+         'view-menu', 'toggle-view', 'add-menu'].indexOf(el.dataset.act) < 0) {
       if (!e.target.closest || !e.target.closest('.pop')) closePops();
     }
 
@@ -2793,15 +2796,25 @@
         toast(L('ลบเส้นฐานแล้ว'), L('ย้อนกลับ'), 'undo');
         break;
 
-      case 'g-search-open':
-        state.ganttSearch = '';
-        renderViewBody();
-        var gsi = document.getElementById('gSearch');
-        if (gsi) gsi.focus();
+      /* คำค้นเก็บอยู่ในมุมมอง ไม่ใช่ใน state ชั่วคราว
+       * จึงติดไปกับมุมมองที่บันทึกไว้ และค้างอยู่ตอนสลับแท็บมุมมองด้วย
+       * ซึ่งตรงกับที่คนคาด — ค้นแล้วสลับไปดูบอร์ด ก็ยังเห็นผลค้นชุดเดิม */
+      case 'f-q-open': {
+        var vq = viewFor(state.route.id);
+        vq.q = ' ';            // ค่าที่ไม่ว่างเพื่อให้ช่องกางออก แล้วล้างทันทีตอนโฟกัส
+        renderTopbar();
+        var qi = document.getElementById('vQ');
+        if (qi) { qi.value = ''; vq.q = ''; qi.focus(); }
         break;
-      case 'g-search-close':
-        state.ganttSearch = null;
-        renderViewBody();
+      }
+      case 'f-q-clear': {
+        viewFor(state.route.id).q = '';
+        renderAll();
+        break;
+      }
+      case 'add-menu':
+        if (popIsOpenFor(el)) { closePops(); break; }
+        openPop(el, addMenu(id || state.route.id));
         break;
       case 'g-views-menu': {
         if (popIsOpenFor(el)) { closePops(); break; }
@@ -3999,15 +4012,16 @@
       return;
     }
 
-    /* ค้นในผัง Gantt เป็นการเน้นแถว ไม่ใช่การกรองออก
-     * ถ้ากรองออกจะเห็นแท่งลอย ๆ ไม่มีบริบทว่างานนั้นอยู่ช่วงไหนของแผน */
-    if (e.target.id === 'gSearch') {
+    /* ค้นในโปรเจกต์ หน่วงไว้ไม่ให้วาดใหม่ทุกตัวอักษร
+     * ใน Gantt คำค้นเป็นการเน้นแถว ไม่ใช่กรองออก เพราะถ้ากรองออกจะเห็นแท่งลอย ๆ
+     * ไม่มีบริบทว่างานนั้นอยู่ช่วงไหนของแผน — ganttView จัดการส่วนนั้นเอง */
+    if (e.target.id === 'vQ') {
       var gq = e.target.value;
       clearTimeout(gSearchTimer);
       gSearchTimer = setTimeout(function () {
-        state.ganttSearch = gq;
-        renderViewBody();
-        var gi2 = document.getElementById('gSearch');
+        viewFor(state.route.id).q = gq;
+        renderAll();
+        var gi2 = document.getElementById('vQ');
         if (gi2) { gi2.focus(); gi2.setSelectionRange(gq.length, gq.length); }
       }, 180);
       return;
