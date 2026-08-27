@@ -58,8 +58,8 @@
     'ขอแก้ไข': 'Changes requested', 'ไม่อนุมัติ': 'Rejected',
     'ตามแผน': 'On track', 'เสี่ยง': 'At risk', 'หลุดแผน': 'Off track',
     'ทุกวัน': 'Daily', 'ทุกสัปดาห์': 'Weekly', 'ทุกเดือน': 'Monthly',
-    'ทุก {n} วัน': 'Every {n} days', 'ทุก {n} สัปดาห์': 'Every {n} weeks',
-    'ทุก {n} เดือน': 'Every {n} months',
+    'ทุก {n} วัน': 'Every [n|day|{n} days]', 'ทุก {n} สัปดาห์': 'Every [n|week|{n} weeks]',
+    'ทุก {n} เดือน': 'Every [n|month|{n} months]',
 
     /* --- ชนิดความสัมพันธ์ --- */
     'จบ → เริ่ม': 'Finish → Start', 'เริ่ม → เริ่ม': 'Start → Start',
@@ -198,7 +198,7 @@
     'ลบงานแล้ว': 'Task deleted', 'คัดลอกงานแล้ว': 'Task duplicated',
     'คัดลอกลิงก์แล้ว': 'Link copied', 'บันทึกเป็นเทมเพลตแล้ว': 'Saved as template',
     'ชื่อเทมเพลต': 'Template name',
-    'ลบ {n} งาน?': 'Delete {n} tasks?', 'ลบแล้ว': 'Deleted',
+    'ลบ {n} งาน?': 'Delete {n} [n|task|tasks]?', 'ลบแล้ว': 'Deleted',
     'เพิ่มเข้าโปรเจกต์แล้ว': 'Added to project',
     'เพิ่มงานนี้เข้าโปรเจกต์อื่น': 'Add this task to another project',
     'งานชิ้นเดียวอยู่ได้หลายโปรเจกต์ แก้ที่ไหนก็อัปเดตทุกที่':
@@ -245,7 +245,7 @@
     'เทมเพลตงาน': 'Task templates',
     'ยังไม่มีเทมเพลต — เปิดงานที่ต้องการ กดปุ่ม ⋯ แล้วเลือก “บันทึกเป็นเทมเพลต”':
       'No templates yet — open a task, click ⋯ and choose “Save as template”',
-    '{n} งานย่อย': '{n} subtasks',
+    '{n} งานย่อย': '{n} [n|subtask|subtasks]',
 
     /* --- สมาชิก --- */
     'เพิ่มสมาชิกใหม่': 'Add member', 'ชื่อ': 'Name', 'อีเมล': 'Email',
@@ -499,7 +499,7 @@
     'ตั้งสิทธิ์ในโปรเจกต์': 'Set project access',
     'ถอดสมาชิกออกจากโปรเจกต์': 'Remove project member',
     'บันทึกการทำงาน': 'Activity log',
-    '{n} รายการ': '{n} entries', 'พบ {n} รายการ': 'Found {n}',
+    '{n} รายการ': '{n} [n|entry|entries]', 'พบ {n} รายการ': 'Found {n}',
     'ส่งออก CSV': 'Export CSV', 'ทั้งหมด': 'All',
     'ค้นหาในบันทึก…': 'Search the log…',
     'ยังไม่มีบันทึกที่ตรงกับเงื่อนไข': 'No entries match this filter',
@@ -618,10 +618,10 @@
     'สวัสดีตอนเย็น': 'Good evening',
     '{greet}, {name}': '{greet}, {name}',
     '{dow}ที่ {d} {mon}': '{dow}, {mon} {d}',
-    '{n} งานเสร็จสัปดาห์นี้': '{n} tasks completed this week',
+    '{n} งานเสร็จสัปดาห์นี้': '{n} [n|task|tasks] completed this week',
     '{n} งานเลยกำหนด': '{n} overdue',
     '{n} งานครบกำหนดใน 7 วัน': '{n} due in 7 days',
-    '{n} เพื่อนร่วมงาน': '{n} collaborators',
+    '{n} เพื่อนร่วมงาน': '{n} [n|collaborator|collaborators]',
     'กำลังจะถึง': 'Upcoming', 'เลยกำหนด ({n})': 'Overdue ({n})',
     'สัปดาห์นี้ ({n})': 'This week ({n})',
     'งานที่ฉันมอบหมาย': 'Tasks I’ve assigned',
@@ -654,7 +654,7 @@
       'When you move a task, everything waiting on it shifts along so the sequence still holds. Gaps you left on purpose are kept, and completed tasks are never moved.',
     'เปิดการเลื่อนงานที่รออยู่ให้อัตโนมัติแล้ว': 'Auto-scheduling on',
     'ปิดการเลื่อนอัตโนมัติแล้ว': 'Auto-scheduling off',
-    'เลื่อนวันแล้ว และดันงานที่รออยู่ต่ออีก {n} งาน': 'Dates moved · {n} dependent tasks shifted',
+    'เลื่อนวันแล้ว และดันงานที่รออยู่ต่ออีก {n} งาน': 'Dates moved · {n} dependent [n|task|tasks] shifted',
     'ตั้งเส้นฐานไว้เมื่อ {when}': 'Baseline set {when}',
     'ยังไม่ได้ตั้งเส้นฐาน': 'No baseline yet',
     'แสดงเส้นฐาน': 'Show baseline',
@@ -671,11 +671,11 @@
     'ลบเส้นฐานที่บันทึกไว้?': 'Delete the saved baseline?',
     'ตั้งเส้นฐานแล้ว': 'Baseline set', 'ลบเส้นฐานแล้ว': 'Baseline cleared',
     'แผนเดิม': 'Original plan',
-    'ช้ากว่าแผน {n} วัน': '{n} days behind plan',
-    'เร็วกว่าแผน {n} วัน': '{n} days ahead of plan',
+    'ช้ากว่าแผน {n} วัน': '{n} [n|day|days] behind plan',
+    'เร็วกว่าแผน {n} วัน': '{n} [n|day|days] ahead of plan',
     'แสดง/ซ่อนคอลัมน์': 'Show/hide columns',
     'เลือกคอลัมน์ที่จะแสดงในตารางฝั่งซ้าย': 'Choose which columns appear in the table on the left',
-    'ระยะเวลา': 'Duration', 'บล็อกงานอะไร': 'Blocking', '{n} วัน': '{n} days',
+    'ระยะเวลา': 'Duration', 'บล็อกงานอะไร': 'Blocking', '{n} วัน': '{n} [n|day|days]',
     'ซ่อนอยู่ {n}': '{n} hidden', 'แสดงครบ': 'All shown',
     'ใช้อยู่ {n}': '{n} active', 'ไม่มี': 'None',
     'แสดงงานที่เสร็จแล้ว': 'Show completed tasks',
@@ -689,8 +689,8 @@
     'นำเข้างานจาก CSV': 'Import tasks from CSV', 'ส่งออกเป็น CSV': 'Export to CSV',
     'ส่งออกไฟล์ CSV แล้ว': 'CSV exported', 'คัดลอกลิงก์แล้ว': 'Link copied',
     'นำเข้าไม่สำเร็จ:': 'Import failed:',
-    'นำเข้า {n} งานแล้ว': 'Imported {n} tasks',
-    'นำเข้า {n} งาน และสร้างคอลัมน์ใหม่ {s} คอลัมน์': 'Imported {n} tasks and created {s} new sections',
+    'นำเข้า {n} งานแล้ว': 'Imported {n} [n|task|tasks]',
+    'นำเข้า {n} งาน และสร้างคอลัมน์ใหม่ {s} คอลัมน์': 'Imported {n} [n|task|tasks] and created {s} new [s|section|sections]',
     'บันทึกการตั้งค่าแล้ว': 'Settings saved',
 
     'รายละเอียดโปรเจกต์': 'Project details', 'ลำดับก่อนหลัง': 'Dependencies',
@@ -809,15 +809,15 @@
 
     /* --- โอนงานต่อ --- */
     'โอนงานต่อ': 'Hand over open tasks', 'ปิดบัญชีและโอนงานต่อ': 'Hand over and disable',
-    'โอนงานที่ค้างอยู่ {n} งานให้คนอื่น': 'Hand over {n} open tasks to someone else',
+    'โอนงานที่ค้างอยู่ {n} งานให้คนอื่น': 'Hand over {n} open [n|task|tasks] to someone else',
     'มีงานที่ยังไม่เสร็จอยู่ {n} งาน ถ้าปล่อยไว้กับบัญชีที่ปิดแล้ว จะไม่มีใครได้รับแจ้งและงานจะค้างเงียบ ๆ':
       '{n} tasks are still open. Left on a disabled account, nobody gets notified and the work quietly stalls.',
     'โอนให้ใคร': 'Hand over to',
     'ไม่โอน ปล่อยว่างไว้ (ต้องมีคนมาหยิบเอง)': 'Leave unassigned — someone must pick them up',
     'งานที่จะโอน': 'Tasks to hand over',
     'โอนงานแล้วปิดบัญชี': 'Hand over and disable', 'โอนงาน': 'Hand over',
-    'โอนงาน {n} งานแล้ว': 'Handed over {n} tasks',
-    'โอนงาน {n} งาน และปิดบัญชีแล้ว': 'Handed over {n} tasks and disabled the account',
+    'โอนงาน {n} งานแล้ว': 'Handed over {n} [n|task|tasks]',
+    'โอนงาน {n} งาน และปิดบัญชีแล้ว': 'Handed over {n} [n|task|tasks] and disabled the account',
 
     /* --- พอร์ตโฟลิโอ --- */
     'พอร์ตโฟลิโอ': 'Portfolios', 'สร้างพอร์ตโฟลิโอ': 'New portfolio',
@@ -860,8 +860,8 @@
     'เลยกำหนด {n}': '{n} overdue',
     'ยังไม่มีโปรเจกต์ไหนที่มีวันที่': 'No project has dates yet',
     'ไม่มีวันที่': 'No dates',
-    '{n} งาน · เสร็จ {p}%': '{n} tasks · {p}% done',
-    '{n} โปรเจกต์': '{n} projects',
+    '{n} งาน · เสร็จ {p}%': '{n} [n|task|tasks] · {p}% done',
+    '{n} โปรเจกต์': '{n} [n|project|projects]',
     'แก้คำอธิบาย': 'Edit description',
 
     /* --- ข้อความบันทึกความเคลื่อนไหวของงาน --- */
@@ -875,14 +875,14 @@
     'ยกเลิกผู้รับผิดชอบ เดิมเป็นของ {who}': 'unassigned it — previously {who}',
 
     /* --- รายละเอียดในบันทึกการทำงาน --- */
-    'ส่งออก {n} งานเป็น CSV': 'exported {n} tasks to CSV',
-    'นำเข้า {n} งาน': 'imported {n} tasks',
-    'จำนวนงานที่บันทึก {n}': '{n} tasks captured',
-    'มีโปรเจกต์อยู่ {n} โปรเจกต์ ซึ่งยังอยู่ครบ': 'held {n} projects, all of which remain',
+    'ส่งออก {n} งานเป็น CSV': 'exported {n} [n|task|tasks] to CSV',
+    'นำเข้า {n} งาน': 'imported {n} [n|task|tasks]',
+    'จำนวนงานที่บันทึก {n}': '{n} [n|task|tasks] captured',
+    'มีโปรเจกต์อยู่ {n} โปรเจกต์ ซึ่งยังอยู่ครบ': 'held {n} [n|project|projects], [n|which remains|all of which remain]',
     '{email} · บทบาท {role}': '{email} · role {role}',
     'เปลี่ยนเป็น {v}': 'changed to {v}',
-    'โอนให้ {who} จำนวน {n} งาน': 'handed {n} tasks to {who}',
-    'ปล่อยว่างไว้ จำนวน {n} งาน': 'left {n} tasks unassigned',
+    'โอนให้ {who} จำนวน {n} งาน': 'handed {n} [n|task|tasks] to {who}',
+    'ปล่อยว่างไว้ จำนวน {n} งาน': 'left {n} [n|task|tasks] unassigned',
     'คัดลอกจากโปรเจกต์เดิม': 'copied from an existing project',
     'งานที่อยู่เฉพาะโปรเจกต์นี้ถูกลบไปด้วย': 'tasks that lived only here were deleted too',
     'ล้างข้อมูลทั้งหมดและเริ่มใหม่': 'cleared everything and started over',
@@ -898,9 +898,9 @@
     'สร้างงาน': 'Create task',
     'แก้ไขงาน': 'Edit task',
     'ย้ายงาน': 'Move task',
-    'ลบ {n} งาน': 'Delete {n} tasks',
-    'แก้ {n} งานพร้อมกัน': 'Edit {n} tasks at once',
-    'ย้าย {n} งาน': 'Move {n} tasks',
+    'ลบ {n} งาน': 'Delete {n} [n|task|tasks]',
+    'แก้ {n} งานพร้อมกัน': 'Edit {n} [n|task|tasks] at once',
+    'ย้าย {n} งาน': 'Move {n} [n|task|tasks]',
     'สร้างโปรเจกต์': 'Create project',
     'ลบคอลัมน์': 'Delete column',
     'เพิ่มสมาชิก': 'Add member',
@@ -932,13 +932,13 @@
     'คนที่ทำงานด้วยบ่อย': 'Frequent collaborators',
     'ยังไม่มีใครทำงานร่วมกับคุณ': 'No one has worked with you yet',
     'ยังไม่เห็นงานที่ทำร่วมกัน': 'No shared work visible to you',
-    '{n} งานร่วมกัน': '{n} tasks together',
+    '{n} งานร่วมกัน': '{n} [n|task|tasks] together',
     'โปรเจกต์ของฉัน': 'My projects',
     'โปรเจกต์ที่อยู่ร่วมกัน': 'Projects in common',
     'ยังไม่มีโปรเจกต์ที่เห็นร่วมกัน': 'No projects in common',
-    '{n} งานที่ยังไม่เสร็จ': '{n} open tasks',
+    '{n} งานที่ยังไม่เสร็จ': '{n} open [n|task|tasks]',
     'รูปประจำตัว': 'Profile photos',
-    '{n} คนใส่รูปแล้ว · รวม {kb} KB': '{n} people have a photo 00b7 {kb} KB total',
+    '{n} คนใส่รูปแล้ว · รวม {kb} KB': '{n} [n|person has|people have] a photo · {kb} KB total',
     'รูปของคุณ': 'Your photo',
     'อัปโหลดรูปใหม่': 'Upload new photo',
     'เปลี่ยนรูป': 'Change photo',
@@ -977,9 +977,40 @@
 
   var lang = 'th';
 
+  /* ---------- เอกพจน์ / พหูพจน์ ----------
+   *
+   * ภาษาไทยไม่แยกรูปพหูพจน์ "1 งาน" กับ "5 งาน" เขียนเหมือนกัน
+   * แต่ภาษาอังกฤษแยก และเดิมเราเขียนค้างไว้รูปเดียวคือรูปพหูพจน์
+   * เลยได้ข้อความอย่าง "1 tasks together" ซึ่งผิดทุกครั้งที่มีของชิ้นเดียว
+   *
+   * คำแปลอังกฤษจึงเขียนสองรูปในวงเล็บเหลี่ยมได้ [ตัวแปร|เอกพจน์|พหูพจน์]
+   *   '{n} งานย่อย': '{n} [n|subtask|subtasks]'
+   *
+   * ที่ระบุชื่อตัวแปรกำกับไว้ เพราะบางข้อความมีตัวเลขสองตัวที่นับคนละอย่าง
+   * เช่นนำเข้างานแล้วสร้างคอลัมน์ใหม่ด้วย ถ้าใช้ตัวเลขตัวเดียวตัดสินทั้งประโยค
+   * จะได้ "1 task and 1 sections" ซึ่งแก้ได้ครึ่งเดียว
+   *
+   * ทั้งประโยคเปลี่ยนก็ทำได้ เพราะค่าแทนที่ถูกใส่หลังเลือกรูปแล้ว
+   *   'ทุก {n} วัน': 'Every [n|day|{n} days]'
+   *
+   * คีย์ที่ไม่มีวงเล็บเหลี่ยมทำงานเหมือนเดิมทุกประการ ไม่ต้องไล่แก้ทั้งพจนานุกรม
+   */
+  var PLURAL = /\[(\w+)\|([^\]|]*)\|([^\]]*)\]/g;
+
+  function pickPlural(s, p) {
+    if (s.indexOf('[') < 0) return s;
+    return s.replace(PLURAL, function (m, key, one, many) {
+      var n = p ? p[key] : null;
+      /* ไม่รู้จำนวน = ใช้รูปพหูพจน์ ซึ่งเป็นรูปที่ถูกบ่อยกว่า */
+      return Number(n) === 1 ? one : many;
+    });
+  }
+
   function t(s, p) {
     var out = s;
-    if (lang === 'en' && Object.prototype.hasOwnProperty.call(EN, s)) out = EN[s];
+    if (lang === 'en' && Object.prototype.hasOwnProperty.call(EN, s)) {
+      out = pickPlural(EN[s], p);
+    }
     if (p) {
       Object.keys(p).forEach(function (k) {
         out = out.split('{' + k + '}').join(p[k]);
