@@ -220,6 +220,8 @@
         R.ganttView(r.id, v, state.ganttCollapsed, v.q);
       else if (r.view === 'calendar') body = R.calendarView(r.id, state.calOffset);
       else if (r.view === 'dashboard') body = R.dashboardView(r.id);
+      else if (r.view === 'overview') body = R.overviewView(r.id);
+      else if (r.view === 'files') body = R.filesView(r.id);
       else body = R.listView(r.id, v, state.sel);
     } else if (r.type === 'portfolio') {
       if (!S.portfolio(r.id)) { state.route = { type: 'home' }; return renderAll(); }
@@ -2449,7 +2451,7 @@
     ]);
     put('comment', [
       'send-comment', 'toggle-follow', 'do-follow', 'remove-follower',
-      'pick-follower', 'toggle-like'
+      'pick-follower', 'toggle-like', 'react', 'react-menu'
     ]);
     return map;
   })();
@@ -2514,7 +2516,7 @@
     if (!el || ['pick-assignee', 'pick-priority', 'pick-follower',
          'add-field-picker', 'field-menu', 'opt-color', 'edit-cell',
          'project-menu', 'status-menu', 'g-zoom-menu', 'g-views-menu', 'pf-menu', 'pf-status',
-         'view-menu', 'toggle-view', 'add-menu'].indexOf(el.dataset.act) < 0) {
+         'view-menu', 'toggle-view', 'add-menu', 'react-menu'].indexOf(el.dataset.act) < 0) {
       if (!e.target.closest || !e.target.closest('.pop')) closePops();
     }
 
@@ -3099,6 +3101,23 @@
         var onNow = S.toggleStar(id);
         renderAll();
         toast(onNow ? L('ปักหมุดไว้บนสุดแล้ว') : L('เอาหมุดออกแล้ว'));
+        break;
+      }
+
+      case 'react':
+        S.toggleReaction(el.dataset.story, el.dataset.emoji);
+        closePops();
+        renderDrawer();
+        break;
+      case 'react-menu': {
+        if (popIsOpenFor(el)) { closePops(); break; }
+        var sid = el.dataset.story;
+        var rh = '<div class="rx-pick">';
+        S.REACTIONS.forEach(function (em) {
+          rh += '<button data-act="react" data-story="' + R.esc(sid) +
+            '" data-emoji="' + R.esc(em) + '">' + em + '</button>';
+        });
+        openPop(el, rh + '</div>');
         break;
       }
 

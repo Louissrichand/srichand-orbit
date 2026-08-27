@@ -1384,13 +1384,33 @@
    * แท็บที่ไม่มีใครกดคือสิ่งรบกวนสายตาที่กินตำแหน่งดีที่สุดของหน้าจอไปเปล่า ๆ
    */
   var PROJECT_VIEWS = [
+    { id: 'overview',  label: 'ภาพรวม',   icon: 'home',       desc: 'คำอธิบาย สมาชิก และประวัติการรายงานสถานะ' },
     { id: 'list',      label: 'รายการ',   icon: 'menu',       desc: 'ตารางงาน จัดกลุ่มและลากสลับลำดับได้' },
     { id: 'board',     label: 'บอร์ด',    icon: 'grid',       desc: 'คัมบัง ลากงานข้ามคอลัมน์' },
     { id: 'timeline',  label: 'ไทม์ไลน์', icon: 'bars',       desc: 'วางแผนงานตามช่วงเวลา' },
     { id: 'gantt',     label: 'Gantt',    icon: 'subtask',    desc: 'ลำดับก่อนหลังและเส้นฐาน' },
     { id: 'calendar',  label: 'ปฏิทิน',   icon: 'calendar',   desc: 'ดูตามกำหนดส่งรายเดือน' },
-    { id: 'dashboard', label: 'สรุปผล',   icon: 'chart',      desc: 'ตัวเลขรวมและความคืบหน้า' }
+    { id: 'dashboard', label: 'สรุปผล',   icon: 'chart',      desc: 'ตัวเลขรวมและความคืบหน้า' },
+    { id: 'files',     label: 'ไฟล์',     icon: 'paperclip',  desc: 'ไฟล์แนบทุกชิ้นในโปรเจกต์รวมไว้ที่เดียว' }
   ];
+
+  /** ไฟล์แนบทุกชิ้นในโปรเจกต์ พร้อมงานที่มันอยู่ ใหม่สุดก่อน */
+  function filesOfProject(projectId) {
+    var out = [];
+    tasksInProject(projectId).forEach(function (x) {
+      if (!canSeeTask(x.task.id)) return;
+      (x.task.attachments || []).forEach(function (a) {
+        out.push({ att: a, task: x.task });
+      });
+    });
+    /* ไฟล์เก่าไม่มีวันที่เก็บไว้ จึงเรียงตามวันที่งานถูกสร้างแทน
+     * ดีกว่าเรียงมั่ว ๆ และไม่ต้องแปลงข้อมูลเก่าย้อนหลัง */
+    return out.sort(function (a, b) {
+      var ka = a.att.addedAt || a.task.createdAt || '';
+      var kb = b.att.addedAt || b.task.createdAt || '';
+      return ka < kb ? 1 : -1;
+    });
+  }
 
   /** มุมมองที่โปรเจกต์นี้เปิดอยู่ ไม่เคยตั้ง = เปิดครบทุกมุมมอง */
   function projectViews(projectId) {
@@ -2076,7 +2096,12 @@
     var t = task(taskId);
     if (!t || !name) return;
     snapshot('แนบไฟล์');
-    t.attachments.push({ id: uid('a'), name: name, url: url || '' });
+    /* เก็บคนแนบและเวลาไว้ด้วย หน้ารวมไฟล์ต้องตอบได้ว่าใครเอามาลงเมื่อไหร่
+     * ไฟล์เก่าที่ไม่มีสองค่านี้ยังแสดงได้ แค่ไม่มีบรรทัดที่มา */
+    t.attachments.push({
+      id: uid('a'), name: name, url: url || '',
+      addedBy: db.currentUserId, addedAt: new Date().toISOString()
+    });
     log(taskId, 'แนบ “{f}”', { f: name });
     commit();
   }
@@ -2087,6 +2112,29 @@
     snapshot('ลบไฟล์แนบ');
     t.attachments = t.attachments.filter(function (a) { return a.id !== attId; });
     commit();
+  }
+
+  /* ---------- อีโมจิตอบรับความเห็น ----------
+   *
+   * ตอบรับสั้น ๆ ว่าอ่านแล้วหรือเห็นด้วย โดยไม่ต้องพิมพ์ตอบ
+   * ในกลุ่มยี่สิบคน ถ้าทุกคนพิมพ์ "รับทราบ" เธรดจะยาวจนหาเนื้อหาจริงไม่เจอ
+   * เก็บเป็น { อีโมจิ: [รหัสผู้ใช้] } นับจำนวนได้และรู้ด้วยว่าใครกดบ้าง
+   */
+  var REACTIONS = ['👍', '✅', '🎉', '❤️', '👀', '🙏'];
+
+  function toggleReaction(storyId, emoji) {
+    var s = null;
+    for (var i = 0; i < db.stories.length; i++) {
+      if (db.stories[i].id === storyId) { s = db.stories[i]; break; }
+    }
+    if (!s || REACTIONS.indexOf(emoji) < 0) return false;
+    s.reactions = s.reactions || {};
+    var who = (s.reactions[emoji] || []).slice();
+    var j = who.indexOf(db.currentUserId);
+    if (j >= 0) who.splice(j, 1); else who.push(db.currentUserId);
+    if (who.length) s.reactions[emoji] = who; else delete s.reactions[emoji];
+    commit();
+    return j < 0;
   }
 
   function addComment(taskId, text) {
@@ -2386,6 +2434,9 @@
   function setProjectStatus(id, state, text) {
     var p = project(id);
     if (!p) return;
+    /* สถานะที่ไม่รู้จักเคยถูกเก็บลงไปเงียบ ๆ แล้วหน้าจอตกไปแสดงสถานะแรกของรายการ
+     * อ่านแล้วเหมือนโปรเจกต์ตามแผน ทั้งที่ค่าข้างในเป็นขยะ ปฏิเสธไปตรง ๆ ดีกว่า */
+    if (!PROJECT_STATES.some(function (x) { return x.id === state; })) return;
     snapshot('อัปเดตสถานะโปรเจกต์');
     var keep = text === null || text === undefined;
     p.status = {
@@ -3404,6 +3455,8 @@
     updateProfile: updateProfile, setAway: setAway, isAway: isAway,
     setPhoto: setPhoto, removePhoto: removePhoto,
     isStarred: isStarred, toggleStar: toggleStar, starredProjects: starredProjects,
+    filesOfProject: filesOfProject,
+    REACTIONS: REACTIONS, toggleReaction: toggleReaction,
     photoBytes: photoBytes, photoTotalBytes: photoTotalBytes,
     PHOTO_PX: PHOTO_PX, PHOTO_MAX_BYTES: PHOTO_MAX_BYTES,
     frequentCollaborators: frequentCollaborators,

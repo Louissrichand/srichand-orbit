@@ -920,6 +920,31 @@
     'เปิดใช้งานบัญชี': 'Enable account',
     'ล้างข้อมูล': 'Clear data',
 
+    /* --- ภาพรวมโปรเจกต์ --- */
+    'ภาพรวม': 'Overview',
+    'คำอธิบาย สมาชิก และประวัติการรายงานสถานะ': 'Description, members and status history',
+    'โปรเจกต์นี้คืออะไร': 'What this project is',
+    'ยังไม่มีคำอธิบาย': 'No description yet.',
+    'เพิ่มคำอธิบาย': 'Add one',
+    'ประวัติการรายงานสถานะ': 'Status history',
+    'ยังไม่เคยรายงานสถานะ': 'No status has been reported yet.',
+    'ตอนนี้ถึงไหนแล้ว': 'Where it stands',
+    'ใครอยู่ในโปรเจกต์นี้': 'Who is on this project',
+    'จัดการ': 'Manage',
+    'ทุกคนในองค์กรเห็นโปรเจกต์นี้': 'Everyone in the organisation can see this project.',
+
+    /* --- ไฟล์ทั้งหมดในโปรเจกต์ --- */
+    'ไฟล์': 'Files',
+    'ไฟล์แนบทุกชิ้นในโปรเจกต์รวมไว้ที่เดียว': 'Every attachment in the project, in one place',
+    'ไฟล์ในโปรเจกต์นี้': 'Files in this project',
+    '{n} ไฟล์': '{n} [n|file|files]',
+    'ยังไม่มีไฟล์แนบ ไฟล์ที่แนบไว้ในงานจะมารวมที่นี่เอง':
+      'No attachments yet — anything attached to a task shows up here automatically.',
+    'ไม่ทราบเวลา': 'time unknown',
+
+    /* --- อีโมจิตอบรับความเห็น --- */
+    'ตอบรับด้วยอีโมจิ': 'React with an emoji',
+
     /* --- ปักหมุดโปรเจกต์ --- */
     'ปักหมุดไว้': 'Starred',
     'ปักหมุดไว้บนสุด': 'Star this project',

@@ -310,6 +310,19 @@
              '"><i></i>' + L('ตั้งสถานะ') + I('chevronDown', 12) + '</button>';
       }
       if (p.archived) h += '<span class="chip">' + L('เก็บเข้าคลังแล้ว') + '</span>';
+
+      /* รูปสมาชิกซ้อนกันไว้ข้างชื่อ ตอบคำถาม "ใครอยู่ในโปรเจกต์นี้" โดยไม่ต้องเปิดเมนู
+       * โปรเจกต์ที่เปิดให้ทั้งองค์กรไม่มีรายชื่อระบุตัว จึงไม่โชว์อะไรเลย
+       * ดีกว่าโชว์พนักงานทั้งบริษัทซึ่งไม่ได้บอกอะไร */
+      var ppl = projectPeople(p.id);
+      if (ppl.length) {
+        h += '<button class="tb-people" data-act="manage-members" title="' +
+          esc(ppl.map(function (m) { return m.user.name; }).join(', ')) + '">';
+        ppl.slice(0, 4).forEach(function (m) { h += avatar(m.user, 'sm'); });
+        if (ppl.length > 4) h += '<span class="tb-more">+' + (ppl.length - 4) + '</span>';
+        h += '</button>';
+      }
+
       h += '</div>' +
         (p.description ? '<div class="tb-desc">' + esc(p.description) + '</div>' : '') +
         '</div>';
@@ -969,6 +982,148 @@
       '<span class="track"><span class="fill" style="width:' + pct + '%;background:' +
       (color || 'var(--accent)') + '"></span></span>' +
       '<span class="val">' + value + ' · ' + pct + '%</span></div>';
+  }
+
+  /* ---------- ภาพรวมโปรเจกต์ ----------
+   *
+   * ตอบคำถามของคนที่เพิ่งถูกดึงเข้าโปรเจกต์ — นี่คือโปรเจกต์อะไร ใครอยู่บ้าง
+   * ตอนนี้เป็นยังไง และที่ผ่านมารายงานสถานะว่าอะไรไปแล้วบ้าง
+   * ข้อมูลทุกอย่างมีอยู่ในระบบแล้ว แค่ไม่เคยมีหน้าที่รวมให้อ่านรวดเดียว
+   * ต่างจากหน้าสรุปผลตรงที่อันนั้นตอบว่า "ตัวเลขเป็นยังไง" ไม่ใช่ "โปรเจกต์นี้คืออะไร"
+   */
+  function overviewView(projectId) {
+    var p = S.project(projectId);
+    if (!p) return '';
+    var s = S.projectStats(projectId);
+    var owner = S.user(p.owner);
+    var h = '<div class="ovw">';
+
+    h += '<div class="ovw-main">';
+
+    h += '<section class="ovw-card"><h3>' + L('โปรเจกต์นี้คืออะไร') + '</h3>';
+    h += p.description
+      ? '<div class="ovw-desc">' + richText(p.description) + '</div>'
+      : '<div class="ovw-empty">' + L('ยังไม่มีคำอธิบาย') +
+        (S.can('structure') ? ' <button class="as-link" data-act="edit-project" data-id="' +
+          esc(p.id) + '">' + L('เพิ่มคำอธิบาย') + '</button>' : '') + '</div>';
+    h += '</section>';
+
+    /* ประวัติการรายงานสถานะ คือสิ่งที่ตอบว่าโปรเจกต์นี้เดินมายังไง
+     * มีเก็บไว้อยู่แล้วแต่เดิมอ่านได้แค่อันล่าสุดจากป้ายบนหัว */
+    h += '<section class="ovw-card"><h3>' + L('ประวัติการรายงานสถานะ') + '</h3>';
+    var logs = (p.statusLog || []).slice().reverse();
+    if (!logs.length) {
+      h += '<div class="ovw-empty">' + L('ยังไม่เคยรายงานสถานะ') + '</div>';
+    } else {
+      h += '<div class="ovw-log">';
+      logs.slice(0, 10).forEach(function (sl) {
+        var st = projectState(sl.state);
+        var by = S.user(sl.by);
+        h += '<div class="ovw-logrow">' +
+          '<span class="status-pill" style="background:' + st.color + '22;color:' + st.color +
+          '"><i style="background:' + st.color + '"></i>' + esc(L(st.label)) + '</span>' +
+          '<div class="grow">' + (sl.text ? '<div class="t">' + esc(sl.text) + '</div>' : '') +
+          '<em>' + esc(by ? by.name : '—') + ' · ' + esc(fmtWhen(sl.at)) + '</em></div></div>';
+      });
+      h += '</div>';
+    }
+    h += '</section>';
+    h += '</div>';
+
+    /* --- คอลัมน์ขวา --- */
+    h += '<div class="ovw-side">';
+
+    h += '<section class="ovw-card"><h3>' + L('ตอนนี้ถึงไหนแล้ว') + '</h3>';
+    h += '<div class="ovw-stats">' +
+      '<div><b>' + s.total + '</b><em>' + L('งานทั้งหมด') + '</em></div>' +
+      '<div><b>' + s.done + '</b><em>' + L('เสร็จแล้ว') + '</em></div>' +
+      '<div class="' + (s.overdue ? 'bad' : '') + '"><b>' + s.overdue + '</b><em>' +
+      L('เลยกำหนด') + '</em></div>' +
+      '</div>';
+    h += bar(L('ความคืบหน้า'), s.done, s.total || 1, p.color);
+    if (p.dueOn) {
+      h += '<div class="ovw-kv"><span>' + L('กำหนดส่งของโปรเจกต์') + '</span><b>' +
+        esc(fmtDate(p.dueOn)) + '</b></div>';
+    }
+    h += '</section>';
+
+    h += '<section class="ovw-card"><h3>' + L('ใครอยู่ในโปรเจกต์นี้') +
+      (S.can('manage') ? '<button class="as-link" data-act="manage-members">' +
+        L('จัดการ') + '</button>' : '') + '</h3>';
+    var mem = projectPeople(p.id);
+    if (!mem.length) {
+      h += '<div class="ovw-empty">' + L('ทุกคนในองค์กรเห็นโปรเจกต์นี้') + '</div>';
+    } else {
+      h += '<div class="ovw-people">';
+      mem.forEach(function (m) {
+        h += '<button class="prof-col" data-act="go-profile" data-id="' + esc(m.user.id) + '">' +
+          avatar(m.user, 'md') + '<span class="grow"><b>' + esc(m.user.name) + '</b>' +
+          '<em>' + esc(m.user.id === p.owner ? L('เจ้าของโปรเจกต์')
+                                             : accessLabel(m.access)) + '</em>' +
+          '</span></button>';
+      });
+      h += '</div>';
+    }
+    if (owner && !mem.some(function (m) { return m.user.id === owner.id; })) {
+      h += '<div class="ovw-kv"><span>' + L('เจ้าของโปรเจกต์') + '</span><b>' +
+        esc(owner.name) + '</b></div>';
+    }
+    h += '</section>';
+    h += '</div></div>';
+    return h;
+  }
+
+  /** ชื่อระดับสิทธิ์ในโปรเจกต์ */
+  function accessLabel(id) {
+    var a = S.PROJECT_ACCESS.filter(function (x) { return x.id === id; })[0];
+    return a ? L(a.label) : id;
+  }
+
+  /** คนที่มีสิทธิ์ในโปรเจกต์นี้แบบระบุตัว เรียงเจ้าของขึ้นก่อน */
+  function projectPeople(projectId) {
+    var p = S.project(projectId);
+    return S.projectMembers(projectId).map(function (m) {
+      return { user: S.user(m.userId), access: m.access };
+    }).filter(function (x) { return x.user && x.user.active !== false; })
+      .sort(function (a, b) {
+        if (a.user.id === p.owner) return -1;
+        if (b.user.id === p.owner) return 1;
+        return a.user.name.localeCompare(b.user.name);
+      });
+  }
+
+  /* ---------- ไฟล์ทั้งหมดในโปรเจกต์ ----------
+   *
+   * เดิมไฟล์แนบกระจายอยู่ในงานแต่ละชิ้น ถ้าจำไม่ได้ว่าแนบไว้ที่งานไหนก็หาไม่เจอ
+   * ที่นี่รวมทุกไฟล์ไว้ พร้อมบอกว่ามาจากงานไหนและกดกลับไปที่งานนั้นได้
+   */
+  function filesView(projectId) {
+    var rows = S.filesOfProject(projectId);
+    var h = '<div class="filesv">';
+    h += '<div class="filesv-head">' + I('paperclip', 16) +
+      '<b>' + L('ไฟล์ในโปรเจกต์นี้') + '</b>' +
+      '<span class="n">' + L('{n} ไฟล์', { n: rows.length }) + '</span></div>';
+
+    if (!rows.length) {
+      h += '<div class="ovw-empty">' +
+        L('ยังไม่มีไฟล์แนบ ไฟล์ที่แนบไว้ในงานจะมารวมที่นี่เอง') + '</div>';
+      return h + '</div>';
+    }
+
+    rows.forEach(function (r) {
+      var by = S.user(r.att.addedBy);
+      h += '<div class="filesv-row">' + I('paperclip', 14) +
+        '<span class="grow">' +
+        (r.att.url
+          ? '<a href="' + esc(r.att.url) + '" target="_blank" rel="noopener noreferrer">' +
+            esc(r.att.name) + '</a>'
+          : '<b>' + esc(r.att.name) + '</b>') +
+        '<em>' + (by ? esc(by.name) + ' · ' : '') +
+        (r.att.addedAt ? esc(fmtWhen(r.att.addedAt)) : L('ไม่ทราบเวลา')) + '</em></span>' +
+        '<button class="filesv-task" data-act="open-task" data-id="' + esc(r.task.id) + '">' +
+        esc(r.task.name) + '</button></div>';
+    });
+    return h + '</div>';
   }
 
   function dashboardView(projectId) {
@@ -1791,6 +1946,38 @@
     return Math.min(Math.floor(lead.length / 2), 3);
   }
 
+  /* แถวอีโมจิใต้ความเห็น — โชว์เฉพาะอันที่มีคนกดแล้ว บวกปุ่มเพิ่ม
+   * ถ้าโชว์ครบทุกอีโมจิตลอดเวลา ทุกความเห็นจะมีแถบไอคอนหกอันห้อยอยู่จนรก */
+  /** ช่วงวันของงานแบบสั้น ใช้ต่อท้ายชื่องานในลำดับก่อนหลัง
+   * ถ้าไม่บอกวัน คนต้องกดเข้าไปดูทีละงานว่าที่รออยู่จะเสร็จเมื่อไหร่ */
+  function depWhen(t) {
+    if (!t.startOn && !t.dueOn) return '';
+    var a = t.startOn, b = t.dueOn;
+    var txt = (a && b) ? (a === b ? fmtDate(b) : fmtDate(a) + ' – ' + fmtDate(b))
+                       : fmtDate(b || a);
+    return '<span class="dep-when' + dueClass(t.dueOn, t.completed) + '">' + esc(txt) + '</span>';
+  }
+
+  function reactionRow(s) {
+    var rx = s.reactions || {};
+    var meId = S.db.currentUserId;
+    var h = '<div class="rx">';
+    Object.keys(rx).forEach(function (em) {
+      var who = rx[em] || [];
+      if (!who.length) return;
+      var mine = who.indexOf(meId) >= 0;
+      var names = who.map(function (u) {
+        var x = S.user(u); return x ? x.name : '?';
+      }).join(', ');
+      h += '<button class="rx-chip' + (mine ? ' on' : '') + '" data-act="react" data-story="' +
+        esc(s.id) + '" data-emoji="' + esc(em) + '" title="' + esc(names) + '">' +
+        em + '<span>' + who.length + '</span></button>';
+    });
+    h += '<button class="rx-add" data-act="react-menu" data-story="' + esc(s.id) +
+      '" title="' + L('ตอบรับด้วยอีโมจิ') + '">' + I('heart', 13) + '</button>';
+    return h + '</div>';
+  }
+
   function richText(text) {
     var lines = String(text == null ? '' : text).split('\n');
     var h = '', listDepth = -1;
@@ -2010,7 +2197,7 @@
         (b.completed ? 'var(--ok)' : 'var(--danger)') + '"></span>' +
         '<span class="dep-type" title="' + esc(depTypeHint(x.type)) + '">' + esc(x.type) + '</span>' +
         '<span class="nm" data-act="open-task" data-id="' + esc(b.id) +
-        '" style="cursor:pointer">' + esc(b.name) + '</span>' +
+        '" style="cursor:pointer">' + esc(b.name) + '</span>' + depWhen(b) +
         '<select class="dep-sel" data-act="edit-dep-type" data-id="' + esc(t.id) +
         '" data-blocker="' + esc(b.id) + '">' +
         S.DEP_TYPES.map(function (d) {
@@ -2025,7 +2212,7 @@
       h += '<div class="dep-row"><span class="dot" style="background:var(--fg-faint)"></span>' +
         '<span style="font-size:12px;color:var(--fg-faint)">' + L('บล็อก') + '</span>' +
         '<span class="nm" data-act="open-task" data-id="' + esc(b.id) +
-        '" style="cursor:pointer">' + esc(b.name) + '</span></div>';
+        '" style="cursor:pointer">' + esc(b.name) + '</span>' + depWhen(b) + '</div>';
     });
 
     // ไฟล์แนบ
@@ -2134,7 +2321,8 @@
         h += '<div class="story">' + avatar(actor) + '<div class="body">' +
           '<div class="who">' + esc(actor ? actor.name : '?') +
           whenTag(s.createdAt) + '</div>' +
-          '<div class="txt">' + richText(s.text) + '</div></div></div>';
+          '<div class="txt">' + richText(s.text) + '</div>' +
+          reactionRow(s) + '</div></div>';
       } else {
         h += '<div class="story log">' + avatar(actor, 'sm') +
           '<div class="txt">' + esc(actor ? actor.name : '?') + ' ' + esc(storyText(s)) +
@@ -2628,6 +2816,7 @@
     VIEWS_WITH_TOOLBAR: VIEWS_WITH_TOOLBAR,
     listView: listView, boardView: boardView, timelineView: timelineView,
     homeView: homeView, dashboardView: dashboardView, profileView: profileView,
+    overviewView: overviewView, filesView: filesView,
     portfolioView: portfolioView, PF_TABS: PF_TABS,
     myTasksView: myTasksView, inboxView: inboxView,
     calendarView: calendarView, searchView: searchView, drawer: drawer,
