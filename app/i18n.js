@@ -943,6 +943,8 @@
     'ยังไม่มีโปรเจกต์ที่คุณเห็นได้': 'There are no projects you can see yet.',
 
     /* --- ปุ่มล้างค่าและแผงงานแบบขยาย --- */
+    'แสดงฟิลด์เพิ่มเติม ({n})': 'Show {n} more [n|field|fields]',
+    'ซ่อนฟิลด์ที่ไม่ได้ใช้': 'Hide unused fields',
     'เลิกเรียง': 'Clear sorting',
     'ขยายเต็มจอ': 'Expand',
     'ย่อกลับ': 'Collapse',

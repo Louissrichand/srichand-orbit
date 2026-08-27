@@ -2926,3 +2926,12 @@ button.prof-away:hover { color: var(--accent); }
   .msgv, .pjx { padding: 18px 16px 56px; }
   .pjx-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ปุ่มกางฟิลด์ที่ซ่อนไว้ในแผงรายละเอียดงาน */
+.dw-morefields {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12.5px; color: var(--fg-soft); padding: 6px 8px;
+  border-radius: var(--radius); margin: 2px 0 4px -8px;
+}
+.dw-morefields:hover { background: var(--bg-sunk); color: var(--fg); }
+.dw-morefields svg { color: var(--fg-faint); }

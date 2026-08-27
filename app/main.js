@@ -651,7 +651,7 @@
     if (state.openTaskId && S.task(state.openTaskId)) {
       $drawer.innerHTML = R.drawer(state.openTaskId,
         { actTab: state.actTab, actSort: state.actSort, actAll: state.actAll,
-          wide: state.dwWide });
+          wide: state.dwWide, moreFields: state.dwMore });
       $drawer.classList.toggle('wide', !!state.dwWide);
       $drawer.classList.add('open');
       $dwBack.classList.add('open');
@@ -882,6 +882,7 @@
      * จะเจอบันทึกอัตโนมัติกองหนึ่งทุกครั้งที่เปิดงาน แทนที่จะเจอสิ่งที่ทีมคุยกันไว้ */
     state.actTab = 'comments';
     state.actAll = false;
+    state.dwMore = false;      // เปิดงานใหม่เริ่มที่มุมมองสั้นเสมอ
     renderDrawer();
     syncHash();
   }
@@ -3108,6 +3109,11 @@
         toast(onNow ? L('ปักหมุดไว้บนสุดแล้ว') : L('เอาหมุดออกแล้ว'));
         break;
       }
+
+      case 'dw-more-fields':
+        state.dwMore = !state.dwMore;
+        renderDrawer();
+        break;
 
       case 'toggle-wide':
         state.dwWide = !state.dwWide;

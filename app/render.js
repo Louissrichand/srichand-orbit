@@ -2201,24 +2201,42 @@
       '<input class="inp" type="date" data-act="edit-start" value="' + esc(t.startOn || '') +
       '"></div></div>';
 
+    /* ---- ฟิลด์ที่ซ่อนไว้เป็นค่ามาตรฐาน ----
+     *
+     * งานส่วนใหญ่ไม่ได้ตั้งเวลา ไม่ได้ทำซ้ำ ไม่มีผู้ติดตามนอกจากคนสร้าง
+     * และไม่ได้กรอกฟิลด์กำหนดเองของโปรเจกต์
+     * ถ้าโชว์ทั้งหมดตลอดเวลา แผงจะยาวขึ้นสี่แถวด้วยช่องว่างเปล่า
+     * ต้องเลื่อนผ่านของที่ไม่ได้ใช้ก่อนถึงจะเจอรายละเอียดกับความเห็น
+     *
+     * ซ่อนไว้ก่อน แต่โผล่เองทันทีที่มีค่าจริง เพราะตอนนั้นมันไม่ใช่ช่องว่างแล้ว
+     * ไม่ได้ตัดทิ้ง เพราะยังต้องตั้งงานประจำและคุมคนที่จะได้รับแจ้งเตือนได้อยู่
+     */
+    var more = !!(opts && opts.moreFields);
+    var showTime  = more || !!t.dueTime;
+    var showRecur = more || !!t.recur;
+
     h += '<div class="fld"><label>' + L('กำหนดส่ง') + '</label><div class="val fld-inline">' +
       '<input class="inp" type="date" data-act="edit-due" value="' + esc(t.dueOn || '') +
       '" style="flex:1">' +
-      '<input class="inp" type="time" data-act="edit-duetime" value="' + esc(t.dueTime || '') +
-      '" style="flex:0 0 110px" title="' + L('เวลา (ไม่บังคับ') + ')">' + '</div></div>';
+      (showTime
+        ? '<input class="inp" type="time" data-act="edit-duetime" value="' + esc(t.dueTime || '') +
+          '" style="flex:0 0 110px" title="' + L('เวลา (ไม่บังคับ') + ')">'
+        : '') + '</div></div>';
 
-    h += '<div class="fld"><label>' + L('ทำซ้ำ') + '</label><div class="val fld-inline">' +
-      '<select class="inp" data-act="edit-recur" style="flex:1"><option value="">' + L('ไม่ทำซ้ำ') + '</option>';
-    S.RECUR_FREQ.forEach(function (x) {
-      h += '<option value="' + x.id + '"' +
-        (t.recur && t.recur.freq === x.id ? ' selected' : '') + '>' + esc(L(x.label)) + '</option>';
-    });
-    h += '</select>';
-    if (t.recur) {
-      h += '<input class="inp" type="number" min="1" max="30" data-act="edit-recur-n" value="' +
-        (t.recur.interval || 1) + '" style="flex:0 0 70px" title="' + L('ทุกกี่รอบ') + '">';
+    if (showRecur) {
+      h += '<div class="fld"><label>' + L('ทำซ้ำ') + '</label><div class="val fld-inline">' +
+        '<select class="inp" data-act="edit-recur" style="flex:1"><option value="">' + L('ไม่ทำซ้ำ') + '</option>';
+      S.RECUR_FREQ.forEach(function (x) {
+        h += '<option value="' + x.id + '"' +
+          (t.recur && t.recur.freq === x.id ? ' selected' : '') + '>' + esc(L(x.label)) + '</option>';
+      });
+      h += '</select>';
+      if (t.recur) {
+        h += '<input class="inp" type="number" min="1" max="30" data-act="edit-recur-n" value="' +
+          (t.recur.interval || 1) + '" style="flex:0 0 70px" title="' + L('ทุกกี่รอบ') + '">';
+      }
+      h += '</div></div>';
     }
-    h += '</div></div>';
 
     h += '<div class="fld"><label>' + L('ความสำคัญ') + '</label><div class="val picker">' +
       '<button class="picker-btn" data-act="pick-priority">' +
@@ -2287,6 +2305,14 @@
 
     homes.forEach(function (x) {
       if (!x.project.fields.length) return;
+      /* บล็อกฟิลด์ของโปรเจกต์โผล่เมื่อมีค่ากรอกไว้แล้วอย่างน้อยหนึ่งช่อง
+       * โปรเจกต์ที่ตั้งฟิลด์ไว้แต่ยังไม่มีใครกรอก จะเป็นกล่องที่มีแต่ขีดกลาง
+       * ซึ่งกินที่ครึ่งหน้าจอโดยไม่ได้บอกอะไร กดแสดงฟิลด์เพิ่มเติมแล้วค่อยขึ้น */
+      var hasVal = x.project.fields.some(function (f) {
+        var v = S.fieldValue(t.id, f.id);
+        return v !== null && v !== undefined && v !== '';
+      });
+      if (!more && !hasVal) return;
       var sec2 = S.section(x.project.id, x.membership.sectionId);
       h += '<div class="dw-pfields"><div class="dw-phead">' +
         '<span class="swatch" style="background:' + esc(x.project.color) + '"></span>' +
@@ -2298,6 +2324,30 @@
       });
       h += '</div>';
     });
+
+    /* ปุ่มกางฟิลด์ที่ซ่อนไว้ นับให้ด้วยว่ามีกี่อัน
+     * ถ้าไม่มีอะไรถูกซ่อนก็ไม่ต้องมีปุ่ม จะได้ไม่มีปุ่มที่กดแล้วไม่มีอะไรเปลี่ยน */
+    var hiddenFields = 0;
+    if (!more) {
+      if (!t.dueTime) hiddenFields++;
+      if (!t.recur) hiddenFields++;
+      if (t.followers.length <= 1) hiddenFields++;
+      homes.forEach(function (x) {
+        if (!x.project.fields.length) return;
+        var hv = x.project.fields.some(function (f) {
+          var v = S.fieldValue(t.id, f.id);
+          return v !== null && v !== undefined && v !== '';
+        });
+        if (!hv) hiddenFields++;
+      });
+    }
+    if (hiddenFields) {
+      h += '<button class="dw-morefields" data-act="dw-more-fields">' +
+        I('chevronDown', 13) + L('แสดงฟิลด์เพิ่มเติม ({n})', { n: hiddenFields }) + '</button>';
+    } else if (more) {
+      h += '<button class="dw-morefields" data-act="dw-more-fields">' +
+        I('chevronRight', 13) + L('ซ่อนฟิลด์ที่ไม่ได้ใช้') + '</button>';
+    }
 
     // รายละเอียด
     h += '<div class="dw-sec-title">' + L('รายละเอียด') + '</div>';
@@ -2351,21 +2401,24 @@
         I('close', 13) + '</button></div>';
     });
 
-    // ผู้ติดตาม
-    h += '<div class="dw-sec-title">' + L('ผู้ติดตาม') +
-      '<button class="btn btn-sm btn-ghost" data-act="pick-follower" data-id="' + esc(t.id) +
-      '">+ ' + L('เพิ่ม') + '</button></div>';
-    h += '<div class="picker"><div class="fld-inline">';
-    t.followers.forEach(function (fid) {
-      var fu = S.user(fid);
-      if (!fu) return;
-      h += '<span class="chip">' + avatar(fu, 'sm') + esc(fu.name) +
-        '<button data-act="remove-follower" data-id="' + esc(t.id) + '" data-user="' +
-        esc(fid) + '" title="' + L('เอาผู้ติดตามคนนี้ออก') + '">' +
-        I('close', 13) + '</button></span>';
-    });
-    if (!t.followers.length) h += '<span style="font-size:13px;color:var(--fg-faint)">' + L('ยังไม่มี') + '</span>';
-    h += '</div></div>';
+    /* ผู้ติดตาม — ทุกงานมีคนสร้างเป็นผู้ติดตามอัตโนมัติอยู่แล้ว
+     * ถ้ามีแค่คนเดียวก็ยังไม่มีอะไรให้ดู โผล่เมื่อมีคนอื่นเข้ามาแล้วเท่านั้น */
+    if (more || t.followers.length > 1) {
+      h += '<div class="dw-sec-title">' + L('ผู้ติดตาม') +
+        '<button class="btn btn-sm btn-ghost" data-act="pick-follower" data-id="' + esc(t.id) +
+        '">+ ' + L('เพิ่ม') + '</button></div>';
+      h += '<div class="picker"><div class="fld-inline">';
+      t.followers.forEach(function (fid) {
+        var fu = S.user(fid);
+        if (!fu) return;
+        h += '<span class="chip">' + avatar(fu, 'sm') + esc(fu.name) +
+          '<button data-act="remove-follower" data-id="' + esc(t.id) + '" data-user="' +
+          esc(fid) + '" title="' + L('เอาผู้ติดตามคนนี้ออก') + '">' +
+          I('close', 13) + '</button></span>';
+      });
+      if (!t.followers.length) h += '<span style="font-size:13px;color:var(--fg-faint)">' + L('ยังไม่มี') + '</span>';
+      h += '</div></div>';
+    }
 
     // งานย่อย
     h += '<div class="dw-sec-title">' + L('งานย่อย') + ' <span style="color:var(--fg-faint)">' +
