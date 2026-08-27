@@ -483,6 +483,10 @@ a { color: var(--accent); }
 .card:hover { border-color: var(--line-strong); box-shadow: var(--shadow); }
 .card.sel { border-color: var(--accent); background: var(--accent-bg); }
 .card.dragging { opacity: .4; }
+
+/* งานที่รองานอื่นอยู่ บอกด้วยแถบแดงบาง ๆ ที่ขอบซ้าย แทนป้ายข้อความในการ์ด
+ * ป้ายกินพื้นที่หนึ่งบรรทัดเต็มทั้งที่บอกได้แค่จริงหรือไม่จริง แถบสีบอกเท่ากันโดยไม่กินที่ */
+.card.blocked { border-left: 3px solid var(--danger); padding-left: 10px; }
 .card.drop-before::before {
   content: ''; position: absolute; left: 0; right: 0; top: -5px;
   height: 2px; background: var(--accent); border-radius: 2px;

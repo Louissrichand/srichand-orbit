@@ -486,7 +486,7 @@
       h += '<span class="approval-pill" style="background:' + a.color + '22;color:' + a.color +
         '">' + esc(L(a.label)) + '</span>';
     }
-    if (!t.completed && S.isBlocked(t.id)) {
+    if (!t.completed && !(opts && opts.slim) && S.isBlocked(t.id)) {
       h += '<span class="chip blocked" title="' + L('รองานอื่นให้เสร็จก่อน') + '">' + I('blocked', 11) + ' ' + L('ถูกบล็อก') + '</span>';
     }
     if (t.recur) h += '<span class="chip recur" title="' + L('ทำซ้ำ') + '">' + I('repeat', 11) + ' ' + esc(recurLabel(t.recur)) + '</span>';
@@ -506,7 +506,7 @@
           esc(x.project.color) + '"></span>' + esc(x.project.name) + '</span>';
       });
     }
-    if (t.dueOn) {
+    if (t.dueOn && !(opts && opts.slim)) {
       h += '<span class="chip' + dueClass(t.dueOn, t.completed) + '">' + fmtDate(t.dueOn) +
         (t.dueTime ? ' ' + esc(t.dueTime) : '') + '</span>';
     }
@@ -537,9 +537,11 @@
     var u = S.user(t.assigneeId);
     var pr = prio(t.priority);
 
+    var blocked = !t.completed && S.isBlocked(t.id);
     var h = '<div class="card' + (t.completed ? ' done' : '') + (opts.selected ? ' sel' : '') +
-      '" draggable="true" data-act="open-task" data-id="' + esc(t.id) +
-      '" data-section="' + esc(sectionId) + '">';
+      (blocked ? ' blocked' : '') + '" draggable="true" data-act="open-task" data-id="' + esc(t.id) +
+      '" data-section="' + esc(sectionId) + '"' +
+      (blocked ? ' title="' + L('รองานอื่นให้เสร็จก่อน') + '"' : '') + '>';
     h += '<div class="top">';
     if (opts.selectable) h += selbox(t, opts.selected);
     h += checkbox(t) + '<span class="nm">' + esc(t.name) + '</span></div>';
@@ -549,7 +551,13 @@
       foot += '<span class="chip" style="background:' + pr.color + '22;color:' + pr.color +
         '"><span class="swatch" style="background:' + pr.color + '"></span>' + L(pr.label) + '</span>';
     }
-    foot += badges(t, opts) + avatar(u, 'sm');
+    /* การ์ดบอร์ดตัดป้าย "ถูกบล็อก" กับกำหนดส่งออก เหลือความสำคัญเป็นป้ายสถานะเดียว
+     * บอร์ดมีไว้ดูว่างานไหนอยู่ขั้นไหน ไม่ใช่ดูว่าครบกำหนดเมื่อไหร่
+     * วันที่อ่านได้จากรายการ ไทม์ไลน์ และปฏิทิน ซึ่งเรียงตามเวลาอยู่แล้ว
+     *
+     * ส่วนงานที่ถูกบล็อกเปลี่ยนไปบอกด้วยแถบแดงที่ขอบซ้ายการ์ดแทน
+     * ถ้าเอาป้ายออกเฉย ๆ ข้อมูลนี้จะหายไปจากบอร์ดทั้งใบ ซึ่งเป็นคนละเรื่องกับการลดความรก */
+    foot += badges(t, { showProject: opts.showProject, slim: true }) + avatar(u, 'sm');
     h += '<div class="foot">' + foot + '</div></div>';
     return h;
   }
