@@ -2615,3 +2615,52 @@ button.prof-away:hover { color: var(--accent); }
   font-size: 12.5px; color: var(--fg-soft); line-height: 1.7;
 }
 .prj-list li { margin-bottom: 2px; }
+
+/* ---------- ฟิลด์กำหนดเองที่แยกตามโปรเจกต์ ---------- */
+
+.dw-pfields {
+  margin: 12px 0 4px; padding: 10px 12px 4px;
+  border: 1px solid var(--line); border-radius: var(--radius-lg);
+  background: var(--bg-sunk);
+}
+.dw-phead {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12.5px; margin-bottom: 8px; min-width: 0;
+}
+.dw-phead .swatch { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+.dw-phead b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dw-phead em {
+  font-style: normal; color: var(--fg-faint); flex: none;
+}
+.dw-phead em::before { content: '· '; }
+.dw-pfields .fld:last-child { margin-bottom: 6px; }
+/* ช่องกรอกต้องต่างจากพื้นบล็อก ไม่งั้นช่องว่างจะกลืนหายไปกับพื้นหลังจนไม่รู้ว่ากรอกได้ */
+.dw-pfields select.inp, .dw-pfields input.inp {
+  background: var(--bg); border-color: var(--line);
+}
+.dw-pfields .inp:hover { border-color: var(--line-strong); }
+.dw-pfields .inp:focus { border-color: var(--accent); }
+
+/* ---------- แท็บความเห็น / ความเคลื่อนไหว ---------- */
+
+.dw-acttabs {
+  display: flex; align-items: center; gap: 4px;
+  margin: 22px 0 10px; border-bottom: 1px solid var(--line);
+}
+.dw-acttab {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 10px; font-size: 13px; font-weight: 500; color: var(--fg-soft);
+  border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap;
+}
+.dw-acttab:hover { color: var(--fg); }
+.dw-acttab.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.dw-acttab .n {
+  min-width: 17px; height: 17px; padding: 0 5px; border-radius: 9px;
+  background: var(--bg-inset); color: var(--fg-soft); font-size: 11px; font-weight: 700;
+  display: grid; place-items: center;
+}
+.dw-acttab.on .n { background: var(--accent-bg); color: var(--accent); }
+
+.dw-actempty {
+  padding: 18px 2px; font-size: 13px; color: var(--fg-faint);
+}

@@ -644,7 +644,7 @@
 
   function renderDrawer() {
     if (state.openTaskId && S.task(state.openTaskId)) {
-      $drawer.innerHTML = R.drawer(state.openTaskId);
+      $drawer.innerHTML = R.drawer(state.openTaskId, { actTab: state.actTab });
       $drawer.classList.add('open');
       $dwBack.classList.add('open');
       $drawer.setAttribute('aria-hidden', 'false');
@@ -869,6 +869,10 @@
   function openTask(id) {
     if (!S.task(id)) return;
     state.openTaskId = id;
+    /* เปิดงานใหม่ให้กลับมาที่แท็บความเห็นเสมอ
+     * ถ้าจำแท็บข้ามงาน คนที่เผลอเปิดค้างไว้ที่ความเคลื่อนไหวทั้งหมด
+     * จะเจอบันทึกอัตโนมัติกองหนึ่งทุกครั้งที่เปิดงาน แทนที่จะเจอสิ่งที่ทีมคุยกันไว้ */
+    state.actTab = 'comments';
     renderDrawer();
     syncHash();
   }
@@ -3087,6 +3091,11 @@
         break;
       case 'unhome':
         if (!S.removeTaskFromProject(id, projectId)) toast(L('งานต้องอยู่อย่างน้อย 1 โปรเจกต์'));
+        break;
+
+      case 'dw-act-tab':
+        state.actTab = el.dataset.tab === 'all' ? 'all' : 'comments';
+        renderDrawer();
         break;
 
       /* --- comment --- */

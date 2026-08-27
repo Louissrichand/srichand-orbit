@@ -1744,7 +1744,7 @@
     return out;
   }
 
-  function drawer(taskId) {
+  function drawer(taskId, opts) {
     var t = S.task(taskId);
     if (!t) return '';
     var u = S.user(t.assigneeId);
@@ -1866,36 +1866,54 @@
     h += '<button class="btn btn-sm btn-ghost" data-act="add-tag" data-id="' + esc(t.id) +
       '">+ ' + L('แท็ก') + '</button></div></div>';
 
-    // ฟิลด์กำหนดเอง จากทุกโปรเจกต์ที่งานนี้อยู่
-    var seen = {};
+    /* ---- ฟิลด์กำหนดเอง แยกกลุ่มตามโปรเจกต์ ----
+     *
+     * ฟิลด์เป็นของโปรเจกต์ ไม่ใช่ของงาน งานหนึ่งอยู่ได้หลายโปรเจกต์
+     * ที่เคยเอามากองรวมกันแล้วตัดชื่อซ้ำทิ้ง ทำให้อ่านไม่ออกว่าช่องไหนของใคร
+     * และถ้าสองโปรเจกต์บังเอิญตั้งชื่อฟิลด์เหมือนกัน จะเห็นแค่อันเดียว
+     * ส่วนอีกอันหายไปเงียบ ๆ ทั้งที่เป็นคนละช่องคนละค่า
+     *
+     * แยกเป็นบล็อกใต้ชื่อโปรเจกต์แบบเดียวกับ Asana จึงตอบได้ว่าค่านี้อยู่ในโปรเจกต์ไหน
+     * ชุดฟิลด์ในแต่ละบล็อกคือชุดเดียวกับคอลัมน์ในหน้ารายการของโปรเจกต์นั้น
+     */
+    function fieldInput(f) {
+      var v = S.fieldValue(t.id, f.id);
+      var s = '';
+      if (f.type === 'select') {
+        s += '<select class="inp" data-act="edit-field" data-field="' + esc(f.id) +
+          '"><option value="">—</option>';
+        f.options.forEach(function (o) {
+          s += '<option' + (v === o ? ' selected' : '') + '>' + esc(o) + '</option>';
+        });
+        s += '</select>';
+      } else if (f.type === 'person') {
+        s += '<select class="inp" data-act="edit-field" data-field="' + esc(f.id) +
+          '"><option value="">—</option>';
+        S.db.users.forEach(function (usr) {
+          s += '<option value="' + esc(usr.id) + '"' + (v === usr.id ? ' selected' : '') +
+            '>' + esc(usr.name) + '</option>';
+        });
+        s += '</select>';
+      } else {
+        var typ = f.type === 'number' ? 'number' : (f.type === 'date' ? 'date' : 'text');
+        s += '<input class="inp" type="' + typ + '" data-act="edit-field" data-field="' +
+          esc(f.id) + '" value="' + esc(v == null ? '' : v) + '">';
+      }
+      return s;
+    }
+
     homes.forEach(function (x) {
+      if (!x.project.fields.length) return;
+      var sec2 = S.section(x.project.id, x.membership.sectionId);
+      h += '<div class="dw-pfields"><div class="dw-phead">' +
+        '<span class="swatch" style="background:' + esc(x.project.color) + '"></span>' +
+        '<b>' + esc(x.project.name) + '</b>' +
+        (sec2 ? '<em>' + esc(sec2.name) + '</em>' : '') + '</div>';
       x.project.fields.forEach(function (f) {
-        if (seen[f.id]) return;
-        seen[f.id] = true;
-        var v = S.fieldValue(t.id, f.id);
-        h += '<div class="fld"><label>' + esc(f.name) + '</label><div class="val">';
-        if (f.type === 'select') {
-          h += '<select class="inp" data-act="edit-field" data-field="' + esc(f.id) +
-            '"><option value="">—</option>';
-          f.options.forEach(function (o) {
-            h += '<option' + (v === o ? ' selected' : '') + '>' + esc(o) + '</option>';
-          });
-          h += '</select>';
-        } else if (f.type === 'person') {
-          h += '<select class="inp" data-act="edit-field" data-field="' + esc(f.id) +
-            '"><option value="">—</option>';
-          S.db.users.forEach(function (usr) {
-            h += '<option value="' + esc(usr.id) + '"' + (v === usr.id ? ' selected' : '') +
-              '>' + esc(usr.name) + '</option>';
-          });
-          h += '</select>';
-        } else {
-          var typ = f.type === 'number' ? 'number' : (f.type === 'date' ? 'date' : 'text');
-          h += '<input class="inp" type="' + typ + '" data-act="edit-field" data-field="' +
-            esc(f.id) + '" value="' + esc(v == null ? '' : v) + '">';
-        }
-        h += '</div></div>';
+        h += '<div class="fld"><label>' + esc(f.name) + '</label>' +
+          '<div class="val">' + fieldInput(f) + '</div></div>';
       });
+      h += '</div>';
     });
 
     // รายละเอียด
@@ -1980,9 +1998,34 @@
     h += '<button class="add-row" data-act="add-subtask" data-id="' + esc(t.id) +
       '">+ ' + L('เพิ่มงานย่อย') + '</button>';
 
-    // ความเคลื่อนไหว
-    h += '<div class="dw-sec-title">' + L('ความเคลื่อนไหว') + '</div>';
-    stories.forEach(function (s) {
+    /* ---- ความเห็นและความเคลื่อนไหว ----
+     *
+     * เดิมเอาความเห็นของคนกับบันทึกอัตโนมัติมาเรียงปนกันในสายเดียว
+     * งานที่แก้วันบ่อย ๆ จะมีบรรทัด "เปลี่ยนกำหนดส่ง" คั่นจนหาสิ่งที่คนพิมพ์ไว้ไม่เจอ
+     * ทั้งที่สองอย่างนี้ตอบคนละคำถาม — ความเห็นคือ "ทีมคุยอะไรกันไว้"
+     * ส่วนบันทึกคือ "งานนี้ถูกแก้อะไรมาบ้าง"
+     *
+     * แยกเป็นสองแท็บแบบ Asana เปิดมาที่ความเห็นก่อน เพราะเป็นสิ่งที่คนเปิดงานมาหา
+     */
+    var onlyComments = stories.filter(function (s) { return s.type === 'comment'; });
+    var tab = (opts && opts.actTab) === 'all' ? 'all' : 'comments';
+    var shown = tab === 'all' ? stories : onlyComments;
+
+    h += '<div class="dw-acttabs">' +
+      '<button class="dw-acttab' + (tab === 'comments' ? ' on' : '') +
+      '" data-act="dw-act-tab" data-tab="comments">' + L('ความเห็น') +
+      (onlyComments.length ? ' <span class="n">' + onlyComments.length + '</span>' : '') +
+      '</button>' +
+      '<button class="dw-acttab' + (tab === 'all' ? ' on' : '') +
+      '" data-act="dw-act-tab" data-tab="all">' + L('ความเคลื่อนไหวทั้งหมด') + '</button>' +
+      '</div>';
+
+    if (!shown.length) {
+      h += '<div class="dw-actempty">' + (tab === 'all'
+        ? L('ยังไม่มีความเคลื่อนไหว')
+        : L('ยังไม่มีใครแสดงความเห็น เริ่มคนแรกได้เลย')) + '</div>';
+    }
+    shown.forEach(function (s) {
       var actor = S.user(s.actorId);
       if (s.type === 'comment') {
         h += '<div class="story">' + avatar(actor) + '<div class="body">' +
