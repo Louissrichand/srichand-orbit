@@ -10,7 +10,7 @@
 
   var KEY = 'orbit.db.v4';
   var LEGACY_KEYS = ['orbit.db.v3', 'orbit.db.v2', 'orbit.db.v1', 'taskflow.db.v1'];   // ชื่อ/เวอร์ชันเดิม
-  var SCHEMA = 11;
+  var SCHEMA = 12;
 
   /* ---------- utilities ---------- */
 
@@ -259,10 +259,13 @@
         text: L('งานเตรียมเปิดตัวเดินตามแผน รอผลตรวจข้อความโฆษณารอบสุดท้าย'),
         by: 'u_me', at: t
       },
-      rules: [
-        { id: 'r_done', whenSection: 's_l4', setCompleted: true,
-          setAssignee: null, setPriority: null, addTag: '' }
+      /* ย้ายเข้า "เสร็จแล้ว" = ทำเครื่องหมายเสร็จ (เดิมเป็นกฎแบบเก่า ตอนนี้เป็นอัตโนมัติ 3a) */
+      automations: [
+        { id: 'au_done', name: '', on: true, chain: false, by: 'u_me', at: t,
+          trigger: { type: 'moved', sec: 's_l4' },
+          paths: [{ conds: [], acts: [{ type: 'complete', v: true }] }], els: null }
       ],
+      autoRuns: [],
       savedViews: []
     };
 
@@ -280,7 +283,7 @@
         { id: 'f_format', name: L('รูปแบบ'), type: 'select',
           options: ['Reels', 'Static', 'Carousel', 'Live'] }
       ],
-      status: null, rules: [], savedViews: []
+      status: null, automations: [], autoRuns: [], savedViews: []
     };
 
     var pOps = {
@@ -292,7 +295,7 @@
         { id: 's_o2', name: L('กำลังทำ') },
         { id: 's_o3', name: L('เสร็จแล้ว') }
       ],
-      fields: [], status: null, rules: [], savedViews: []
+      fields: [], status: null, automations: [], autoRuns: [], savedViews: []
     };
 
     var projects = [pLaunch, pContent, pOps];
@@ -421,7 +424,6 @@
       d.taskTemplates = d.taskTemplates || [];
       d.projects.forEach(function (p) {
         if (!('status' in p)) p.status = null;
-        p.rules = p.rules || [];
         p.savedViews = p.savedViews || [];
         p.colWidths = p.colWidths || {};
       });
@@ -588,6 +590,33 @@
       if (!p.roles || typeof p.roles !== 'object' || Array.isArray(p.roles)) p.roles = {};
       p.accessRequests = Array.isArray(p.accessRequests) ? p.accessRequests : [];
     });
+    /* v12 — อัตโนมัติ (ชิ้นงาน 3a) แทนกฎแบบเดิม
+     *   project.automations [{ id, name, on, chain, by, at, trigger: { type, … },
+     *                         paths: [{ conds: [{f, op, v}], acts: [{ type, … }] }], els: [acts] | null }]
+     *   project.autoRuns    ประวัติการรัน 200 ครั้งล่าสุด [{ at, a, an, t, tn, s, n, e, ep, by }]
+     *   personal.auto / autoRuns  อัตโนมัติของงานของฉัน (ย้ายเซกชันของตัวเอง)
+     *   autoFired           { คีย์: วันที่ } กันอัตโนมัติตามเวลารันซ้ำ (รหัสอัตโนมัติ + งาน + วัน) เก็บ 60 วัน
+     * กฎเดิม { whenSection, setCompleted, setAssignee, setPriority, addTag } กลายเป็น
+     * อัตโนมัติ "ย้ายเข้าคอลัมน์" หนึ่งเส้นทางที่ไม่มีเงื่อนไข แล้วลบ p.rules ทิ้ง */
+    d.projects.forEach(function (p) {
+      p.automations = Array.isArray(p.automations) ? p.automations.filter(function (a) { return a && a.id; }) : [];
+      (p.rules || []).forEach(function (r) {
+        if (!r || !r.whenSection) return;
+        var acts = [];
+        if (r.setCompleted) acts.push({ type: 'complete', v: true });
+        if (r.setAssignee) acts.push({ type: 'assign', mode: 'user', user: r.setAssignee });
+        if (r.setPriority) acts.push({ type: 'priority', v: r.setPriority });
+        if (r.addTag) acts.push({ type: 'tag', tag: r.addTag });
+        if (!acts.length) return;
+        p.automations.push({ id: r.id ? 'au_' + String(r.id).replace(/^r_/, '') : uid('au'), name: '', on: true,
+          chain: false, by: null, at: null, trigger: { type: 'moved', sec: r.whenSection },
+          paths: [{ conds: [], acts: acts }], els: null });
+      });
+      delete p.rules;
+      p.automations.forEach(normalizeAuto);
+      p.autoRuns = Array.isArray(p.autoRuns) ? p.autoRuns.slice(-AUTO_RUNS_MAX) : [];
+    });
+    d.autoFired = pruneFired(d.autoFired);
     prunePersonal(d);
     if (!d.users.some(function (u) { return u.role === 'admin'; })) {
       var firstUser = d.users.filter(function (u) { return u.id === d.currentUserId; })[0] || d.users[0];
@@ -651,6 +680,7 @@
 
   /** แทนข้อมูลทั้งก้อนด้วยของจากส่วนกลาง โดยไม่ส่งกลับขึ้นไปอีก */
   function replaceDb(obj) {
+    autoQueue.length = 0;
     suppressRemote = true;
     db = migrate(obj);
     dropIndex();
@@ -710,8 +740,19 @@
    * แก้หลายงานพร้อมกันผ่านฟังก์ชันเดิมที่ต่างคน snapshot/commit เอง
    * ครอบด้วย batch แล้วจะได้จุดย้อนกลับเดียว และบันทึก/วาดใหม่ครั้งเดียวตอนจบ */
   var batchDepth = 0;
+  var autoQueue = [];          // 3a — เหตุการณ์ที่รอให้อัตโนมัติตรวจ (ดู autoFire / drainAuto)
+  var autoDraining = false;
+  var autoCtx = null;          // อัตโนมัติที่กำลังรันอยู่ { depth, a, p, t, ev } — null = คนกดเอง
   function batch(label, params, fn) {
     snapshot(label, params);
+    batchDepth++;
+    var out;
+    try { out = fn(); } finally { batchDepth--; }
+    commit();
+    return out;
+  }
+  /** เหมือน batch แต่ไม่เก็บจุดย้อนกลับ — ใช้กับอัตโนมัติตามเวลาที่ไม่ได้เกิดจากการกดของใคร */
+  function quietBatch(fn) {
     batchDepth++;
     var out;
     try { out = fn(); } finally { batchDepth--; }
@@ -721,6 +762,9 @@
   function commit() {
     dropIndex();          // ข้อมูลเปลี่ยนแล้ว ดัชนีเก่าใช้ไม่ได้
     if (batchDepth) return;            // อยู่ในชุดคำสั่งเดียวกัน (batch) — บันทึกครั้งเดียวตอนจบ
+    /* 3a — อัตโนมัติที่ถูกปลุกระหว่างการแก้ครั้งนี้รันตรงนี้ ก่อนบันทึก
+     * การกระทำของอัตโนมัติจึงอยู่ในจุดย้อนกลับเดียวกับสิ่งที่ผู้ใช้ทำ และบันทึก/วาดใหม่ครั้งเดียว */
+    if (autoQueue.length && !autoDraining && !suppressRemote) drainAuto();
     /* รหัสงานเลขรันให้งานใหม่ในโปรเจกต์ที่มีฟิลด์ ID ก่อนบันทึก — ทุกทางที่งานเข้าโปรเจกต์
      * (สร้าง นำเข้า ย้าย ทำซ้ำ คัดลอก) จึงได้เลขเองโดยไม่ต้องไล่แก้ทีละที่
      * ข้อมูลที่มาจากส่วนกลาง (replaceDb) ไม่แตะ เครื่องที่สร้างงานเป็นคนออกเลขเอง */
@@ -915,6 +959,7 @@
   function undo() {
     var s = undoStack.pop();
     if (!s) return null;
+    autoQueue.length = 0;
     db = JSON.parse(s.data);
     dropIndex();
     commit();
@@ -1461,7 +1506,8 @@
       },
       home: null,
       inbox: { sort: 'new', dense: false },
-      notepad: '', pv: {}, cal: null, searches: []
+      notepad: '', pv: {}, cal: null, searches: [],
+      auto: [], autoRuns: []           // 3a — อัตโนมัติของงานของฉัน
     };
   }
 
@@ -1496,6 +1542,9 @@
       if (!Array.isArray(s.conds)) s.conds = [];
       if (s.mode !== 'calendar') s.mode = 'list';
     });
+    p.auto = Array.isArray(p.auto) ? p.auto.filter(function (a) { return isObj(a) && a.id; }) : [];
+    p.auto.forEach(normalizeAuto);
+    p.autoRuns = Array.isArray(p.autoRuns) ? p.autoRuns.slice(-50) : [];
     return p;
   }
 
@@ -2137,6 +2186,7 @@
   function notifyNewTask(t, projectId) {
     var p = project(projectId);
     if (!p || !t || t.parentId) return;
+    autoFire('added', t.id, { projectId: projectId });   // 3a — งานเข้าโปรเจกต์ (สร้างใหม่หรือเพิ่มเข้ามา)
     var w = projectWatchers(projectId, 'newTasks');
     if (w.length) notifyOnly(t.id, w, 'งานใหม่ “{t}” ใน {p}', 'newtask', { t: t.name, p: p.name });
   }
@@ -2483,6 +2533,10 @@
       });
       return all;
     }
+    /* 3a — เงื่อนไขของอัตโนมัติ 'a:<pid>' = ของโปรเจกต์นั้น + "อยู่ในโปรเจกต์ใดก็ได้" */
+    if (String(projectId || '').indexOf('a:') === 0) {
+      return filterFields(projectId.slice(2)).concat([SEARCH_BUILTIN[0]]);
+    }
     var p = project(projectId);
     var out = FILTER_BUILTIN.slice();
     ((p && p.fields) || []).forEach(function (f) {
@@ -2497,8 +2551,9 @@
 
   /** ตัวเลือกให้ติ๊กของเงื่อนไขชนิดคน/ตัวเลือก [[ค่า, ป้าย, สี]] */
   function filterChoices(projectId, fid) {
-    var p = project(projectId);
     var def = filterField(projectId, fid);
+    if (String(projectId || '').indexOf('a:') === 0) projectId = projectId.slice(2);
+    var p = project(projectId);
     if (!def) return [];
     if (def.kind === 'person' || fid === 'followers') {
       return [[ME, 'ฉัน', null]].concat(db.users.filter(function (u) { return u.active !== false; })
@@ -2961,11 +3016,7 @@
       if (beforeId) list.forEach(function (x, i) { if (x.task.id === beforeId) at = i; });
       if (at === 0) pos = list[0].membership.position / 2;
       else if (at > 0) pos = (list[at - 1].membership.position + list[at].membership.position) / 2;
-      var moved = m.sectionId !== key;
-      if (moved) log(taskId, 'ย้ายไปคอลัมน์ {c}', { c: section(projectId, key).name });
-      m.sectionId = key;
-      m.position = pos;
-      if (moved) applyRules(projectId, key, taskId);
+      setSectionRaw(m, key, pos);
       return;
     }
     if (by === 'assignee') {
@@ -2980,11 +3031,7 @@
       var fid = by.slice(6);
       var cur = fieldValue(taskId, fid);
       if ((cur || '') === (key || '')) return;
-      setFieldRaw(taskId, fid, key || null);
-      var f = null;
-      db.projects.forEach(function (p) { (p.fields || []).forEach(function (x) { if (x.id === fid) f = x; }); });
-      var who = f && f.type === 'person' ? user(key) : null;
-      log(taskId, key ? 'ตั้ง {f} เป็น {v}' : 'ล้างค่า {f}', { f: f ? f.name : '', v: who ? who.name : key });
+      setFieldRaw(taskId, fid, key || null, { log: true });
     }
   }
 
@@ -3002,19 +3049,35 @@
     return true;
   }
 
-  /** ใส่ค่าฟิลด์โดยไม่ commit */
-  function setFieldRaw(taskId, fieldId, value) {
-    var empty = (value === null || value === '' ||
+  /** ใส่ค่าฟิลด์โดยไม่ snapshot/commit — ทางเดียวที่ค่าฟิลด์เปลี่ยน (ช่องในรายการ แผงงาน แก้หลายงาน
+   *  ลากลงกลุ่ม อัตโนมัติ) ลงประวัติเมื่อฟิลด์เปิด "แจ้งเมื่อค่าเปลี่ยน" หรือ opts.log แล้วปลุกอัตโนมัติ
+   *  @returns true ถ้าค่าเปลี่ยนจริง */
+  function setFieldRaw(taskId, fieldId, value, opts) {
+    var empty = (value === null || value === undefined || value === '' ||
                  (value && value.length === 0 && typeof value !== 'number'));
     var fv = db.fieldValues.filter(function (v) {
       return v.taskId === taskId && v.fieldId === fieldId;
     })[0];
+    var before = JSON.stringify(fv ? fv.value : null), after = JSON.stringify(empty ? null : value);
+    if (before === after) return false;
+    var def = fieldDef(fieldId);
+    /* ฟิลด์ที่เปิด "แจ้งเมื่อค่าเปลี่ยน" — ลงประวัติ แล้ว log() แจ้งผู้ติดตาม (ผู้รับผิดชอบเป็นผู้ติดตามอยู่แล้ว)
+     * เดิมการลากลงกลุ่ม (2b) ข้ามขั้นนี้ ตอนนี้ทุกทางผ่านตรงนี้ */
+    if (def && (def.notify || (opts && opts.log))) {
+      var shown = empty ? '' : [].concat(value).map(function (x) {
+        var who = def.type === 'person' ? user(x) : null;
+        return who ? who.name : x;
+      }).join(', ');
+      log(taskId, empty ? 'ล้างค่า {f}' : 'ตั้ง {f} เป็น {v}', { f: def.name, v: shown });
+    }
     if (fv) {
       if (empty) db.fieldValues = db.fieldValues.filter(function (v) { return v !== fv; });
       else fv.value = value;
     } else if (!empty) {
       db.fieldValues.push({ taskId: taskId, fieldId: fieldId, value: value });
     }
+    autoFire('field', taskId, { field: fieldId, value: empty ? null : value });
+    return true;
   }
 
   /* ---------- สีตามฟิลด์ (ปฏิทินและไทม์ไลน์) ---------- */
@@ -3305,11 +3368,13 @@
    * ข้อมูลเก่าที่เก็บเป็นประโยคไว้แล้วยังแสดงได้ เพราะ L() คืนค่าเดิมเมื่อไม่เจอคีย์
    */
   function log(taskId, key, params, exclude) {
-    db.stories.push({
+    var st = {
       id: uid('st'), taskId: taskId, actorId: db.currentUserId,
       type: 'log', text: key, params: params || null,
       createdAt: new Date().toISOString()
-    });
+    };
+    if (autoCtx) st.auto = 1;          // 3a — ทำโดยอัตโนมัติ (ประวัติขึ้น ⚡)
+    db.stories.push(st);
     var actor = me();
     /* ข้อความแจ้งเตือนก็ต้องแปลตอนอ่านเหมือนกัน จึงส่งคีย์กับค่าไปด้วย */
     notify(taskId, (actor ? actor.name : 'มีคน') + ' ' + fill(key, params),
@@ -3552,14 +3617,17 @@
     if ('completed' in patch && patch.completed !== t.completed) {
       patch.completedAt = patch.completed ? today() : null;
       log(id, patch.completed ? 'ทำงานนี้เสร็จแล้ว' : 'เปิดงานนี้อีกครั้ง');
+      autoFire('completed', id, { v: !!patch.completed });
       if (patch.completed) {
         spawnRecurrence(t);
         // ปลดล็อกงานที่รออยู่ แล้วแจ้งผู้รับผิดชอบ
         blocking(id).forEach(function (b) {
+          if (b.completed) return;
           var others = blockers(b.id).filter(function (x) { return x.id !== id; });
           if (!others.length) {
             notifyOnly(b.id, b.assigneeId ? [b.assigneeId] : [],
               'งาน “{t}” พร้อมทำต่อแล้ว', 'unblock', { t: b.name }, true);
+            autoFire('unblocked', b.id, { by: id });
           }
         });
       }
@@ -3581,10 +3649,10 @@
       /* แจ้งคนที่เพิ่งได้รับงานเป็นการเฉพาะ แยกจากความเคลื่อนไหวทั่วไป
        * เพราะ "มีงานเข้า" เป็นเรื่องที่คนอยากรู้ทันที ต่างจาก "มีคนเปลี่ยนวัน" */
       if (patch.assigneeId) {
-        var actorA = me();
         notifyOnly(id, [patch.assigneeId],
           'มอบหมายงาน “{t}” ให้คุณ', 'assigned', { t: t.name });
       }
+      autoFire('assignee', id, { user: patch.assigneeId || null, old: t.assigneeId || null });
     }
     /* ---- บันทึกการเปลี่ยนแปลงให้ครบทุกช่อง ----
      *
@@ -3602,6 +3670,7 @@
         log(id, patch.dueOn ? 'ตั้งกำหนดส่ง {d}' : 'ลบกำหนดส่ง',
           patch.dueOn ? { d: patch.dueOn } : null);
       }
+      autoFire('due', id, { old: t.dueOn || null, now: patch.dueOn || null });
     }
     if ('startOn' in patch && patch.startOn !== t.startOn) {
       if (patch.startOn && t.startOn) {
@@ -3610,6 +3679,7 @@
         log(id, patch.startOn ? 'ตั้งวันเริ่ม {d}' : 'ลบวันเริ่ม',
           patch.startOn ? { d: patch.startOn } : null);
       }
+      autoFire('start', id, { old: t.startOn || null, now: patch.startOn || null });
     }
     if ('dueTime' in patch && patch.dueTime !== t.dueTime) {
       log(id, patch.dueTime ? 'ตั้งเวลาส่ง {d}' : 'ลบเวลาส่ง',
@@ -3663,6 +3733,7 @@
         log(id, 'เปลี่ยนสถานะอนุมัติเป็น “{s}”', { s: st.label }, askers);
         var akey = APPROVAL_NOTICE[patch.approval];
         if (akey) notifyOnly(id, askers, akey, 'approval', { t: t.name });
+        autoFire('approval', id, { v: patch.approval });
       }
     }
 
@@ -4102,39 +4173,24 @@
       else newPos = (list[idx - 1].membership.position + list[idx].membership.position) / 2;
     }
 
-    var changedSection = m.sectionId !== toSectionId;
-    if (changedSection) {
-      var s = section(projectId, toSectionId);
-      if (s) log(taskId, 'ย้ายไปคอลัมน์ {c}', { c: s.name });
-    }
-    m.sectionId = toSectionId;
-    m.position = newPos;
-
-    if (changedSection) applyRules(projectId, toSectionId, taskId);
+    setSectionRaw(m, toSectionId, newPos);
     commit();
   }
 
-  /** กฎอัตโนมัติ: เมื่อย้ายเข้าคอลัมน์ที่กำหนด ให้ทำอะไรบ้าง */
-  function applyRules(projectId, sectionId, taskId) {
-    var p = project(projectId);
-    var t = task(taskId);
-    if (!p || !t) return;
-    p.rules.forEach(function (r) {
-      if (r.whenSection !== sectionId) return;
-      if (r.setCompleted && !t.completed) {
-        t.completed = true;
-        t.completedAt = today();
-        log(taskId, 'ถูกทำเครื่องหมายเสร็จโดยกฎอัตโนมัติ');
-        spawnRecurrence(t);
-      }
-      if (r.setAssignee && r.setAssignee !== t.assigneeId) {
-        mtForget(t.id, t.assigneeId);
-        t.assigneeId = r.setAssignee;
-        stampAssign(t);
-      }
-      if (r.setPriority) t.priority = r.setPriority;
-      if (r.addTag && t.tags.indexOf(r.addTag) < 0) t.tags.push(r.addTag);
-    });
+  /** ย้ายคอลัมน์ของ membership หนึ่งอัน — ทางเดียวที่งานเปลี่ยนคอลัมน์ในโปรเจกต์ (ลาก ย้ายหลายงาน
+   *  ลากลงกลุ่ม ตัวเลือกคอลัมน์ในแผงงาน และอัตโนมัติ) ไม่ snapshot/commit
+   *  ลงประวัติและปลุกอัตโนมัติ "ย้ายเข้าคอลัมน์" เมื่อคอลัมน์เปลี่ยนจริง */
+  function setSectionRaw(m, sectionId, position) {
+    var moved = m.sectionId !== sectionId;
+    var from = m.sectionId;
+    if (moved) {
+      var s = section(m.projectId, sectionId);
+      if (s) log(m.taskId, 'ย้ายไปคอลัมน์ {c}', { c: s.name });
+    }
+    m.sectionId = sectionId;
+    if (position != null) m.position = position;
+    if (moved) autoFire('moved', m.taskId, { projectId: m.projectId, sec: sectionId, from: from });
+    return moved;
   }
 
   function addTaskToProject(taskId, projectId, sectionId) {
@@ -4218,9 +4274,13 @@
   function toggleFollower(taskId, userId) {
     var t = task(taskId);
     if (!t) return;
+    snapshot('เปลี่ยนผู้ติดตาม');
     var i = t.followers.indexOf(userId);
     if (i >= 0) t.followers.splice(i, 1);
-    else t.followers.push(userId);
+    else {
+      t.followers.push(userId);
+      autoFire('follower', taskId, { user: userId });
+    }
     commit();
   }
 
@@ -4250,6 +4310,7 @@
       addedBy: db.currentUserId, addedAt: new Date().toISOString()
     });
     log(taskId, 'แนบ “{f}”', { f: name });
+    autoFire('attachment', taskId, { name: name });
     commit();
   }
 
@@ -4311,6 +4372,7 @@
     if (parent && parent.parentId) parent = story(parent.parentId);
     if (parent && (parent.type !== 'comment' || parent.taskId !== taskId)) parent = null;
 
+    snapshot('เพิ่มความเห็น');          // 3a — ย้อนกลับได้ (รวมสิ่งที่อัตโนมัติทำตามความเห็นนี้)
     var s = {
       id: uid('st'), taskId: taskId, actorId: db.currentUserId,
       type: 'comment', text: clean, createdAt: new Date().toISOString(),
@@ -4341,6 +4403,8 @@
         db.currentUserId, [], 'comment', mentioned, 'แสดงความเห็น', null, actor);
     }
     logConnected(taskId, '', clean);
+    if (autoCtx) s.auto = 1;            // 3a — ความเห็นที่อัตโนมัติเขียน
+    autoFire('comment', taskId, { story: s.id });
     commit();
     return s;
   }
@@ -4409,23 +4473,13 @@
   function setFieldValue(taskId, fieldId, value) {
     var def = fieldDef(fieldId);
     if (def && def.type === 'id') return;          // รหัสงานออกเลขเอง แก้ด้วยมือไม่ได้
+    var fv = db.fieldValues.filter(function (v) { return v.taskId === taskId && v.fieldId === fieldId; })[0];
     var empty = (value === null || value === '' ||
                  (value && value.length === 0 && typeof value !== 'number'));
-    var fv = db.fieldValues.filter(function (v) {
-      return v.taskId === taskId && v.fieldId === fieldId;
-    })[0];
-    /* ฟิลด์ที่เปิด "แจ้งเมื่อค่าเปลี่ยน" — ลงประวัติ แล้ว log() แจ้งผู้ติดตาม (ผู้รับผิดชอบเป็นผู้ติดตามอยู่แล้ว) */
-    if (def && def.notify && JSON.stringify(fv ? fv.value : null) !== JSON.stringify(empty ? null : value)) {
-      log(taskId, empty ? 'ล้างค่า {f}' : 'ตั้ง {f} เป็น {v}',
-        { f: def.name, v: empty ? '' : [].concat(value).join(', ') });
-    }
-    if (fv) {
-      if (empty) {
-        db.fieldValues = db.fieldValues.filter(function (v) { return v !== fv; });
-      } else { fv.value = value; }
-    } else if (!empty) {
-      db.fieldValues.push({ taskId: taskId, fieldId: fieldId, value: value });
-    }
+    if (JSON.stringify(fv ? fv.value : null) === JSON.stringify(empty ? null : value)) return;
+    /* 3a — ค่าฟิลด์ย้อนกลับได้แล้ว (เดิมไม่มีจุดย้อนกลับ) และอัตโนมัติที่ตามมาอยู่ในจุดเดียวกัน */
+    snapshot('แก้ค่าฟิลด์');
+    setFieldRaw(taskId, fieldId, value);
     commit();
   }
 
@@ -4437,16 +4491,15 @@
     commit();
   }
 
+  /** ย้ายหลายงานไปคอลัมน์เดียวกัน — ผ่าน setSectionRaw เหมือนการลาก อัตโนมัติ "ย้ายเข้าคอลัมน์" จึงทำงาน */
   function bulkMove(ids, projectId, sectionId) {
+    if (!section(projectId, sectionId)) return;
     snapshot('ย้าย {n} งาน', { n: ids.length });
     ids.forEach(function (id) {
       var m = db.memberships.filter(function (x) {
         return x.taskId === id && x.projectId === projectId;
       })[0];
-      if (m) {
-        m.sectionId = sectionId;
-        m.position = nextPosition(projectId, sectionId);
-      }
+      if (m) setSectionRaw(m, sectionId, nextPosition(projectId, sectionId));
     });
     commit();
   }
@@ -4670,7 +4723,7 @@
       depShift: { mode: 'consume', scope: 'downstream' },
       workDays: 'all',
       baseline: null,
-      fields: [], status: null, rules: [], savedViews: [], colWidths: {},
+      fields: [], status: null, automations: [], autoRuns: [], savedViews: [], colWidths: {},
       visibility: 'org', locked: false, views: null, statusLog: [], messages: [],
       defaultTab: null, roles: {}, accessRequests: []
     };
@@ -4764,10 +4817,12 @@
     });
     p.roles = {};
     p.accessRequests = [];
-    p.rules.forEach(function (r) {
-      r.id = uid('r');
-      r.whenSection = sectionMap[r.whenSection] || null;
-    });
+    /* อัตโนมัติไปด้วย รหัสคอลัมน์และฟิลด์ในทริกเกอร์ เงื่อนไข และการกระทำชี้ไปของในสำเนา */
+    var idMap = {};
+    Object.keys(sectionMap).forEach(function (k) { idMap[k] = sectionMap[k]; });
+    Object.keys(fieldMap).forEach(function (k) { idMap[k] = fieldMap[k]; });
+    p.automations = (p.automations || []).map(function (a) { return remapAuto(a, idMap); });
+    p.autoRuns = [];
     p.savedViews = [];
     db.projects.push(p);
     audit("project.duplicate", p.name, "คัดลอกจากโปรเจกต์เดิม");
@@ -5080,27 +5135,6 @@
     } catch (e) {
       return String(n);
     }
-  }
-
-  /* ---------- rules ---------- */
-
-  function addRule(projectId, rule) {
-    var p = project(projectId);
-    p.rules.push({
-      id: uid('r'),
-      whenSection: rule.whenSection,
-      setAssignee: rule.setAssignee || null,
-      setPriority: rule.setPriority || null,
-      setCompleted: !!rule.setCompleted,
-      addTag: rule.addTag || ''
-    });
-    commit();
-  }
-
-  function deleteRule(projectId, ruleId) {
-    var p = project(projectId);
-    p.rules = p.rules.filter(function (r) { return r.id !== ruleId; });
-    commit();
   }
 
   /* ---------- saved views ---------- */
@@ -6306,9 +6340,7 @@
       if (t.tags.indexOf(nw) < 0) t.tags.push(nw);
       n++;
     });
-    db.projects.forEach(function (p) {
-      (p.rules || []).forEach(function (r) { if (r.addTag === oldName) r.addTag = nw; });
-    });
+    autoActsEach(function (a) { if ((a.type === 'tag' || a.type === 'untag') && a.tag === oldName) a.tag = nw; });
     audit('tag.rename', oldName, '→ {t} ({n})', { t: nw, n: n });
     commit();
     return n;
@@ -6322,9 +6354,7 @@
       var k = (t.tags || []).indexOf(name);
       if (k >= 0) { t.tags.splice(k, 1); n++; }
     });
-    db.projects.forEach(function (p) {
-      (p.rules || []).forEach(function (r) { if (r.addTag === name) r.addTag = ''; });
-    });
+    autoActsEach(function (a) { if ((a.type === 'tag' || a.type === 'untag') && a.tag === name) a.tag = ''; });
     audit('tag.delete', name, '{n} งาน', { n: n });
     commit();
     return n;
@@ -6824,7 +6854,11 @@
       ids.forEach(function (id) {
         var t = task(id);
         if (!t) return;
-        people.forEach(function (u) { if (t.followers.indexOf(u) < 0) t.followers.push(u); });
+        people.forEach(function (u) {
+          if (t.followers.indexOf(u) >= 0) return;
+          t.followers.push(u);
+          autoFire('follower', id, { user: u });
+        });
       });
       return ids.length;
     });
@@ -6859,6 +6893,710 @@
       ids.forEach(function (id) { if (id !== masterId && mergeDuplicate(id, masterId)) n++; });
     });
     return n;
+  }
+
+  /* ======================================================================
+   * 3a — อัตโนมัติ (Automations)
+   *
+   * อัตโนมัติหนึ่งตัว = ทริกเกอร์หนึ่งอัน + เส้นทางหลายเส้น (เงื่อนไข AND → การกระทำ) + เส้นทาง "อื่น ๆ"
+   * เส้นทางแรกที่เงื่อนไขตรงครบได้ทำ ไม่ตรงสักเส้นและมี "อื่น ๆ" ก็ทำ "อื่น ๆ"
+   *
+   * ทุกจุดที่ข้อมูลเปลี่ยน (updateTask, setSectionRaw, setFieldRaw, notifyNewTask, addComment …)
+   * เรียก autoFire() ใส่คิวไว้เฉย ๆ แล้ว commit() เป็นคนรันคิวก่อนบันทึก (drainAuto)
+   * สิ่งที่คนกดกับสิ่งที่อัตโนมัติทำตามจึงย้อนกลับได้ครั้งเดียวและบันทึกครั้งเดียว
+   *
+   * กันวนไม่รู้จบ — การกระทำของอัตโนมัติปลุกอัตโนมัติอื่นได้เฉพาะตัวที่เปิด chain ไว้
+   * ลึกได้ไม่เกิน 3 ชั้น และอัตโนมัติตัวเดิมรันกับงานเดิมได้ครั้งเดียวต่อหนึ่งการกด
+   *
+   * ทริกเกอร์ตามเวลา (ใกล้ครบกำหนด เลยกำหนด ตามกำหนดเวลา) ไม่มีเซิร์ฟเวอร์คอยปลุก
+   * ตรวจเฉพาะตอนมีคนเปิดแอปอยู่ (autoTick จาก main.js) และจดคีย์ที่รันแล้วไว้ใน db.autoFired
+   * ซึ่งซิงก์ไปทุกเครื่อง เครื่องอื่นที่ได้ข้อมูลชุดนั้นแล้วจะไม่รันซ้ำ
+   *
+   * เพิ่มทริกเกอร์/การกระทำใหม่ (เช่น 3b ฟอร์ม สถานะของชนิดงาน):
+   *   S.autoRegister('trigger', { id, label, match(tr, ev, t) })  แล้วเรียก S.autoFire(id, taskId, info)
+   *   S.autoRegister('action',  { id, label, task: true, run(act, ctx) })
+   *   และเพิ่มช่องตั้งค่าใน autoTrigParams / autoActParams ของ main.js
+   * ====================================================================== */
+
+  var AUTO_RUNS_MAX = 200, AUTO_MAX_DEPTH = 3, AUTO_MAX_ACTS = 20, AUTO_MAX_PATHS = 5,
+      AUTO_MAX_CONDS = 10, AUTO_MAX = 50, AUTO_MANUAL_MAX = 50, AUTO_TIME_CAP = 50, AUTO_FIRED_DAYS = 60;
+
+  function dateIs(tr, ev) {
+    var m = tr.mode || 'any';
+    return m === 'any' || (m === 'set' ? !!ev.info.now : !ev.info.now);
+  }
+  function always() { return true; }
+
+  /* time: ตรวจตามเวลา  manual: กดรันเอง  personal: ใช้ในงานของฉันได้ */
+  var AUTO_TRIGGERS = [
+    { id: 'added',       label: 'งานถูกเพิ่มเข้าโปรเจกต์', match: always },
+    { id: 'moved',       label: 'งานถูกย้ายเข้าคอลัมน์',
+      match: function (tr, ev) { return !tr.sec || ev.info.sec === tr.sec; } },
+    { id: 'completed',   label: 'งานทำเสร็จ / เปิดใหม่', personal: true,
+      match: function (tr, ev) { return (tr.v !== false) === !!ev.info.v; } },
+    { id: 'assignee',    label: 'ผู้รับผิดชอบเปลี่ยน',
+      match: function (tr, ev) {
+        return !tr.user || (tr.user === '@none' ? !ev.info.user : ev.info.user === tr.user);
+      } },
+    { id: 'due',         label: 'กำหนดส่งเปลี่ยน', match: dateIs },
+    { id: 'start',       label: 'วันเริ่มเปลี่ยน', match: dateIs },
+    { id: 'field',       label: 'ค่าฟิลด์เปลี่ยน',
+      match: function (tr, ev) {
+        if (!tr.field || ev.info.field !== tr.field) return false;
+        if (tr.val == null || tr.val === '') return true;
+        var v = ev.info.value;
+        return Array.isArray(v) ? v.indexOf(tr.val) >= 0 : String(v) === String(tr.val);
+      } },
+    { id: 'comment',     label: 'มีความเห็นใหม่', match: always },
+    { id: 'attachment',  label: 'มีไฟล์แนบใหม่', match: always },
+    { id: 'follower',    label: 'มีผู้ติดตามเพิ่ม', match: always },
+    { id: 'unblocked',   label: 'งานไม่ถูกบล็อกแล้ว', match: always },
+    { id: 'approval',    label: 'สถานะอนุมัติเปลี่ยน',
+      match: function (tr, ev) { return !tr.v || ev.info.v === tr.v; } },
+    { id: 'approaching', label: 'ใกล้ครบกำหนด', time: true, personal: true },
+    { id: 'overdue',     label: 'เลยกำหนด', time: true, personal: true },
+    { id: 'manual',      label: 'กดรันเอง', manual: true },
+    { id: 'scheduled',   label: 'ตามกำหนดเวลา', time: true }
+  ];
+
+  function trigDef(id) { return AUTO_TRIGGERS.filter(function (x) { return x.id === id; })[0] || null; }
+  function actDef(id) { return AUTO_ACTIONS.filter(function (x) { return x.id === id; })[0] || null; }
+
+  /** ข้อผิดพลาดที่แปลได้ — เก็บเป็นคีย์ภาษาไทย + ค่า ลงประวัติการรัน */
+  function autoErr(key, params) {
+    var e = new Error(fill(key, params));
+    e.autoKey = key;
+    e.params = params || null;
+    return e;
+  }
+
+  /** ลิงก์ตรงไปที่งาน (ใช้ในตัวแปร {link}) */
+  function taskUrl(id) {
+    try { return global.location.origin + global.location.pathname + '#/task/' + id; }
+    catch (e) { return '#/task/' + id; }
+  }
+
+  /** เลื่อนวันแบบนับวันปฏิทินหรือวันทำงาน (วันทำงาน = ตามโปรเจกต์ ถ้าโปรเจกต์ไม่มีวันหยุดใช้ จ.–ศ.) */
+  function shiftDate(base, n, unit, mode) {
+    if (unit !== 'workdays') return addDays(base, n);
+    var m = mode && mode !== 'all' ? mode : 'mon-fri';
+    if (!n) return nextWorkday(base, m);
+    var d = base, step = n < 0 ? -1 : 1, left = Math.abs(n), guard = 0;
+    while (left > 0 && guard++ < 10000) {
+      d = addDays(d, step);
+      if (isWorkday(d, m)) left--;
+    }
+    return d;
+  }
+
+  /* ตัวแปรในข้อความ — {task} {link} {assignee} {creator} {triggerer} {due} {start} {created}
+   * {project} {section} {field:ชื่อฟิลด์} แทนค่าตอนรัน แล้วเก็บเป็นข้อความธรรมดา */
+  var AUTO_VARS = ['task', 'link', 'assignee', 'creator', 'triggerer', 'due', 'start', 'created',
+                   'project', 'section'];
+
+  function autoVars(text, ctx, md) {
+    var t = ctx.t, p = ctx.p;
+    function nm(id) { var u = user(id); return u ? u.name : ''; }
+    return String(text || '').replace(/\{([a-z]+)(?::([^{}\n]{1,80}))?\}/g, function (all, k, arg) {
+      switch (k) {
+        case 'task':      return t ? t.name : '';
+        case 'link':      return !t ? '' : md ? '@[' + refLabel(t.name) + '](' + t.id + ')' : taskUrl(t.id);
+        case 'assignee':  return t ? nm(t.assigneeId) : '';
+        case 'creator':   return t ? nm(t.createdBy) : '';
+        case 'triggerer': return nm(ctx.ev && ctx.ev.by);
+        case 'due':       return (t && t.dueOn) || '';
+        case 'start':     return (t && t.startOn) || '';
+        case 'created':   return t && t.createdAt ? String(t.createdAt).slice(0, 10) : '';
+        case 'project':   return p ? p.name : '';
+        case 'section': {
+          var s = p && ctx.m ? section(p.id, ctx.m.sectionId) : null;
+          return s ? s.name : '';
+        }
+        case 'field': {
+          if (!t || !arg) return '';
+          var want = arg.trim().toLowerCase();
+          var f = ((p && p.fields) || []).filter(function (x) {
+            return x.id === arg.trim() || String(x.name).toLowerCase() === want;
+          })[0];
+          if (!f) return '';
+          var v = fieldValue(t.id, f.id);
+          if (v === null || v === undefined || v === '') return '';
+          if (f.type === 'person') return nm(v);
+          if (f.type === 'number') return formatNumber(f, v);
+          if (f.type === 'id') return fieldText(f, v);
+          return [].concat(v).join(', ');
+        }
+      }
+      return all;
+    });
+  }
+
+  /** วันจากสเปกแบบสัมพัทธ์ { n, unit: days|workdays, dir: after|before, from } */
+  function autoDate(spec, ctx) {
+    var t = ctx.t, from = spec.from || 'trigger', base = null;
+    if (from === 'trigger') base = today();
+    else if (from === 'created') base = t && t.createdAt ? String(t.createdAt).slice(0, 10) : null;
+    else if (from === 'due') base = t && t.dueOn;
+    else if (from === 'start') base = t && t.startOn;
+    else if (from.indexOf('field:') === 0 && t) {
+      var fv = fieldValue(t.id, from.slice(6));
+      base = typeof fv === 'string' && /^\d{4}-\d\d-\d\d/.test(fv) ? fv.slice(0, 10) : null;
+    }
+    if (!base) throw autoErr('ไม่มีวันตั้งต้นให้นับ');
+    var n = Math.max(0, Math.min(3650, parseInt(spec.n, 10) || 0)) * (spec.dir === 'before' ? -1 : 1);
+    return shiftDate(base, n, spec.unit, ctx.p && ctx.p.workDays);
+  }
+
+  /** หมุนเวียนรายชื่อ — ข้ามคนที่ปิดบัญชีหรือตั้งสถานะไม่อยู่ครอบวันนี้ จำตำแหน่งไว้ที่ act.ptr */
+  function roundRobin(act) {
+    var list = (act.list || []).filter(function (u) { var x = user(u); return x && x.active !== false; });
+    if (!list.length) throw autoErr('ยังไม่ได้เลือกคนในรายการหมุนเวียน');
+    var start = (parseInt(act.ptr, 10) || 0) % list.length;
+    for (var k = 0; k < list.length; k++) {
+      var i = (start + k) % list.length;
+      if (!isAway(list[i])) { act.ptr = i + 1; return list[i]; }
+    }
+    throw autoErr('ทุกคนในรายการหมุนเวียนไม่อยู่');
+  }
+
+  /** คนจากสเปก { mode: user|var|rr|none, user, var, list } */
+  function autoUser(spec, ctx) {
+    var mode = spec.mode || 'user', t = ctx.t;
+    if (mode === 'none') return null;
+    if (mode === 'rr') return roundRobin(spec);
+    var id = null;
+    if (mode === 'var') {
+      var v = spec['var'] || '';
+      if (v === 'creator') id = t && t.createdBy;
+      else if (v === 'triggerer') id = ctx.ev && ctx.ev.by;
+      else if (v === 'assignee') id = t && t.assigneeId;
+      else if (v.indexOf('field:') === 0 && t) id = fieldValue(t.id, v.slice(6));
+    } else id = spec.user;
+    var u = id ? user(id) : null;
+    if (!u || u.active === false) throw autoErr('ไม่พบคนที่จะมอบหมาย');
+    return u.id;
+  }
+
+  function needTask(ctx) { if (!ctx.t || !task(ctx.t.id)) throw autoErr('ไม่มีงานให้ทำ'); return ctx.t; }
+
+  var AUTO_ACTIONS = [
+    { id: 'section', label: 'ย้ายไปคอลัมน์', task: true, run: function (a, ctx) {
+      var t = needTask(ctx), p = ctx.p;
+      var m = p && db.memberships.filter(function (x) { return x.taskId === t.id && x.projectId === p.id; })[0];
+      if (!m) throw autoErr('งานไม่ได้อยู่ในโปรเจกต์นี้');
+      if (!section(p.id, a.sec)) throw autoErr('คอลัมน์ปลายทางถูกลบไปแล้ว');
+      if (m.sectionId !== a.sec) setSectionRaw(m, a.sec, nextPosition(p.id, a.sec));
+    } },
+    { id: 'complete', label: 'ทำเครื่องหมายเสร็จ / เปิดใหม่', task: true, run: function (a, ctx) {
+      var t = needTask(ctx), v = a.v !== false;
+      if (!!t.completed !== v) updateTask(t.id, { completed: v }, { quiet: true });
+    } },
+    { id: 'assign', label: 'มอบหมายให้', task: true, run: function (a, ctx) {
+      var t = needTask(ctx), who = autoUser(a, ctx);
+      if ((t.assigneeId || null) !== who) updateTask(t.id, { assigneeId: who }, { quiet: true });
+    } },
+    { id: 'due', label: 'ตั้งกำหนดส่ง', task: true, run: function (a, ctx) {
+      var t = needTask(ctx), d = a.mode === 'clear' ? null : autoDate(a, ctx);
+      if ((t.dueOn || null) !== d) updateTask(t.id, { dueOn: d }, { quiet: true });
+    } },
+    { id: 'start', label: 'ตั้งวันเริ่ม', task: true, run: function (a, ctx) {
+      var t = needTask(ctx), d = a.mode === 'clear' ? null : autoDate(a, ctx);
+      if ((t.startOn || null) !== d) updateTask(t.id, { startOn: d }, { quiet: true });
+    } },
+    { id: 'field', label: 'ตั้งค่าฟิลด์', task: true, run: function (a, ctx) {
+      var t = needTask(ctx), p = ctx.p;
+      var f = p && (p.fields || []).filter(function (x) { return x.id === a.field; })[0];
+      if (!f || f.type === 'id') throw autoErr('ฟิลด์นี้ถูกลบไปแล้ว');
+      var v = a.value;
+      if (f.type === 'text') v = autoVars(v, ctx).slice(0, 2000);
+      else if (f.type === 'number') {
+        v = v === '' || v === null || v === undefined ? null : Number(v);
+        if (v !== null && isNaN(v)) throw autoErr('ค่าตัวเลขไม่ถูกต้อง');
+      } else if (f.type === 'select') {
+        if (v && !(f.options || []).some(function (o) { return o.name === v; })) {
+          throw autoErr('ตัวเลือก “{v}” ถูกลบไปแล้ว', { v: v });
+        }
+        v = v || null;
+      } else if (f.type === 'multi') {
+        v = [].concat(v || []).filter(function (x) {
+          return (f.options || []).some(function (o) { return o.name === x; });
+        });
+      } else if (f.type === 'person') {
+        v = a.mode === 'none' ? null : autoUser({ mode: a.mode || 'user', user: v, 'var': a['var'] }, ctx);
+      } else if (f.type === 'date') {
+        v = a.mode === 'clear' ? null : autoDate(a, ctx);
+      }
+      setFieldRaw(t.id, f.id, v);
+    } },
+    { id: 'comment', label: 'เพิ่มความเห็น', task: true, run: function (a, ctx) {
+      var t = needTask(ctx), txt = autoVars(a.text, ctx, true).trim();
+      if (!txt) throw autoErr('ข้อความว่าง');
+      addComment(t.id, txt.slice(0, 5000));
+    } },
+    { id: 'followers', label: 'เพิ่มผู้ติดตาม', task: true, run: function (a, ctx) {
+      var t = needTask(ctx), people = (a.users || []).slice();
+      (a.vars || []).forEach(function (v) {
+        var id = v === 'creator' ? t.createdBy : v === 'triggerer' ? ctx.ev.by : v === 'assignee' ? t.assigneeId : null;
+        if (id) people.push(id);
+      });
+      people.forEach(function (u) {
+        if (!user(u) || t.followers.indexOf(u) >= 0) return;
+        t.followers.push(u);
+        autoFire('follower', t.id, { user: u });
+      });
+    } },
+    { id: 'tag', label: 'เพิ่มแท็ก', task: true, run: function (a, ctx) {
+      var t = needTask(ctx), tg = String(a.tag || '').trim().slice(0, 40);
+      if (!tg) throw autoErr('ยังไม่ได้ใส่แท็ก');
+      if (t.tags.indexOf(tg) < 0) updateTask(t.id, { tags: t.tags.concat([tg]) }, { quiet: true });
+    } },
+    { id: 'untag', label: 'เอาแท็กออก', task: true, run: function (a, ctx) {
+      var t = needTask(ctx), tg = String(a.tag || '').trim();
+      if (t.tags.indexOf(tg) >= 0) updateTask(t.id, { tags: t.tags.filter(function (x) { return x !== tg; }) }, { quiet: true });
+    } },
+    { id: 'priority', label: 'ตั้งความสำคัญ', task: true, run: function (a, ctx) {
+      var t = needTask(ctx), v = PRIORITIES.some(function (x) { return x.id === a.v; }) ? a.v : 'none';
+      if (t.priority !== v) updateTask(t.id, { priority: v }, { quiet: true });
+    } },
+    { id: 'create', label: 'สร้างงาน / งานย่อย / ขออนุมัติ', task: false, run: function (a, ctx) {
+      var kind = a.kind || 'task', t = ctx.t, p = ctx.p;
+      var name = autoVars(a.name, ctx).replace(/\s+/g, ' ').trim().slice(0, 300) || 'งานใหม่';
+      var attrs = { name: name, notes: autoVars(a.notes || '', ctx, true).slice(0, 20000),
+                    type: kind === 'approval' ? 'approval' : 'task' };
+      if (a.assign && a.assign.mode && a.assign.mode !== 'none') attrs.assigneeId = autoUser(a.assign, ctx);
+      if (a.due && a.due.on) attrs.dueOn = autoDate(a.due, ctx);
+      var c;
+      if (kind === 'task') {
+        if (!p) throw autoErr('ไม่มีโปรเจกต์ให้สร้างงาน');
+        var sec = section(p.id, a.sec) ? a.sec : (ctx.m && section(p.id, ctx.m.sectionId) ? ctx.m.sectionId : p.sections[0].id);
+        c = createTaskRaw(attrs, p.id, sec);
+      } else {
+        needTask(ctx);
+        attrs.parentId = t.id;
+        c = createTaskRaw(attrs, null, null);
+      }
+      if (attrs.assigneeId && c.followers.indexOf(attrs.assigneeId) < 0) c.followers.push(attrs.assigneeId);
+    } },
+    { id: 'addproj', label: 'เพิ่มเข้าโปรเจกต์อื่น', task: true, run: function (a, ctx) {
+      var t = needTask(ctx), q = project(a.pid);
+      if (!q || q.archived) throw autoErr('โปรเจกต์ปลายทางถูกลบหรือเก็บเข้าคลังแล้ว');
+      if (t.parentId) throw autoErr('งานย่อยเพิ่มเข้าโปรเจกต์ไม่ได้');
+      var have = db.memberships.filter(function (m) { return m.taskId === t.id && m.projectId === q.id; })[0];
+      if (have) {
+        if (a.sec && section(q.id, a.sec) && have.sectionId !== a.sec) setSectionRaw(have, a.sec, nextPosition(q.id, a.sec));
+        return;
+      }
+      addTaskToProject(t.id, q.id, section(q.id, a.sec) ? a.sec : null);
+    } },
+    /* เฉพาะงานของฉัน — ย้ายเซกชันส่วนตัวของเจ้าของ ไม่แตะจุดสีฟ้า */
+    { id: 'mtmove', label: 'ย้ายไปเซกชันในงานของฉัน', task: true, personal: true, run: function (a, ctx) {
+      var t = needTask(ctx);
+      if (t.assigneeId !== db.currentUserId) throw autoErr('งานนี้ไม่ได้มอบหมายให้คุณแล้ว');
+      var st = personalOf(), seen = st.mt.seen[t.id];
+      if (mtSectionOf(t) === a.sec) return;
+      if (!mtMove(t.id, a.sec)) throw autoErr('เซกชันปลายทางถูกลบไปแล้ว');
+      if (seen === undefined) delete st.mt.seen[t.id]; else st.mt.seen[t.id] = seen;
+    } }
+  ];
+
+  /** ลงทะเบียนทริกเกอร์หรือการกระทำใหม่ (ชิ้นงานถัดไป) — id ซ้ำ = แทนของเดิม */
+  function autoRegister(kind, def) {
+    var list = kind === 'action' ? AUTO_ACTIONS : AUTO_TRIGGERS;
+    if (!def || !def.id) return false;
+    for (var i = 0; i < list.length; i++) if (list[i].id === def.id) { list[i] = def; return true; }
+    list.push(def);
+    return true;
+  }
+
+  /** ปลุกอัตโนมัติ — ใส่คิวไว้ commit() เป็นคนรัน (info.projectId จำกัดโปรเจกต์ info.only จำกัดตัวอัตโนมัติ) */
+  function autoFire(type, taskId, info) {
+    if (!db) return;
+    info = info || {};
+    autoQueue.push({
+      type: type, taskId: taskId || null, info: info, projectId: info.projectId || null,
+      only: info.only || null, personal: !!info.personal,
+      depth: autoCtx ? autoCtx.depth + 1 : 0, by: db.currentUserId
+    });
+  }
+
+  function drainAuto() {
+    autoDraining = true;
+    batchDepth++;
+    var ran = {}, guard = 0;
+    try {
+      while (autoQueue.length && guard++ < 1000) {
+        var ev = autoQueue.shift();
+        try { autoProcess(ev, ran); } catch (e) { console.error('อัตโนมัติทำงานผิดพลาด', e); }
+      }
+      autoQueue.length = 0;
+    } finally {
+      autoCtx = null;
+      batchDepth--;
+      autoDraining = false;
+      dropIndex();
+    }
+  }
+
+  function autoProcess(ev, ran) {
+    var t = ev.taskId ? task(ev.taskId) : null;
+    if (ev.taskId && !t) return;
+    if (ev.personal) {
+      var pa = (personalOf().auto || []).filter(function (a) { return a.id === ev.only; })[0];
+      if (pa) autoConsider(pa, null, t, ev, ran);
+      return;
+    }
+    var pids = ev.projectId ? [ev.projectId]
+      : t ? (index().memByTask[t.id] || []).map(function (m) { return m.projectId; }) : [];
+    pids.forEach(function (pid) {
+      var p = project(pid);
+      if (!p || p.archived) return;
+      (p.automations || []).slice().forEach(function (a) { autoConsider(a, p, t, ev, ran); });
+    });
+    /* งานของฉัน "ทำเสร็จ → ย้าย" ของเจ้าของงานที่กำลังเปิดแอป (เครื่องอื่นตามทันตอน autoTick) */
+    if (ev.type === 'completed' && ev.info.v && t && t.assigneeId === db.currentUserId && !ev.only) {
+      (personalOf().auto || []).forEach(function (a) {
+        if (!a.on || a.trigger.type !== 'completed') return;
+        var key = 'mtc:' + a.id + ':' + t.id;
+        if (db.autoFired && db.autoFired[key]) return;
+        if (!db.autoFired) db.autoFired = {};
+        db.autoFired[key] = today();
+        autoConsider(a, null, t, { type: 'completed', taskId: t.id, info: ev.info, only: a.id,
+          depth: ev.depth, by: ev.by, personal: true }, ran);
+      });
+    }
+  }
+
+  function autoConsider(a, p, t, ev, ran) {
+    if (!a || !a.on || !a.trigger) return;
+    if (ev.only) {
+      if (a.id !== ev.only) return;
+    } else {
+      var def = trigDef(a.trigger.type);
+      if (!def || def.time || def.manual || a.trigger.type !== ev.type) return;
+      if (def.match && !def.match(a.trigger, ev, t)) return;
+      if (ev.depth > 0 && !a.chain) return;           // การกระทำของอัตโนมัติอื่นปลุกได้เฉพาะตัวที่ยอม
+    }
+    var key = a.id + ':' + (t ? t.id : '');
+    if (ev.depth >= AUTO_MAX_DEPTH || (ev.depth > 0 && ran[key])) {
+      autoLog(p, a, t, ev, 'loop', 0, autoErr('หยุดไว้เพื่อกันการวนไม่รู้จบ'), null);
+      return;
+    }
+    ran[key] = true;
+    autoRun(a, p, t, ev);
+  }
+
+  /** เลือกเส้นทาง แล้วทำการกระทำทีละอัน — อันไหนพังลงประวัติ อันที่เหลือยังทำต่อ */
+  function autoRun(a, p, t, ev) {
+    var m = t && p ? db.memberships.filter(function (x) { return x.taskId === t.id && x.projectId === p.id; })[0] : null;
+    var acts = null, pathIdx = null;
+    var paths = a.paths || [];
+    for (var i = 0; i < paths.length; i++) {
+      var conds = paths[i].conds || [];
+      if (!t && conds.length) continue;
+      if (conds.every(function (c) { return matchCond(t, c, m); })) { acts = paths[i].acts || []; pathIdx = i; break; }
+    }
+    if (!acts && a.els) { acts = a.els; pathIdx = -1; }
+    if (!acts) return false;                       // ไม่ตรงเงื่อนไข ไม่ถือเป็นการรัน
+    var prev = autoCtx;
+    autoCtx = { depth: ev.depth, a: a, p: p, t: t, m: m, ev: ev };
+    var done = 0, err = null;
+    acts.slice(0, AUTO_MAX_ACTS).forEach(function (act) {
+      try {
+        var def = actDef(act.type);
+        if (!def) throw autoErr('การกระทำนี้ใช้ไม่ได้แล้ว');
+        if (def.task && !t) throw autoErr('ไม่มีงานให้ทำ');
+        if (!p && !def.personal) throw autoErr('การกระทำนี้ใช้ในงานของฉันไม่ได้');
+        def.run(act, autoCtx);
+        done++;
+      } catch (e) {
+        if (!err) err = e && e.autoKey ? e : autoErr('ทำไม่สำเร็จ: {m}', { m: String((e && e.message) || e).slice(0, 80) });
+        if (!(e && e.autoKey)) console.error('อัตโนมัติทำไม่สำเร็จ', e);
+      }
+    });
+    autoCtx = prev;
+    autoLog(p, a, t, ev, err ? 'err' : 'ok', done, err, pathIdx);
+    return true;
+  }
+
+  /** ประวัติการรัน — สั้นที่สุดเท่าที่อ่านรู้เรื่อง เก็บ 200 ครั้งล่าสุดต่อโปรเจกต์ (งานของฉัน 50) */
+  function autoLog(p, a, t, ev, s, n, err, path) {
+    var list = p ? (p.autoRuns = p.autoRuns || []) : personalOf().autoRuns;
+    list.push({
+      at: new Date().toISOString(), a: a.id, an: (a.name || '').slice(0, 60),
+      t: t ? t.id : null, tn: t ? String(t.name).slice(0, 60) : null,
+      s: s, n: n, e: err ? err.autoKey : null, ep: err ? err.params : null,
+      by: ev.by || null, tr: ev.type, p: path
+    });
+    var max = p ? AUTO_RUNS_MAX : 50;
+    if (list.length > max) list.splice(0, list.length - max);
+  }
+
+  /* ---------- อัตโนมัติตามเวลา ---------- */
+
+  function timeHit(tr, t, now, td) {
+    if (tr.type === 'approaching') {
+      var days = Math.max(0, Math.min(365, parseInt(tr.days, 10)));
+      if (isNaN(days)) days = 1;
+      return t.dueOn >= td && t.dueOn <= addDays(td, days);
+    }
+    if (tr.type === 'overdue') {
+      var n = Math.max(0, Math.min(8760, parseInt(tr.n, 10) || 0));
+      var unit = tr.unit === 'hours' ? 3600000 : 86400000;
+      var dueMs = new Date(t.dueOn + 'T' + (t.dueTime || '23:59') + ':59').getTime();
+      return now >= dueMs + n * unit;
+    }
+    return false;
+  }
+
+  /** คีย์ของรอบตามกำหนดเวลาที่ถึงแล้ว (null = ยังไม่ถึง) — วันที่พลาดไปเพราะไม่มีใครเปิดแอปจะรันตามหลังในรอบเดียวกัน */
+  function schedKey(a, td) {
+    var tr = a.trigger, created = a.at ? String(a.at).slice(0, 10) : '0000-00-00', fire, period;
+    if (tr.freq === 'weekly') {
+      var dow = new Date(td + 'T00:00:00').getDay(), mi = (dow + 6) % 7;
+      var want = ((parseInt(tr.day, 10) || 0) + 6) % 7;
+      period = addDays(td, -mi);
+      fire = addDays(period, want);
+    } else if (tr.freq === 'monthly') {
+      var y = +td.slice(0, 4), mo = +td.slice(5, 7);
+      var last = new Date(y, mo, 0).getDate();
+      var dd = Math.min(Math.max(1, parseInt(tr.day, 10) || 1), last);
+      period = td.slice(0, 7);
+      fire = period + '-' + (dd < 10 ? '0' : '') + dd;
+    } else {
+      period = fire = td;
+    }
+    if (td < fire || fire < created) return null;
+    return 'sch:' + a.id + ':' + period;
+  }
+
+  /**
+   * ตรวจอัตโนมัติตามเวลา — main.js เรียกตอนเปิดแอป ทุก 5 นาที และหลังรับข้อมูลจากส่วนกลาง
+   * @param opts.now  มิลลิวินาทีแทนเวลาจริง (ทดสอบ "เลยกำหนด N ชั่วโมง")
+   * @returns จำนวนการรันที่ปลุก
+   */
+  function autoTick(opts) {
+    if (!db || !isActive()) return 0;
+    var now = (opts && opts.now) || Date.now(), td = today();
+    var fired = db.autoFired || {};
+    var out = [];
+    db.projects.forEach(function (p) {
+      if (p.archived) return;
+      (p.automations || []).forEach(function (a) {
+        if (!a.on || !a.trigger) return;
+        var ty = a.trigger.type;
+        if (ty === 'approaching' || ty === 'overdue') {
+          var n = 0;
+          tasksInProject(p.id).forEach(function (x) {
+            var t = x.task;
+            if (n >= AUTO_TIME_CAP || t.completed || !t.dueOn || !timeHit(a.trigger, t, now, td)) return;
+            var key = (ty === 'approaching' ? 'apr:' : 'ovd:') + a.id + ':' + t.id + ':' + t.dueOn;
+            if (fired[key]) return;
+            n++;
+            out.push({ key: key, type: ty, taskId: t.id, info: { projectId: p.id, only: a.id } });
+          });
+        } else if (ty === 'scheduled') {
+          var sk = schedKey(a, td);
+          if (!sk || fired[sk]) return;
+          if (a.trigger.scope === 'tasks') {
+            out.push({ key: sk });
+            tasksInProject(p.id).filter(function (x) { return !x.task.completed; }).slice(0, 200)
+              .forEach(function (x) {
+                out.push({ type: 'scheduled', taskId: x.task.id, info: { projectId: p.id, only: a.id } });
+              });
+          } else {
+            out.push({ key: sk, type: 'scheduled', taskId: null, info: { projectId: p.id, only: a.id } });
+          }
+        }
+      });
+    });
+    /* งานของฉัน — เฉพาะของคนที่เปิดแอปอยู่ (ย้ายเซกชันส่วนตัวของคนอื่นไม่ได้) */
+    var mine = db.personal && db.personal[db.currentUserId];
+    ((mine && mine.auto) || []).forEach(function (a) {
+      if (!a.on || !a.trigger) return;
+      var ty = a.trigger.type, created = a.at ? String(a.at).slice(0, 10) : '';
+      mtTasks().forEach(function (t) {
+        var key;
+        if (ty === 'completed') {
+          if (!t.completed || !t.completedAt || String(t.completedAt).slice(0, 10) < created) return;
+          key = 'mtc:' + a.id + ':' + t.id;
+        } else if (ty === 'approaching' || ty === 'overdue') {
+          if (t.completed || !t.dueOn || !timeHit(a.trigger, t, now, td)) return;
+          key = (ty === 'approaching' ? 'mta:' : 'mto:') + a.id + ':' + t.id + ':' + t.dueOn;
+        } else return;
+        if (fired[key]) return;
+        out.push({ key: key, type: ty, taskId: t.id, info: { only: a.id, personal: true } });
+      });
+    });
+    if (!out.length) return 0;
+    quietBatch(function () {
+      if (!db.autoFired) db.autoFired = {};
+      out.forEach(function (x) {
+        if (x.key) db.autoFired[x.key] = td;
+        if (x.type) autoFire(x.type, x.taskId, x.info);
+      });
+    });
+    return out.filter(function (x) { return x.type; }).length;
+  }
+
+  function pruneFired(obj) {
+    var out = {}, lim = addDays(today(), -AUTO_FIRED_DAYS);
+    if (isObj(obj)) Object.keys(obj).forEach(function (k) { if (String(obj[k]) >= lim) out[k] = obj[k]; });
+    return out;
+  }
+
+  /* ---------- จัดการอัตโนมัติ ---------- */
+
+  function normalizeAuto(a) {
+    if (typeof a.name !== 'string') a.name = '';
+    a.on = a.on !== false;
+    a.chain = !!a.chain;
+    if (!isObj(a.trigger) || !a.trigger.type) a.trigger = { type: 'manual' };
+    a.paths = Array.isArray(a.paths) && a.paths.length ? a.paths : [{ conds: [], acts: [] }];
+    a.paths.forEach(function (pt) {
+      if (!Array.isArray(pt.conds)) pt.conds = [];
+      if (!Array.isArray(pt.acts)) pt.acts = [];
+    });
+    if (!Array.isArray(a.els)) a.els = null;
+    if (!('by' in a)) a.by = null;
+    if (!('at' in a)) a.at = null;
+    return a;
+  }
+
+  /** ไล่ทุกการกระทำของทุกอัตโนมัติในทุกโปรเจกต์ (เปลี่ยนชื่อ/ลบแท็ก) */
+  function autoActsEach(fn) {
+    db.projects.forEach(function (p) {
+      (p.automations || []).forEach(function (a) {
+        (a.paths || []).forEach(function (pt) { (pt.acts || []).forEach(fn); });
+        (a.els || []).forEach(fn);
+      });
+    });
+  }
+
+  /** สำเนาอัตโนมัติที่ชี้ไปหาคอลัมน์/ฟิลด์ชุดใหม่ (คัดลอกโปรเจกต์) */
+  function remapAuto(a, idMap) {
+    var s = JSON.stringify(a);
+    Object.keys(idMap).forEach(function (k) {
+      if (!k || k === idMap[k]) return;
+      s = s.replace(new RegExp(k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![A-Za-z0-9_])', 'g'), idMap[k]);
+    });
+    var c = JSON.parse(s);
+    c.id = uid('au');
+    (c.paths || []).forEach(function (pt) { (pt.acts || []).forEach(function (x) { delete x.ptr; }); });
+    return c;
+  }
+
+  /** '@me' = อัตโนมัติของงานของฉัน */
+  function autoList(pid) {
+    if (pid === '@me') return personalOf().auto;
+    var p = project(pid);
+    return p ? (p.automations = p.automations || []) : [];
+  }
+  function automations(pid) { return autoList(pid).slice(); }
+  function automation(pid, id) { return autoList(pid).filter(function (a) { return a.id === id; })[0] || null; }
+
+  /** แก้อัตโนมัติของโปรเจกต์ได้ไหม — คนที่แก้โครงสร้างโปรเจกต์นั้นได้ (งานของฉัน = ตัวเอง) */
+  function canEditAutos(pid) {
+    if (pid === '@me') return isActive();
+    return !!project(pid) && can('structure') && canInProject(pid, 'edit');
+  }
+
+  /** สร้างหรือแก้ (มี id อยู่แล้ว = แทนของเดิม) คืนตัวที่บันทึก หรือ null */
+  function saveAutomation(pid, input) {
+    if (!canEditAutos(pid) || !input) return null;
+    var list = autoList(pid);
+    var a = normalizeAuto(clone(input));
+    a.name = String(a.name || '').trim().slice(0, 120);
+    a.paths = a.paths.slice(0, AUTO_MAX_PATHS).map(function (pt) {
+      return { conds: pt.conds.slice(0, AUTO_MAX_CONDS), acts: pt.acts.slice(0, AUTO_MAX_ACTS) };
+    });
+    if (a.els) a.els = a.els.slice(0, AUTO_MAX_ACTS);
+    var old = a.id ? list.filter(function (x) { return x.id === a.id; })[0] : null;
+    if (old) {
+      snapshot('แก้อัตโนมัติ');
+      a.by = old.by; a.at = old.at;
+      list[list.indexOf(old)] = a;
+    } else {
+      if (list.length >= AUTO_MAX) return null;
+      snapshot('สร้างอัตโนมัติ');
+      a.id = uid('au');
+      a.by = db.currentUserId;
+      a.at = new Date().toISOString();
+      list.push(a);
+    }
+    commit();
+    return a;
+  }
+
+  function setAutomationOn(pid, id, on) {
+    var a = automation(pid, id);
+    if (!a || !canEditAutos(pid)) return false;
+    snapshot(on ? 'เปิดอัตโนมัติ' : 'ปิดอัตโนมัติ');
+    a.on = !!on;
+    commit();
+    return true;
+  }
+
+  function duplicateAutomation(pid, id) {
+    var a = automation(pid, id), list = autoList(pid);
+    if (!a || !canEditAutos(pid) || list.length >= AUTO_MAX) return null;
+    snapshot('ทำสำเนาอัตโนมัติ');
+    var c = remapAuto(a, {});
+    c.name = (a.name ? a.name + ' ' : '') + '(สำเนา)';
+    c.on = false;                       // สำเนาเริ่มแบบปิด ไม่ให้ทำงานซ้อนกับตัวเดิมทันที
+    c.by = db.currentUserId;
+    c.at = new Date().toISOString();
+    list.splice(list.indexOf(a) + 1, 0, c);
+    commit();
+    return c;
+  }
+
+  function deleteAutomation(pid, id) {
+    var a = automation(pid, id), list = autoList(pid);
+    if (!a || !canEditAutos(pid)) return false;
+    snapshot('ลบอัตโนมัติ');
+    list.splice(list.indexOf(a), 1);
+    commit();
+    return true;
+  }
+
+  /** อัตโนมัติแบบกดรันเองที่ใช้กับงานนี้ได้ [{ p, a }] */
+  function manualAutomationsFor(taskId) {
+    var out = [];
+    projectsOfTask(taskId).forEach(function (x) {
+      (x.project.automations || []).forEach(function (a) {
+        if (a.on && a.trigger && a.trigger.type === 'manual') out.push({ p: x.project, a: a });
+      });
+    });
+    return out;
+  }
+
+  /** รันอัตโนมัติแบบกดเองกับงานที่เลือก (สูงสุด 50) — ย้อนกลับได้ครั้งเดียว
+   *  คนที่เห็นงานกดได้ทุกคน (รวมดูอย่างเดียว) การกระทำทำในนามอัตโนมัติที่คนแก้โปรเจกต์ตั้งไว้ */
+  function runAutomation(pid, id, taskIds) {
+    var a = automation(pid, id);
+    if (!a || !a.on || !a.trigger || a.trigger.type !== 'manual' || !isActive()) return 0;
+    var ids = (taskIds || []).filter(function (tid, i, arr) {
+      return arr.indexOf(tid) === i && task(tid) && canSeeTask(tid) &&
+        db.memberships.some(function (m) { return m.taskId === tid && m.projectId === pid; });
+    }).slice(0, AUTO_MANUAL_MAX);
+    if (!ids.length) return 0;
+    batch('รันอัตโนมัติ “{a}”', { a: a.name || a.trigger.label || '' }, function () {
+      ids.forEach(function (tid) { autoFire('manual', tid, { projectId: pid, only: a.id }); });
+    });
+    return ids.length;
+  }
+
+  /** ประวัติการรัน ใหม่สุดก่อน */
+  function autoRuns(pid) {
+    var list = pid === '@me' ? personalOf().autoRuns : ((project(pid) || {}).autoRuns || []);
+    return list.slice().reverse();
+  }
+
+  /** อัตโนมัติ "ย้ายเข้าคอลัมน์นี้" ที่เปิดอยู่ (ไอคอนสายฟ้าบนหัวคอลัมน์) */
+  function autoForSection(pid, secId) {
+    return autoList(pid).filter(function (a) {
+      return a.on && a.trigger && a.trigger.type === 'moved' && a.trigger.sec === secId;
+    });
   }
 
   /* ---------- backup ---------- */
@@ -7004,7 +7742,6 @@
     deleteSection: deleteSection, moveSection: moveSection,
     addField: addField, renameField: renameField, deleteField: deleteField,
     colWidth: colWidth, setColWidth: setColWidth, resetColWidths: resetColWidths,
-    addRule: addRule, deleteRule: deleteRule,
     saveView: saveView, deleteSavedView: deleteSavedView,
     /* 2b — มุมมองของโปรเจกต์ */
     SV_MAX: SV_MAX, SV_KINDS: SV_KINDS, savedView: savedView, updateSavedView: updateSavedView,
@@ -7065,6 +7802,17 @@
     bulkAddToProject: bulkAddToProject, bulkMoveSection: bulkMoveSection, bulkSetField: bulkSetField,
     bulkAddFollowers: bulkAddFollowers, bulkAddTag: bulkAddTag, bulkDependOn: bulkDependOn,
     bulkMerge: bulkMerge,
+
+    /* 3a — อัตโนมัติ */
+    AUTO_TRIGGERS: AUTO_TRIGGERS, AUTO_ACTIONS: AUTO_ACTIONS, AUTO_VARS: AUTO_VARS,
+    AUTO_MAX_ACTS: AUTO_MAX_ACTS, AUTO_MAX_PATHS: AUTO_MAX_PATHS, AUTO_MAX_CONDS: AUTO_MAX_CONDS,
+    AUTO_MANUAL_MAX: AUTO_MANUAL_MAX, AUTO_MAX_DEPTH: AUTO_MAX_DEPTH,
+    automations: automations, automation: automation, canEditAutos: canEditAutos,
+    saveAutomation: saveAutomation, setAutomationOn: setAutomationOn,
+    duplicateAutomation: duplicateAutomation, deleteAutomation: deleteAutomation,
+    manualAutomationsFor: manualAutomationsFor, runAutomation: runAutomation,
+    autoRuns: autoRuns, autoForSection: autoForSection, autoTick: autoTick,
+    autoFire: autoFire, autoRegister: autoRegister, shiftDate: shiftDate, quietBatch: quietBatch,
 
     exportJSON: exportJSON, importJSON: importJSON, reset: reset
   };

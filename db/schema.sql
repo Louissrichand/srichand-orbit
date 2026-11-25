@@ -405,16 +405,56 @@ CREATE TABLE dbo.project_messages (
 CREATE INDEX ix_pmsg_project ON dbo.project_messages(project_id, created_at DESC);
 GO
 
-/* กฎอัตโนมัติแบบเดิม (projects[].rules) — ลากเข้าเซกชันไหนแล้วทำอะไร
-   ชิ้นงาน 3a จะแทนด้วยตาราง automations ที่มีหลายเงื่อนไขหลายการกระทำ */
-CREATE TABLE dbo.project_rules (
-    id              UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
-    project_id      UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.projects(id) ON DELETE CASCADE,
-    when_section_id UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.sections(id),
-    set_completed   BIT              NOT NULL DEFAULT 0,
-    set_assignee_id UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
-    set_priority    VARCHAR(10)      NULL,
-    add_tag         NVARCHAR(100)    NULL
+/* อัตโนมัติ (ชิ้นงาน 3a) แทนกฎแบบเดิม project_rules — กฎเดิมแปลงเป็นอัตโนมัติ "ย้ายเข้าคอลัมน์" ตอนย้ายข้อมูล
+   ทริกเกอร์ เส้นทาง (เงื่อนไข {f, op, v} ชุดเดียวกับตัวกรองของมุมมอง) และการกระทำเก็บเป็น JSON ในแถวเดียว
+   เพราะรูปร่างต่างกันมากตามชนิด และอ่าน/เขียนทั้งก้อนเสมอ
+     trigger_json  { type: added|moved|completed|assignee|due|start|field|comment|attachment|follower|
+                            unblocked|approval|approaching|overdue|manual|scheduled, …ค่าของชนิดนั้น }
+     paths_json    [{ conds: [{f, op, v}], acts: [{ type, … }] }]   สูงสุด 5 เส้นทาง 20 การกระทำต่อเส้นทาง
+     else_json     [{ type, … }] | NULL   เส้นทาง "อื่น ๆ"
+   owner_user_id ไม่ว่าง = อัตโนมัติของงานของฉัน (ย้ายเซกชันส่วนตัว) project_id ว่าง */
+CREATE TABLE dbo.automations (
+    id             UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    project_id     UNIQUEIDENTIFIER NULL REFERENCES dbo.projects(id) ON DELETE CASCADE,
+    owner_user_id  UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    name           NVARCHAR(120)    NOT NULL DEFAULT N'',
+    is_on          BIT              NOT NULL DEFAULT 1,
+    allow_chain    BIT              NOT NULL DEFAULT 0,      -- ให้การกระทำของอัตโนมัติอื่นปลุกได้ (ลึกสุด 3 ชั้น)
+    trigger_json   NVARCHAR(MAX)    NOT NULL,
+    paths_json     NVARCHAR(MAX)    NOT NULL,
+    else_json      NVARCHAR(MAX)    NULL,
+    created_by     UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    created_at     DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT ck_automation_scope CHECK ((project_id IS NULL) <> (owner_user_id IS NULL))
+);
+CREATE INDEX ix_automations_project ON dbo.automations(project_id);
+GO
+
+/* ประวัติการรัน — เก็บ 200 ครั้งล่าสุดต่อโปรเจกต์ (งานของฉัน 50) ทีมเห็นร่วมกัน */
+CREATE TABLE dbo.automation_runs (
+    id             BIGINT IDENTITY PRIMARY KEY,
+    automation_id  UNIQUEIDENTIFIER NULL,                    -- อัตโนมัติถูกลบแล้วประวัติยังอยู่ (เก็บชื่อไว้ใน automation_name)
+    automation_name NVARCHAR(60)    NULL,
+    project_id     UNIQUEIDENTIFIER NULL REFERENCES dbo.projects(id) ON DELETE CASCADE,
+    task_id        UNIQUEIDENTIFIER NULL,
+    task_name      NVARCHAR(60)     NULL,
+    status         VARCHAR(4)       NOT NULL CHECK (status IN ('ok', 'err', 'loop')),
+    actions_done   INT              NOT NULL DEFAULT 0,
+    error_key      NVARCHAR(200)    NULL,                    -- คีย์คำแปล แปลตอนแสดง
+    error_params   NVARCHAR(400)    NULL,
+    trigger_type   VARCHAR(20)      NULL,
+    path_index     INT              NULL,                    -- -1 = "อื่น ๆ"
+    triggered_by   UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    ran_at         DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME()
+);
+CREATE INDEX ix_autoruns_project ON dbo.automation_runs(project_id, ran_at DESC);
+GO
+
+/* กันอัตโนมัติตามเวลารันซ้ำ — คีย์ = ชนิด:รหัสอัตโนมัติ:รหัสงาน:วันครบกำหนด หรือ sch:รหัส:รอบ
+   ตอนมีเซิร์ฟเวอร์ใช้ UNIQUE ของคีย์นี้เป็นตัวล็อกแทนการซิงก์ทั้งก้อน · ล้างแถวที่เก่ากว่า 60 วัน */
+CREATE TABLE dbo.automation_fired (
+    fire_key   NVARCHAR(200) NOT NULL PRIMARY KEY,
+    fired_on   DATE          NOT NULL
 );
 GO
 

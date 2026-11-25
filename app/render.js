@@ -1035,7 +1035,8 @@
         '<button class="sec-caret" data-act="sec-collapse" data-key="' + esc(g.key || '_') + '" title="' +
         (collapsed ? L('ขยาย') : L('ย่อ')) + '">' + I('chevronDown', 14) + '</button>' +
         groupMark(g) + '<span class="sec-nm">' + esc(groupLabel(g)) + '</span>' +
-        '<span class="sec-n">' + g.items.length + '</span>';
+        '<span class="sec-n">' + g.items.length + '</span>' +
+        (g.isSection ? secBolt(projectId, g.key, canStruct) : '');
       h += '<span class="sec-acts">';
       if (g.isSection && canStruct) {
         h += '<button class="btn btn-sm btn-ghost" data-act="move-section" data-section="' +
@@ -1100,7 +1101,7 @@
    * แถว (swimlane) ตามผู้รับผิดชอบ ความสำคัญ หรือฟิลด์ (bSwim)
    * ลากการ์ดข้ามคอลัมน์/แถว = ตั้งค่าของกลุ่มนั้นให้งาน (ดู S.dropToGroups) ลากหลายใบพร้อมกันได้ถ้าเลือกไว้
    */
-  function boardHead(g, view, canStruct, collapsed) {
+  function boardHead(g, view, canStruct, collapsed, pid) {
     var cc = g.color ? ' has-cc" style="--cc:' + esc(g.color) : '';
     if (collapsed) {
       return '<button class="col-fold' + cc + '" data-act="bcol-toggle" data-key="' + esc(g.key || '_') +
@@ -1108,7 +1109,8 @@
         '<span class="col-fold-nm">' + esc(groupLabel(g)) + '</span></button>';
     }
     var h = '<div class="col-head' + cc + '">' + groupMark(g) + '<h3>' + esc(groupLabel(g)) + '</h3>' +
-      '<span class="n">' + g.items.length + '</span><span class="acts">';
+      '<span class="n">' + g.items.length + '</span>' +
+      (g.isSection && pid ? secBolt(pid, g.key, canStruct) : '') + '<span class="acts">';
     if (g.isSection && canStruct) {
       h += '<button class="btn btn-sm btn-ghost" data-act="move-section" data-section="' +
         esc(g.key) + '" data-delta="-1" title="' + L('ย้ายซ้าย') + '">‹</button>' +
@@ -1148,7 +1150,7 @@
         var collapsed = !!fold[g.key || '_'];
         h += '<div class="col' + (collapsed ? ' folded' : '') + '"' +
           (g.isSection ? ' data-section="' + esc(g.key) + '"' : '') + '>';
-        h += boardHead(g, view, canStruct, collapsed);
+        h += boardHead(g, view, canStruct, collapsed, projectId);
         if (!collapsed) {
           h += boardCards(g.items, g, null, view, sel);
           if (g.isSection && canAdd) {
@@ -1171,7 +1173,7 @@
     h += '<div class="bs-head">';
     cols.forEach(function (g) {
       var collapsed = !!fold[g.key || '_'];
-      h += '<div class="col bs-col' + (collapsed ? ' folded' : '') + '">' + boardHead(g, view, canStruct, collapsed) + '</div>';
+      h += '<div class="col bs-col' + (collapsed ? ' folded' : '') + '">' + boardHead(g, view, canStruct, collapsed, projectId) + '</div>';
     });
     h += '</div>';
     lanes.forEach(function (lane) {
@@ -2450,7 +2452,20 @@
       h += '<button class="vtb-btn' + (v.group !== 'sections' ? ' on' : '') + '" data-act="mt-group" title="' +
         L('จัดกลุ่ม') + '">' + I('grid', 13) + '<span>' + L('จัดกลุ่ม') + '</span></button>';
     }
+    /* 3a — อัตโนมัติของงานของฉัน (ย้ายเซกชันเมื่อใกล้ครบกำหนด เลยกำหนด ทำเสร็จ) */
+    var na = S.automations('@me').filter(function (a) { return a.on; }).length;
+    h += '<button class="vtb-btn' + (na ? ' on' : '') + '" data-act="mt-auto" title="' + L('ระบบอัตโนมัติ') + '">' +
+      I('bolt', 14) + '<span>' + L('ระบบอัตโนมัติ') + '</span>' + (na ? '<span class="vtb-n">' + na + '</span>' : '') + '</button>';
     return h + '</div>';
+  }
+
+  /** ไอคอนสายฟ้าบนหัวคอลัมน์ — สีเมื่อมีอัตโนมัติ "ย้ายเข้าคอลัมน์นี้" เปิดอยู่ (3a) */
+  function secBolt(pid, secId, canStruct) {
+    var n = S.autoForSection(pid, secId).length;
+    if (!n && !canStruct) return '';
+    return '<button class="btn btn-sm btn-ghost sec-bolt' + (n ? ' on' : '') + '" data-act="auto-sec" data-section="' +
+      esc(secId) + '" title="' + esc(n ? L('อัตโนมัติของคอลัมน์นี้ {n} รายการ', { n: n }) : L('เพิ่มอัตโนมัติให้คอลัมน์นี้')) + '">' +
+      I('bolt', 13) + (n > 1 ? '<span class="sec-bolt-n">' + n + '</span>' : '') + '</button>';
   }
 
   function mtSecActs(g, i, n, board) {
@@ -3387,7 +3402,10 @@
       var sec = S.section(x.project.id, x.membership.sectionId);
       h += '<span class="chip" style="margin:0 5px 5px 0"><span class="swatch" style="background:' +
         esc(x.project.color) + '"></span>' + esc(x.project.name) +
-        (sec ? ' · ' + esc(sec.name) : '') +
+        /* 3a — กดชื่อคอลัมน์เพื่อย้าย (ผ่าน S.moveTask อัตโนมัติ "ย้ายเข้าคอลัมน์" จึงทำงาน) */
+        (sec ? ' · <button class="chip-sec" data-act="dw-sec" data-id="' + esc(t.id) + '" data-project="' +
+          esc(x.project.id) + '" title="' + esc(L('ย้ายไปคอลัมน์อื่น')) + '">' + esc(sec.name) + ' ' +
+          I('chevronDown', 10) + '</button>' : '') +
         (homes.length > 1 ? '<button data-act="unhome" data-id="' + esc(t.id) +
           '" data-project="' + esc(x.project.id) + '" title="' +
           L('เอางานออกจากโปรเจกต์นี้') + '">' + I('close', 13) + '</button>' : '') + '</span>';
@@ -3794,6 +3812,7 @@
           (s.editedAt ? '<span class="cmt-edited" title="' + esc(fmtExact(s.editedAt)) + '">' +
             L('(แก้ไขแล้ว)') + '</span>' : '') +
           (s.pinned ? '<span class="cmt-pin">' + I('flag', 11) + L('ปักหมุด') + '</span>' : '') +
+          (s.auto ? '<span class="auto-tag" title="' + esc(L('เขียนโดยอัตโนมัติ')) + '">' + I('bolt', 11) + L('โดยอัตโนมัติ') + '</span>' : '') +
           '<span class="grow"></span>' +
           '<button class="cmt-more" data-act="comment-menu" data-story="' + esc(s.id) +
           '" title="' + L('ตัวเลือกความเห็น') + '">' + I('more', 14) + '</button></div>';
@@ -3854,6 +3873,7 @@
       } else {
         h += '<div class="story log">' + avatar(actor, 'sm') +
           '<div class="txt">' + esc(actor ? actor.name : '?') + ' ' + esc(storyText(s)) +
+          (s.auto ? ' <span class="auto-tag" title="' + esc(L('ทำโดยอัตโนมัติ')) + '">' + I('bolt', 11) + L('โดยอัตโนมัติ') + '</span>' : '') +
           whenTag(s.createdAt) + '</div></div>';
       }
     });
