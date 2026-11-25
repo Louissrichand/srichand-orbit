@@ -1,0 +1,128 @@
+# Orbit ↔ Asana parity plan
+
+Working spec for branch `asana-parity`. Each chunk below is built in order, one at a time, and appends a line to **Progress log** at the bottom when done.
+The full comparison table (≈110 rows, with sources) is the published report "Orbit เทียบ Asana"; this file is the build spec derived from it.
+
+## Ground rules (every chunk)
+
+- **Stack stays the same:** vanilla HTML/CSS/JS, no build step, no new dependencies, no CDN additions. Works from `index.html` served over http (`serve.ps1`, port 8123) and in local single-browser mode with `clientId` empty.
+- **Data compatibility:** all data lives in one `db` object (`app/store.js`). Any new field/entity gets a default in `migrate()` and `SCHEMA` is bumped when shape changes. Old data must load without loss. Team mode syncs the whole db as one JSON file, so keep new structures compact (no large blobs; attachments stay ≤ 2 MB until chunk 4b moves them to SharePoint).
+- **Store mutation pattern:** `snapshot(labelKey)` → mutate `db` → `log(taskId, key, params)` and/or `audit(...)` → `commit()`. Persisted text (logs, notifications, audit) is stored as an i18n key + params and translated at render time. Selectors use the cached index.
+- **Rendering:** `render.js` / `gantt.js` are pure functions returning HTML strings. Always `esc()` user text; translate with `L('ไทย')`. Export new renderers on `global.Render`.
+- **Interaction:** `main.js` uses `data-act` attributes with one delegated click switch, plus `change` / `input` handlers. **Every data-changing action must be registered in `NEEDS`** (`manage`, `structure`, `write`, `write:task`, `create`, `comment`). Modals: `openModal(html, wide)`; prompts: `askText`, `askConfirm`, `askChoice` (never native `alert/confirm/prompt`); popovers: `openPop(anchor, html)`; undo toast: `toast(msg, L('ย้อนกลับ'), 'undo')`.
+- **i18n:** Thai text inline in `L('…')`, English entry added to `EN` in `app/i18n.js`. Plurals `[n|one|many]`, params `{x}`.
+- **New project view:** add to `PROJECT_VIEWS` (store.js), branch in `renderViewBody` (main.js), `VIEWS_WITH_TOOLBAR` if filterable, and `ck_proj_view` in `db/schema.sql`. **New top-level page:** route in `readHash` allow-list + `buildHash`, branch in `renderViewBody`, sidebar button, topbar title.
+- **Permissions:** respect org role caps (`ROLE_CAPS`) and project access (`admin|edit|comment|view`). Guests only see what they are invited to.
+- **Both themes + mobile:** use existing CSS tokens in `assets/styles.css`; check dark mode and ≤ 620 px width.
+- **Keep `db/schema.sql` and `docs/API.md` roughly in sync** with new entities (tables/columns), and update README feature list.
+- **Verify before committing:** run `powershell -ExecutionPolicy Bypass -File serve.ps1` in the background, open `http://localhost:8123/` in the built-in browser, check the console has no errors, and click through every new feature at least once (create, edit, reload page to confirm it persisted, undo where relevant, dark mode, narrow width). No Node.js on this machine; the browser is the syntax check.
+- **Commit** at the end of the chunk on branch `asana-parity` (never push), message in Thai like the existing history, ending with:
+  `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
+
+## Chunks
+
+### 0 + 1a — bugs, comments, rich text
+Bugs:
+1. Single-select field in task drawer shows "[object Object]" (`render.js` ~2308 treats options as strings; they are `{name,color}`).
+2. Multi-select field in drawer falls through to a text input (`render.js` ~2320); build a proper multi-select like the list cell.
+3. Legacy `fieldsModal` lists options as "[object Object]" and adds options as strings (`main.js` ~1748, ~3849).
+4. Task delete still uses native `confirm()` (`main.js` ~3138) → `askConfirm`.
+5. Tab+X writes legacy `db.settings.theme` (`main.js` ~4570) → `setPref('theme')` + `applyTheme`. (Note: in Asana Tab+X is "full screen task"; keep theme toggle but ALSO make the drawer's expand button reachable — choose: Tab+X = expand task when a task is open, otherwise theme.)
+6. "Copy link" builds `#/task/<id>` that `readHash` ignores (`main.js` ~3121) → support the route on hashchange.
+7. README/`db/schema.sql` drift: document portfolios, messages, reactions, rules, templates, baseline, away, photos; README "not built" list is wrong.
+
+Features:
+- **Threaded replies** on comments: one level deep, collapsed by default with "n replies · time" row + participant avatars, oldest-first, reply box; notify only thread participants + @mentioned.
+- **Edit / delete own comment** (delete of a parent with replies leaves "ความเห็นนี้ถูกลบแล้ว"), **pin comment to top** (shows at top with a marker and in place), **copy comment link** (`…/t_<id>/c_<storyId>` scrolls & highlights).
+- **Comment drafts** kept per task per user (in memory + localStorage, not in db).
+- **Rich-text task description**: contenteditable editor with toolbar (bold, italic, underline, strike, code, bullet/numbered list, link, heading), keyboard shortcuts Ctrl+B/I/U, Ctrl+Shift+X/M/8/7, Ctrl+K; markdown-ish autoformat (`* `, `1. `); paste of markdown converts; store as sanitized minimal HTML (whitelist tags) or the existing rich format — pick one, render safely everywhere (drawer, search snippets, CSV export as plain text).
+- **@mention tasks and projects** (not only people) in comments and description: typeahead on `@`, inserts a chip link; mentioning a task adds a "connected work" log line on the target task.
+
+### 1b — rest of task core
+- **Start time** in addition to due time.
+- **Recurring tasks**: weekly with chosen weekdays, monthly (every N months; same date), yearly, "periodically: N days after completion", plus existing daily. New occurrence copies all fields incl. subtasks (not comments), field values, followers, tags, memberships. "Stop repeating" action.
+- **Approvals**: approver = assignee; approval status change notifies the task creator/followers ("อนุมัติแล้ว", "ขอแก้", "ปฏิเสธ"); show approval icon state in list/board; approval actions limited to assignee unless user has project edit.
+- **Follow-up task**: drawer ⋯ → "สร้างงานติดตามผล" → "ติดตาม: <name>", assigned to me, same project/section, description links back; shortcut Shift+Tab+F.
+- **Duplicate with options**: checkbox dialog (assignee, description, subtasks, attachments, tags, followers, projects, dependencies, dates, field values).
+- **Merge duplicates**: pick master task; move tags, followers, likes to master; duplicate gets completed and name prefixed "[ซ้ำ]"; undo; notify.
+- **Assign duplicate tasks**: in assignee picker, "มอบสำเนาให้หลายคน" → create a copy per chosen person.
+- **Paste multiple lines** into add-task input / list → one task per line (confirm when > 1).
+- **Trash (30 days)**: deleting tasks/projects/fields moves them to `db.trash` with deletedAt/deletedBy; Trash page (search menu or settings) lists the user's own deletions (admins see all) with Restore / Delete permanently; purge items > 30 days on load.
+- **Due soon / overdue notifications**: on app load and once per hour while open, generate (deduped per task per day) inbox notifications for assignee: due tomorrow, due today, overdue; plus a weekly "overdue summary" item on Monday. New notification kinds with toggles in settings.
+- **Number field formats**: number / currency (THB, USD, EUR, JPY, CNY, SGD, …) / percent / custom unit label; decimal places 0–4; display formatting in list, drawer, CSV.
+- **Subtasks**: drag a list row onto another task's subtask area or use "แปลงเป็นงานย่อยของ…" / "ย้ายออกเป็นงานหลัก"; parent date rollup action "จัดวันงานหลักให้ครอบงานย่อย" + warning when a subtask is outside parent dates; filter/sort/hide-completed subtasks in drawer.
+
+### 2a — My Tasks, Inbox, Home
+- **My Tasks sections** per user (stored on user prefs or `db.myTaskSections[userId]`): create/rename/reorder/delete; special "เพิ่งได้รับมอบหมาย" (renamable, not deletable) receives newly assigned tasks; drag tasks between sections; keep current due-bucket grouping as an optional "จัดกลุ่มตามวันครบกำหนด".
+- **My Tasks views**: List, Board (columns = my sections), Calendar (week/month with unscheduled sidebar), Files; filter/sort/group saved automatically per user; blue dot on unread newly-assigned tasks.
+- **Private tasks**: tasks created in My Tasks without a project are private to creator (+ assignee, followers); "ทำให้เป็นสาธารณะ" adds to a project. Visibility respected in search, home, profile.
+- **Inbox**: tabs กิจกรรม / บุ๊กมาร์ก / เก็บถาวร; bookmark a notification; mark read/unread; filters (from person, project, @mentioned me, assigned to me, assigned by me, unread only); sort newest/relevance; density detailed/compact; "สร้างงานติดตามผล" from a notification; archive all.
+- **Per-project notification settings**: per user per project toggles (status updates, messages, new tasks); "Do not disturb" (pause N hours or schedule) that suppresses the unread dot/toasts.
+- **Home customization**: widget list (งานของฉัน, งานที่ฉันมอบหมาย, โปรเจกต์ล่าสุด, คนที่ทำงานด้วย, อัปเดตสถานะ, สมุดโน้ตส่วนตัว, ร่างความเห็น, สถิติงานเสร็จ, ฟอร์ม/เป้าหมาย placeholders later), add/remove/reorder by drag, half/full width; saved per user.
+
+### 2b — project views
+- **List**: filter builder (+ เพิ่มตัวกรอง) over all built-in and custom fields with operators (is/is not/any of/empty/not empty, date ranges, number compare), dynamic "ฉัน" for people; multi-sort (several keys); group by any custom field (select/person/date) with "แสดงกลุ่มว่าง"; show/hide/reorder columns (Created on, Created by, Completed on, Last modified, Blocked by, Blocking available); column footer summary for number fields (sum/avg/min/max/count); expand subtasks inline; Shift-click range select + Ctrl-click; Enter adds below, Shift+Enter adds above; Ctrl+↑/↓ move task, Ctrl+Shift+↑/↓ move to prev/next section.
+- **Sections**: collapse/expand each and all, duplicate section (optionally into another project, choose what to keep), Tab+N.
+- **Board**: group columns by section or any select/person field; subgroup rows (swimlanes) by assignee/field; card shows chosen fields (customize), due date, subtask count, cover image (from an image attachment: "ตั้งเป็นรูปปก"), card size S/M/L, collapse columns (saved), match column color to field option color, multi-card drag, inline edit on card.
+- **Calendar** (project + global): Month and Week; drag task to change date (respect dependency shift); click a day to quick-add; show weekends toggle; multi-day bars; "ไม่มีวันครบกำหนด" sidebar to drag from; color by field.
+- **Timeline**: unscheduled tasks panel with drag onto dates; color by custom field; red dependency line when dates conflict; create task by clicking an empty date row.
+- **Saved views as tabs**: project tabs bar shows saved views as tabs (rename, reorder, remove, set default, up to 50); "ผู้รับผิดชอบคือฉัน" dynamic filter.
+
+### 2c — search, shortcuts, bulk, fields, project admin
+- **Search operators**: `"exact phrase"`, `a | b`, `-exclude`, `prefix*`, grouping `( )`.
+- **Advanced search page**: filters (assignee incl. nobody/not me, projects/sections, tags any/all/none, assigned by, followers, created by, due/start/created/completed/modified dates with on/between/within next N days, completion, has attachment, is blocked/blocking, is subtask, type, custom fields); results as List or Calendar; save (star) → appears in sidebar "การค้นหาที่บันทึก"; per user.
+- **Shortcuts** (help modal updated): Tab+D due, Tab+A assign, Tab+T tag, Tab+P add to project, Tab+S subtasks, Tab+F followers, Tab+J join, Tab+L leave, Tab+K like, Tab+R description, Tab+N section, Tab+O collapse sidebar, Tab+Enter open details, Tab+Del delete, Ctrl+Enter complete, Shift+Tab+F follow-up, ↑/↓ change selection, Inbox J/K/F/I/U.
+- **Bulk actions**: move to section, add to project, set custom field, add followers, add tag, mark milestone/approval, make dependent on a task, merge duplicates, copy links; selection sum of number fields.
+- **Fields**: ID field type (prefix, auto-increment per project, searchable, `@REQ-12` mentionable); organization **field library** (global fields usable in any project; editing propagates); field descriptions; notify-on-change toggle for select fields.
+- **Tags page** `#/tag/<name>`: all tasks with that tag; rename/delete tag (admin/member).
+- **CSV import mapping preview**: map columns → name/description/section/assignee/collaborators/start/due/type/dependents/parent/tags/custom fields (create new), ignore column, encoding note; **CSV export includes custom fields**, plus JSON export of a project.
+- **Project roles** (free-text role per member, shown on Overview); **request access** to private project (creates a task for the owner); **project trash/restore** (uses chunk 1b trash); **convert task → project** (name→project, assignee→owner, followers→members, subtasks→tasks, link back); **print** stylesheet for list view (`@media print`); **.ics download** for My Tasks / a project (all-day events for dated incomplete tasks).
+
+### 3a — automations
+Replace the single-trigger rules with an **Automations** engine (migrate existing rules):
+- Triggers: task added to project, moved to section, completed / reopened, assignee changed, due date changed/set, start date changed, field changed (any type; specific value), comment added, attachment added, follower added, no longer blocked, approval status changed, custom-type status changed (after 3b), due date approaching (N days), overdue (N hours/days after), manual ("รันเอง" with label), scheduled (daily/weekly/monthly) — time-based ones evaluate when any member has the app open (document this limit).
+- Conditions with paths: several paths, each AND of conditions (section, assignee, field value, type, completed, name contains, in any of projects, tag), plus "อื่น ๆ" path.
+- Actions (up to 20): move to section, complete/reopen, set assignee (fixed person, variable, or round-robin across a list skipping people who are away), set due/start date relative (N days/workdays before/after trigger/created/due/start/date field), set custom field (incl. text via variables), add comment (variables), add followers, add tag, remove tag, create task / subtask / approval (name/description/assignee/due with variables), add to another project/section, set priority.
+- Variables: task name, link, assignee name, creator, triggerer, due/start/created dates, field values, project name, section name.
+- UI: Customize → Automations list with active toggle, duplicate, delete, per-section lightning icon on list/board headers, run history (last 200 runs per project: status, task, time, actions, error), manual run from task ⋯ and on up to 50 selected tasks.
+- Guard against loops (max depth 3; automations may opt in to being triggered by other automations).
+- My Tasks automations: presets "ใกล้ครบกำหนด → ย้ายไปเซกชัน", "เลยกำหนด → ย้าย", "ทำเสร็จ → ย้าย".
+
+### 3b — forms, task types, templates, status
+- **Forms** (per project, up to 20): builder with title, description, heading blocks, questions (short text, long text, single-select, multi-select, number, date / date range, person, attachment) each optionally mapped to a project field; required toggle; branching on select answers (nested up to 5); settings (target section, title question, default assignee, copy answers into description, add submitter as follower, confirmation message, "ส่งอีกครั้ง" button, active/inactive). Submission page `#/form/<id>` usable by any signed-in member (and local mode); shareable link; Home widget "ฟอร์ม". Trigger "form submitted" in automations.
+- **Custom task types** per project (and copied by templates): name, icon/emoji, statuses (name, color, counts-as-complete), default type for "+ เพิ่ม…"; filter/sort/group by type & status; status change logged and available as automation trigger/action.
+- **Project templates**: "บันทึกเป็นเทมเพลต" stores template (sections, fields, rules/automations, forms, task types, task templates, tasks with **relative dates** from project start, roles as placeholders, skip weekends option); template gallery on new-project dialog (built-in starter templates in Thai: แผนเปิดตัวสินค้าใหม่, คำขอฝ่ายออกแบบ, ปฏิทินคอนเทนต์, แผนงานอีเวนต์, รับเรื่อง IT, Onboarding พนักงานใหม่) + org templates; "ใช้เทมเพลต" asks start date and role→person mapping; template access can-edit / can-use.
+- **Task templates upgrade**: per project, relative due date/range, assignee, fields, followers, description, subtasks, dependencies between subtasks; used from Add menu and section "+".
+- **Status update builder**: blocks (สรุป, สิ่งที่ทำได้, สิ่งที่ติดขัด, ขั้นต่อไป, custom), highlights (milestones completed, overdue tasks, completed tasks in period, chart snapshot) chosen from a side panel, remembers layout; status templates; weekly reminder task to project owner on Friday (toggle) generated on load; status visible on Overview and Messages.
+
+### 3c — overview, pages, charts, time, advanced fields
+- **Overview**: key resources (links + attachments), project brief (rich text doc with headings, tables, @mentions), milestones panel (add/edit), connected portfolios list, project roles.
+- **Pages** (documents): project tab "หน้า" + standalone pages; rich-text editor (headings, lists, checklist, table, code, quote, divider, @mentions, images ≤ 500 KB); inline comment threads resolvable; version history (keep last 20 snapshots) with restore; select text → create task with back-link; private-to-me notepad page in My Tasks / Home widget.
+- **Project dashboard builder**: up to 20 widgets; chart types bar, stacked bar, grouped bar, line (with benchmark), burnup, burndown, donut, number, lollipop, text widget; X axis (assignee, section, priority, type, custom select field, completion, time period), Y (task count, sum/avg of number field, estimated/actual time); filters; half/full width, reorder, duplicate; click a bar → filtered list; export PNG (canvas) — draw charts as inline SVG.
+- **Messages**: replies under a message, join/leave, @mentions, attachments; status updates appear in the feed.
+- **Time tracking**: estimated & actual time per task (h m), live start/stop timer (one running per user, floating pill), time entries with user/date/note, rollup from subtasks, totals in list footer, CSV export of time entries.
+- **Formula fields** (+ − × ÷ over number/date fields, DateAdd/DateSubtract, Rollup of subtasks, Today) and **Reference fields** (link to tasks/projects/portfolios/goals as chips).
+- **Proofing**: click on an image attachment preview to drop a numbered pin with comment → creates a subtask; pins shown on image.
+- **Gantt/Timeline**: critical path highlight (longest dependent chain, toggle), chain-dependencies action for multi-selected tasks, dependency preview modal when dates shift outside Gantt/Timeline.
+
+### 4a — goals, teams, portfolios
+- **Teams**: entity with name, description, members (admin/member), privacy (public / by request / private), color/icon; team page `#/team/<id>` tabs ภาพรวม (description, members, pinned projects/portfolios, key resources), งานทั้งหมด, ข้อความ, ปฏิทินทีม; projects can be shared with teams; sidebar "ทีม"; admin console Teams tab.
+- **Goals**: page `#/goals` tabs เป้าหมายบริษัท / ทีม / ของฉัน / แผนผังกลยุทธ์; goal fields: name, owner, team or company, time period (fiscal year start configurable; quarter/half/year/custom), privacy, members, parent goal, description, custom fields; progress: manual (%, number, currency with start/target/current) or automatic from sub-goals (average/sum, optional custom weights totalling 100%), projects (tasks or milestones complete), or tasks; status updates (on track/at risk/off track) with reminders; close as achieved/partial/missed/dropped; progress-over-time chart; related work; comments + activity; export CSV; Home goals widget.
+- **Strategy map**: SVG tree company → team goals → projects, pan/zoom, mission statement editable by admins.
+- **Portfolios**: nested portfolios (no cycles; nested-in-timeline disabled like Asana), portfolio custom fields + rollups (sum of a numeric project field), filters/sort/group + saved views as tabs, milestone progress column, connected goals column, Progress tab, messages, project templates in portfolio.
+
+### 4b — workload, timesheets, reporting, platform
+- **Workload** (project, portfolio, and universal page `#/workload`): rows per person, columns per day/week; measure by task count or effort field (hours/points/%), spread across weekdays of the task range; per-person capacity (prefs, admin-editable); over-capacity red; away periods shaded (allow multiple away ranges per user); drill-down per person; drag to reschedule/reassign; click empty cell to create; zoom days/weeks/months.
+- **Timesheets**: weekly grid per user (rows task/project, columns days) from time entries (3c), billable flag, time categories, submit → reviewer approves/rejects (admin or project admin), lock after approval, reviewer list, CSV export.
+- **Universal reporting** `#/reports`: dashboards across organization/teams/portfolios/projects using the 3c chart engine; sources tasks/projects/goals/portfolios; share with people/teams (private or org-visible); PNG export per chart.
+- **Attachments to SharePoint/OneDrive** in team mode: upload to `<sitePath>/Orbit/attachments/<taskId>/` via Graph, store only metadata + driveItem id/webUrl; "แนบจาก OneDrive/SharePoint" picker (Graph search/browse); local mode keeps data-URI fallback; migration tool to move existing inline attachments out of the db file; raise limit to 100 MB in team mode.
+- **Browser notifications** (Notification API, opt-in, while tab open) for new inbox items.
+- **PWA**: `manifest.webmanifest`, icons, minimal service worker caching app shell (only when served over https/localhost), "ติดตั้ง Orbit" hint; touch drag support (pointer events) for list/board.
+- **Embedded media tab**: project view that embeds an allow-listed URL (Google Docs/Sheets/Slides, Figma, Miro, Loom, YouTube, Office 365 embeds) in an iframe.
+
+## Out of scope (by decision)
+Bundles, capacity-planning allocations/placeholders, custom RBAC roles, SAML/SCIM/IP allowlist/data residency (Entra handles), Slack/Zoom/Jira/Salesforce/Zapier, and everything that needs a server (email/Teams notifications, email-to-task, public forms/links, API/webhooks, exact-time scheduled automations, AI) — that is phase 5, after the Azure Static Web Apps backend exists.
+
+## Progress log
+<!-- each chunk appends: date · chunk · commit hash · what was built · known gaps -->
+- 2026-11-25 · 0 + 1a · da4fb77 · Bugs 1–7 fixed (drawer single/multi-select, fieldsModal options, delete via askConfirm, Tab+X = expand task / per-user theme, `#/task/<id>` on hashchange, README + db/schema.sql + docs/API.md drift); new `app/richtext.js` contenteditable editor for description + comment/reply/edit composers (toolbar, Ctrl+B/I/U, Ctrl+Shift+X/M/8/7, Ctrl+K via askText, `- `/`* `/`1. `/`# ` autoformat, Tab/Shift+Tab indent, safe paste of HTML/markdown); **storage format = existing mini-markdown, not HTML** (`**b**` `*i*` `++u++` `~~s~~` `` `c` `` `[t](url)` lists `# h`, people `@Name`, refs `@[label](t_…|p_…)`), helpers `S.plainText(md, forSearch)` / `S.textRefs(md)` / `RichText.toHtml|fromNode`; @ typeahead for people/tasks/projects, task refs log "อ้างถึงงานนี้ใน …" on the target; threaded replies (1 level, collapsed row, participant-only notify), edit/delete own (tombstone when replies exist), pin to top, comment link `#/task/<t>/c_<storyId>` scroll + highlight, per-user per-composer drafts in localStorage `orbit.drafts`; SCHEMA 6→7 (comment `parentId`, `editedAt`, `pinned`, `deleted`). Known gaps: no hover card on chips; link chips inside the editor open the task on click (no caret placement on them); edit/pin/delete of comments has undo but adding a comment does not; field-value changes still have no undo (pre-existing); serve.ps1 crashes when a request is aborted mid-response (pre-existing).
