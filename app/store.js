@@ -10,7 +10,7 @@
 
   var KEY = 'orbit.db.v4';
   var LEGACY_KEYS = ['orbit.db.v3', 'orbit.db.v2', 'orbit.db.v1', 'taskflow.db.v1'];   // ชื่อ/เวอร์ชันเดิม
-  var SCHEMA = 9;
+  var SCHEMA = 10;
 
   /* ---------- utilities ---------- */
 
@@ -172,6 +172,7 @@
       dependsOn: attrs.dependsOn || [],
       attachments: attrs.attachments || [],
       recur: attrs.recur || null,
+      coverId: attrs.coverId || null,
       createdBy: attrs.createdBy || 'u_me',
       createdAt: attrs.createdAt || today(),
       /* ได้รับมอบหมายเมื่อไร โดยใคร — ตัดสินว่างานไปลง "เพิ่งได้รับมอบหมาย" ในงานของฉัน
@@ -525,6 +526,32 @@
     });
     d.personal = (d.personal && typeof d.personal === 'object' && !Array.isArray(d.personal))
       ? d.personal : {};
+    /* v10 — มุมมองของโปรเจกต์ (ชิ้นงาน 2b)
+     *   task.coverId        ไฟล์แนบรูปที่ตั้งเป็นรูปปกของการ์ดบอร์ด
+     *   project.defaultTab  แท็บมุมมองที่บันทึกไว้ซึ่งเปิดเป็นค่าเริ่มต้น (null = project.defaultView)
+     *   savedViews[]        { id, name, icon, kind, view } — kind ใหม่ (เดิมไม่รู้ว่าบันทึกจากมุมมองไหน
+     *                       เดาจากค่าของ Gantt ที่ต่างจากค่าเริ่มต้น) และ view เก็บเฉพาะคีย์ที่ต่างจากค่าเริ่มต้น
+     *                       ตัวกรองสี่ช่องแบบเดิมกลายเป็นเงื่อนไขของตัวสร้างตัวกรอง (fillView)
+     *   personal.pv[pid]    มุมมองที่ทำงานอยู่ของแต่ละคน   personal.cal  ตั้งค่าปฏิทินรวม */
+    d.tasks.forEach(function (t) {
+      if (!('coverId' in t)) t.coverId = null;
+      if (t.coverId && !(t.attachments || []).some(function (a) { return a.id === t.coverId; })) t.coverId = null;
+    });
+    d.projects.forEach(function (p) {
+      if (!('defaultTab' in p)) p.defaultTab = null;
+      p.savedViews = (p.savedViews || []).filter(function (v) { return v && v.id; }).map(function (v) {
+        var full = fillView(v.view || {});
+        if (SV_KINDS.indexOf(v.kind) < 0) {
+          v.kind = (full.gZoom !== 'month' || full.gColorBy !== 'theme' || full.gShowBaseline ||
+            full.gSubtasks === 'expanded') ? 'gantt' : 'list';
+        }
+        if (!v.name) v.name = 'มุมมอง';
+        if (!v.icon) v.icon = '📊';
+        v.view = viewDiff(full);
+        return v;
+      });
+      if (p.defaultTab && !p.savedViews.some(function (v) { return v.id === p.defaultTab; })) p.defaultTab = null;
+    });
     prunePersonal(d);
     if (!d.users.some(function (u) { return u.role === 'admin'; })) {
       var firstUser = d.users.filter(function (u) { return u.id === d.currentUserId; })[0] || d.users[0];
@@ -1476,6 +1503,8 @@
    *   home      [{ w, full }]  วิดเจ็ตหน้าแรกตามลำดับ  null = ค่าเริ่มต้น
    *   inbox     { sort, dense }
    *   notepad   ข้อความในสมุดโน้ตส่วนตัว
+   *   pv        { projectId: มุมมองที่ทำงานอยู่ (เฉพาะคีย์ที่ต่างจากค่าเริ่มต้น) }  (2b)
+   *   cal       { mode, weekends, colorBy } ของปฏิทินรวม  null = ค่าเริ่มต้น  (2b)
    * ====================================================================== */
   var MT_RECENT = 'recent';
   var NOTEPAD_MAX = 20000;
@@ -1499,7 +1528,7 @@
       },
       home: null,
       inbox: { sort: 'new', dense: false },
-      notepad: ''
+      notepad: '', pv: {}, cal: null
     };
   }
 
@@ -1525,12 +1554,15 @@
     if (!Array.isArray(p.home)) p.home = null;
     if (!isObj(p.inbox)) p.inbox = b.inbox;
     if (typeof p.notepad !== 'string') p.notepad = '';
+    if (!isObj(p.pv)) p.pv = {};
+    if (!isObj(p.cal)) p.cal = null;
     return p;
   }
 
   /** ล้างรหัสที่ไม่มีความหมายแล้ว (งานถูกลบ ไม่ได้เป็นของคนนี้แล้ว เซกชันถูกลบ) ทำตอนโหลด */
   function prunePersonal(d) {
-    var tasks = {}, users = {};
+    var tasks = {}, users = {}, projs = {};
+    d.projects.forEach(function (p) { projs[p.id] = true; });
     d.tasks.forEach(function (t) { tasks[t.id] = t; });
     d.users.forEach(function (u) { users[u.id] = true; });
     Object.keys(d.personal).forEach(function (who) {
@@ -1546,6 +1578,7 @@
         var t = tasks[tid];
         if (!t || t.assigneeId !== who || t.completed) delete p.mt.seen[tid];
       });
+      Object.keys(p.pv).forEach(function (pid) { if (!projs[pid]) delete p.pv[pid]; });
     });
   }
 
@@ -2334,10 +2367,35 @@
     { id: 'blocking',  label: 'บล็อกงานอะไร' }
   ];
 
+  /* ---------- 2b — มุมมองของโปรเจกต์ ----------
+   *
+   * มุมมองหนึ่งชุด (ตัวกรอง เรียง จัดกลุ่ม คอลัมน์ บอร์ด ปฏิทิน ไทม์ไลน์ Gantt) เป็นอ็อบเจ็กต์เดียว
+   * ใช้ทั้งเป็นมุมมองที่ทำงานอยู่ของแต่ละคน (personal.pv[projectId]) และเป็นแท็บที่บันทึกไว้ (project.savedViews)
+   * ทั้งสองที่เก็บเฉพาะคีย์ที่ต่างจากค่าเริ่มต้น (viewDiff) แล้วเติมกลับตอนอ่าน (fillView) ไฟล์ข้อมูลกลางจึงไม่บวม
+   *
+   *   filters  [{ f, op, v }]   f = 'assignee' | 'createdBy' | 'section' | 'priority' | 'type' | 'tags'
+   *                                 | 'due' | 'start' | 'created' | 'completedOn' | 'modified'
+   *                                 | 'completed' | 'blocked' | 'name' | 'field:<id>'
+   *                             op ตามชนิด (FILTER_OPS)  v = อาร์เรย์ค่า (คน/ตัวเลือก) ตัวเลข วันที่ หรือ [a, b]
+   *                             คนใช้ '@me' แทน "ฉัน" — ตีความตอนกรอง แท็บเดียวกันจึงเห็นงานของใครของมัน
+   *   sorts    [{ k, d }]       เรียงหลายชั้น k = คีย์ใน SORTS หรือ 'field:<id>'  d = 'asc' | 'desc'
+   *                             sort / sortDir ยังอยู่เป็นสำเนาของชั้นแรก ให้โค้ดเก่าที่อ่านสองคีย์นี้ใช้ต่อได้
+   *   group    'section' | 'assignee' | 'priority' | 'due' | 'none' | 'field:<id>' (select/person/date)
+   *   showEmpty แสดงกลุ่มที่ไม่มีงาน
+   *   cols / colShow / foot   ลำดับคอลัมน์ในรายการ เปิดปิดคอลัมน์ และสรุปท้ายคอลัมน์ตัวเลข
+   *   collapsed { groupKey: true } กลุ่มที่ยุบในรายการ
+   *   bGroup / bSwim / bSize / bCard / bCollapsed   บอร์ด: คอลัมน์ตาม แถวตาม ขนาดการ์ด ฟิลด์บนการ์ด คอลัมน์ที่ยุบ
+   *   cMode / cWeekends / cColorBy   ปฏิทิน      tColorBy   ไทม์ไลน์
+   */
   function defaultView() {
     return {
       assignee: '', priority: '', tag: '', due: 'any', q: '',
       showCompleted: true, sort: 'manual', sortDir: 'asc', group: 'section',
+      filters: [], sorts: [], showEmpty: false,
+      cols: [], colShow: {}, foot: {}, collapsed: {},
+      bGroup: 'section', bSwim: 'none', bSize: 'm', bCard: {}, bCollapsed: {},
+      cMode: 'month', cWeekends: true, cColorBy: 'project',
+      tColorBy: 'priority',
 
       /* --- Gantt --- */
       gZoom: 'month',
@@ -2348,25 +2406,254 @@
     };
   }
 
-  /** เติมคีย์ที่ยังไม่มีให้มุมมองเก่า
+  var LEGACY_DUE = { overdue: 'overdue', today: 'today', week: 'week', none: 'empty' };
+
+  /** เติมคีย์ที่ยังไม่มีให้มุมมองเก่า และแปลงตัวกรองแบบเดิมเป็นเงื่อนไขของตัวสร้างตัวกรอง
    *
    * มุมมองที่ผู้ใช้บันทึกไว้ก่อนมีตัวเลือก Gantt จะขาดคีย์ใหม่ทั้งหมด
    * ถ้าไม่เติม พอโหลดมุมมองนั้นแล้ว Gantt จะอ่านค่า undefined แล้วหน้าพัง
+   *
+   * ตัวกรองสี่ช่องแบบเดิม (ผู้รับผิดชอบ ความสำคัญ แท็ก กำหนดส่ง) กลายเป็นเงื่อนไขหนึ่งแถวต่อช่อง
+   * แล้วล้างช่องเดิมทิ้ง ไม่งั้นจะกรองซ้ำสองชั้นและลบออกจากตัวสร้างไม่ได้
+   * ส่วน sort/sortDir ถ้ามีโค้ดตั้งตรง ๆ (คลิกหัวคอลัมน์) จะถูกยกเป็นชั้นแรกของ sorts ที่นี่
    */
   function fillView(v) {
     var base = defaultView();
     if (!v) return base;
     Object.keys(base).forEach(function (k) {
-      if (!(k in v)) v[k] = base[k];
+      if (!(k in v) || v[k] === null || v[k] === undefined) v[k] = base[k];
     });
     v.gCols = v.gCols || base.gCols;
     Object.keys(base.gCols).forEach(function (k) {
       if (!(k in v.gCols)) v.gCols[k] = base.gCols[k];
     });
+    ['filters', 'sorts', 'cols'].forEach(function (k) { if (!Array.isArray(v[k])) v[k] = []; });
+    ['colShow', 'foot', 'collapsed', 'bCard', 'bCollapsed'].forEach(function (k) {
+      if (!v[k] || typeof v[k] !== 'object' || Array.isArray(v[k])) v[k] = {};
+    });
+    if (v.assignee) { v.filters.push({ f: 'assignee', op: 'is', v: [v.assignee] }); v.assignee = ''; }
+    if (v.priority) { v.filters.push({ f: 'priority', op: 'is', v: [v.priority] }); v.priority = ''; }
+    if (v.tag) { v.filters.push({ f: 'tags', op: 'any', v: [v.tag] }); v.tag = ''; }
+    if (v.due && v.due !== 'any') {
+      if (LEGACY_DUE[v.due]) v.filters.push({ f: 'due', op: LEGACY_DUE[v.due], v: null });
+      v.due = 'any';
+    }
+    /* ชั้นแรกของการเรียงกับ sort/sortDir ต้องตรงกันเสมอ */
+    if (!v.sort || v.sort === 'manual') v.sorts = [];
+    else if (!v.sorts.length || v.sorts[0].k !== v.sort || v.sorts[0].d !== v.sortDir) {
+      var rest = v.sorts.filter(function (s) { return s && s.k !== v.sort; });
+      v.sorts = [{ k: v.sort, d: v.sortDir === 'desc' ? 'desc' : 'asc' }].concat(rest);
+    }
     return v;
   }
 
-  function matchesFilter(t, f) {
+  /** ตั้งการเรียงหลายชั้นทีเดียว แล้วคัดลอกชั้นแรกไปไว้ที่ sort/sortDir */
+  function setSorts(v, list) {
+    var seen = {};
+    v.sorts = (list || []).filter(function (s) {
+      if (!s || !s.k || s.k === 'manual' || seen[s.k]) return false;
+      seen[s.k] = true;
+      return true;
+    }).slice(0, 5);
+    v.sort = v.sorts.length ? v.sorts[0].k : 'manual';
+    v.sortDir = v.sorts.length ? v.sorts[0].d : 'asc';
+    return v;
+  }
+
+  /** เก็บเฉพาะคีย์ที่ต่างจากค่าเริ่มต้น — ใช้ตอนบันทึกลงข้อมูลกลาง */
+  function viewDiff(v) {
+    var base = defaultView(), out = {};
+    fillView(v);
+    Object.keys(v).forEach(function (k) {
+      if (!(k in base)) return;
+      if (JSON.stringify(v[k]) !== JSON.stringify(base[k])) out[k] = clone(v[k]);
+    });
+    return out;
+  }
+
+  /* ---------- ตัวสร้างตัวกรอง ---------- */
+
+  var ME = '@me';
+
+  var FILTER_BUILTIN = [
+    { id: 'assignee',    label: 'ผู้รับผิดชอบ',  kind: 'person' },
+    { id: 'createdBy',   label: 'สร้างโดย',      kind: 'person' },
+    { id: 'section',     label: 'คอลัมน์',       kind: 'select' },
+    { id: 'priority',    label: 'ความสำคัญ',    kind: 'select' },
+    { id: 'type',        label: 'ชนิดงาน',      kind: 'select' },
+    { id: 'tags',        label: 'แท็ก',         kind: 'multi' },
+    { id: 'due',         label: 'กำหนดส่ง',     kind: 'date' },
+    { id: 'start',       label: 'วันเริ่ม',      kind: 'date' },
+    { id: 'created',     label: 'วันที่สร้าง',   kind: 'date' },
+    { id: 'completedOn', label: 'วันที่ทำเสร็จ', kind: 'date' },
+    { id: 'modified',    label: 'แก้ไขล่าสุด',   kind: 'date' },
+    { id: 'completed',   label: 'ทำเสร็จแล้ว',  kind: 'bool' },
+    { id: 'blocked',     label: 'ถูกบล็อกอยู่',  kind: 'bool' },
+    { id: 'name',        label: 'ชื่องาน',      kind: 'text' }
+  ];
+
+  var FILTER_OPS = {
+    person: [['is', 'เป็น'], ['not', 'ไม่เป็น'], ['empty', 'ว่าง'], ['notempty', 'ไม่ว่าง']],
+    select: [['is', 'เป็น'], ['not', 'ไม่เป็น'], ['empty', 'ว่าง'], ['notempty', 'ไม่ว่าง']],
+    multi:  [['any', 'มีอย่างใดอย่างหนึ่ง'], ['all', 'มีครบทุกค่า'], ['none', 'ไม่มี'],
+             ['empty', 'ว่าง'], ['notempty', 'ไม่ว่าง']],
+    date:   [['overdue', 'เลยมาแล้ว'], ['today', 'วันนี้'], ['week', 'ภายใน 7 วันข้างหน้า'],
+             ['next', 'ภายใน N วันข้างหน้า'], ['last', 'ย้อนหลัง N วัน'],
+             ['before', 'ก่อนวันที่'], ['after', 'หลังวันที่'], ['on', 'ตรงวันที่'], ['between', 'ระหว่าง'],
+             ['empty', 'ว่าง'], ['notempty', 'ไม่ว่าง']],
+    number: [['eq', '='], ['ne', '≠'], ['gt', '>'], ['gte', '≥'], ['lt', '<'], ['lte', '≤'],
+             ['empty', 'ว่าง'], ['notempty', 'ไม่ว่าง']],
+    text:   [['contains', 'มีคำว่า'], ['notcontains', 'ไม่มีคำว่า'], ['empty', 'ว่าง'], ['notempty', 'ไม่ว่าง']],
+    bool:   [['yes', 'ใช่'], ['no', 'ไม่ใช่']]
+  };
+
+  /** ฟิลด์ที่กรองได้ในโปรเจกต์นี้ — ของในตัวก่อน ตามด้วยฟิลด์ที่สร้างเอง */
+  function filterFields(projectId) {
+    var p = project(projectId);
+    var out = FILTER_BUILTIN.slice();
+    ((p && p.fields) || []).forEach(function (f) {
+      out.push({ id: 'field:' + f.id, label: f.name, kind: f.type, field: f, custom: true });
+    });
+    return out;
+  }
+
+  function filterField(projectId, fid) {
+    return filterFields(projectId).filter(function (x) { return x.id === fid; })[0] || null;
+  }
+
+  /** ตัวเลือกให้ติ๊กของเงื่อนไขชนิดคน/ตัวเลือก [[ค่า, ป้าย, สี]] */
+  function filterChoices(projectId, fid) {
+    var p = project(projectId);
+    var def = filterField(projectId, fid);
+    if (!def) return [];
+    if (def.kind === 'person') {
+      return [[ME, 'ฉัน', null]].concat(db.users.filter(function (u) { return u.active !== false; })
+        .map(function (u) { return [u.id, u.name, u.color]; }));
+    }
+    if (fid === 'section') return (p ? p.sections : []).map(function (s) { return [s.id, s.name, null]; });
+    if (fid === 'priority') return PRIORITIES.filter(function (x) { return x.id !== 'none'; })
+      .map(function (x) { return [x.id, x.label, x.color]; });
+    if (fid === 'type') return TASK_TYPES.map(function (x) { return [x.id, x.label, null]; });
+    if (fid === 'tags') return allTags().map(function (x) { return [x, x, null]; });
+    if (def.field && def.field.options) {
+      return def.field.options.map(function (o) { return [o.name, o.name, o.color]; });
+    }
+    return [];
+  }
+
+  /** วันที่แก้ไขล่าสุดของงาน — บรรทัดล่าสุดในประวัติ ไม่มีก็ใช้วันที่สร้าง */
+  function lastModified(taskId) {
+    var st = index().storyByTask[taskId] || [];
+    var best = '';
+    st.forEach(function (s) { if ((s.createdAt || '') > best) best = s.createdAt; });
+    if (best) return best.slice(0, 10);
+    var t = task(taskId);
+    return t && t.createdAt ? String(t.createdAt).slice(0, 10) : null;
+  }
+
+  /** ค่าดิบของงานในฟิลด์หนึ่ง ใช้ทั้งกรอง เรียง จัดกลุ่ม และสรุปท้ายคอลัมน์ */
+  function taskValue(t, fid, m) {
+    switch (fid) {
+      case 'assignee':    return t.assigneeId || null;
+      case 'createdBy':   return t.createdBy || null;
+      case 'section':     return m ? m.sectionId : null;
+      case 'priority':    return t.priority && t.priority !== 'none' ? t.priority : null;
+      case 'type':        return t.type || 'task';
+      case 'tags':        return t.tags || [];
+      case 'due':         return t.dueOn || null;
+      case 'start':       return t.startOn || null;
+      case 'created':     return t.createdAt ? String(t.createdAt).slice(0, 10) : null;
+      case 'completedOn': return t.completedAt ? String(t.completedAt).slice(0, 10) : null;
+      case 'modified':    return lastModified(t.id);
+      case 'completed':   return !!t.completed;
+      case 'blocked':     return !t.completed && isBlocked(t.id);
+      case 'name':        return t.name;
+    }
+    if (fid && fid.indexOf('field:') === 0) {
+      var v = fieldValue(t.id, fid.slice(6));
+      return v === undefined ? null : v;
+    }
+    return null;
+  }
+
+  function meIs(list) {
+    return [].concat(list || []).map(function (x) { return x === ME ? db.currentUserId : x; });
+  }
+
+  function condKind(fid) {
+    var b = FILTER_BUILTIN.filter(function (x) { return x.id === fid; })[0];
+    if (b) return b.kind;
+    if (fid && fid.indexOf('field:') === 0) {
+      var hit = null;
+      db.projects.forEach(function (p) {
+        (p.fields || []).forEach(function (f) { if ('field:' + f.id === fid) hit = f.type; });
+      });
+      return hit;
+    }
+    return null;
+  }
+
+  /** ตรงเงื่อนไขหนึ่งแถวไหม — เงื่อนไขที่ยังกรอกไม่ครบถือว่าผ่าน ไม่ซ่อนงานทั้งหมดตอนกำลังเลือกค่า */
+  function matchCond(t, c, m) {
+    if (!c || !c.f) return true;
+    var kind = condKind(c.f);
+    if (!kind) return true;                         // ฟิลด์ถูกลบไปแล้ว
+    var val = taskValue(t, c.f, m);
+    var empty = val === null || val === undefined || val === '' || (Array.isArray(val) && !val.length);
+    var op = c.op;
+    if (op === 'empty') return kind === 'bool' ? !val : empty;
+    if (op === 'notempty') return kind === 'bool' ? !!val : !empty;
+    var td = today();
+    if (kind === 'person' || kind === 'select') {
+      var want = meIs(c.v);
+      if (!want.length) return true;
+      var hit = !empty && want.indexOf(val) >= 0;
+      return op === 'not' ? !hit : hit;
+    }
+    if (kind === 'multi') {
+      var w = meIs(c.v);
+      if (!w.length) return true;
+      var arr = empty ? [] : [].concat(val);
+      var has = function (x) { return arr.indexOf(x) >= 0; };
+      if (op === 'all') return w.every(has);
+      if (op === 'none') return !w.some(has);
+      return w.some(has);
+    }
+    if (kind === 'bool') return op === 'no' ? !val : !!val;
+    if (kind === 'text') {
+      if (!c.v) return true;
+      var hay = String(val || '').toLowerCase(), q = String(c.v).toLowerCase();
+      return op === 'notcontains' ? hay.indexOf(q) < 0 : hay.indexOf(q) >= 0;
+    }
+    if (kind === 'number') {
+      if (c.v === '' || c.v === null || c.v === undefined || isNaN(+c.v)) return true;
+      if (empty) return false;
+      var n = +val, x = +c.v;
+      return op === 'ne' ? n !== x : op === 'gt' ? n > x : op === 'gte' ? n >= x
+        : op === 'lt' ? n < x : op === 'lte' ? n <= x : n === x;
+    }
+    if (kind === 'date') {
+      var d = empty ? null : String(val).slice(0, 10);
+      if (op === 'overdue') return !!d && d < td && !(c.f === 'due' && t.completed);
+      if (op === 'today') return d === td;
+      if (op === 'week') return !!d && d >= td && d <= addDays(td, 7);
+      var N = Math.max(0, parseInt(c.v, 10) || 0);
+      if (op === 'next') return !!d && d >= td && d <= addDays(td, N);
+      if (op === 'last') return !!d && d <= td && d >= addDays(td, -N);
+      if (op === 'between') {
+        var a = c.v && c.v[0], b = c.v && c.v[1];
+        if (!a && !b) return true;
+        return !!d && (!a || d >= a) && (!b || d <= b);
+      }
+      if (!c.v) return true;
+      if (op === 'before') return !!d && d < c.v;
+      if (op === 'after') return !!d && d > c.v;
+      if (op === 'on') return d === c.v;
+    }
+    return true;
+  }
+
+  function matchesFilter(t, f, m) {
     if (f.assignee && t.assigneeId !== f.assignee) return false;
     if (f.priority && t.priority !== f.priority) return false;
     if (f.tag && t.tags.indexOf(f.tag) < 0) return false;
@@ -2390,7 +2677,22 @@
       if (f.due === 'today' && t.dueOn !== td) return false;
       if (f.due === 'week' && !(t.dueOn && t.dueOn >= td && t.dueOn <= addDays(td, 7))) return false;
     }
+    var conds = f.filters || [];
+    for (var i = 0; i < conds.length; i++) {
+      if (!matchCond(t, conds[i], m)) return false;
+    }
     return true;
+  }
+
+  /** จำนวนเงื่อนไขที่ใช้อยู่ (ไว้ติดบนปุ่มตัวกรอง) */
+  function filterCount(v) {
+    var n = (v.filters || []).length;
+    if (v.assignee) n++;
+    if (v.priority) n++;
+    if (v.tag) n++;
+    if (v.due && v.due !== 'any') n++;
+    if (!v.showCompleted) n++;
+    return n;
   }
 
   function prioRank(id) {
@@ -2400,10 +2702,7 @@
 
   /** ค่าที่ใช้เทียบของฟิลด์ที่สร้างเอง แปลงให้เทียบกันได้ตามชนิด */
   function fieldSortKey(t, fieldId) {
-    var v = null;
-    db.fieldValues.forEach(function (x) {
-      if (x.taskId === t.id && x.fieldId === fieldId) v = x.value;
-    });
+    var v = fieldValue(t.id, fieldId);
     if (v === null || v === undefined || v === '') return null;
     if (typeof v === 'number') return v;
     if (v.length && typeof v !== 'string') return v.join(', ');   // multi-select
@@ -2411,61 +2710,122 @@
     return u ? u.name : String(v);
   }
 
-  function sortItems(items, sort, dir) {
-    if (!sort || sort === 'manual') return items;
-    var sign = (dir === 'desc') ? -1 : 1;
+  /** เทียบสองงานด้วยคีย์เดียว ช่องว่างไปอยู่ท้ายเสมอไม่ว่าจะเรียงทางไหน */
+  function cmpBy(ta, tb, sort, sign) {
     var fieldId = (sort.indexOf('field:') === 0) ? sort.slice(6) : null;
+    var va, vb;
+    if (fieldId) { va = fieldSortKey(ta, fieldId); vb = fieldSortKey(tb, fieldId); }
+    else if (sort === 'priority') {
+      va = ta.priority === 'none' ? null : prioRank(ta.priority);
+      vb = tb.priority === 'none' ? null : prioRank(tb.priority);
+    } else if (sort === 'name') { va = ta.name; vb = tb.name; }
+    else if (sort === 'assignee' || sort === 'createdBy') {
+      var ua = user(sort === 'assignee' ? ta.assigneeId : ta.createdBy);
+      var ub = user(sort === 'assignee' ? tb.assigneeId : tb.createdBy);
+      va = ua ? ua.name : null; vb = ub ? ub.name : null;
+    } else if (sort === 'created') {
+      /* วันที่สร้างแบบ "น้อยไปมาก" เดิมคือใหม่สุดก่อน คงไว้ คนที่ใช้อยู่จะไม่เห็นลำดับกลับหัว */
+      va = ta.createdAt || null; vb = tb.createdAt || null;
+      if (va && vb && va !== vb) return sign * (va < vb ? 1 : -1);
+    } else {
+      va = taskValue(ta, sort); vb = taskValue(tb, sort);
+    }
+    if ((va === null || va === undefined) && (vb === null || vb === undefined)) return 0;
+    if (va === null || va === undefined) return 1;
+    if (vb === null || vb === undefined) return -1;
+    if (typeof va === 'number' && typeof vb === 'number') return sign * (va - vb);
+    return sign * String(va).localeCompare(String(vb), 'th');
+  }
+
+  /** เรียง [{task}] — รับได้ทั้ง (items, 'key', 'asc') แบบเดิม และ (items, [{k, d}, …]) แบบหลายชั้น */
+  function sortItems(items, sort, dir) {
+    var keys = Array.isArray(sort) ? sort
+      : (!sort || sort === 'manual') ? [] : [{ k: sort, d: dir }];
+    keys = keys.filter(function (s) { return s && s.k && s.k !== 'manual'; });
+    if (!keys.length) return items;
     var copy = items.slice();
     copy.sort(function (a, b) {
-      var ta = a.task, tb = b.task;
-      if (fieldId) {
-        var va = fieldSortKey(ta, fieldId), vb = fieldSortKey(tb, fieldId);
-        // ช่องว่างไปอยู่ท้ายเสมอ ไม่ว่าจะเรียงทางไหน
-        if (va === null && vb === null) return 0;
-        if (va === null) return 1;
-        if (vb === null) return -1;
-        if (typeof va === 'number' && typeof vb === 'number') return sign * (va - vb);
-        return sign * String(va).localeCompare(String(vb), 'th');
-      }
-      if (sort === 'due') {
-        return sign * ((ta.dueOn || '9999-99-99') < (tb.dueOn || '9999-99-99') ? -1 : 1);
-      }
-      if (sort === 'priority') return sign * (prioRank(ta.priority) - prioRank(tb.priority));
-      if (sort === 'name') return sign * ta.name.localeCompare(tb.name, 'th');
-      if (sort === 'created') return sign * (ta.createdAt < tb.createdAt ? 1 : -1);
-      if (sort === 'assignee') {
-        var na = (user(ta.assigneeId) || { name: 'ฮฮฮ' }).name;
-        var nb = (user(tb.assigneeId) || { name: 'ฮฮฮ' }).name;
-        return sign * na.localeCompare(nb, 'th');
+      for (var i = 0; i < keys.length; i++) {
+        var r = cmpBy(a.task, b.task, keys[i].k, keys[i].d === 'desc' ? -1 : 1);
+        if (r) return r;
       }
       return 0;
     });
     return copy;
   }
 
-  /** คืน [{key, label, items}] ตามการจัดกลุ่มที่เลือก */
-  function groupItems(projectId, items, group) {
+  /** คนที่ควรมีกลุ่มเมื่อ "แสดงกลุ่มว่าง" — สมาชิกโปรเจกต์ ไม่มีรายชื่อก็ทุกคนที่ใช้งานอยู่ */
+  function groupPeople(projectId) {
+    var mem = projectMembers(projectId).map(function (m) { return m.userId; });
+    var p = project(projectId);
+    if (p && p.owner && mem.indexOf(p.owner) < 0) mem.push(p.owner);
+    return db.users.filter(function (u) {
+      return u.active !== false && (!mem.length || mem.indexOf(u.id) >= 0);
+    });
+  }
+
+  /** คืน [{key, label, items, set}] ตามการจัดกลุ่มที่เลือก
+   *  set = { by, key } ค่าที่ต้องตั้งให้งานที่ถูกลากมาวางในกลุ่มนี้ (null = วางไม่ได้)
+   *  opts.showEmpty  แสดงกลุ่มที่ว่าง (ตัวเลือกที่ยังไม่มีงาน คนที่ยังไม่มีงาน) */
+  function groupItems(projectId, items, group, opts) {
+    opts = opts || {};
+    var showEmpty = !!opts.showEmpty;
     var out = [];
-    if (group === 'assignee') {
+    function push(g) { if (showEmpty || g.items.length) out.push(g); }
+    var fieldId = group && group.indexOf('field:') === 0 ? group.slice(6) : null;
+    var f = fieldId ? ((project(projectId) || {}).fields || []).filter(function (x) { return x.id === fieldId; })[0] : null;
+    if (fieldId && !f) group = 'section';           // ฟิลด์ถูกลบไปแล้ว กลับไปจัดตามคอลัมน์
+
+    if (group === 'assignee' || (f && f.type === 'person')) {
+      var val = function (x) { return f ? (fieldValue(x.task.id, f.id) || '') : (x.task.assigneeId || ''); };
+      var by = f ? group : 'assignee';
       var seen = {};
-      items.forEach(function (x) { seen[x.task.assigneeId || ''] = true; });
+      items.forEach(function (x) { seen[val(x)] = true; });
+      var people = showEmpty ? groupPeople(projectId) : [];
       db.users.forEach(function (u) {
-        if (!seen[u.id]) return;
+        if (!seen[u.id] && people.indexOf(u) < 0) return;
         out.push({
-          key: u.id, label: u.name,
-          items: items.filter(function (x) { return x.task.assigneeId === u.id; })
+          key: u.id, label: u.name, user: u, set: { by: by, key: u.id },
+          items: items.filter(function (x) { return val(x) === u.id; })
         });
       });
-      if (seen['']) {
-        out.push({
-          key: '', label: 'ยังไม่มอบหมาย',
-          items: items.filter(function (x) { return !x.task.assigneeId; })
+      push({ key: '', label: f ? 'ไม่ระบุ' : 'ยังไม่มอบหมาย', set: { by: by, key: '' },
+        items: items.filter(function (x) { return !val(x); }) });
+    } else if (f && (f.type === 'select' || f.type === 'multi')) {
+      (f.options || []).forEach(function (o) {
+        push({
+          key: o.name, label: o.name, color: o.color, set: f.type === 'select' ? { by: group, key: o.name } : null,
+          items: items.filter(function (x) {
+            var v = fieldValue(x.task.id, f.id);
+            return f.type === 'multi' ? [].concat(v || []).indexOf(o.name) >= 0 : v === o.name;
+          })
         });
-      }
+      });
+      push({ key: '', label: 'ไม่มีค่า', set: f.type === 'select' ? { by: group, key: '' } : null,
+        items: items.filter(function (x) {
+          var v = fieldValue(x.task.id, f.id);
+          return v === null || v === undefined || v === '' || (Array.isArray(v) && !v.length);
+        }) });
+    } else if (f && f.type === 'date') {
+      /* ฟิลด์วันที่จัดเป็นรายเดือน เรียงตามเวลา งานที่ไม่มีวันอยู่ท้าย */
+      var months = {};
+      items.forEach(function (x) {
+        var v = fieldValue(x.task.id, f.id);
+        if (v) months[String(v).slice(0, 7)] = true;
+      });
+      Object.keys(months).sort().forEach(function (mk) {
+        out.push({ key: mk, label: mk, month: mk, set: null,
+          items: items.filter(function (x) { return String(fieldValue(x.task.id, f.id) || '').slice(0, 7) === mk; }) });
+      });
+      push({ key: '', label: 'ไม่มีวันที่', set: { by: group, key: '' },
+        items: items.filter(function (x) { return !fieldValue(x.task.id, f.id); }) });
+    } else if (f) {
+      out.push({ key: 'all', label: 'ทั้งหมด', items: items, set: null });
     } else if (group === 'priority') {
       PRIORITIES.forEach(function (p) {
-        var sub = items.filter(function (x) { return x.task.priority === p.id; });
-        if (sub.length) out.push({ key: p.id, label: p.label, color: p.color, items: sub });
+        push({ key: p.id, label: p.label, color: p.id === 'none' ? null : p.color,
+          set: { by: 'priority', key: p.id },
+          items: items.filter(function (x) { return (x.task.priority || 'none') === p.id; }) });
       });
     } else if (group === 'due') {
       var td = today();
@@ -2474,19 +2834,20 @@
         ['today', 'วันนี้', function (t) { return t.dueOn === td; }],
         ['week', 'ภายใน 7 วัน', function (t) { return t.dueOn && t.dueOn > td && t.dueOn <= addDays(td, 7); }],
         ['later', 'หลังจากนั้น', function (t) { return t.dueOn && t.dueOn > addDays(td, 7); }],
-        ['none', 'ไม่มีกำหนด', function (t) { return !t.dueOn; }]
+        ['none', 'ไม่มีกำหนด', function (t) { return !t.dueOn; }],
+        ['past', 'ผ่านมาแล้ว', function (t) { return t.dueOn && t.dueOn < td && t.completed; }]
       ];
       defs.forEach(function (d) {
         var sub = items.filter(function (x) { return d[2](x.task); });
-        if (sub.length) out.push({ key: d[0], label: d[1], items: sub });
+        push({ key: d[0], label: d[1], items: sub, set: null });
       });
     } else if (group === 'none') {
-      out.push({ key: 'all', label: 'ทั้งหมด', items: items });
+      out.push({ key: 'all', label: 'ทั้งหมด', items: items, set: null });
     } else {
       var p = project(projectId);
       p.sections.forEach(function (s) {
         out.push({
-          key: s.id, label: s.name, isSection: true,
+          key: s.id, label: s.name, isSection: true, set: { by: 'section', key: s.id },
           items: items.filter(function (x) { return x.membership.sectionId === s.id; })
         });
       });
@@ -2494,14 +2855,279 @@
     return out;
   }
 
-  /** filter + sort + group รวบเป็นก้อนเดียวให้ view เรียกใช้ */
-  function viewGroups(projectId, view) {
-    var items = tasksInProject(projectId).filter(function (x) {
-      return matchesFilter(x.task, view);
-    });
-    var groups = groupItems(projectId, items, view.group);
-    groups.forEach(function (g) { g.items = sortItems(g.items, view.sort, view.sortDir); });
+  /** filter + sort + group รวบเป็นก้อนเดียวให้ view เรียกใช้
+   *  opts.group ใช้แทน view.group (บอร์ดจัดคอลัมน์ด้วย bGroup)  opts.showEmpty แทน view.showEmpty */
+  function viewGroups(projectId, view, opts) {
+    opts = opts || {};
+    var items = viewItems(projectId, view);
+    var groups = groupItems(projectId, items, opts.group || view.group,
+      { showEmpty: 'showEmpty' in opts ? opts.showEmpty : view.showEmpty });
+    var keys = view.sorts && view.sorts.length ? view.sorts : view.sort;
+    groups.forEach(function (g) { g.items = sortItems(g.items, keys, view.sortDir); });
     return groups;
+  }
+
+  /** งานในโปรเจกต์ที่ผ่านตัวกรอง (ยังไม่จัดกลุ่ม ไม่เรียง) */
+  function viewItems(projectId, view) {
+    return tasksInProject(projectId).filter(function (x) {
+      return matchesFilter(x.task, view, x.membership);
+    });
+  }
+
+  /* ---------- คอลัมน์ของรายการ ----------
+   * ของในตัวที่เปิดไว้ตั้งแต่ต้นคือผู้รับผิดชอบกับกำหนดส่ง ที่เหลือซ่อนไว้ให้เปิดเอง
+   * ฟิลด์ที่สร้างเองแสดงเป็นค่าเริ่มต้น (สร้างมาก็เพราะอยากเห็น) */
+  var LIST_COLS = [
+    { id: 'assignee',    label: 'ผู้รับผิดชอบ',  w: 170, on: true,  sort: 'assignee' },
+    { id: 'due',         label: 'กำหนดส่ง',     w: 148, on: true,  sort: 'due' },
+    { id: 'start',       label: 'วันเริ่ม',      w: 130, on: false, sort: 'start' },
+    { id: 'priority',    label: 'ความสำคัญ',    w: 130, on: false, sort: 'priority' },
+    { id: 'tags',        label: 'แท็ก',         w: 170, on: false },
+    { id: 'created',     label: 'วันที่สร้าง',   w: 130, on: false, sort: 'created' },
+    { id: 'createdBy',   label: 'สร้างโดย',      w: 160, on: false, sort: 'createdBy' },
+    { id: 'completedOn', label: 'วันที่ทำเสร็จ', w: 140, on: false, sort: 'completedOn' },
+    { id: 'modified',    label: 'แก้ไขล่าสุด',   w: 140, on: false, sort: 'modified' },
+    { id: 'blockedBy',   label: 'ถูกบล็อกโดย',   w: 190, on: false },
+    { id: 'blocking',    label: 'กำลังบล็อก',    w: 190, on: false }
+  ];
+
+  /** ทุกคอลัมน์ตามลำดับที่ผู้ใช้จัด พร้อมสถานะเปิด/ปิด */
+  function listColumns(projectId, v) {
+    var p = project(projectId);
+    var all = LIST_COLS.map(function (c) {
+      return { id: c.id, label: c.label, w: c.w, sort: c.sort || null, builtin: true,
+        on: v.colShow && (c.id in v.colShow) ? !!v.colShow[c.id] : c.on, wkey: c.id };
+    });
+    ((p && p.fields) || []).forEach(function (f) {
+      var id = 'field:' + f.id;
+      all.push({ id: id, label: f.name, w: 158, sort: id, field: f, wkey: f.id,
+        on: v.colShow && (id in v.colShow) ? !!v.colShow[id] : true });
+    });
+    var order = (v.cols || []);
+    all.sort(function (a, b) {
+      var ia = order.indexOf(a.id), ib = order.indexOf(b.id);
+      if (ia < 0 && ib < 0) return 0;
+      if (ia < 0) return 1;
+      if (ib < 0) return -1;
+      return ia - ib;
+    });
+    return all;
+  }
+
+  var FOOT_FNS = [
+    ['none', 'ไม่แสดง'], ['sum', 'ผลรวม'], ['avg', 'ค่าเฉลี่ย'], ['min', 'ต่ำสุด'],
+    ['max', 'สูงสุด'], ['count', 'จำนวนที่กรอก']
+  ];
+
+  /** สรุปท้ายคอลัมน์ตัวเลขของงานชุดหนึ่ง คืนตัวเลข (หรือ null ถ้าไม่มีอะไรให้สรุป) */
+  function footValue(tasks, fieldId, fn) {
+    var nums = [];
+    tasks.forEach(function (t) {
+      var v = fieldValue(t.id, fieldId);
+      if (typeof v === 'number' && !isNaN(v)) nums.push(v);
+      else if (v !== null && v !== undefined && v !== '' && !isNaN(+v)) nums.push(+v);
+    });
+    if (fn === 'count') return nums.length;
+    if (!nums.length) return null;
+    if (fn === 'avg') return nums.reduce(function (a, b) { return a + b; }, 0) / nums.length;
+    if (fn === 'min') return Math.min.apply(null, nums);
+    if (fn === 'max') return Math.max.apply(null, nums);
+    return nums.reduce(function (a, b) { return a + b; }, 0);
+  }
+
+  /* ---------- การ์ดบอร์ด ---------- */
+  var CARD_PARTS = [
+    { id: 'cover',    label: 'รูปปก',        on: true },
+    { id: 'assignee', label: 'ผู้รับผิดชอบ',  on: true },
+    { id: 'due',      label: 'กำหนดส่ง',     on: true },
+    { id: 'priority', label: 'ความสำคัญ',    on: true },
+    { id: 'subtasks', label: 'จำนวนงานย่อย', on: true },
+    { id: 'tags',     label: 'แท็ก',         on: false }
+  ];
+
+  /** การ์ดแสดงส่วนนี้ไหม — ส่วนในตัวมีค่าเริ่มต้น ฟิลด์ที่สร้างเองซ่อนไว้จนกว่าจะเลือก */
+  function cardShows(v, key) {
+    var o = v.bCard || {};
+    if (key in o) return !!o[key];
+    var c = CARD_PARTS.filter(function (x) { return x.id === key; })[0];
+    return c ? c.on : false;
+  }
+
+  /** ตั้งค่าของกลุ่มให้งานที่ถูกลากมาวาง ยังไม่ commit (ผู้เรียก snapshot/commit เอง) */
+  function applyGroupValue(taskId, projectId, by, key, beforeId) {
+    var t = task(taskId);
+    if (!t || !by) return;
+    if (by === 'section') {
+      var m = db.memberships.filter(function (x) { return x.taskId === taskId && x.projectId === projectId; })[0];
+      if (!m || !section(projectId, key)) return;
+      var list = tasksInSection(projectId, key).filter(function (x) { return x.task.id !== taskId; });
+      var pos = list.length ? list[list.length - 1].membership.position + 1 : 1, at = -1;
+      if (beforeId) list.forEach(function (x, i) { if (x.task.id === beforeId) at = i; });
+      if (at === 0) pos = list[0].membership.position / 2;
+      else if (at > 0) pos = (list[at - 1].membership.position + list[at].membership.position) / 2;
+      var moved = m.sectionId !== key;
+      if (moved) log(taskId, 'ย้ายไปคอลัมน์ {c}', { c: section(projectId, key).name });
+      m.sectionId = key;
+      m.position = pos;
+      if (moved) applyRules(projectId, key, taskId);
+      return;
+    }
+    if (by === 'assignee') {
+      if ((t.assigneeId || '') !== (key || '')) updateTask(taskId, { assigneeId: key || null }, { quiet: true });
+      return;
+    }
+    if (by === 'priority') {
+      if ((t.priority || 'none') !== (key || 'none')) updateTask(taskId, { priority: key || 'none' }, { quiet: true });
+      return;
+    }
+    if (by.indexOf('field:') === 0) {
+      var fid = by.slice(6);
+      var cur = fieldValue(taskId, fid);
+      if ((cur || '') === (key || '')) return;
+      setFieldRaw(taskId, fid, key || null);
+      var f = null;
+      db.projects.forEach(function (p) { (p.fields || []).forEach(function (x) { if (x.id === fid) f = x; }); });
+      var who = f && f.type === 'person' ? user(key) : null;
+      log(taskId, key ? 'ตั้ง {f} เป็น {v}' : 'ล้างค่า {f}', { f: f ? f.name : '', v: who ? who.name : key });
+    }
+  }
+
+  /** ลากงาน (หนึ่งหรือหลายชิ้น) ลงกลุ่มบนบอร์ดหรือในรายการ — ย้อนกลับได้ในครั้งเดียว
+   *  sets = [{ by, key }] เช่น คอลัมน์ + แถว (swimlane) */
+  function dropToGroups(ids, projectId, sets, beforeId) {
+    ids = (ids || []).filter(function (id) { return !!task(id); });
+    sets = (sets || []).filter(function (s) { return s && s.by; });
+    if (!ids.length || !sets.length) return false;
+    snapshot(ids.length > 1 ? 'ย้าย {n} งาน' : 'ย้ายงาน', { n: ids.length });
+    ids.forEach(function (id) {
+      sets.forEach(function (s) { applyGroupValue(id, projectId, s.by, s.key, ids.length === 1 ? beforeId : null); });
+    });
+    commit();
+    return true;
+  }
+
+  /** ใส่ค่าฟิลด์โดยไม่ commit */
+  function setFieldRaw(taskId, fieldId, value) {
+    var empty = (value === null || value === '' ||
+                 (value && value.length === 0 && typeof value !== 'number'));
+    var fv = db.fieldValues.filter(function (v) {
+      return v.taskId === taskId && v.fieldId === fieldId;
+    })[0];
+    if (fv) {
+      if (empty) db.fieldValues = db.fieldValues.filter(function (v) { return v !== fv; });
+      else fv.value = value;
+    } else if (!empty) {
+      db.fieldValues.push({ taskId: taskId, fieldId: fieldId, value: value });
+    }
+  }
+
+  /* ---------- สีตามฟิลด์ (ปฏิทินและไทม์ไลน์) ---------- */
+  function colorChoices(projectId) {
+    var out = [['project', 'สีของโปรเจกต์'], ['priority', 'ความสำคัญ'], ['assignee', 'ผู้รับผิดชอบ'],
+               ['progress', 'ความคืบหน้า']];
+    var p = projectId ? project(projectId) : null;
+    ((p && p.fields) || []).forEach(function (f) {
+      if (f.type === 'select' || f.type === 'person') out.push(['field:' + f.id, f.name]);
+    });
+    return out;
+  }
+
+  /* ---------- มุมมองที่ทำงานอยู่ของแต่ละคน ---------- */
+
+  /** มุมมองล่าสุดที่คนนี้ใช้ในโปรเจกต์นี้ (เติมค่าเริ่มต้นแล้ว) */
+  function projView(projectId) {
+    var pv = personalOf().pv || {};
+    return fillView(clone(pv[projectId] || {}));
+  }
+
+  /** จำมุมมองที่ทำงานอยู่ — ไม่มี snapshot ไม่วาดใหม่ เขียนลงที่เก็บเฉย ๆ
+   *  คืน true ถ้ามีอะไรเปลี่ยน */
+  function setProjView(projectId, view) {
+    if (!project(projectId) || !me()) return false;
+    var st = personalOf();
+    if (!st.pv || typeof st.pv !== 'object') st.pv = {};
+    var d = viewDiff(view);
+    var empty = !Object.keys(d).length;
+    if (JSON.stringify(st.pv[projectId] || {}) === JSON.stringify(d)) return false;
+    if (empty) delete st.pv[projectId];
+    else st.pv[projectId] = d;
+    persist();
+    return true;
+  }
+
+  /** ปฏิทินรวม — โหมด วันหยุด และสีที่จำไว้ต่อคน */
+  function calPrefs() {
+    var c = personalOf().cal;
+    return {
+      mode: c && c.mode === 'week' ? 'week' : 'month',
+      weekends: !(c && c.weekends === false),
+      colorBy: (c && c.colorBy) || 'project'
+    };
+  }
+
+  function setCalPrefs(patch) {
+    var st = personalOf();
+    var c = calPrefs();
+    Object.keys(patch || {}).forEach(function (k) { c[k] = patch[k]; });
+    st.cal = c;
+    commit();
+    return c;
+  }
+
+  /* ---------- แท็บมุมมองที่บันทึกไว้ ----------
+   * { id, name, icon, kind: list|board|timeline|gantt|calendar, view } เรียงตามลำดับในอาร์เรย์
+   * project.defaultTab = id ของแท็บที่เปิดเป็นค่าเริ่มต้น (null = ใช้ project.defaultView ซึ่งเป็นมุมมองในตัว) */
+  var SV_MAX = 50;
+  var SV_KINDS = ['list', 'board', 'timeline', 'gantt', 'calendar'];
+
+  function savedView(projectId, id) {
+    var p = project(projectId);
+    return p ? (p.savedViews || []).filter(function (v) { return v.id === id; })[0] || null : null;
+  }
+
+  function updateSavedView(projectId, id, view) {
+    var sv = savedView(projectId, id);
+    if (!sv) return false;
+    snapshot('บันทึกมุมมอง “{n}”', { n: sv.name });
+    sv.view = viewDiff(clone(view));
+    commit();
+    return true;
+  }
+
+  function renameSavedView(projectId, id, name, icon) {
+    var sv = savedView(projectId, id);
+    var nm = String(name || '').trim().slice(0, 60);
+    if (!sv || !nm) return false;
+    snapshot('เปลี่ยนชื่อมุมมอง');
+    sv.name = nm;
+    if (icon) sv.icon = String(icon).slice(0, 4);
+    commit();
+    return true;
+  }
+
+  function moveSavedView(projectId, id, delta) {
+    var p = project(projectId);
+    if (!p) return false;
+    var i = -1;
+    p.savedViews.forEach(function (v, k) { if (v.id === id) i = k; });
+    var j = i + delta;
+    if (i < 0 || j < 0 || j >= p.savedViews.length) return false;
+    snapshot('ย้ายแท็บมุมมอง');
+    var x = p.savedViews.splice(i, 1)[0];
+    p.savedViews.splice(j, 0, x);
+    commit();
+    return true;
+  }
+
+  /** ตั้งแท็บเริ่มต้นของโปรเจกต์ — รับได้ทั้งมุมมองในตัว ('list') และแท็บที่บันทึกไว้ ('v_…') */
+  function setDefaultTab(projectId, tab) {
+    var p = project(projectId);
+    if (!p) return false;
+    snapshot('ตั้งมุมมองเริ่มต้น');
+    if (savedView(projectId, tab)) p.defaultTab = tab;
+    else { p.defaultTab = null; p.defaultView = tab; }
+    commit();
+    return true;
   }
 
   function allTags() {
@@ -3633,6 +4259,7 @@
     if (!t) return;
     snapshot('ลบไฟล์แนบ');
     t.attachments = t.attachments.filter(function (a) { return a.id !== attId; });
+    if (t.coverId === attId) t.coverId = null;
     commit();
   }
 
@@ -4222,6 +4849,93 @@
     commit();
   }
 
+
+  /* ---------- 2b — ทำสำเนาคอลัมน์ รูปปก และเพิ่มงานต่อจากแถว ---------- */
+
+  var SEC_DUP_KEYS = ['assignee', 'dates', 'notes', 'subtasks', 'tags', 'followers', 'attachments', 'fields'];
+
+  /** ทำสำเนาคอลัมน์พร้อมงานข้างใน ลงโปรเจกต์เดิมหรือโปรเจกต์อื่น
+   *  o = { toProject, name, keep: { assignee, dates, notes, subtasks, tags, followers, attachments, fields } }
+   *  ค่าฟิลด์ที่สร้างเองคัดลอกได้เฉพาะในโปรเจกต์เดิม (ฟิลด์เป็นของแต่ละโปรเจกต์)
+   *  คืน { projectId, sectionId, n } หรือ null */
+  function duplicateSection(projectId, sectionId, o) {
+    o = o || {};
+    var src = section(projectId, sectionId);
+    var toPid = o.toProject && project(o.toProject) ? o.toProject : projectId;
+    var dest = project(toPid);
+    if (!src || !dest) return null;
+    var keep = {};
+    SEC_DUP_KEYS.forEach(function (k) { keep[k] = !o.keep || !(k in o.keep) ? true : !!o.keep[k]; });
+    if (toPid !== projectId) keep.fields = false;
+    var opt = { assignee: keep.assignee, notes: keep.notes, subtasks: keep.subtasks,
+      attachments: keep.attachments, tags: keep.tags, followers: keep.followers,
+      projects: false, deps: false, dates: keep.dates, fields: keep.fields };
+    var name = String(o.name || '').trim().slice(0, 120) || (src.name + ' ' + L('(สำเนา)'));
+    var roots = tasksInSection(projectId, sectionId).map(function (x) { return x.task; });
+    snapshot('ทำสำเนาคอลัมน์ “{s}”', { s: src.name });
+    var ns = { id: uid('s'), name: name };
+    /* ในโปรเจกต์เดิมวางต่อจากคอลัมน์ต้นฉบับ โปรเจกต์อื่นวางท้ายสุด */
+    var at = toPid === projectId ? dest.sections.indexOf(src) + 1 : dest.sections.length;
+    dest.sections.splice(at, 0, ns);
+    var pos = 1;
+    roots.forEach(function (t) {
+      var c = copyTaskTree(t, opt, null, 0);
+      c.name = t.name;
+      if (!keep.assignee) { c.assigneeId = null; c.assignedAt = null; c.assignedBy = null; }
+      db.memberships.push({ id: uid('m'), taskId: c.id, projectId: toPid, sectionId: ns.id, position: pos++ });
+      log(c.id, 'คัดลอกมาจาก “{t}”', { t: t.name });
+    });
+    audit('section.duplicate', dest.name, '{s} → {d}', { s: src.name, d: name });
+    commit();
+    return { projectId: toPid, sectionId: ns.id, n: roots.length };
+  }
+
+  function isImageAtt(a) {
+    if (!a) return false;
+    if (a.mime && /^image\//.test(a.mime)) return true;
+    return /^data:image\//.test(a.url || '') || /\.(png|jpe?g|gif|webp|svg)(\?|#|$)/i.test(a.url || a.name || '');
+  }
+
+  /** ตั้งรูปปกของการ์ดจากไฟล์แนบที่เป็นรูป  attId = null คือเอารูปปกออก */
+  function setCover(taskId, attId) {
+    var t = task(taskId);
+    if (!t) return false;
+    if (attId && !isImageAtt((t.attachments || []).filter(function (a) { return a.id === attId; })[0])) return false;
+    if ((t.coverId || null) === (attId || null)) return false;
+    snapshot(attId ? 'ตั้งรูปปก' : 'เอารูปปกออก');
+    t.coverId = attId || null;
+    log(taskId, attId ? 'ตั้งรูปปกของการ์ด' : 'เอารูปปกของการ์ดออก');
+    commit();
+    return true;
+  }
+
+  function coverOf(t) {
+    if (!t || !t.coverId) return null;
+    var a = (t.attachments || []).filter(function (x) { return x.id === t.coverId; })[0];
+    return a && isImageAtt(a) && a.url ? a : null;
+  }
+
+  /** เพิ่มงานใหม่เหนือหรือใต้งานที่ระบุ ในคอลัมน์เดียวกัน (Enter / Shift+Enter ในรายการ) */
+  function createTaskNear(attrs, projectId, refId, above) {
+    var m = db.memberships.filter(function (x) { return x.taskId === refId && x.projectId === projectId; })[0];
+    var p = project(projectId);
+    if (!p) return null;
+    var secId = m ? m.sectionId : p.sections[0].id;
+    var list = tasksInSection(projectId, secId);
+    var i = -1;
+    list.forEach(function (x, k) { if (x.task.id === refId) i = k; });
+    var pos;
+    if (i < 0) pos = list.length ? list[list.length - 1].membership.position + 1 : 1;
+    else if (above) pos = i === 0 ? list[0].membership.position - 1 : (list[i - 1].membership.position + list[i].membership.position) / 2;
+    else pos = i === list.length - 1 ? list[i].membership.position + 1 : (list[i].membership.position + list[i + 1].membership.position) / 2;
+    snapshot('สร้างงาน');
+    var t = createTaskRaw(attrs, projectId, secId);
+    var nm = db.memberships.filter(function (x) { return x.taskId === t.id && x.projectId === projectId; })[0];
+    if (nm) nm.position = pos;
+    commit();
+    return t;
+  }
+
   /** ความกว้างคอลัมน์ที่ผู้ใช้ลากไว้ จำแยกตามโปรเจกต์ */
   function colWidth(projectId, key, fallback) {
     var p = project(projectId);
@@ -4352,24 +5066,36 @@
 
   /* ---------- saved views ---------- */
 
-  function saveView(projectId, name, view, icon) {
+  function saveView(projectId, name, view, icon, kind) {
     var p = project(projectId);
-    /* ชื่อซ้ำให้ทับของเดิม ไม่งั้นกดบันทึกสองครั้งจะได้มุมมองชื่อเดียวกันสองอัน
+    var nm = String(name || '').trim().slice(0, 60);
+    if (!p || !nm) return null;
+    var k = SV_KINDS.indexOf(kind) >= 0 ? kind : 'list';
+    /* ชื่อซ้ำ (ชนิดเดียวกัน) ให้ทับของเดิม ไม่งั้นกดบันทึกสองครั้งจะได้มุมมองชื่อเดียวกันสองอัน
      * แล้วผู้ใช้จะแยกไม่ออกว่าอันไหนใหม่ */
-    var old = p.savedViews.filter(function (v) { return v.name === name; })[0];
+    var old = p.savedViews.filter(function (v) { return v.name === nm && (v.kind || 'list') === k; })[0];
+    if (!old && p.savedViews.length >= SV_MAX) return null;
+    snapshot('บันทึกมุมมอง “{n}”', { n: nm });
     if (old) {
-      old.view = clone(view);
+      old.view = viewDiff(clone(view));
       if (icon) old.icon = icon;
     } else {
-      p.savedViews.push({ id: uid('v'), name: name, icon: icon || '📊', view: clone(view) });
+      old = { id: uid('v'), name: nm, icon: icon || '📊', kind: k, view: viewDiff(clone(view)) };
+      p.savedViews.push(old);
     }
+    audit('project.view', p.name, nm);
     commit();
+    return old;
   }
 
   function deleteSavedView(projectId, viewId) {
     var p = project(projectId);
+    if (!p || !savedView(projectId, viewId)) return false;
+    snapshot('ลบแท็บมุมมอง');
     p.savedViews = p.savedViews.filter(function (v) { return v.id !== viewId; });
+    if (p.defaultTab === viewId) p.defaultTab = null;
     commit();
+    return true;
   }
 
   /* ---------- task templates ---------- */
@@ -5210,6 +5936,18 @@
     colWidth: colWidth, setColWidth: setColWidth, resetColWidths: resetColWidths,
     addRule: addRule, deleteRule: deleteRule,
     saveView: saveView, deleteSavedView: deleteSavedView,
+    /* 2b — มุมมองของโปรเจกต์ */
+    SV_MAX: SV_MAX, SV_KINDS: SV_KINDS, savedView: savedView, updateSavedView: updateSavedView,
+    renameSavedView: renameSavedView, moveSavedView: moveSavedView, setDefaultTab: setDefaultTab,
+    ME: ME, FILTER_OPS: FILTER_OPS, filterFields: filterFields, filterField: filterField,
+    filterChoices: filterChoices, filterCount: filterCount, matchCond: matchCond, taskValue: taskValue,
+    lastModified: lastModified, setSorts: setSorts, viewDiff: viewDiff, groupItems: groupItems,
+    viewItems: viewItems, LIST_COLS: LIST_COLS, listColumns: listColumns, FOOT_FNS: FOOT_FNS,
+    footValue: footValue, CARD_PARTS: CARD_PARTS, cardShows: cardShows, dropToGroups: dropToGroups,
+    colorChoices: colorChoices, projView: projView, setProjView: setProjView,
+    calPrefs: calPrefs, setCalPrefs: setCalPrefs, SEC_DUP_KEYS: SEC_DUP_KEYS,
+    duplicateSection: duplicateSection, isImageAtt: isImageAtt, setCover: setCover, coverOf: coverOf,
+    createTaskNear: createTaskNear,
     saveTaskTemplate: saveTaskTemplate, applyTaskTemplate: applyTaskTemplate,
     deleteTaskTemplate: deleteTaskTemplate,
 

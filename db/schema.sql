@@ -350,14 +350,24 @@ CREATE TABLE dbo.project_status_updates (
 CREATE INDEX ix_status_project ON dbo.project_status_updates(project_id, created_at DESC);
 GO
 
-/* มุมมองที่บันทึกไว้ ทั้งของส่วนตัวและของโปรเจกต์ */
+/* มุมมองที่บันทึกไว้ = แท็บของโปรเจกต์ (ชิ้นงาน 2b, SCHEMA 10) — ตรงกับ project.savedViews ใน app/store.js
+   config_json เก็บเฉพาะคีย์ที่ต่างจากค่าเริ่มต้น: filters [{f,op,v}] (คนใช้ "@me" = คนที่เปิดดู) sorts [{k,d}]
+   group showEmpty cols colShow foot collapsed bGroup bSwim bSize bCard bCollapsed cMode cWeekends cColorBy tColorBy g* */
 CREATE TABLE dbo.saved_views (
     id          UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
     project_id  UNIQUEIDENTIFIER NULL REFERENCES dbo.projects(id) ON DELETE CASCADE,
     owner_id    UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
     name        NVARCHAR(200)    NOT NULL,
-    config_json NVARCHAR(MAX)    NOT NULL
+    icon        NVARCHAR(8)      NULL,
+    kind        VARCHAR(12)      NOT NULL DEFAULT 'list',   -- list | board | timeline | gantt | calendar
+    position    INT              NOT NULL DEFAULT 0,        -- ลำดับแท็บ (สูงสุด 50 แท็บต่อโปรเจกต์)
+    config_json NVARCHAR(MAX)    NOT NULL,
+    CONSTRAINT ck_saved_view_kind CHECK (kind IN ('list','board','timeline','gantt','calendar'))
 );
+/* แท็บเริ่มต้นของโปรเจกต์ — NULL = ใช้ projects.default_view */
+ALTER TABLE dbo.projects ADD default_tab_id UNIQUEIDENTIFIER NULL;
+/* รูปปกของการ์ดบอร์ด — ไฟล์แนบที่เป็นรูปของงานนั้น */
+ALTER TABLE dbo.tasks ADD cover_attachment_id UNIQUEIDENTIFIER NULL;
 GO
 
 /* ---------------------------------------------------------------
@@ -627,6 +637,18 @@ CREATE TABLE dbo.user_personal (
     home_json     NVARCHAR(2000)   NULL,   -- [{"w":"mine","full":false},…]  NULL = ค่าเริ่มต้น
     inbox_json    NVARCHAR(200)    NULL,   -- {"sort":"new|relevance","dense":false}
     notepad       NVARCHAR(MAX)    NULL,   -- ไม่เกิน 20,000 ตัวอักษร
+    cal_json      NVARCHAR(200)    NULL,   -- ปฏิทินรวม {"mode","weekends","colorBy"} (2b)
     updated_at    DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME()
+);
+GO
+
+/* มุมมองที่ทำงานอยู่ของแต่ละคนในแต่ละโปรเจกต์ (ชิ้นงาน 2b) — ตรงกับ db.personal[userId].pv[projectId]
+   รูปแบบเดียวกับ saved_views.config_json แก้ได้เฉพาะเจ้าตัว ไม่มีผลกับคนอื่น */
+CREATE TABLE dbo.user_project_views (
+    user_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.users(id) ON DELETE CASCADE,
+    project_id  UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.projects(id) ON DELETE CASCADE,
+    config_json NVARCHAR(MAX)    NOT NULL,
+    updated_at  DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT pk_user_project_views PRIMARY KEY (user_id, project_id)
 );
 GO

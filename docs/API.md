@@ -95,6 +95,12 @@
 | DELETE | `/api/projects/{id}` | PA หรือ OA | ลบแบบซ่อน · **ลง audit** |
 | POST | `/api/projects/{id}/archive` | E + ST | เก็บเข้าคลัง |
 | POST | `/api/projects/{id}/duplicate` | E + ST | คัดลอกเป็นเทมเพลต · ปลายทางนี้สร้างโปรเจกต์ใหม่ `ST` จึงกันไม่ให้ `guest` เลี่ยงข้อห้ามสร้างโปรเจกต์ |
+| GET | `/api/projects/{id}/views` | R | แท็บมุมมองที่บันทึกไว้ (`saved_views`) เรียงตาม `position` · ตัวกรอง `@me` ไม่ตีความที่เซิร์ฟเวอร์ ส่งกลับตามที่เก็บ |
+| POST · PATCH · DELETE | `/api/projects/{id}/views[/{viewId}]` | E + ST | สร้าง เปลี่ยนชื่อ บันทึกทับ ย้ายลำดับ ลบแท็บ · ไม่เกิน 50 แท็บต่อโปรเจกต์ (`409`) · ลง audit `project.view` |
+| PUT | `/api/projects/{id}/default-tab` | E + ST | `{tab}` = มุมมองในตัว (`list`…) หรือรหัสแท็บ → `default_view` / `default_tab_id` |
+| GET · PUT | `/api/projects/{id}/my-view` | R + ตัวเอง | มุมมองที่ทำงานอยู่ของตัวเอง (`user_project_views`) — ตัวกรอง เรียง จัดกลุ่ม คอลัมน์ การ์ด ปฏิทิน |
+| POST | `/api/projects/{id}/sections/{sectionId}/duplicate` | E + ST (ทั้งต้นทางและปลายทาง) | `{to_project, name, keep:{assignee,dates,notes,subtasks,tags,followers,attachments,fields}}` · ค่าฟิลด์คัดลอกเฉพาะโปรเจกต์เดียวกัน · ลง audit `section.duplicate` |
+| POST | `/api/projects/{id}/group-drop` | E (ทุกงาน) | `{task_ids[], sets:[{by,key}], before_id}` ลากงานลงคอลัมน์/แถวบนบอร์ด = ตั้งเซกชัน ผู้รับผิดชอบ ความสำคัญ หรือฟิลด์ตัวเลือก/คน ทีเดียวทั้งชุด |
 
 ### สมาชิกโปรเจกต์ — จุดที่ต้องระวังที่สุด
 
@@ -150,6 +156,7 @@
 | POST · DELETE | `/api/stories/{id}/reactions/{emoji}` | C | อีโมจิตอบรับ ชุดที่ยอมรับตรงกับ `REACTIONS` ใน store.js |
 | POST | `/api/tasks/{id}/followers` | C | — |
 | POST | `/api/tasks/{id}/attachments` | E | ขอ SAS URL อัปโหลดตรงเข้า Blob · จำกัดขนาดต่อไฟล์ |
+| PUT | `/api/tasks/{id}/cover` | E | `{attachment_id}` ตั้งรูปปกของการ์ด (`null` = เอาออก) · ต้องเป็นไฟล์แนบรูปของงานนั้น → `tasks.cover_attachment_id` |
 | GET | `/api/attachments/{id}` | R | คืน SAS อ่านอายุสั้น · **ปฏิเสธถ้า `scan_status <> 'clean'`** |
 
 ### ข้ามโปรเจกต์
