@@ -145,6 +145,8 @@ CREATE TABLE dbo.tasks (
     task_type     VARCHAR(10)      NOT NULL DEFAULT 'task',   -- task | milestone | approval
     approval      VARCHAR(10)      NULL,                      -- pending | approved | changes | rejected (ผู้อนุมัติ = assignee)
     assignee_id   UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    assigned_at   DATETIME2(0)     NULL,     -- มอบหมายครั้งล่าสุดเมื่อไร (2a) ใช้ตัดสิน "เพิ่งได้รับมอบหมาย" และจุดสีฟ้า
+    assigned_by   UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
     parent_id     UNIQUEIDENTIFIER NULL REFERENCES dbo.tasks(id),
     start_on      DATE             NULL,
     start_at      DATETIME2(0)     NULL,     -- วันเริ่ม + เวลาเริ่ม (startTime) ถ้าตั้งไว้
@@ -321,8 +323,12 @@ CREATE TABLE dbo.notifications (
     id           BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
     user_id      UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.users(id) ON DELETE CASCADE,
     task_id      UNIQUEIDENTIFIER NULL REFERENCES dbo.tasks(id),
-    kind         VARCHAR(20)      NULL,     -- assigned | mention | comment | unblock | activity | message | approval | due | overdue
+    kind         VARCHAR(20)      NULL,     -- assigned | mention | comment | unblock | activity | message | approval | due | overdue | status | newtask
     dedupe_key   VARCHAR(120)     NULL,     -- กันเตือนกำหนดส่งซ้ำ เช่น due1:<task>:<date>
+    actor_id     UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),   -- ใช้กับตัวกรอง "จากใคร" ในกล่องข้อความ
+    project_id   UNIQUEIDENTIFIER NULL REFERENCES dbo.projects(id), -- ประกาศ/สถานะที่ไม่มีงานให้ชี้
+    route        VARCHAR(20)      NULL,     -- mytasks | p-overview
+    bookmarked   BIT              NOT NULL DEFAULT 0,
     body         NVARCHAR(1000)   NOT NULL,
     read_at      DATETIME2(0)     NULL,
     archived_at  DATETIME2(0)     NULL,
@@ -374,7 +380,7 @@ GO
 
 /* ---------------------------------------------------------------
    ของที่ฝั่งเบราว์เซอร์มีแล้วแต่ไฟล์นี้ยังไม่เคยบันทึกไว้
-   ตรงกับรูปข้อมูลใน app/store.js (SCHEMA 7) — แก้ที่ไหนต้องแก้อีกที่ด้วย
+   ตรงกับรูปข้อมูลใน app/store.js (SCHEMA 9) — แก้ที่ไหนต้องแก้อีกที่ด้วย
    --------------------------------------------------------------- */
 
 /* ประกาศของโปรเจกต์ (projects[].messages) — เรื่องที่ไม่ได้ผูกกับงานชิ้นไหน */
@@ -525,6 +531,8 @@ GO
    หมายเหตุสำคัญ: ถ้างานหนึ่งอยู่ทั้งโปรเจกต์เปิดและโปรเจกต์ปิด
    คนที่เห็นแค่โปรเจกต์เปิดจะเห็นตัวงาน แต่ต้องไม่เห็นว่ามันไปอยู่โปรเจกต์ปิดด้วย
    การกรองรายชื่อโปรเจกต์ของงานทำที่ชั้น API */
+/* งานส่วนตัว (2a) = งานต้นทางไม่อยู่ใน task_projects เลย เห็นเฉพาะคู่กรณีตามส่วนล่างของฟังก์ชันนี้
+   งานย่อยต้องใช้สิทธิ์ของงานต้นทาง (ยังไม่ได้เขียนลงฟังก์ชันนี้ — ทำตอนย้ายไป API) */
 CREATE FUNCTION dbo.fn_VisibleTasks (@user_id UNIQUEIDENTIFIER)
 RETURNS TABLE
 AS
@@ -582,4 +590,43 @@ GO
       ที่ระดับ 20,000 งาน ยังเร็วพอ
    ============================================================= */
 CREATE INDEX ix_tasks_name ON dbo.tasks(name) WHERE deleted_at IS NULL;
+GO
+
+/* =============================================================
+   ของส่วนตัวของแต่ละคน (ชิ้นงาน 2a) — ตรงกับ db.personal[userId] ใน app/store.js (SCHEMA 9)
+   งานของฉันแบบมีเซกชัน หน้าแรกที่จัดเอง กล่องข้อความ สมุดโน้ต
+   ห้ามคืนแถวของคนอื่นเด็ดขาด — ทุกปลายทางกรองด้วย user_id = ผู้เรียก
+   ============================================================= */
+CREATE TABLE dbo.my_task_sections (
+    id          VARCHAR(40)      NOT NULL,          -- 'recent' (เพิ่งได้รับมอบหมาย ลบไม่ได้) | today | next | later | ms_…
+    user_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.users(id) ON DELETE CASCADE,
+    name        NVARCHAR(120)    NOT NULL DEFAULT N'',   -- ว่าง = ชื่อมาตรฐานตามภาษา
+    position    INT              NOT NULL,
+    CONSTRAINT pk_my_task_sections PRIMARY KEY (user_id, id)
+);
+GO
+
+/* งานที่เจ้าตัวจัดลงเซกชันแล้ว — ไม่มีแถว หรือ placed_at < tasks.assigned_at = อยู่ "เพิ่งได้รับมอบหมาย"
+   seen_at = เปิดดูแล้วหลังได้รับมอบหมาย (ไม่มีจุดสีฟ้า) */
+CREATE TABLE dbo.my_task_placements (
+    user_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.users(id) ON DELETE CASCADE,
+    task_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.tasks(id) ON DELETE CASCADE,
+    section_id  VARCHAR(40)      NULL,
+    position    FLOAT            NULL,
+    placed_at   DATETIME2(3)     NULL,
+    seen_at     DATETIME2(3)     NULL,
+    CONSTRAINT pk_my_task_placements PRIMARY KEY (user_id, task_id)
+);
+GO
+
+/* มุมมองงานของฉัน วิดเจ็ตหน้าแรก การเรียงกล่องข้อความ สมุดโน้ต — แถวเดียวต่อคน
+   ห้ามรบกวนกับการแจ้งเตือนรายโปรเจกต์อยู่ใน users.prefs_json (dnd, projNotify) */
+CREATE TABLE dbo.user_personal (
+    user_id       UNIQUEIDENTIFIER NOT NULL PRIMARY KEY REFERENCES dbo.users(id) ON DELETE CASCADE,
+    my_view_json  NVARCHAR(1000)   NULL,   -- {"mode","group","sort","dir","show","due","project","cal"}
+    home_json     NVARCHAR(2000)   NULL,   -- [{"w":"mine","full":false},…]  NULL = ค่าเริ่มต้น
+    inbox_json    NVARCHAR(200)    NULL,   -- {"sort":"new|relevance","dense":false}
+    notepad       NVARCHAR(MAX)    NULL,   -- ไม่เกิน 20,000 ตัวอักษร
+    updated_at    DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME()
+);
 GO

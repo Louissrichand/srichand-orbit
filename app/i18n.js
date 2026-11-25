@@ -1334,6 +1334,99 @@
     'รูปแบบตัวเลข…': 'Number format…', 'รูปแบบตัวเลขของ “{f}”': 'Number format of “{f}”',
     'ตั้งรูปแบบตัวเลข': 'set the number format', 'ตั้งรูปแบบตัวเลขแล้ว': 'Number format saved',
 
+    /* 2a — งานของฉัน */
+    'เพิ่งได้รับมอบหมาย': 'Recently assigned', 'ทำวันนี้': 'Do today', 'ทำสัปดาห์หน้า': 'Do next week',
+    'ทำทีหลัง': 'Do later', 'เซกชันของฉัน': 'My sections', 'วันครบกำหนด': 'Due date',
+    'ก่อนหน้านี้': 'Earlier', 'ส่วนตัว (ไม่อยู่ในโปรเจกต์)': 'Private (no project)',
+    'ชื่อเซกชันใหม่': 'New section name', 'เพิ่มเซกชัน': 'Add section', '+ เพิ่มเซกชัน': '+ Add section',
+    'เช่น ทำวันนี้ รอคนอื่น อ่านทีหลัง': 'e.g. Do today, Waiting on others, Read later',
+    'เปลี่ยนชื่อเซกชัน': 'Rename section', 'ลบเซกชัน “{s}”?': 'Delete section “{s}”?',
+    'งานในเซกชันนี้จะกลับไปอยู่ “{r}” ไม่มีงานไหนถูกลบ':
+      'Tasks in this section go back to “{r}”. No task is deleted.',
+    'ลบเซกชันแล้ว': 'Section deleted', 'เพิ่มเซกชันในงานของฉัน': 'add a My Tasks section',
+    'ย้ายเซกชัน': 'move section', 'ลบเซกชันในงานของฉัน': 'delete a My Tasks section',
+    'ย้ายงานในงานของฉัน': 'move a task in My Tasks', 'ย้ายไป “{s}” แล้ว': 'Moved to “{s}”',
+    'งานที่สร้างจากงานของฉันเป็นงานส่วนตัว เห็นเฉพาะคุณจนกว่าจะเพิ่มเข้าโปรเจกต์':
+      'Tasks created in My Tasks are private — only you can see them until you add them to a project.',
+    'งานที่มีคนมอบหมายให้คุณจะมาอยู่ที่นี่ก่อน': 'Tasks someone assigns to you land here first',
+    'ลากงานมาวางที่นี่': 'Drag tasks here', 'กาง': 'Expand', 'ยุบ': 'Collapse',
+    'สถานะงาน': 'Completion', 'งานที่ยังไม่เสร็จ': 'Incomplete tasks', 'งานที่เสร็จแล้ว': 'Completed tasks',
+    'ทุกโปรเจกต์': 'All projects', 'งานส่วนตัว (ไม่อยู่ในโปรเจกต์)': 'Private tasks (no project)',
+    'กดซ้ำเพื่อสลับมากไปน้อย · เรียงอยู่จะลากจัดลำดับในเซกชันไม่ได้':
+      'Click again to reverse · while sorted, drag only moves between sections',
+    'จัดกลุ่มตามวันครบกำหนด = มุมมองงานของฉันแบบเดิม': 'Group by due date = the classic My Tasks layout',
+    'ไฟล์ในงานของฉัน': 'Files in my tasks', 'ยังไม่มีไฟล์แนบในงานที่มอบหมายให้คุณ': 'No attachments on tasks assigned to you yet',
+    'เพิ่งได้รับมอบหมาย ยังไม่ได้เปิดดู': 'Newly assigned — not opened yet',
+    /* 2a — ปฏิทินสัปดาห์/เดือน */
+    'สัปดาห์ก่อน': 'Previous week', 'สัปดาห์ถัดไป': 'Next week', 'เพิ่มงานวันนี้': 'Add a task on this day',
+    'ยังไม่มีวัน': 'Unscheduled', 'ทุกงานมีวันแล้ว': 'Every task has a date',
+    'ลากงานไปวางบนวันที่ หรือลากงานกลับมาที่นี่เพื่อเอาวันออก':
+      'Drag a task onto a day, or back here to clear its dates.',
+    'งานใหม่ ครบกำหนด {d}': 'New task due {d}', 'เอาวันออกแล้ว': 'Dates cleared', 'ครบกำหนด {d} แล้ว': 'Now due {d}',
+    /* 2a — งานส่วนตัว */
+    'ส่วนตัว': 'Private', 'งานส่วนตัว — เห็นเฉพาะคนสร้าง ผู้รับผิดชอบ และผู้ติดตาม':
+      'Private task — only the creator, assignee and collaborators can see it',
+    'เห็นเฉพาะคนสร้าง ผู้รับผิดชอบ และผู้ติดตาม': 'Only the creator, assignee and collaborators can see this',
+    'ทำให้เป็นสาธารณะ…': 'Make public…', 'ทำให้เป็นสาธารณะ': 'Make public', 'ส่วนตัวตามงานหลัก': 'Private, like its parent task',
+    'เพิ่มงานนี้เข้าโปรเจกต์ แล้วทุกคนที่เห็นโปรเจกต์นั้นจะเห็นงานนี้ด้วย (รวมงานย่อย)':
+      'Add this task to a project — everyone who can see that project will see it (and its subtasks).',
+    'ยังไม่มีโปรเจกต์ที่คุณแก้ไขได้': 'There is no project you can edit yet', 'เลือกโปรเจกต์ก่อน': 'Pick a project first',
+    'งานนี้อยู่ใน {p} แล้ว ทุกคนที่เห็นโปรเจกต์เห็นงานนี้ด้วย': 'The task is now in {p} and visible to everyone who can see the project',
+    /* 2a — กล่องข้อความ */
+    'กิจกรรม': 'Activity', 'บุ๊กมาร์ก': 'Bookmarks', 'เก็บถาวร': 'Archive', 'ยังไม่อ่าน': 'Unread only',
+    '@พูดถึงฉัน': '@Mentioned me', 'มอบหมายให้ฉัน': 'Assigned to me', 'ที่ฉันมอบหมาย': 'Assigned by me',
+    'แสดงเฉพาะ': 'Show only', 'จากใคร': 'From', 'จาก {who}': 'From {who}',
+    'ใหม่สุดก่อน': 'Newest', 'เกี่ยวข้องที่สุด': 'Most relevant',
+    'เกี่ยวข้องที่สุด = ยังไม่อ่านก่อน แล้วเรียงตามความสำคัญ (พูดถึงฉัน มอบหมาย อนุมัติ ปลดล็อก กำหนดส่ง)':
+      'Most relevant = unread first, then by importance (mentions, assignments, approvals, unblocked, due dates)',
+    'ละเอียด': 'Detailed', 'กะทัดรัด': 'Compact',
+    'ไม่มีรายการที่ตรงกับตัวกรอง': 'Nothing matches these filters',
+    'ยังไม่มีรายการที่บุ๊กมาร์กไว้ กดรูปที่คั่นหนังสือบนรายการเพื่อเก็บไว้ดูทีหลัง':
+      'No bookmarks yet. Click the bookmark icon on a notification to keep it for later.',
+    'บุ๊กมาร์กไว้แล้ว ดูได้ที่แท็บบุ๊กมาร์ก': 'Bookmarked — find it under Bookmarks', 'เอาบุ๊กมาร์กออกแล้ว': 'Bookmark removed',
+    'เอาบุ๊กมาร์กออก': 'Remove bookmark', 'ทำเป็นยังไม่อ่าน': 'Mark as unread', 'ทำเป็นอ่านแล้ว': 'Mark as read',
+    'ย้ายกลับไปกิจกรรม': 'Move back to Activity', 'รายการในแท็บนี้เก็บไว้แล้ว': 'Everything here is already archived',
+    'ไม่มีรายการให้เก็บ': 'Nothing to archive', 'เก็บ {n} รายการแล้ว': 'Archived [n|1 item|{n} items]',
+    'มีการแจ้งเตือนใหม่ {n} รายการ': '[n|1 new notification|{n} new notifications]', 'เปิดดู': 'Open',
+    'งานใหม่ “{t}” ใน {p}': 'New task “{t}” in {p}', 'อัปเดตสถานะของ {p}': 'posted a status update on {p}',
+    /* 2a — ห้ามรบกวน และการแจ้งเตือนรายโปรเจกต์ */
+    'ห้ามรบกวน': 'Do not disturb', 'ห้ามรบกวนอยู่': 'Do not disturb is on',
+    'หยุดการแจ้งเตือนชั่วคราว': 'Pause notifications', 'นาน 30 นาที': 'For 30 minutes',
+    'นาน 1 ชั่วโมง': 'For 1 hour', 'นาน 2 ชั่วโมง': 'For 2 hours', 'นาน 4 ชั่วโมง': 'For 4 hours',
+    'นาน 8 ชั่วโมง': 'For 8 hours', 'ถึงพรุ่งนี้ 8 โมงเช้า': 'Until 8:00 tomorrow',
+    'เลิกพักตอนนี้': 'Resume now', 'เลิกพัก': 'Resume', 'ตั้งช่วงห้ามรบกวนประจำวัน…': 'Set a daily quiet schedule…',
+    'ห้ามรบกวนถึง {t}': 'Do not disturb until {t}', 'เลิกพักการแจ้งเตือนแล้ว': 'Notifications resumed',
+    'ยังอยู่ในช่วงห้ามรบกวนประจำวันที่ตั้งไว้': 'Still inside your daily quiet hours',
+    'อยู่ในช่วงห้ามรบกวนที่ตั้งไว้ {a}–{b}': 'Inside your quiet hours {a}–{b}',
+    'ไม่ขึ้นตัวเลขแดงและไม่เด้งเตือน': 'no red badge and no pop-ups',
+    'ห้ามรบกวนทุกวันตามช่วงเวลา': 'Daily quiet hours',
+    'ในช่วงนี้ไม่ขึ้นตัวเลขแดงและไม่เด้งเตือน รายการยังเข้ากล่องข้อความครบ':
+      'No red badge or pop-ups during these hours — everything still arrives in your inbox.',
+    'ตั้งแต่': 'From', 'ถึง': 'to',
+    'การแจ้งเตือนของโปรเจกต์นี้': 'Notifications for this project', 'การแจ้งเตือนของ {p}': 'Notifications for {p}',
+    'ตั้งเฉพาะตัวคุณ คนอื่นในโปรเจกต์ไม่เปลี่ยนตาม': 'Only for you — other members are not affected.',
+    'เมื่อมีคนรายงานสถานะ ตามแผน เสี่ยง หรือหลุดแผน': 'When someone posts on track, at risk or off track',
+    'ประกาศใหม่': 'New messages', 'งานใหม่ในโปรเจกต์': 'New tasks in the project',
+    'ทุกครั้งที่มีงานถูกเพิ่มเข้าโปรเจกต์นี้': 'Every time a task is added to this project',
+    'อัปเดตสถานะของโปรเจกต์': 'Project status updates',
+    'โปรเจกต์ที่เปิดรับไว้ในเมนูโปรเจกต์ → การแจ้งเตือนของโปรเจกต์นี้':
+      'For projects you opted into via Project menu → Notifications for this project',
+    'งานใหม่ในโปรเจกต์ที่ติดตาม': 'New tasks in projects I watch',
+    'เฉพาะโปรเจกต์ที่เปิด “งานใหม่ในโปรเจกต์” ไว้': 'Only projects where “New tasks in the project” is on',
+    /* 2a — หน้าแรก */
+    'ปรับแต่งหน้าแรก': 'Customize', 'ปรับหน้าแรก': 'customize Home',
+    'ลากการ์ดเพื่อสลับที่ กดปุ่มบนการ์ดเพื่อย่อขยายหรือเอาออก':
+      'Drag cards to reorder; use the buttons on a card to resize or remove it.',
+    'คืนค่าเริ่มต้น': 'Reset to default', 'หน้าแรกยังว่างอยู่': 'Your Home is empty.', 'เพิ่มวิดเจ็ต': 'Add widgets',
+    'ใส่ครบทุกวิดเจ็ตแล้ว': 'All widgets are on your Home', 'โปรเจกต์ล่าสุด': 'Recent projects',
+    'คนที่ทำงานด้วย': 'People', 'ยังไม่มีโปรเจกต์ไหนรายงานสถานะ': 'No project has posted a status yet',
+    'สมุดโน้ตส่วนตัว': 'Private notepad', 'เห็นเฉพาะคุณ': 'Only you', 'จดอะไรก็ได้ บันทึกเองอัตโนมัติ': 'Jot anything — it saves automatically',
+    'ร่างความเห็น': 'Draft comments', 'ไม่มีความเห็นที่พิมพ์ค้างไว้': 'No unsent comments',
+    '{n} งาน': '[n|1 task|{n} tasks]', 'สถิติงานเสร็จ': 'Tasks completed',
+    '7 วันนี้': 'Last 7 days', '7 วันก่อน': 'Previous 7 days', '30 วัน': '30 days',
+    'ลากเพื่อย้าย': 'Drag to move', 'ครึ่งแถว': 'Half width', 'เต็มแถว': 'Full width',
+    'เอาวิดเจ็ตออกแล้ว': 'Widget removed', 'คืนหน้าแรกเป็นค่าเริ่มต้นแล้ว': 'Home reset to default',
+
     /* --- ชื่อเดือน / วัน --- */
     '__monthsShort': 'Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec',
     '__monthsFull': 'January,February,March,April,May,June,July,August,September,October,November,December',

@@ -206,10 +206,13 @@
          '" data-act="go" data-route="mytasks">' + I('checkCircle') + '' +
          '<span class="grow">' + L('งานของฉัน') + '</span>' +
          (mineCount ? '<span class="count">' + mineCount + '</span>' : '') + '</button>';
+    /* ห้ามรบกวน — ไม่ขึ้นตัวเลขแดง แต่บอกด้วยไอคอนพระจันทร์ว่ากำลังพักอยู่ ไม่ใช่ว่าไม่มีอะไรเข้า */
+    var dnd = S.isDnd();
     h += '<button class="sb-item' + (route.type === 'inbox' ? ' active' : '') +
          '" data-act="go" data-route="inbox">' + I('bell') + '' +
          '<span class="grow">' + L('กล่องข้อความ') + '</span>' +
-         (unread ? '<span class="count alert">' + unread + '</span>' : '') + '</button>';
+         (dnd ? '<span class="sb-dnd" title="' + L('ห้ามรบกวนอยู่') + '">' + I('moon', 13) + '</span>'
+              : (unread ? '<span class="count alert">' + unread + '</span>' : '')) + '</button>';
     h += '<button class="sb-item' + (route.type === 'calendar' ? ' active' : '') +
          '" data-act="go" data-route="calendar">' + I('calendar') + '' +
          '<span class="grow">' + L('ปฏิทินรวม') + '</span></button>';
@@ -417,8 +420,14 @@
       h += '<button class="btn btn-ghost" data-act="project-menu" data-id="' +
            esc(route.id) + '" title="' + L('เมนูโปรเจกต์') + '">' + I('more') + '</button>';
     } else if (route.type === 'inbox') {
-      h += '<button class="btn" data-act="inbox-read-all">' + L('อ่านทั้งหมด') + '</button>';
-      h += '<button class="btn" data-act="inbox-archive-all">' + L('เก็บทั้งหมด') + '</button>';
+      var dndOn = S.isDnd();
+      h += '<button class="btn' + (dndOn ? ' btn-dnd-on' : '') + '" data-act="dnd-menu" title="' +
+        L('ห้ามรบกวน') + '">' + I('moon', 14) + '<span class="hide-sm">' +
+        (dndOn ? L('ห้ามรบกวนอยู่') : L('ห้ามรบกวน')) + '</span></button>';
+      h += '<button class="btn" data-act="inbox-read-all" title="' + L('อ่านทั้งหมด') + '">' +
+        I('check', 14) + '<span class="hide-sm">' + L('อ่านทั้งหมด') + '</span></button>';
+      h += '<button class="btn" data-act="inbox-archive-all" title="' + L('เก็บทั้งหมด') + '">' +
+        I('archive', 14) + '<span class="hide-sm">' + L('เก็บทั้งหมด') + '</span></button>';
     } else if (route.type === 'portfolio') {
       h += '<button class="btn btn-primary" data-act="pf-add" data-pf="' + esc(route.id) + '">' +
            L('+ เพิ่มโปรเจกต์เข้าพอร์ต') + '</button>';
@@ -441,6 +450,15 @@
         h += '<button class="tb-addview" data-act="view-menu" data-id="' + esc(route.id) +
              '" title="' + L('เพิ่มหรือลดมุมมอง') + '">' + I('plus', 15) + '</button>';
       }
+      h += '</div>';
+    }
+    if (route.type === 'mytasks') {
+      var mode = S.personalOf().mt.view.mode;
+      h += '<div class="tb-tabs">';
+      MT_TABS.forEach(function (v) {
+        h += '<button class="tb-tab' + (mode === v[0] ? ' active' : '') +
+             '" data-act="mt-mode" data-v="' + v[0] + '">' + L(v[1]) + '</button>';
+      });
       h += '</div>';
     }
     if (route.type === 'portfolio') {
@@ -590,12 +608,25 @@
         h += '<span class="chip"><span class="swatch" style="background:' +
           esc(x.project.color) + '"></span>' + esc(x.project.name) + '</span>';
       });
+      if (!t.parentId && S.isPrivate(t.id)) h += privateChip();
     }
     if (t.dueOn) {
       h += '<span class="chip' + dueClass(t.dueOn, t.completed) + '">' + fmtDate(t.dueOn) +
         (t.dueTime ? ' ' + esc(t.dueTime) : '') + '</span>';
     }
     return h;
+  }
+
+  /** ป้าย "ส่วนตัว" — งานที่ไม่อยู่โปรเจกต์ไหน เห็นเฉพาะคู่กรณี */
+  function privateChip() {
+    return '<span class="chip chip-private" title="' +
+      L('งานส่วนตัว — เห็นเฉพาะคนสร้าง ผู้รับผิดชอบ และผู้ติดตาม') + '">' +
+      I('lock', 11) + ' ' + L('ส่วนตัว') + '</span>';
+  }
+
+  /** จุดสีฟ้า — งานที่คนอื่นเพิ่งมอบให้และยังไม่ได้เปิดดู */
+  function newDot(t) {
+    return S.mtIsNew(t.id) ? '<span class="new-dot" title="' + L('เพิ่งได้รับมอบหมาย ยังไม่ได้เปิดดู') + '"></span>' : '';
   }
 
   function taskRow(t, opts) {
@@ -607,6 +638,7 @@
       '" draggable="true" data-act="open-task" data-id="' + esc(t.id) + '"' +
       (opts.sectionId ? ' data-section="' + esc(opts.sectionId) + '"' : '') + '>';
     if (opts.selectable) h += selbox(t, opts.selected);
+    if (opts.dots) h += '<span class="dot-slot">' + newDot(t) + '</span>';
     h += checkbox(t);
     if (t.priority !== 'none') {
       h += '<span class="prio-bar" style="background:' + pr.color + '" title="' + L(pr.label) + '"></span>';
@@ -629,7 +661,8 @@
       (blocked ? ' title="' + L('รองานอื่นให้เสร็จก่อน') + '"' : '') + '>';
     h += '<div class="top">';
     if (opts.selectable) h += selbox(t, opts.selected);
-    h += checkbox(t) + '<span class="nm">' + esc(t.name) + '</span>' + approvalIcon(t) + '</div>';
+    h += (opts.dots ? newDot(t) : '') + checkbox(t) + '<span class="nm">' + esc(t.name) + '</span>' +
+      approvalIcon(t) + '</div>';
 
     var foot = '';
     if (t.priority !== 'none') {
@@ -646,7 +679,18 @@
      *   ช่องติ๊กของหมุดหมายเป็นสี่เหลี่ยมข้าวหลามตัดอยู่แล้ว
      *   งานที่ถูกบล็อกมีแถบแดงที่ขอบซ้ายการ์ด
      *   รูปผู้รับผิดชอบอยู่ท้ายแถวเดียวกับความสำคัญ */
-    foot += avatar(u, 'sm');
+    /* งานของฉันไม่มีคอลัมน์ให้บอกว่าครบเมื่อไรหรืออยู่โปรเจกต์ไหน จึงเติมสองอย่างนี้บนการ์ด */
+    if (opts.mine) {
+      if (t.dueOn) {
+        foot += '<span class="chip' + dueClass(t.dueOn, t.completed) + '">' + fmtDate(t.dueOn) + '</span>';
+      }
+      var hp = S.projectsOfTask(t.id)[0];
+      if (hp) {
+        foot += '<span class="chip"><span class="swatch" style="background:' + esc(hp.project.color) +
+          '"></span>' + esc(hp.project.name) + '</span>';
+      } else if (!t.parentId && S.isPrivate(t.id)) foot += privateChip();
+    }
+    foot += opts.mine ? '' : avatar(u, 'sm');
     h += '<div class="foot">' + foot + '</div></div>';
     return h;
   }
@@ -1158,32 +1202,8 @@
    * ที่นี่รวมทุกไฟล์ไว้ พร้อมบอกว่ามาจากงานไหนและกดกลับไปที่งานนั้นได้
    */
   function filesView(projectId) {
-    var rows = S.filesOfProject(projectId);
-    var h = '<div class="filesv">';
-    h += '<div class="filesv-head">' + I('paperclip', 16) +
-      '<b>' + L('ไฟล์ในโปรเจกต์นี้') + '</b>' +
-      '<span class="n">' + L('{n} ไฟล์', { n: rows.length }) + '</span></div>';
-
-    if (!rows.length) {
-      h += '<div class="ovw-empty">' +
-        L('ยังไม่มีไฟล์แนบ ไฟล์ที่แนบไว้ในงานจะมารวมที่นี่เอง') + '</div>';
-      return h + '</div>';
-    }
-
-    rows.forEach(function (r) {
-      var by = S.user(r.att.addedBy);
-      h += '<div class="filesv-row">' + I('paperclip', 14) +
-        '<span class="grow">' +
-        (r.att.url
-          ? '<a href="' + esc(r.att.url) + '" target="_blank" rel="noopener noreferrer">' +
-            esc(r.att.name) + '</a>'
-          : '<b>' + esc(r.att.name) + '</b>') +
-        '<em>' + (by ? esc(by.name) + ' · ' : '') +
-        (r.att.addedAt ? esc(fmtWhen(r.att.addedAt)) : L('ไม่ทราบเวลา')) + '</em></span>' +
-        '<button class="filesv-task" data-act="open-task" data-id="' + esc(r.task.id) + '">' +
-        esc(r.task.name) + '</button></div>';
-    });
-    return h + '</div>';
+    return filesList(S.filesOfProject(projectId), L('ไฟล์ในโปรเจกต์นี้'),
+      L('ยังไม่มีไฟล์แนบ ไฟล์ที่แนบไว้ในงานจะมารวมที่นี่เอง'));
   }
 
   /* ---------- ประกาศของโปรเจกต์ ----------
@@ -1621,7 +1641,8 @@
   }
 
   function hcard(o) {
-    var h = '<section class="hcard">';
+    var h = '<section class="hcard' + (o.cls ? ' ' + o.cls : '') + '"' + (o.attrs || '') + '>';
+    if (o.tools) h += o.tools;
     h += '<div class="hcard-head">' + o.title + '<span class="grow"></span>' + (o.action || '') + '</div>';
     if (o.tabs) h += '<div class="hcard-tabs">' + o.tabs + '</div>';
     h += '<div class="hcard-body">' + o.body + '</div>';
@@ -1651,12 +1672,19 @@
     return h;
   }
 
-  function homeView(st) {
+  /* ---------- หน้าแรกแบบจัดเองได้ ----------
+   *
+   * วิดเจ็ตเรียงตามที่แต่ละคนจัดไว้ (S.homeLayout — เก็บใน db.personal จึงตามไปทุกเครื่อง)
+   * กว้างครึ่งหรือเต็มแถว โหมดปรับแต่งเพิ่ม ลบ ลากสลับ ย่อขยายได้
+   * st = สถานะหน้าจอ (แท็บของแต่ละการ์ด, edit) · extra.drafts = ร่างความเห็นจาก localStorage
+   */
+  function homeView(st, extra) {
     st = st || {};
+    extra = extra || {};
     var meUser = S.me();
-    var mine = S.myTasks(S.db.currentUserId);
     var stats = S.homeStats();
-    var assigned = S.assignedByMe();
+    var layout = S.homeLayout();
+    var edit = !!st.edit;
 
     var h = '<div class="home">';
 
@@ -1674,108 +1702,222 @@
         esc(L('{n} งานครบกำหนดใน 7 วัน', { n: stats.dueWeek })) + '</span>';
     h += '<span class="hstat">' + I('users', 14) +
       esc(L('{n} เพื่อนร่วมงาน', { n: stats.collaborators })) + '</span>';
+    h += '<button class="hstat hstat-btn' + (edit ? ' on' : '') + '" data-act="home-edit">' +
+      I(edit ? 'check' : 'settings', 14) + esc(edit ? L('เสร็จแล้ว') : L('ปรับแต่งหน้าแรก')) + '</button>';
     h += '</div></div>';
 
-    h += '<div class="home-grid">';
-
-    /* --- งานของฉัน --- */
-    var mineTab = st.mine || 'upcoming';
-    var mineItems = mineTab === 'overdue' ? mine.overdue
-      : mineTab === 'done' ? S.myCompleted(S.db.currentUserId, HOME_ROWS)
-      : mine.today.concat(mine.upcoming, mine.later, mine.nodate);
-    h += hcard({
-      title: '<span class="hcard-title">' + avatar(meUser, 'sm') + L('งานของฉัน') + '</span>',
-      action: '<button class="btn btn-sm btn-ghost" data-act="go" data-route="mytasks">' +
-              L('ดูทั้งหมด') + '</button>',
-      tabs: hTabs('mine', mineTab, [
-        ['upcoming', L('กำลังจะถึง')],
-        ['overdue', L('เลยกำหนด ({n})', { n: mine.overdue.length })],
-        ['done', L('เสร็จแล้ว')]
-      ]),
-      body: hList(mineItems, L('ไม่มีงานในช่วงนี้'))
-    });
-
-    /* --- โปรเจกต์ --- */
-    var projs = S.visibleProjects();
-    var showAll = !!st.allProjects;
-    var pb;
-    if (!projs.length && !S.can('structure')) {
-      pb = '<div class="hempty">' + L('ยังไม่มีโปรเจกต์') + '</div>';
-    } else {
-      pb = '<div class="hproj-grid">';
-      if (S.can('structure')) {
-        pb += '<button class="hproj new" data-act="new-project">' +
-          '<span class="hproj-ic">' + I('plus', 15) + '</span>' +
-          '<span class="hproj-txt"><span class="hproj-nm">' + L('สร้างโปรเจกต์ใหม่') + '</span></span></button>';
-      }
-      (showAll ? projs : projs.slice(0, 7)).forEach(function (p) {
-        var n = S.dueSoonCount(p.id);
-        pb += '<button class="hproj" data-act="go" data-route="project" data-id="' + esc(p.id) + '">' +
-          '<span class="hproj-ic" style="background:' + esc(p.color) + '22">' + esc(p.icon) + '</span>' +
-          '<span class="hproj-txt"><span class="hproj-nm">' + esc(p.name) +
-          (p.visibility === 'private'
-            ? '<span class="lockmark" title="' + L('โปรเจกต์ปิด') + '">' + I('shield', 11) + '</span>'
-            : '') +
-          '</span><span class="hproj-sub">' +
-          /* จุดสีบอกสถานะ อ่านทั้งหน้าแรกครั้งเดียวก็รู้ว่าโปรเจกต์ไหนกำลังมีปัญหา */
-          (p.status
-            ? '<i class="st-dot" style="background:' + esc(projectState(p.status.state).color) +
-              '" title="' + esc(L(projectState(p.status.state).label)) + '"></i>'
-            : '') +
-          (n ? esc(L('งานใกล้ครบกำหนด {n} งาน', { n: n })) : L('ไม่มีงานใกล้ครบกำหนด')) +
-          '</span></span></button>';
-      });
-      pb += '</div>';
-      if (projs.length > 7) {
-        pb += '<button class="hlink" data-act="home-more-projects">' +
-          (showAll ? L('ย่อกลับ') : L('ดูเพิ่ม')) + '</button>';
-      }
+    if (edit) {
+      h += '<div class="home-editbar">' + I('grip', 14) + '<span class="grow">' +
+        L('ลากการ์ดเพื่อสลับที่ กดปุ่มบนการ์ดเพื่อย่อขยายหรือเอาออก') + '</span>' +
+        '<button class="btn btn-sm btn-ghost" data-act="home-w-reset">' + L('คืนค่าเริ่มต้น') + '</button></div>';
     }
-    h += hcard({
-      title: '<span class="hcard-title">' + I('grid', 15) + L('โปรเจกต์') + '</span>',
-      body: pb
-    });
 
-    /* --- งานที่ฉันมอบหมาย --- */
-    var aTab = st.assigned || 'week';
-    var aItems = aTab === 'upcoming' ? assigned.upcoming
-      : aTab === 'overdue' ? assigned.overdue
-      : aTab === 'done' ? assigned.completed
-      : assigned.week;
-    h += hcard({
-      title: '<span class="hcard-title">' + I('users', 15) + L('งานที่ฉันมอบหมาย') + '</span>',
-      tabs: hTabs('assigned', aTab, [
-        ['week', L('สัปดาห์นี้ ({n})', { n: assigned.week.length })],
-        ['upcoming', L('กำลังจะถึง')],
-        ['overdue', L('เลยกำหนด ({n})', { n: assigned.overdue.length })],
-        ['done', L('เสร็จแล้ว')]
-      ]),
-      body: hList(aItems, L('ยังไม่ได้มอบหมายงานให้ใคร'))
-    });
+    h += '<div class="home-grid2' + (edit ? ' editing' : '') + '">';
+    layout.forEach(function (x, i) { h += homeWidget(x, i, layout.length, st, extra, edit); });
+    h += '</div>';
+    if (!layout.length && !edit) {
+      h += '<div class="hempty">' + L('หน้าแรกยังว่างอยู่') +
+        ' <button class="as-link" data-act="home-edit">' + L('เพิ่มวิดเจ็ต') + '</button></div>';
+    }
 
-    /* --- กิจกรรมล่าสุด --- */
-    var acts = S.recentActivity(HOME_ROWS);
-    var ab = '';
-    if (!acts.length) ab = '<div class="hempty">' + L('ยังไม่มีกิจกรรม') + '</div>';
-    acts.forEach(function (a) {
-      ab += '<div class="hact" data-act="open-task" data-id="' + esc(a.story.taskId) + '">' +
-        avatar(a.actor, 'sm') +
-        '<span class="hact-body"><span class="hact-txt"><strong>' +
-        esc(a.actor ? a.actor.name : '?') + '</strong> ' +
-        esc(a.story.type === 'comment' ? L('แสดงความเห็น') : storyText(a.story)) + '</span>' +
-        '<span class="hact-sub" title="' + esc(fmtExact(a.story.createdAt)) + '">' +
-        esc(a.taskName || '') + ' · ' + esc(fmtWhen(a.story.createdAt)) +
-        '</span></span></div>';
-    });
-    h += hcard({
-      title: '<span class="hcard-title">' + I('bell', 15) + L('กิจกรรมล่าสุด') + '</span>',
-      action: '<button class="btn btn-sm btn-ghost" data-act="go" data-route="inbox">' +
-              L('ดูทั้งหมด') + '</button>',
-      body: ab
-    });
-
-    h += '</div></div>';
+    if (edit) {
+      var have = {};
+      layout.forEach(function (x) { have[x.w] = true; });
+      var rest = S.HOME_WIDGETS.filter(function (w) { return !have[w.id]; });
+      h += '<div class="home-add"><div class="home-add-h">' + L('เพิ่มวิดเจ็ต') + '</div>';
+      if (!rest.length) h += '<div class="hempty">' + L('ใส่ครบทุกวิดเจ็ตแล้ว') + '</div>';
+      h += '<div class="home-add-grid">';
+      rest.forEach(function (w) {
+        h += '<button class="home-add-btn" data-act="home-w-add" data-w="' + w.id + '">' +
+          I(w.icon, 16) + '<span>' + esc(L(w.label)) + '</span>' + I('plus', 14) + '</button>';
+      });
+      h += '</div></div>';
+    }
+    h += '</div>';
     return h;
+  }
+
+  function hTitle(icon, text) {
+    return '<span class="hcard-title">' + icon + esc(text) + '</span>';
+  }
+
+  /** การ์ดหนึ่งใบบนหน้าแรก ตามชนิดวิดเจ็ต */
+  function homeWidget(x, i, n, st, extra, edit) {
+    var meUser = S.me();
+    var o = null;
+    var w = x.w;
+
+    if (w === 'mine') {
+      var mine = S.myTasks(S.db.currentUserId);
+      var mineTab = st.mine || 'upcoming';
+      var mineItems = mineTab === 'overdue' ? mine.overdue
+        : mineTab === 'done' ? S.myCompleted(S.db.currentUserId, HOME_ROWS)
+        : mine.today.concat(mine.upcoming, mine.later, mine.nodate);
+      o = {
+        title: '<span class="hcard-title">' + avatar(meUser, 'sm') + L('งานของฉัน') + '</span>',
+        action: '<button class="btn btn-sm btn-ghost" data-act="go" data-route="mytasks">' + L('ดูทั้งหมด') + '</button>',
+        tabs: hTabs('mine', mineTab, [
+          ['upcoming', L('กำลังจะถึง')],
+          ['overdue', L('เลยกำหนด ({n})', { n: mine.overdue.length })],
+          ['done', L('เสร็จแล้ว')]
+        ]),
+        body: hList(mineItems, L('ไม่มีงานในช่วงนี้'))
+      };
+    } else if (w === 'assigned') {
+      var assigned = S.assignedByMe();
+      var aTab = st.assigned || 'week';
+      var aItems = aTab === 'upcoming' ? assigned.upcoming
+        : aTab === 'overdue' ? assigned.overdue
+        : aTab === 'done' ? assigned.completed : assigned.week;
+      o = {
+        title: hTitle(I('users', 15), L('งานที่ฉันมอบหมาย')),
+        tabs: hTabs('assigned', aTab, [
+          ['week', L('สัปดาห์นี้ ({n})', { n: assigned.week.length })],
+          ['upcoming', L('กำลังจะถึง')],
+          ['overdue', L('เลยกำหนด ({n})', { n: assigned.overdue.length })],
+          ['done', L('เสร็จแล้ว')]
+        ]),
+        body: hList(aItems, L('ยังไม่ได้มอบหมายงานให้ใคร'))
+      };
+    } else if (w === 'projects') {
+      o = { title: hTitle(I('grid', 15), L('โปรเจกต์ล่าสุด')),
+            action: '<button class="btn btn-sm btn-ghost" data-act="go" data-route="projects">' + L('ดูทั้งหมด') + '</button>',
+            body: homeProjects(!!st.allProjects) };
+    } else if (w === 'people') {
+      var col = S.frequentCollaborators(null, 8);
+      var cb = '';
+      if (!col.length) cb = '<div class="hempty">' + L('ยังไม่มีใครทำงานร่วมกับคุณ') + '</div>';
+      else {
+        cb = '<div class="hpeople">';
+        col.forEach(function (c) {
+          cb += '<button class="hperson" data-act="go-profile" data-id="' + esc(c.user.id) + '">' +
+            avatar(c.user, 'md') + '<b>' + esc(c.user.name) + '</b><em>' +
+            esc(c.user.title || L('{n} งานร่วมกัน', { n: c.n })) + '</em></button>';
+        });
+        cb += '</div>';
+      }
+      o = { title: hTitle(I('users', 15), L('คนที่ทำงานด้วย')), body: cb };
+    } else if (w === 'status') {
+      var feed = S.statusFeed(6);
+      var sb = '';
+      if (!feed.length) sb = '<div class="hempty">' + L('ยังไม่มีโปรเจกต์ไหนรายงานสถานะ') + '</div>';
+      feed.forEach(function (f) {
+        var stt = projectState(f.entry.state);
+        var by = S.user(f.entry.by);
+        sb += '<button class="hstatus" data-act="go-project-view" data-id="' + esc(f.project.id) +
+          '" data-view="overview"><span class="hproj-ic" style="background:' + esc(f.project.color) + '22">' +
+          esc(f.project.icon) + '</span><span class="grow"><span class="hstatus-top"><b>' + esc(f.project.name) +
+          '</b><span class="approval-pill" style="background:' + stt.color + '22;color:' + stt.color + '">' +
+          esc(L(stt.label)) + '</span></span>' +
+          (f.entry.text ? '<span class="hstatus-txt">' + esc(S.plainText(f.entry.text).slice(0, 140)) + '</span>' : '') +
+          '<span class="hact-sub" title="' + esc(fmtExact(f.entry.at)) + '">' + esc(by ? by.name : '?') +
+          ' · ' + esc(fmtWhen(f.entry.at)) + '</span></span></button>';
+      });
+      o = { title: hTitle(I('flag', 15), L('อัปเดตสถานะ')), body: sb };
+    } else if (w === 'notepad') {
+      var np = S.personalOf().notepad || '';
+      o = {
+        title: hTitle(I('note', 15), L('สมุดโน้ตส่วนตัว')),
+        action: '<span class="hnote-hint">' + I('lock', 12) + L('เห็นเฉพาะคุณ') + '</span>',
+        body: '<textarea class="hnote" data-act="notepad" maxlength="' + S.NOTEPAD_MAX + '" placeholder="' +
+          L('จดอะไรก็ได้ บันทึกเองอัตโนมัติ') + '">' + esc(np) + '</textarea>'
+      };
+    } else if (w === 'drafts') {
+      var ds = extra.drafts || [];
+      var dh = '';
+      if (!ds.length) dh = '<div class="hempty">' + L('ไม่มีความเห็นที่พิมพ์ค้างไว้') + '</div>';
+      ds.slice(0, HOME_ROWS).forEach(function (d) {
+        dh += '<button class="hdraft" data-act="open-task" data-id="' + esc(d.taskId) + '">' +
+          I('pencil', 13) + '<span class="grow"><b>' + esc(d.taskName) + '</b><em>' +
+          esc(d.text.slice(0, 120)) + '</em></span></button>';
+      });
+      o = { title: hTitle(I('pencil', 15), L('ร่างความเห็น')), body: dh };
+    } else if (w === 'stats') {
+      var cs = S.completedStats(null, 14);
+      var peak = 1;
+      cs.days.forEach(function (d) { if (d.n > peak) peak = d.n; });
+      var bars = '<div class="hbars">';
+      cs.days.forEach(function (d) {
+        var dd = new Date(d.d + 'T00:00:00');
+        bars += '<div class="hbar" title="' + esc(fmtDate(d.d) + ' · ' + L('{n} งาน', { n: d.n })) + '">' +
+          '<i style="height:' + Math.round(d.n / peak * 100) + '%"></i>' +
+          '<span>' + dd.getDate() + '</span></div>';
+      });
+      bars += '</div>';
+      o = {
+        title: hTitle(I('chart', 15), L('สถิติงานเสร็จ')),
+        body: '<div class="hstat-nums">' +
+          '<span><b>' + cs.week + '</b>' + L('7 วันนี้') + '</span>' +
+          '<span><b>' + cs.prevWeek + '</b>' + L('7 วันก่อน') + '</span>' +
+          '<span><b>' + cs.month + '</b>' + L('30 วัน') + '</span></div>' + bars
+      };
+    } else if (w === 'activity') {
+      var acts = S.recentActivity(HOME_ROWS);
+      var ab = '';
+      if (!acts.length) ab = '<div class="hempty">' + L('ยังไม่มีกิจกรรม') + '</div>';
+      acts.forEach(function (a) {
+        ab += '<div class="hact" data-act="open-task" data-id="' + esc(a.story.taskId) + '">' +
+          avatar(a.actor, 'sm') +
+          '<span class="hact-body"><span class="hact-txt"><strong>' +
+          esc(a.actor ? a.actor.name : '?') + '</strong> ' +
+          esc(a.story.type === 'comment' ? L('แสดงความเห็น') : storyText(a.story)) + '</span>' +
+          '<span class="hact-sub" title="' + esc(fmtExact(a.story.createdAt)) + '">' +
+          esc(a.taskName || '') + ' · ' + esc(fmtWhen(a.story.createdAt)) +
+          '</span></span></div>';
+      });
+      o = {
+        title: hTitle(I('bell', 15), L('กิจกรรมล่าสุด')),
+        action: '<button class="btn btn-sm btn-ghost" data-act="go" data-route="inbox">' + L('ดูทั้งหมด') + '</button>',
+        body: ab
+      };
+    }
+    if (!o) return '';
+    o.cls = (x.full ? 'full' : 'half') + (edit ? ' hw-edit' : '');
+    o.attrs = ' data-w="' + esc(w) + '" data-i="' + i + '"' + (edit ? ' draggable="true"' : '');
+    if (edit) {
+      o.tools = '<div class="hw-tools">' +
+        '<span class="hw-grip" title="' + L('ลากเพื่อย้าย') + '">' + I('grip', 14) + '</span>' +
+        '<button data-act="home-w-move" data-i="' + i + '" data-d="-1"' + (i === 0 ? ' disabled' : '') +
+        ' title="' + L('ย้ายขึ้น') + '">' + I('arrowUp', 13) + '</button>' +
+        '<button data-act="home-w-move" data-i="' + i + '" data-d="1"' + (i === n - 1 ? ' disabled' : '') +
+        ' title="' + L('ย้ายลง') + '">' + I('arrowDown', 13) + '</button>' +
+        '<button data-act="home-w-size" data-i="' + i + '" title="' +
+        (x.full ? L('ครึ่งแถว') : L('เต็มแถว')) + '">' + I(x.full ? 'shrink' : 'expand', 13) + '</button>' +
+        '<button data-act="home-w-remove" data-i="' + i + '" title="' + L('เอาออก') + '">' + I('close', 13) + '</button>' +
+        '</div>';
+    }
+    return hcard(o);
+  }
+
+  /** ตารางโปรเจกต์ล่าสุดบนหน้าแรก */
+  function homeProjects(showAll) {
+    var projs = S.recentProjects();
+    if (!projs.length && !S.can('structure')) return '<div class="hempty">' + L('ยังไม่มีโปรเจกต์') + '</div>';
+    var pb = '<div class="hproj-grid">';
+    if (S.can('structure')) {
+      pb += '<button class="hproj new" data-act="new-project">' +
+        '<span class="hproj-ic">' + I('plus', 15) + '</span>' +
+        '<span class="hproj-txt"><span class="hproj-nm">' + L('สร้างโปรเจกต์ใหม่') + '</span></span></button>';
+    }
+    (showAll ? projs : projs.slice(0, 7)).forEach(function (p) {
+      var dn = S.dueSoonCount(p.id);
+      var ps = p.status ? projectState(p.status.state) : null;
+      pb += '<button class="hproj" data-act="go" data-route="project" data-id="' + esc(p.id) + '">' +
+        '<span class="hproj-ic" style="background:' + esc(p.color) + '22">' + esc(p.icon) + '</span>' +
+        '<span class="hproj-txt"><span class="hproj-nm">' + esc(p.name) +
+        (p.visibility === 'private'
+          ? '<span class="lockmark" title="' + L('โปรเจกต์ปิด') + '">' + I('shield', 11) + '</span>' : '') +
+        '</span><span class="hproj-sub">' +
+        (ps ? '<i class="st-dot" style="background:' + esc(ps.color) + '" title="' + esc(L(ps.label)) + '"></i>' : '') +
+        (dn ? esc(L('งานใกล้ครบกำหนด {n} งาน', { n: dn })) : L('ไม่มีงานใกล้ครบกำหนด')) +
+        '</span></span></button>';
+    });
+    pb += '</div>';
+    if (projs.length > 7) {
+      pb += '<button class="hlink" data-act="home-more-projects">' +
+        (showAll ? L('ย่อกลับ') : L('ดูเพิ่ม')) + '</button>';
+    }
+    return pb;
   }
 
   /* ---------- หน้าโปรไฟล์ ----------
@@ -1895,75 +2037,480 @@
     return h;
   }
 
-  /* ---------- my tasks ---------- */
+  /* ---------- งานของฉัน ----------
+   *
+   * เซกชันเป็นของแต่ละคน (S.mtGroups) งานที่เพิ่งได้รับมอบหมายลง "เพิ่งได้รับมอบหมาย" เอง
+   * มุมมอง ตัวกรอง เรียง จัดกลุ่ม บันทึกต่อคนใน db.personal (S.mtSetView)
+   * ui = { collapsed: {sectionId: true}, calAnchor } สถานะหน้าจอที่ไม่ต้องจำข้ามเครื่อง
+   */
+  var MT_TABS = [['list', 'รายการ'], ['board', 'บอร์ด'], ['calendar', 'ปฏิทิน'], ['files', 'ไฟล์']];
 
-  function myTasksView(sel) {
-    var b = S.myTasks(S.db.currentUserId);
-    var groups = [
-      ['overdue', L('เลยกำหนด'), b.overdue],
-      ['today', L('วันนี้'), b.today],
-      ['upcoming', L('สัปดาห์นี้'), b.upcoming],
-      ['later', L('หลังจากนั้น'), b.later],
-      ['nodate', L('ไม่มีกำหนด'), b.nodate]
-    ];
-    var total = groups.reduce(function (a, g) { return a + g[2].length; }, 0);
+  function mtLabel(g) {
+    if (g.special) return g.label ? L(g.label) : L('เพิ่งได้รับมอบหมาย');
+    return L(g.label);
+  }
 
-    if (!total) return '<div class="empty"><div class="big">🎉</div>' + L('ไม่มีงานค้างเลย') + '</div>';
+  function mtFilterCount(v) {
+    return (v.show !== 'open' ? 1 : 0) + (v.due && v.due !== 'any' ? 1 : 0) + (v.project ? 1 : 0);
+  }
 
-    var h = '<div class="list-wrap">';
-    groups.forEach(function (g) {
-      if (!g[2].length) return;
-      h += '<div class="bucket-head' + (g[0] === 'overdue' ? ' overdue' : '') + '">' +
-           esc(g[1]) + '<span class="n">' + g[2].length + '</span></div>';
-      g[2].forEach(function (t) {
-        h += taskRow(t, { showProject: true, selectable: true, selected: !!sel[t.id] });
+  function mtToolbar(v) {
+    var h = '<div class="vtb mt-tb">';
+    if (S.can('write')) {
+      h += '<div class="vtb-add"><button class="btn btn-sm btn-primary" data-act="mt-add-top">' +
+        I('plus', 13) + ' ' + L('เพิ่มงาน') + '</button></div>';
+    }
+    h += '<div class="vtb-spacer"></div>';
+    var nf = mtFilterCount(v);
+    h += '<button class="vtb-btn' + (nf ? ' on' : '') + '" data-act="mt-filter" title="' + L('ตัวกรอง') + '">' +
+      I('filter', 14) + '<span>' + L('ตัวกรอง') + '</span>' +
+      (nf ? '<span class="vtb-n">' + nf + '</span><span class="vtb-x" data-act="mt-filter-clear" title="' +
+        L('ล้างตัวกรอง') + '">' + I('close', 11) + '</span>' : '') + '</button>';
+    if (v.mode === 'list' || v.mode === 'board') {
+      var sortOn = v.sort && v.sort !== 'manual';
+      h += '<button class="vtb-btn' + (sortOn ? ' on' : '') + '" data-act="mt-sort" title="' + L('เรียง') + '">' +
+        I(v.dir === 'desc' ? 'arrowDown' : 'arrowUp', 14) + '<span>' + L('เรียง') + '</span>' +
+        (sortOn ? '<span class="vtb-x" data-act="mt-sort-clear" title="' + L('เลิกเรียง') + '">' +
+          I('close', 11) + '</span>' : '') + '</button>';
+      h += '<button class="vtb-btn' + (v.group !== 'sections' ? ' on' : '') + '" data-act="mt-group" title="' +
+        L('จัดกลุ่ม') + '">' + I('grid', 13) + '<span>' + L('จัดกลุ่ม') + '</span></button>';
+    }
+    return h + '</div>';
+  }
+
+  function mtSecActs(g, i, n, board) {
+    if (!g.isSection) return '';
+    return '<span class="acts">' +
+      '<button class="btn btn-sm btn-ghost" data-act="mt-sec-move" data-section="' + esc(g.key) +
+      '" data-delta="-1"' + (i === 0 ? ' disabled' : '') + ' title="' + L(board ? 'ย้ายซ้าย' : 'ย้ายขึ้น') + '">' +
+      I(board ? 'arrowLeft' : 'arrowUp', 14) + '</button>' +
+      '<button class="btn btn-sm btn-ghost" data-act="mt-sec-move" data-section="' + esc(g.key) +
+      '" data-delta="1"' + (i === n - 1 ? ' disabled' : '') + ' title="' + L(board ? 'ย้ายขวา' : 'ย้ายลง') + '">' +
+      I(board ? 'arrowRight' : 'arrowDown', 14) + '</button>' +
+      '<button class="btn btn-sm btn-ghost" data-act="mt-sec-rename" data-section="' + esc(g.key) +
+      '" title="' + L('เปลี่ยนชื่อ') + '">' + I('pencil', 14) + '</button>' +
+      (g.special ? '' : '<button class="btn btn-sm btn-ghost" data-act="mt-sec-delete" data-section="' +
+        esc(g.key) + '" title="' + L('ลบ') + '">' + I('trash', 14) + '</button>') + '</span>';
+  }
+
+  function myTasksView(sel, ui) {
+    ui = ui || {};
+    sel = sel || {};
+    var v = S.personalOf().mt.view;
+    var h = mtToolbar(v);
+    if (v.mode === 'calendar') return h + mtCalendar(v, ui);
+    if (v.mode === 'files') return h + filesList(S.filesOfTasks(S.mtTasks()),
+      L('ไฟล์ในงานของฉัน'), L('ยังไม่มีไฟล์แนบในงานที่มอบหมายให้คุณ'));
+
+    var groups = S.mtGroups(null, v);
+    var total = groups.reduce(function (a, g) { return a + g.items.length; }, 0);
+    var canW = S.can('write');
+
+    if (v.mode === 'board') {
+      h += '<div class="board mt-board">';
+      groups.forEach(function (g, i) {
+        h += '<div class="col"' + (g.isSection ? ' data-section="' + esc(g.key) + '"' : '') + '>';
+        h += '<div class="col-head"><h3>' + (g.color ? '<span class="swatch" style="background:' + esc(g.color) + '"></span>' : '') +
+          esc(mtLabel(g)) + '</h3><span class="n">' + g.items.length + '</span>' +
+          mtSecActs(g, i, groups.length, true) + '</div>';
+        h += '<div class="col-body"' + (g.isSection ? ' data-section="' + esc(g.key) + '"' : '') + '>';
+        g.items.forEach(function (t) {
+          h += taskCard(t, g.isSection ? g.key : '', { selectable: true, selected: !!sel[t.id], dots: true, mine: true });
+        });
+        h += '</div>';
+        if (g.isSection && canW) {
+          h += '<button class="col-add" data-act="mt-add" data-section="' + esc(g.key) + '">+ ' + L('เพิ่มงาน') + '</button>';
+        }
+        h += '</div>';
       });
+      if (v.group === 'sections') {
+        h += '<button class="col-new" data-act="mt-sec-add">' + L('+ เพิ่มเซกชัน') + '</button>';
+      }
+      return h + '</div>';
+    }
+
+    h += '<div class="list-wrap mt-list">';
+    groups.forEach(function (g, i) {
+      var coll = !!(ui.collapsed && ui.collapsed[g.key]);
+      h += '<div class="sec mt-sec' + (coll ? ' collapsed' : '') + '">';
+      h += '<div class="sec-head"><button class="sec-tog" data-act="mt-collapse" data-section="' + esc(g.key) +
+        '" title="' + (coll ? L('กาง') : L('ยุบ')) + '">' + I(coll ? 'chevronRight' : 'chevronDown', 14) + '</button>' +
+        '<h3' + (g.key === 'overdue' ? ' class="overdue"' : '') + '>' +
+        (g.color ? '<span class="swatch" style="background:' + esc(g.color) + '"></span>' : '') +
+        (g.key === '__private' ? I('lock', 13) + ' ' : '') + esc(mtLabel(g)) + '</h3>' +
+        '<span class="n">' + g.items.length + '</span>' + mtSecActs(g, i, groups.length, false) + '</div>';
+      if (!coll) {
+        h += '<div class="sec-body"' + (g.isSection ? ' data-section="' + esc(g.key) + '"' : '') + '>';
+        g.items.forEach(function (t) {
+          h += taskRow(t, { showProject: true, selectable: true, selected: !!sel[t.id], dots: true,
+                            sectionId: g.isSection ? g.key : '' });
+        });
+        if (g.isSection && !g.items.length) {
+          h += '<div class="mt-empty">' + (g.special
+            ? L('งานที่มีคนมอบหมายให้คุณจะมาอยู่ที่นี่ก่อน')
+            : L('ลากงานมาวางที่นี่')) + '</div>';
+        }
+        h += '</div>';
+        if (g.isSection && canW) {
+          h += '<button class="add-row" data-act="mt-add" data-section="' + esc(g.key) + '">' +
+            I('plus', 14) + ' ' + L('เพิ่มงาน') + '</button>';
+        }
+      }
+      h += '</div>';
     });
+    if (!total && v.group !== 'sections') {
+      h += '<div class="empty"><div class="big">🎉</div>' +
+        (mtFilterCount(v) ? L('ไม่มีงานที่ตรงกับตัวกรอง') : L('ไม่มีงานค้างเลย')) + '</div>';
+    }
+    if (v.group === 'sections') {
+      h += '<button class="add-row mt-addsec" data-act="mt-sec-add">' + I('plus', 14) + ' ' + L('เพิ่มเซกชัน') + '</button>';
+    }
+    return h + '</div>';
+  }
+
+  /** ปฏิทินของงานของฉัน — งานที่ยังไม่มีวันอยู่แถบข้าง ลากลงวันได้ */
+  function mtCalendar(v, ui) {
+    var all = S.mtTasks().filter(function (t) {
+      return (v.show === 'all' || (v.show === 'done' ? t.completed : !t.completed)) &&
+        (!v.project || (v.project === '__private' ? S.isPrivate(t.id)
+          : S.projectsOfTask(S.rootOf(t).id).some(function (x) { return x.project.id === v.project; })));
+    });
+    return calBoard({
+      scope: 'mt', mode: v.cal, anchor: ui.calAnchor,
+      tasks: all.filter(function (t) { return t.dueOn || t.startOn; }),
+      unscheduled: all.filter(function (t) { return !t.dueOn && !t.startOn; }),
+      addable: S.can('write'), dots: true
+    });
+  }
+
+  /* ---------- ปฏิทินสัปดาห์/เดือน ใช้ซ้ำได้ ----------
+   *
+   * ชิ้นงาน 2a ใช้กับงานของฉัน ชิ้นงาน 2b ใช้ฟังก์ชันเดียวกันกับปฏิทินโปรเจกต์และปฏิทินรวม
+   *   opts.scope        ชื่อขอบเขต (เช่น 'mt' หรือ 'p:<projectId>') อยู่ใน data-scope
+   *                     main.js ใช้แยกว่ากำลังเลื่อน เพิ่ม หรือวางงานในปฏิทินไหน
+   *   opts.mode         'week' | 'month'
+   *   opts.anchor       วันใดก็ได้ในช่วงที่จะแสดง (YYYY-MM-DD) ไม่ส่ง = วันนี้
+   *   opts.tasks        งานที่มีวัน — งานที่มีทั้งวันเริ่มและกำหนดส่งเป็นแถบยาวข้ามวัน
+   *   opts.unscheduled  งานที่ยังไม่มีวัน แสดงในแถบข้าง (null = ไม่มีแถบข้าง)
+   *   opts.addable      ปุ่ม + ในแต่ละวัน (data-act="calx-add" data-date)
+   *   opts.colorOf      fn(task) → สีของแถบ (ไม่ส่ง = สีโปรเจกต์แรก)
+   *   opts.dots         จุดสีฟ้าของงานที่เพิ่งได้รับมอบหมาย
+   *   opts.maxLanes     จำนวนแถบต่อวันในมุมมองเดือนก่อนยุบเป็น "+n" (ค่าเริ่ม 3)
+   * การโต้ตอบที่ main.js ต้องรองรับ: calx-nav (data-d -1/0/1) calx-mode (data-v) calx-add calx-day
+   * และการลาก .calx-drag ลง .calx-row (หาวันจากตำแหน่งเมาส์ในแถว) หรือลง .calx-side (เอาวันออก)
+   */
+  function calSpan(t) {
+    var a = t.startOn || t.dueOn, b = t.dueOn || t.startOn;
+    if (!a) return null;
+    return a <= b ? [a, b] : [b, a];
+  }
+
+  function calStart(mode, anchor) {
+    var a = new Date(anchor + 'T00:00:00');
+    var ws = weekStart();
+    if (mode === 'week') {
+      var s = new Date(a);
+      s.setDate(a.getDate() - ((a.getDay() - ws + 7) % 7));
+      return { start: S.iso(s), weeks: 1, month: a.getMonth(), year: a.getFullYear() };
+    }
+    var first = new Date(a.getFullYear(), a.getMonth(), 1);
+    var st = new Date(first);
+    st.setDate(1 - ((first.getDay() - ws + 7) % 7));
+    var last = new Date(a.getFullYear(), a.getMonth() + 1, 0);
+    var span = S.daysBetween(S.iso(st), S.iso(last)) + 1;
+    return { start: S.iso(st), weeks: Math.ceil(span / 7), month: a.getMonth(), year: a.getFullYear() };
+  }
+
+  function calTitle(mode, rg) {
+    if (mode === 'month') return MONF()[rg.month] + ' ' + YR(rg.year);
+    var a = new Date(rg.start + 'T00:00:00'), b = new Date(S.addDays(rg.start, 6) + 'T00:00:00');
+    var m = MON();
+    if (a.getMonth() === b.getMonth()) {
+      return a.getDate() + '–' + b.getDate() + ' ' + m[a.getMonth()] + ' ' + YR(a.getFullYear());
+    }
+    return a.getDate() + ' ' + m[a.getMonth()] + ' – ' + b.getDate() + ' ' + m[b.getMonth()] + ' ' +
+      YR(b.getFullYear());
+  }
+
+  function calColor(t) {
+    var p = S.projectsOfTask(S.rootOf(t).id)[0];
+    return p ? p.project.color : 'var(--accent)';
+  }
+
+  function calBoard(opts) {
+    var mode = opts.mode === 'month' ? 'month' : 'week';
+    var anchor = opts.anchor || S.today();
+    var rg = calStart(mode, anchor);
+    var td = S.today();
+    var maxL = mode === 'month' ? (opts.maxLanes || 3) : 99;
+    var colorOf = opts.colorOf || calColor;
+    var dows = DOWR();
+
+    var h = '<div class="calx m-' + mode + (opts.unscheduled ? ' has-side' : '') +
+      '" data-scope="' + esc(opts.scope || '') + '">';
+    h += '<div class="calx-head">' +
+      '<div class="calx-nav">' +
+      '<button class="btn btn-sm" data-act="calx-nav" data-d="-1" title="' +
+      (mode === 'month' ? L('เดือนก่อนหน้า') : L('สัปดาห์ก่อน')) + '">' + I('arrowLeft', 14) + '</button>' +
+      '<button class="btn btn-sm" data-act="calx-nav" data-d="0">' + L('วันนี้') + '</button>' +
+      '<button class="btn btn-sm" data-act="calx-nav" data-d="1" title="' +
+      (mode === 'month' ? L('เดือนถัดไป') : L('สัปดาห์ถัดไป')) + '">' + I('arrowRight', 14) + '</button></div>' +
+      '<strong class="calx-title">' + esc(calTitle(mode, rg)) + '</strong>' +
+      '<div class="segmented calx-modes">' +
+      '<button data-act="calx-mode" data-v="week" class="' + (mode === 'week' ? 'on' : '') + '">' + L('สัปดาห์') + '</button>' +
+      '<button data-act="calx-mode" data-v="month" class="' + (mode === 'month' ? 'on' : '') + '">' + L('เดือน') + '</button>' +
+      '</div></div>';
+
+    h += '<div class="calx-body"><div class="calx-main">';
+    if (mode === 'month') {
+      h += '<div class="calx-dows">';
+      dows.forEach(function (d) { h += '<div>' + esc(d) + '</div>'; });
+      h += '</div>';
+    }
+
+    var tasks = (opts.tasks || []).filter(function (t) { return !!calSpan(t); });
+    for (var w = 0; w < rg.weeks; w++) {
+      var w0 = S.addDays(rg.start, w * 7), w6 = S.addDays(w0, 6);
+      var days = [];
+      for (var k = 0; k < 7; k++) days.push(S.addDays(w0, k));
+      var items = [];
+      tasks.forEach(function (t) {
+        var sp = calSpan(t);
+        if (sp[0] > w6 || sp[1] < w0) return;
+        items.push({
+          t: t,
+          a: sp[0] < w0 ? 0 : S.daysBetween(w0, sp[0]),
+          b: sp[1] > w6 ? 6 : S.daysBetween(w0, sp[1]),
+          cutL: sp[0] < w0, cutR: sp[1] > w6
+        });
+      });
+      items.sort(function (x, y) {
+        return (x.a - y.a) || ((y.b - y.a) - (x.b - x.a)) ||
+          (x.t.completed === y.t.completed ? 0 : x.t.completed ? 1 : -1) ||
+          x.t.name.localeCompare(y.t.name, 'th');
+      });
+      var lanes = [];
+      items.forEach(function (it) {
+        var l = 0;
+        while (lanes[l] !== undefined && lanes[l] >= it.a) l++;
+        lanes[l] = it.b;
+        it.lane = l;
+      });
+      var hidden = [0, 0, 0, 0, 0, 0, 0];
+      var rows = Math.min(lanes.length, maxL);
+      h += '<div class="calx-row" data-start="' + w0 + '" style="--rows:' + rows + '">';
+      days.forEach(function (d, i) {
+        var dt = new Date(d + 'T00:00:00');
+        var other = mode === 'month' && dt.getMonth() !== rg.month;
+        h += '<div class="calx-day' + (other ? ' other' : '') + (d === td ? ' is-today' : '') +
+          (d < td ? ' past' : '') + '" style="grid-column:' + (i + 1) + '">' +
+          '<div class="calx-dnum">' +
+          (mode === 'week' ? '<span class="calx-dw">' + esc(dows[i]) + '</span>' : '') +
+          '<button class="calx-dbtn" data-act="calx-day" data-date="' + d + '" title="' +
+          esc(fmtDate(d)) + '">' + dt.getDate() + '</button>' +
+          (opts.addable ? '<button class="calx-add" data-act="calx-add" data-date="' + d + '" title="' +
+            L('เพิ่มงานวันนี้') + '">' + I('plus', 12) + '</button>' : '') +
+          '</div></div>';
+      });
+      items.forEach(function (it) {
+        if (it.lane >= maxL) {
+          for (var c = it.a; c <= it.b; c++) hidden[c]++;
+          return;
+        }
+        var t = it.t;
+        var end = t.dueOn || t.startOn;
+        var over = !t.completed && end < td;
+        h += '<div class="calx-bar calx-drag' + (t.completed ? ' done' : '') + (over ? ' over' : '') +
+          (it.cutL ? ' cut-l' : '') + (it.cutR ? ' cut-r' : '') + (it.a === it.b ? ' one' : '') +
+          '" draggable="true" data-act="open-task" data-id="' + esc(t.id) + '" style="grid-column:' +
+          (it.a + 1) + ' / ' + (it.b + 2) + ';grid-row:' + (it.lane + 2) + ';--c:' + esc(colorOf(t)) +
+          '" title="' + esc(t.name + (t.dueOn ? ' · ' + fmtDate(t.dueOn) : '')) + '">' +
+          (opts.dots ? newDot(t) : '') +
+          (t.type === 'milestone' ? I('diamond', 10) : '') +
+          '<span class="nm">' + esc(t.name) + '</span></div>';
+      });
+      hidden.forEach(function (cnt, i) {
+        if (!cnt) return;
+        h += '<button class="calx-more" data-act="calx-day" data-date="' + days[i] + '" style="grid-column:' +
+          (i + 1) + ';grid-row:' + (rows + 2) + '">+' + cnt + ' ' + L('อื่น ๆ') + '</button>';
+      });
+      h += '</div>';
+    }
     h += '</div>';
+
+    if (opts.unscheduled) {
+      var un = opts.unscheduled;
+      h += '<aside class="calx-side" data-scope="' + esc(opts.scope || '') + '">' +
+        '<div class="calx-side-head">' + I('calendar', 14) + '<b>' + L('ยังไม่มีวัน') + '</b>' +
+        '<span class="n">' + un.length + '</span></div>' +
+        '<div class="calx-side-hint">' + L('ลากงานไปวางบนวันที่ หรือลากงานกลับมาที่นี่เพื่อเอาวันออก') + '</div>';
+      if (!un.length) h += '<div class="calx-side-empty">' + L('ทุกงานมีวันแล้ว') + '</div>';
+      un.forEach(function (t) {
+        h += '<div class="calx-un calx-drag' + (t.completed ? ' done' : '') + '" draggable="true" data-act="open-task" data-id="' +
+          esc(t.id) + '">' + (opts.dots ? newDot(t) : '') + checkbox(t) +
+          '<span class="nm">' + esc(t.name) + '</span></div>';
+      });
+      h += '</aside>';
+    }
+    h += '</div></div>';
     return h;
   }
 
-  /* ---------- inbox ---------- */
+  /** รายการไฟล์ ใช้ทั้งแท็บไฟล์ของโปรเจกต์และของงานของฉัน */
+  function filesList(rows, title, emptyText) {
+    var h = '<div class="filesv">';
+    h += '<div class="filesv-head">' + I('paperclip', 16) +
+      '<b>' + esc(title) + '</b>' +
+      '<span class="n">' + L('{n} ไฟล์', { n: rows.length }) + '</span></div>';
+    if (!rows.length) return h + '<div class="ovw-empty">' + esc(emptyText) + '</div></div>';
+    rows.forEach(function (r) {
+      var by = S.user(r.att.addedBy);
+      h += '<div class="filesv-row">' + I('paperclip', 14) +
+        '<span class="grow">' +
+        (r.att.url
+          ? '<a href="' + esc(r.att.url) + '" target="_blank" rel="noopener noreferrer">' +
+            esc(r.att.name) + '</a>'
+          : '<b>' + esc(r.att.name) + '</b>') +
+        '<em>' + (by ? esc(by.name) + ' · ' : '') +
+        (r.att.addedAt ? esc(fmtWhen(r.att.addedAt)) : L('ไม่ทราบเวลา')) + '</em></span>' +
+        '<button class="filesv-task" data-act="open-task" data-id="' + esc(r.task.id) + '">' +
+        esc(r.task.name) + '</button></div>';
+    });
+    return h + '</div>';
+  }
 
-  function inboxView(showArchived) {
-    var list = S.inbox(S.db.currentUserId, showArchived);
-    var h = '<div class="inbox-wrap">';
-    h += '<div class="tb-tabs" style="margin:0 0 6px">' +
-      '<button class="tb-tab' + (showArchived ? '' : ' active') +
-      '" data-act="inbox-tab" data-archived="0">' + L('ยังไม่เก็บ') + '</button>' +
-      '<button class="tb-tab' + (showArchived ? ' active' : '') +
-      '" data-act="inbox-tab" data-archived="1">' + L('เก็บแล้ว') + '</button></div>';
+  /* ---------- กล่องข้อความ ----------
+   * ui = { tab, f: { from, project, mention, toMe, byMe, unread } }
+   * การเรียงกับความหนาแน่นจำไว้ต่อคน (personal.inbox) ตัวกรองอยู่แค่ในหน้าจอ */
+  var INBOX_TABS = [['activity', 'กิจกรรม'], ['bookmarks', 'บุ๊กมาร์ก'], ['archive', 'เก็บถาวร']];
+  var INBOX_FLAGS = [['unread', 'ยังไม่อ่าน'], ['mention', '@พูดถึงฉัน'], ['toMe', 'มอบหมายให้ฉัน'],
+                     ['byMe', 'ที่ฉันมอบหมาย']];
+
+  function inboxFilterCount(f) {
+    var n = 0;
+    Object.keys(f || {}).forEach(function (k) { if (f[k]) n++; });
+    return n;
+  }
+
+  function inboxView(ui) {
+    ui = ui || {};
+    var f = ui.f || {};
+    var tab = ui.tab || 'activity';
+    var pref = S.personalOf().inbox;
+    var sort = pref.sort === 'relevance' ? 'relevance' : 'new';
+    var dense = !!pref.dense;
+    var list = S.inboxList(null, {
+      tab: tab, from: f.from, project: f.project, mention: f.mention,
+      toMe: f.toMe, byMe: f.byMe, unread: f.unread, sort: sort
+    });
+
+    var h = '<div class="inbox-wrap' + (dense ? ' dense' : '') + '">';
+    h += '<div class="tb-tabs inbox-tabs">';
+    INBOX_TABS.forEach(function (x) {
+      h += '<button class="tb-tab' + (tab === x[0] ? ' active' : '') + '" data-act="inbox-tab" data-tab="' +
+        x[0] + '">' + (x[0] === 'bookmarks' ? I('bookmark', 13) + ' ' : '') + L(x[1]) + '</button>';
+    });
+    h += '</div>';
+
+    var nf = inboxFilterCount(f);
+    h += '<div class="inbox-tb">' +
+      '<button class="vtb-btn' + (nf ? ' on' : '') + '" data-act="inbox-filter">' + I('filter', 14) +
+      '<span>' + L('ตัวกรอง') + '</span>' + (nf ? '<span class="vtb-n">' + nf + '</span>' +
+        '<span class="vtb-x" data-act="inbox-filter-clear" title="' + L('ล้างตัวกรอง') + '">' +
+        I('close', 11) + '</span>' : '') + '</button>' +
+      '<button class="vtb-btn" data-act="inbox-sort">' + I('arrowDown', 14) + '<span>' +
+      (sort === 'relevance' ? L('เกี่ยวข้องที่สุด') : L('ใหม่สุดก่อน')) + '</span></button>' +
+      '<div class="vtb-spacer"></div>' +
+      '<div class="segmented inbox-density">' +
+      '<button data-act="inbox-dense" data-v="0" class="' + (dense ? '' : 'on') + '">' + L('ละเอียด') + '</button>' +
+      '<button data-act="inbox-dense" data-v="1" class="' + (dense ? 'on' : '') + '">' + L('กะทัดรัด') + '</button>' +
+      '</div></div>';
+
+    /* ตัวกรองที่เปิดอยู่เป็นป้าย กดกากบาทเอาออกทีละอัน */
+    if (nf) {
+      h += '<div class="inbox-chips">';
+      if (f.from) {
+        var fu = S.user(f.from);
+        h += '<span class="chip">' + L('จาก {who}', { who: esc(fu ? fu.name : '?') }) +
+          '<button data-act="inbox-unfilter" data-k="from" title="' + L('เอาออก') + '">' + I('close', 12) + '</button></span>';
+      }
+      if (f.project) {
+        var fp = S.project(f.project);
+        h += '<span class="chip">' + esc(fp ? fp.name : '?') +
+          '<button data-act="inbox-unfilter" data-k="project" title="' + L('เอาออก') + '">' + I('close', 12) + '</button></span>';
+      }
+      INBOX_FLAGS.forEach(function (x) {
+        if (!f[x[0]]) return;
+        h += '<span class="chip">' + esc(L(x[1])) +
+          '<button data-act="inbox-unfilter" data-k="' + x[0] + '" title="' + L('เอาออก') + '">' + I('close', 12) + '</button></span>';
+      });
+      h += '</div>';
+    }
+
+    if (S.isDnd()) {
+      var dd = S.dndOf();
+      var until = dd.until && Date.parse(dd.until) > Date.now() ? new Date(dd.until) : null;
+      h += '<div class="inbox-dnd">' + I('moon', 14) + '<span class="grow">' +
+        (until ? esc(L('ห้ามรบกวนถึง {t}', { t: fmtDate(S.iso(until)) + ' ' + fmtTime(until) }))
+               : esc(L('อยู่ในช่วงห้ามรบกวนที่ตั้งไว้ {a}–{b}', { a: dd.from, b: dd.to }))) +
+        ' · ' + L('ไม่ขึ้นตัวเลขแดงและไม่เด้งเตือน') + '</span>' +
+        (until ? '<button class="btn btn-sm" data-act="dnd-off">' + L('เลิกพัก') + '</button>' : '') + '</div>';
+    }
 
     if (!list.length) {
-      h += '<div class="empty"><div class="big">📭</div>' +
-        (showArchived ? L('ยังไม่มีรายการที่เก็บไว้') : L('ไม่มีการแจ้งเตือนใหม่')) + '</div></div>';
+      h += '<div class="empty"><div class="big">' + (tab === 'bookmarks' ? '🔖' : '📭') + '</div>' +
+        (nf ? L('ไม่มีรายการที่ตรงกับตัวกรอง')
+          : tab === 'archive' ? L('ยังไม่มีรายการที่เก็บไว้')
+          : tab === 'bookmarks' ? L('ยังไม่มีรายการที่บุ๊กมาร์กไว้ กดรูปที่คั่นหนังสือบนรายการเพื่อเก็บไว้ดูทีหลัง')
+          : L('ไม่มีการแจ้งเตือนใหม่')) + '</div></div>';
       return h;
     }
 
-    list.forEach(function (n) {
-      var t = S.task(n.taskId);
-      /* ประกาศของโปรเจกต์ไม่มีงานให้ชี้ ต้องพาไปที่หน้าประกาศแทน
-       * ไม่งั้นจะขึ้นว่า "งานถูกลบแล้ว" ซึ่งไม่จริงและชวนตกใจ */
-      var np = (!t && n.projectId) ? S.project(n.projectId) : null;
-      h += '<div class="nrow' + (n.read ? '' : ' unread') + '" data-act="open-notif" data-id="' +
-        esc(n.id) + '" data-task="' + esc(n.taskId) + '"' +
-        (np ? ' data-project="' + esc(np.id) + '"' : '') +
-        (n.route ? ' data-route="' + esc(n.route) + '"' : '') + '>';
-      h += n.read ? '<span style="width:8px;flex:0 0 8px"></span>' : '<span class="unread-dot"></span>';
-      var ntxt = n.key ? (n.actorName ? n.actorName + ' ' : '') + L(n.key, n.params || undefined) : n.text;
-      h += '<div class="body"><div class="txt">' + esc(ntxt) + '</div>' +
-        '<div class="sub" title="' + esc(fmtExact(n.createdAt)) + '">' +
-        esc(t ? t.name : (np ? np.name : (n.route === 'mytasks' ? L('งานของฉัน') : L('(งานถูกลบแล้ว)')))) + ' · ' +
-        esc(fmtWhen(n.createdAt)) + '</div></div>';
-      h += '<span class="acts">' +
-        (n.archived ? '' :
-          '<button class="btn btn-sm btn-ghost" data-act="archive-notif" data-id="' +
-          esc(n.id) + '" title="' + L('เก็บ') + '">✓' + '</button>') +
-        '</span>';
-      h += '</div>';
-    });
+    list.forEach(function (n) { h += inboxRow(n, dense); });
+    return h + '</div>';
+  }
+
+  function inboxRow(n, dense) {
+    var t = n.taskId ? S.task(n.taskId) : null;
+    /* ประกาศของโปรเจกต์ไม่มีงานให้ชี้ ต้องพาไปที่หน้าประกาศแทน */
+    var np = (!t && n.projectId) ? S.project(n.projectId) : null;
+    var actor = n.actorId ? S.user(n.actorId) : null;
+    var h = '<div class="nrow' + (n.read ? '' : ' unread') + (n.bookmarked ? ' marked' : '') +
+      '" data-act="open-notif" data-id="' + esc(n.id) + '" data-task="' + esc(n.taskId || '') + '"' +
+      (np ? ' data-project="' + esc(np.id) + '"' : '') +
+      (n.route ? ' data-route="' + esc(n.route) + '"' : '') + '>';
+    h += n.read ? '<span class="nrow-dot"></span>' : '<span class="unread-dot"></span>';
+    if (!dense) h += '<span class="nrow-av">' + (actor ? avatar(actor, 'sm')
+      : '<span class="nrow-sys">' + I(n.kind === 'due' || n.kind === 'overdue' ? 'calendar' : 'bell', 13) + '</span>') + '</span>';
+    var ntxt = n.key ? (n.actorName ? n.actorName + ' ' : '') + L(n.key, n.params || undefined) : n.text;
+    var where = t ? t.name : (np ? np.name : (n.route === 'mytasks' ? L('งานของฉัน') : L('(งานถูกลบแล้ว)')));
+    h += '<div class="body"><div class="txt">' + esc(ntxt) + '</div>';
+    if (!dense) {
+      var pj = t ? S.projectsOfTask(S.rootOf(t).id)[0] : null;
+      h += '<div class="sub" title="' + esc(fmtExact(n.createdAt)) + '">' +
+        '<span class="nsub-where">' + esc(where) + '</span>' +
+        (pj ? '<span class="hchip" style="background:' + esc(pj.project.color) + '22;color:' +
+          esc(pj.project.color) + '">' + esc(pj.project.name) + '</span>'
+          : (t && !t.parentId && S.isPrivate(t.id) ? privateChip() : '')) +
+        '<span class="nsub-when">' + esc(fmtWhen(n.createdAt)) + '</span></div>';
+    }
     h += '</div>';
-    return h;
+    if (dense) h += '<span class="nrow-when" title="' + esc(fmtExact(n.createdAt)) + '">' + esc(fmtWhen(n.createdAt)) + '</span>';
+    h += '<span class="acts">' +
+      '<button class="btn btn-sm btn-ghost nact-mark' + (n.bookmarked ? ' on' : '') + '" data-act="notif-bookmark" data-id="' +
+      esc(n.id) + '" title="' + (n.bookmarked ? L('เอาบุ๊กมาร์กออก') : L('บุ๊กมาร์ก')) + '">' +
+      (n.bookmarked ? global.Icons.iconFilled('bookmark', 14) : I('bookmark', 14)) + '</button>' +
+      '<button class="btn btn-sm btn-ghost" data-act="notif-read" data-id="' + esc(n.id) + '" title="' +
+      (n.read ? L('ทำเป็นยังไม่อ่าน') : L('ทำเป็นอ่านแล้ว')) + '">' + I(n.read ? 'eye' : 'check', 14) + '</button>' +
+      (t ? '<button class="btn btn-sm btn-ghost" data-act="notif-followup" data-id="' + esc(t.id) + '" title="' +
+        L('สร้างงานติดตามผล') + '">' + I('plus', 14) + '</button>' : '') +
+      (n.archived
+        ? '<button class="btn btn-sm btn-ghost" data-act="unarchive-notif" data-id="' + esc(n.id) + '" title="' +
+          L('ย้ายกลับไปกิจกรรม') + '">' + I('arrowUp', 14) + '</button>'
+        : '<button class="btn btn-sm btn-ghost" data-act="archive-notif" data-id="' + esc(n.id) + '" title="' +
+          L('เก็บ') + '">' + I('archive', 14) + '</button>') +
+      '</span>';
+    return h + '</div>';
   }
 
   /* ---------- ถังขยะ ----------
@@ -2329,7 +2876,18 @@
 
     // โปรเจกต์ (multi-homing)
     h += '<div class="fld"><label>' + L('โปรเจกต์') + '</label><div class="val" style="padding-top:5px">';
-    homes.forEach(function (x) {
+    /* งานส่วนตัว — บอกให้ชัดว่าใครเห็นบ้าง และทางออกคือเพิ่มเข้าโปรเจกต์ */
+    var priv = S.isPrivate(t.id);
+    if (priv && !t.parentId) {
+      h += '<div class="dw-private">' + privateChip() + '<span>' +
+        L('เห็นเฉพาะคนสร้าง ผู้รับผิดชอบ และผู้ติดตาม') + '</span></div>' +
+        '<button class="btn btn-sm" data-act="make-public" data-id="' + esc(t.id) + '">' +
+        I('users', 13) + ' ' + L('ทำให้เป็นสาธารณะ…') + '</button></div></div>';
+    } else if (priv) {
+      h += '<div class="dw-private">' + privateChip() + '<span>' +
+        L('ส่วนตัวตามงานหลัก') + '</span></div></div></div>';
+    }
+    if (!priv) homes.forEach(function (x) {
       var sec = S.section(x.project.id, x.membership.sectionId);
       h += '<span class="chip" style="margin:0 5px 5px 0"><span class="swatch" style="background:' +
         esc(x.project.color) + '"></span>' + esc(x.project.name) +
@@ -2338,8 +2896,10 @@
           '" data-project="' + esc(x.project.id) + '" title="' +
           L('เอางานออกจากโปรเจกต์นี้') + '">' + I('close', 13) + '</button>' : '') + '</span>';
     });
-    h += '<button class="btn btn-sm btn-ghost" data-act="add-home" data-id="' + esc(t.id) +
-      '">+ ' + L('เพิ่มโปรเจกต์') + '</button></div></div>';
+    if (!priv) {
+      h += '<button class="btn btn-sm btn-ghost" data-act="add-home" data-id="' + esc(t.id) +
+        '">+ ' + L('เพิ่มโปรเจกต์') + '</button></div></div>';
+    }
 
     // แท็ก
     h += '<div class="fld"><label>' + L('แท็ก') + '</label><div class="val" style="padding-top:5px">';
@@ -3283,6 +3843,8 @@
     projectsView: projectsView,
     portfolioView: portfolioView, PF_TABS: PF_TABS,
     myTasksView: myTasksView, inboxView: inboxView, trashView: trashView, approvalIcon: approvalIcon,
+    MT_TABS: MT_TABS, INBOX_FLAGS: INBOX_FLAGS, calBoard: calBoard, calSpan: calSpan,
+    filesList: filesList, privateChip: privateChip, newDot: newDot, fmtTime: fmtTime,
     calendarView: calendarView, searchView: searchView, drawer: drawer,
     taskRow: taskRow, taskCard: taskCard
   };

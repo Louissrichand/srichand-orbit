@@ -20,8 +20,11 @@
     route: { type: 'home' },
     openTaskId: null,
     calOffset: 0,
-    inboxArchived: false,
-    home: { mine: 'upcoming', assigned: 'week', allProjects: false },
+    /* กล่องข้อความ — แท็บและตัวกรองอยู่แค่ในหน้าจอ (การเรียงกับความหนาแน่นจำไว้ใน db.personal) */
+    inbox: { tab: 'activity', f: {} },
+    /* งานของฉัน — เซกชันที่ยุบไว้ และวันที่ปฏิทินกำลังแสดง (มุมมอง/ตัวกรองจำไว้ใน db.personal) */
+    mt: { collapsed: {}, calAnchor: null },
+    home: { mine: 'upcoming', assigned: 'week', allProjects: false, edit: false },
     reopenAddIn: null,
     sel: {},                 // งานที่ถูกเลือกไว้ (id -> true)
     views: {},               // ตัวกรองต่อโปรเจกต์
@@ -251,8 +254,14 @@
     var r = state.route;
     var body = '';
 
+    /* สมุดโน้ตบนหน้าแรกบันทึกระหว่างพิมพ์ การบันทึกทำให้หน้าวาดใหม่
+     * จึงเก็บข้อความกับเคอร์เซอร์ไว้ แล้วคืนให้ช่องใหม่ ไม่ให้โฟกัสหลุดกลางประโยค */
+    var note = document.activeElement && document.activeElement.classList &&
+      document.activeElement.classList.contains('hnote') ? document.activeElement : null;
+    var keepNote = note ? { v: note.value, a: note.selectionStart, b: note.selectionEnd, top: note.scrollTop } : null;
+
     if (r.type === 'home') {
-      body = R.homeView(state.home);
+      body = R.homeView(state.home, { drafts: draftList() });
     } else if (r.type === 'project') {
       var p = S.project(r.id);
       if (!p) { state.route = { type: 'home' }; return renderAll(); }
@@ -274,9 +283,9 @@
       if (!S.portfolio(r.id)) { state.route = { type: 'home' }; return renderAll(); }
       body = R.portfolioView(r.id, r.view || 'list');
     } else if (r.type === 'mytasks') {
-      body = R.myTasksView(state.sel);
+      body = R.myTasksView(state.sel, state.mt);
     } else if (r.type === 'inbox') {
-      body = R.inboxView(state.inboxArchived);
+      body = R.inboxView(state.inbox);
     } else if (r.type === 'calendar') {
       body = R.calendarView(null, state.calOffset);
     } else if (r.type === 'projects') {
@@ -304,6 +313,15 @@
     if (prevG) state.ganttScroll = { x: prevG.scrollLeft, y: prevG.scrollTop };
 
     $view.innerHTML = body + R.bulkbar(state.sel);
+    if (keepNote) {
+      var nn = $view.querySelector('.hnote');
+      if (nn) {
+        nn.value = keepNote.v;
+        nn.focus();
+        try { nn.setSelectionRange(keepNote.a, keepNote.b); } catch (e) { /* ช่องเปลี่ยนชนิด */ }
+        nn.scrollTop = keepNote.top;
+      }
+    }
     resumeInlineAdd();
     restoreTimelineScroll();
     restoreGanttScroll();
@@ -714,6 +732,24 @@
     try { global.localStorage.setItem(DRAFT_KEY, JSON.stringify(drafts)); } catch (e) {}
   }
 
+  /** ร่างความเห็นของคนที่ใช้อยู่ สำหรับวิดเจ็ต "ร่างความเห็น" บนหน้าแรก
+   *  คีย์ c:<งาน> ความเห็นใหม่ · r:<ความเห็นแม่> คำตอบ · e:<ความเห็น> กำลังแก้ */
+  function draftList() {
+    var pre = (S.db.currentUserId || '') + '|';
+    var out = [];
+    Object.keys(drafts).forEach(function (k) {
+      if (k.indexOf(pre) !== 0) return;
+      var key = k.slice(pre.length);
+      var ref = key.slice(2);
+      var tid = key.charAt(0) === 'c' ? ref : (S.story(ref) || {}).taskId;
+      var t = tid ? S.task(tid) : null;
+      if (!t || !S.canSeeTask(t.id)) return;
+      out.push({ key: key, taskId: t.id, taskName: t.name,
+                 text: S.plainText(drafts[k]).replace(/\s+/g, ' ').trim() });
+    });
+    return out;
+  }
+
   /** ตัวแก้ไขที่โฟกัสอยู่ในแผงงาน — เก็บไว้ก่อนวาดใหม่ แล้วคืนเนื้อหาและเคอร์เซอร์ให้หลังวาด
    *  ไม่งั้นทุกครั้งที่ซิงก์ข้อมูลเข้ามาระหว่างพิมพ์ ข้อความที่ยังไม่บันทึกจะหายและโฟกัสหลุด */
   function captureEditor() {
@@ -860,7 +896,7 @@
     el.style.height = el.scrollHeight + 'px';
   }
 
-  S.onChange(function () { renderAll(); });
+  S.onChange(function () { renderAll(); noticeNewInbox(); });
 
   /** style.background คืนเป็น rgb() — แปลงกลับเป็น hex ให้เก็บลงข้อมูล */
   function rgbToHex(v) {
@@ -1141,11 +1177,12 @@
   }
 
   function openTask(id) {
-    if (!S.task(id)) return;
+    if (!S.task(id) || !S.canSeeTask(id)) return;
     flushEditor();
     if (state.openTaskId !== id) resetDrawerState();
     state.openTaskId = id;
-    renderDrawer();
+    /* เปิดดูแล้ว จุดสีฟ้าในงานของฉันหาย — mtMarkSeen commit แล้ววาดใหม่ทั้งหน้าให้เอง */
+    if (!S.mtMarkSeen(id)) renderDrawer();
     syncHash();
   }
 
@@ -1202,6 +1239,14 @@
   }
 
   function resumeInlineAdd() {
+    if (state.reopenMtAdd) {
+      var msec = state.reopenMtAdd;
+      state.reopenMtAdd = null;
+      var mb = $view.querySelectorAll('[data-act="mt-add"]');
+      for (var k = 0; k < mb.length; k++) {
+        if (mb[k].getAttribute('data-section') === msec) { mtInlineAdd(mb[k], msec); return; }
+      }
+    }
     if (!state.reopenAddIn) return;
     var sec = state.reopenAddIn;
     state.reopenAddIn = null;
@@ -1395,6 +1440,7 @@
     h += item('add-to-portfolio', 'star', L('เพิ่มเข้าพอร์ตโฟลิโอ'));
     h += '<div class="pop-sep"></div>';
     h += item('update-status', 'flag', L('อัปเดตสถานะโปรเจกต์'));
+    h += item('proj-notify-menu', 'bell', L('การแจ้งเตือนของโปรเจกต์นี้'));
     h += item('copy-project-link', 'link', L('คัดลอกลิงก์โปรเจกต์'));
     h += item('dup-project', 'copy', L('คัดลอกโปรเจกต์'));
     h += '<div class="pop-sep"></div>';
@@ -1754,6 +1800,216 @@
       '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
       '<button class="btn btn-primary" data-act="do-followup" data-id="' + R.esc(taskId) + '">' +
       L('สร้างงาน') + '</button></div>';
+  }
+
+  /* ---------- 2a: ตัวช่วยของงานของฉัน กล่องข้อความ และปฏิทิน ---------- */
+
+  /** ตัวเลือกปัจจุบันของกล่องข้อความ ส่งให้ S.inboxList */
+  function inboxOpts() {
+    var f = state.inbox.f || {};
+    return { tab: state.inbox.tab, from: f.from, project: f.project, mention: f.mention,
+             toMe: f.toMe, byMe: f.byMe, unread: f.unread,
+             sort: S.personalOf().inbox.sort === 'relevance' ? 'relevance' : 'new' };
+  }
+
+  /** ชื่อของเซกชัน "เพิ่งได้รับมอบหมาย" ตามที่เจ้าตัวตั้งไว้ */
+  function recentLabel() {
+    var s = S.mtSection(S.MT_RECENT);
+    return s && s.name ? L(s.name) : L('เพิ่งได้รับมอบหมาย');
+  }
+
+  function popCheck(on) { return '<span class="pop-check">' + (on ? I('check', 13) : '') + '</span>'; }
+
+  /** แผงตัวกรองกล่องข้อความ — ติ๊กได้หลายอย่างโดยแผงไม่ปิด */
+  function inboxFilterPop() {
+    var f = state.inbox.f || {};
+    var h = '<div class="pop-note strong">' + R.esc(L('แสดงเฉพาะ')) + '</div>';
+    R.INBOX_FLAGS.forEach(function (x) {
+      h += '<button data-act="inbox-f" data-k="' + x[0] + '"' + (f[x[0]] ? ' class="on"' : '') + '>' +
+        popCheck(f[x[0]]) + '<span class="grow">' + R.esc(L(x[1])) + '</span></button>';
+    });
+    var people = S.inboxPeople();
+    if (people.length) {
+      h += '<div class="pop-sep"></div><div class="pop-note strong">' + R.esc(L('จากใคร')) + '</div>';
+      people.forEach(function (u) {
+        h += '<button data-act="inbox-f" data-k="from" data-v="' + R.esc(u.id) + '"' +
+          (f.from === u.id ? ' class="on"' : '') + '>' + popCheck(f.from === u.id) + R.avatar(u, 'sm') +
+          '<span class="grow">' + R.esc(u.name) + '</span></button>';
+      });
+    }
+    var projs = S.visibleProjects();
+    if (projs.length) {
+      h += '<div class="pop-sep"></div><div class="pop-note strong">' + R.esc(L('โปรเจกต์')) + '</div>';
+      projs.forEach(function (p) {
+        h += '<button data-act="inbox-f" data-k="project" data-v="' + R.esc(p.id) + '"' +
+          (f.project === p.id ? ' class="on"' : '') + '>' + popCheck(f.project === p.id) +
+          '<span class="swatch" style="background:' + R.esc(p.color) + '"></span>' +
+          '<span class="grow">' + R.esc(p.name) + '</span></button>';
+      });
+    }
+    return h;
+  }
+
+  /** แผงตัวกรอง / เรียง / จัดกลุ่มของงานของฉัน */
+  function mtPop(kind) {
+    var v = S.personalOf().mt.view;
+    var h = '';
+    function opt(k, val, label, extra) {
+      var on = String(v[k]) === String(val);
+      return '<button data-act="mt-set" data-k="' + k + '" data-v="' + R.esc(val) + '"' + (on ? ' class="on"' : '') + '>' +
+        popCheck(on) + (extra || '') + '<span class="grow">' + R.esc(label) + '</span></button>';
+    }
+    if (kind === 'filter') {
+      h += '<div class="pop-note strong">' + R.esc(L('สถานะงาน')) + '</div>';
+      h += opt('show', 'open', L('งานที่ยังไม่เสร็จ')) + opt('show', 'done', L('งานที่เสร็จแล้ว')) +
+        opt('show', 'all', L('งานทั้งหมด'));
+      h += '<div class="pop-sep"></div><div class="pop-note strong">' + R.esc(L('กำหนดส่ง')) + '</div>';
+      S.DUE_FILTERS.forEach(function (d) { h += opt('due', d.id, L(d.label)); });
+      h += '<div class="pop-sep"></div><div class="pop-note strong">' + R.esc(L('โปรเจกต์')) + '</div>';
+      h += opt('project', '', L('ทุกโปรเจกต์')) + opt('project', '__private', L('งานส่วนตัว (ไม่อยู่ในโปรเจกต์)'), I('lock', 13));
+      S.visibleProjects().forEach(function (p) {
+        h += opt('project', p.id, p.name, '<span class="swatch" style="background:' + R.esc(p.color) + '"></span>');
+      });
+    } else if (kind === 'sort') {
+      S.SORTS.forEach(function (s) {
+        if (S.MT_SORTS.indexOf(s.id) < 0) return;
+        var on = v.sort === s.id;
+        h += '<button data-act="mt-set" data-k="sort" data-v="' + s.id + '"' + (on ? ' class="on"' : '') + '>' +
+          popCheck(on) + '<span class="grow">' + R.esc(L(s.label)) + '</span>' +
+          (on && s.id !== 'manual' ? I(v.dir === 'desc' ? 'arrowDown' : 'arrowUp', 13) : '') + '</button>';
+      });
+      h += '<div class="pop-note">' + R.esc(L('กดซ้ำเพื่อสลับมากไปน้อย · เรียงอยู่จะลากจัดลำดับในเซกชันไม่ได้')) + '</div>';
+    } else {
+      S.MT_GROUPS.forEach(function (g) { h += opt('group', g.id, L(g.label)); });
+      h += '<div class="pop-note">' + R.esc(L('จัดกลุ่มตามวันครบกำหนด = มุมมองงานของฉันแบบเดิม')) + '</div>';
+    }
+    return h;
+  }
+
+  /** ช่องพิมพ์ชื่องานใต้เซกชันของงานของฉัน — Enter แล้วพิมพ์ต่อได้เลย */
+  function mtInlineAdd(btn, secId) {
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'inp inline-add-input';
+    input.dataset.mtsec = secId;
+    input.placeholder = L('ชื่องาน แล้วกด Enter (วางหลายบรรทัด = หลายงาน)');
+    input.style.cssText = 'border:1px solid var(--accent);background:var(--bg);margin:4px 0';
+    btn.style.display = 'none';
+    btn.parentNode.insertBefore(input, btn);
+    input.focus();
+    function done() {
+      var v = input.value.trim();
+      input.value = '';
+      input.remove();
+      btn.style.display = '';
+      if (v) S.mtCreateTasks([v], secId);
+    }
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        var v = input.value.trim();
+        input.value = '';
+        if (v) { state.reopenMtAdd = secId; S.mtCreateTasks([v], secId); }
+      } else if (e.key === 'Escape') {
+        input.value = '';
+        input.blur();
+      }
+    });
+    input.addEventListener('blur', done);
+  }
+
+  /* ปฏิทินที่วาดด้วย R.calBoard บอกขอบเขตไว้ใน data-scope
+   * 'mt' = งานของฉัน (มุมมองจำไว้ใน db.personal วันที่อยู่ในหน้าจอ)
+   * ขอบเขตอื่น (เช่น 'p:<projectId>' ของชิ้นงาน 2b) เก็บใน state.calx */
+  function calxScope(el) {
+    var box = el.closest ? el.closest('.calx') : null;
+    return box ? box.dataset.scope : '';
+  }
+  function calxGet(scope) {
+    if (scope === 'mt') {
+      return { mode: S.personalOf().mt.view.cal === 'month' ? 'month' : 'week',
+               anchor: state.mt.calAnchor || S.today() };
+    }
+    state.calx = state.calx || {};
+    var c = state.calx[scope] || (state.calx[scope] = { mode: 'month', anchor: S.today() });
+    return c;
+  }
+  function calxSet(scope, patch) {
+    if (scope === 'mt') {
+      if (patch.anchor) state.mt.calAnchor = patch.anchor;
+      if (patch.mode && patch.mode !== S.personalOf().mt.view.cal) { S.mtSetView({ cal: patch.mode }); return; }
+      renderViewBody();
+      return;
+    }
+    var c = calxGet(scope);
+    Object.keys(patch).forEach(function (k) { c[k] = patch[k]; });
+    renderViewBody();
+  }
+
+  /** วันที่ใต้ตำแหน่งเมาส์ในแถวสัปดาห์ของปฏิทิน */
+  function calxDateAt(row, x) {
+    var r = row.getBoundingClientRect();
+    var col = Math.floor((x - r.left) / (r.width / 7));
+    col = Math.max(0, Math.min(6, col));
+    return S.addDays(row.dataset.start, col);
+  }
+
+  /** ทำงานส่วนตัวให้เป็นสาธารณะ — เลือกโปรเจกต์และเซกชันที่จะวาง */
+  function makePublicModal(taskId) {
+    var projs = S.visibleProjects().filter(function (p) { return S.canInProject(p.id, 'edit'); });
+    var h = '<h2>' + L('ทำให้เป็นสาธารณะ') + '</h2>' +
+      '<p class="prj-note">' + L('เพิ่มงานนี้เข้าโปรเจกต์ แล้วทุกคนที่เห็นโปรเจกต์นั้นจะเห็นงานนี้ด้วย (รวมงานย่อย)') + '</p>';
+    if (!projs.length) {
+      return h + '<div class="prj-warn">' + I('alert', 15) + '<span>' +
+        L('ยังไม่มีโปรเจกต์ที่คุณแก้ไขได้') + '</span></div>' +
+        '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
+    }
+    h += '<div class="field"><label>' + L('โปรเจกต์') + '</label><select id="mpProject" class="inp" data-act="mp-project">';
+    projs.forEach(function (p) {
+      h += '<option value="' + R.esc(p.id) + '">' + R.esc(p.icon + ' ' + p.name) + '</option>';
+    });
+    h += '</select></div>';
+    h += '<div class="field"><label>' + L('คอลัมน์') + '</label><select id="mpSection" class="inp">' +
+      sectionOptions(projs[0].id) + '</select></div>';
+    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="do-make-public" data-id="' + R.esc(taskId) + '">' +
+      L('ทำให้เป็นสาธารณะ') + '</button></div>';
+    return h;
+  }
+
+  function sectionOptions(projectId) {
+    var p = S.project(projectId);
+    return (p ? p.sections : []).map(function (s) {
+      return '<option value="' + R.esc(s.id) + '">' + R.esc(s.name) + '</option>';
+    }).join('');
+  }
+
+  /** การแจ้งเตือนของโปรเจกต์นี้ — เปิดปิดได้ต่อคนต่อโปรเจกต์ */
+  function projNotifyModal(projectId) {
+    var p = S.project(projectId);
+    if (!p) return '';
+    var cur = S.projNotifyOf(projectId);
+    var h = '<h2>' + L('การแจ้งเตือนของ {p}', { p: R.esc(p.name) }) + '</h2>' +
+      '<p class="prj-note">' + L('ตั้งเฉพาะตัวคุณ คนอื่นในโปรเจกต์ไม่เปลี่ยนตาม') + '</p>';
+    S.PROJ_NOTIFY.forEach(function (k) {
+      h += setToggle('proj-notify', L(k.label), cur[k.id], L(k.desc),
+        ' data-id="' + R.esc(projectId) + '" data-k="' + k.id + '"');
+    });
+    h += '<div class="modal-acts"><button class="btn btn-primary" data-act="close-modal">' + L('เสร็จแล้ว') + '</button></div>';
+    return h;
+  }
+
+  /* แจ้งว่ามีรายการใหม่เข้ากล่องข้อความ (เช่นซิงก์มาจากเพื่อนร่วมทีม)
+   * ห้ามรบกวนอยู่ = ไม่เด้ง ตัวเลขที่แถบซ้ายก็ถูกซ่อนไว้ด้วย */
+  var lastUnread = { uid: null, n: 0 };
+  function noticeNewInbox() {
+    var who = S.db.currentUserId;
+    var n = S.unreadCount(who);
+    if (!lastUnread) lastUnread = { uid: null, n: 0 };
+    if (lastUnread.uid === who && n > lastUnread.n && !S.isDnd() && state.route.type !== 'inbox') {
+      toast(L('มีการแจ้งเตือนใหม่ {n} รายการ', { n: n - lastUnread.n }), L('เปิดดู'), 'go-inbox');
+    }
+    lastUnread = { uid: who, n: n };
   }
 
   /* ---- เลือกงานอีกชิ้น ใช้ทั้งรวมงานซ้ำและแปลงเป็นงานย่อย ---- */
@@ -2184,7 +2440,7 @@
       if (x.id === taskId || x.parentId) return false;
       if (t.dependsOn.filter(function (d) { return d.id === x.id; }).length) return false;
       if (q && x.name.toLowerCase().indexOf(q) < 0) return false;
-      return true;
+      return S.canSeeTask(x.id);
     }).slice(0, 12);
     if (!list.length) return '<div style="color:var(--fg-faint)">' + L('ไม่พบงาน') + '</div>';
     var h = '';
@@ -2545,6 +2801,23 @@
         h += setToggle('set-notify', L(k.label), on, k.desc ? L(k.desc) : '',
           ' data-kind="' + k.id + '"');
       });
+      /* ห้ามรบกวนประจำวัน — พักแบบครั้งเดียวกดได้จากปุ่มพระจันทร์ในกล่องข้อความ */
+      var dnd = S.dndOf();
+      var sched = !!(dnd.from && dnd.to);
+      h += '<label class="opt-lbl">' + L('ห้ามรบกวน') + '</label>';
+      h += setToggle('dnd-sched', L('ห้ามรบกวนทุกวันตามช่วงเวลา'), sched,
+        L('ในช่วงนี้ไม่ขึ้นตัวเลขแดงและไม่เด้งเตือน รายการยังเข้ากล่องข้อความครบ'));
+      if (sched) {
+        h += '<div class="dnd-times">' + L('ตั้งแต่') +
+          ' <input class="inp" type="time" data-act="dnd-from" value="' + R.esc(dnd.from) + '"> ' + L('ถึง') +
+          ' <input class="inp" type="time" data-act="dnd-to" value="' + R.esc(dnd.to) + '"></div>';
+      }
+      if (dnd.until && Date.parse(dnd.until) > Date.now()) {
+        var du = new Date(dnd.until);
+        h += '<div class="dnd-now">' + I('moon', 14) + '<span class="grow">' +
+          R.esc(L('ห้ามรบกวนถึง {t}', { t: R.fmtDate(S.iso(du)) + ' ' + R.fmtTime(du) })) + '</span>' +
+          '<button class="btn btn-sm" data-act="dnd-off">' + L('เลิกพัก') + '</button></div>';
+      }
       h += '<div class="prj-warn">' + I('alert', 15) + '<span>' +
         L('การแจ้งเตือนทางอีเมลยังไม่เปิด จะทำได้เมื่อเชื่อมต่อระบบส่วนกลางแล้ว ตอนนี้ทุกอย่างอยู่ในกล่องข้อความของแอป') +
         '</span></div>';
@@ -2990,6 +3263,21 @@
       /* ความเห็นแบบเธรด — แก้และลบได้เฉพาะของตัวเอง ตรวจซ้ำที่ store อีกชั้น */
       'send-reply', 'comment-reply', 'comment-edit', 'comment-save', 'comment-delete', 'comment-pin'
     ]);
+    /* 2a — งานใหม่จากงานของฉัน / ปฏิทิน เป็นงานส่วนตัวของคนสร้าง */
+    put('create', ['mt-add', 'mt-add-top', 'calx-add']);
+    put('write', ['notif-followup']);
+    put('write:task', ['make-public', 'do-make-public']);
+    /* ของส่วนตัว — เซกชันงานของฉัน มุมมองที่จำไว้ หน้าแรก สมุดโน้ต บุ๊กมาร์ก อ่านแล้ว ห้ามรบกวน
+     * การแจ้งเตือนรายโปรเจกต์ แก้ได้ทุกคนที่บัญชียังใช้งานได้ (รวมบทบาทดูอย่างเดียว)
+     * เพราะไม่ได้แตะงานหรือโปรเจกต์ของใคร */
+    put('self', [
+      'mt-sec-add', 'mt-sec-rename', 'mt-sec-move', 'mt-sec-delete', 'mt-mode', 'mt-set',
+      'mt-filter-clear', 'mt-sort-clear', 'calx-mode',
+      'home-edit', 'home-w-add', 'home-w-remove', 'home-w-move', 'home-w-size', 'home-w-reset', 'notepad',
+      'open-notif', 'notif-bookmark', 'notif-read', 'archive-notif', 'unarchive-notif',
+      'inbox-read-all', 'inbox-archive-all', 'inbox-sort-set', 'inbox-dense',
+      'dnd-set', 'dnd-off', 'dnd-sched', 'dnd-from', 'dnd-to', 'proj-notify'
+    ]);
     return map;
   })();
 
@@ -3027,6 +3315,7 @@
     var ok;
     if (need === "write:task") ok = S.can("write", actTaskId(el));
     else if (need === "create") ok = S.can("write");
+    else if (need === "self") ok = S.isActive();
     else if (need === "structure") {
       /* การแก้โครงสร้างเกิดขึ้นในบริบทของโปรเจกต์ที่เปิดอยู่
        * จึงต้องผ่านสิทธิ์ของโปรเจกต์นั้นด้วย ไม่ใช่แค่บทบาทระดับองค์กร */
@@ -3055,7 +3344,8 @@
          'project-menu', 'status-menu', 'g-zoom-menu', 'g-views-menu', 'pf-menu', 'pf-status',
          'view-menu', 'toggle-view', 'add-menu', 'react-menu',
          'add-tag', 'tag-search', 'sub-dates', 'sub-assign',
-         'sub-start', 'sub-due', 'comment-menu', 'dw-field-multi'].indexOf(el.dataset.act) < 0) {
+         'sub-start', 'sub-due', 'comment-menu', 'dw-field-multi',
+         'mt-filter', 'mt-sort', 'mt-group', 'inbox-filter', 'inbox-sort', 'dnd-menu'].indexOf(el.dataset.act) < 0) {
       if (!e.target.closest || !e.target.closest('.pop')) closePops();
     }
 
@@ -4073,25 +4363,298 @@
 
       /* --- inbox --- */
       case 'inbox-tab':
-        state.inboxArchived = el.dataset.archived === '1';
+        state.inbox.tab = el.dataset.tab || 'activity';
         renderViewBody();
         break;
       case 'open-notif': {
         S.markRead(id);
         var tid = el.dataset.task;
-        if (S.task(tid)) { openTask(tid); break; }
+        if (tid && S.task(tid)) { openTask(tid); break; }
         /* สรุปรายสัปดาห์ไม่ได้ชี้งานชิ้นเดียว พาไปหน้างานของฉัน */
         if (el.dataset.route === 'mytasks') {
           state.route = { type: 'mytasks' }; clearSel(); renderAll(); break;
         }
-        /* ประกาศของโปรเจกต์พาไปที่หน้าประกาศของโปรเจกต์นั้น */
+        /* ประกาศพาไปหน้าประกาศ การรายงานสถานะพาไปหน้าภาพรวมของโปรเจกต์ */
         var npid = el.dataset.project;
-        if (npid && S.project(npid)) goProject(npid, 'messages');
+        if (npid && S.project(npid)) goProject(npid, el.dataset.route === 'p-overview' ? 'overview' : 'messages');
         break;
       }
       case 'archive-notif': e.stopPropagation(); S.archiveNotification(id); break;
+      case 'unarchive-notif': e.stopPropagation(); S.unarchiveNotification(id); break;
+      case 'notif-bookmark': {
+        e.stopPropagation();
+        var bm = S.toggleBookmark(id);
+        if (bm !== null) toast(bm ? L('บุ๊กมาร์กไว้แล้ว ดูได้ที่แท็บบุ๊กมาร์ก') : L('เอาบุ๊กมาร์กออกแล้ว'));
+        break;
+      }
+      case 'notif-read': {
+        e.stopPropagation();
+        var nr = S.notification(id);
+        if (nr) S.setNotifRead(id, !nr.read);
+        break;
+      }
+      case 'notif-followup':
+        e.stopPropagation();
+        if (S.task(id)) openModal(followUpModal(id));
+        break;
       case 'inbox-read-all': S.markAllRead(S.db.currentUserId); break;
-      case 'inbox-archive-all': S.archiveAll(S.db.currentUserId); toast(L('เก็บทั้งหมดแล้ว')); break;
+      case 'inbox-archive-all': {
+        if (state.inbox.tab === 'archive') { toast(L('รายการในแท็บนี้เก็บไว้แล้ว')); break; }
+        /* เก็บเฉพาะที่เห็นอยู่ตามแท็บและตัวกรอง ไม่ใช่ทุกอย่างที่ซ่อนอยู่หลังตัวกรอง */
+        var allIds = S.inboxList(null, inboxOpts()).map(function (x) { return x.id; });
+        if (!allIds.length) { toast(L('ไม่มีรายการให้เก็บ')); break; }
+        S.archiveAll(S.db.currentUserId, allIds);
+        toast(L('เก็บ {n} รายการแล้ว', { n: allIds.length }), L('ย้อนกลับ'), 'undo');
+        break;
+      }
+      case 'inbox-filter': {
+        if (popIsOpenFor(el)) { closePops(); break; }
+        var ifp = openPop(el, inboxFilterPop());
+        if (ifp) ifp.classList.add('pop-tall');
+        break;
+      }
+      case 'inbox-f': {
+        var fk = el.dataset.k, fv = el.dataset.v;
+        if (fk === 'from' || fk === 'project') state.inbox.f[fk] = state.inbox.f[fk] === fv ? '' : fv;
+        else state.inbox.f[fk] = !state.inbox.f[fk];
+        renderViewBody();
+        var ipop = el.closest('.pop');
+        if (ipop) ipop.innerHTML = inboxFilterPop();
+        break;
+      }
+      case 'inbox-unfilter':
+        state.inbox.f[el.dataset.k] = (el.dataset.k === 'from' || el.dataset.k === 'project') ? '' : false;
+        renderViewBody();
+        break;
+      case 'inbox-filter-clear':
+        e.stopPropagation();
+        closePops();
+        state.inbox.f = {};
+        renderViewBody();
+        break;
+      case 'inbox-sort': {
+        if (popIsOpenFor(el)) { closePops(); break; }
+        var cur = S.personalOf().inbox.sort === 'relevance' ? 'relevance' : 'new';
+        openPop(el, [['new', L('ใหม่สุดก่อน')], ['relevance', L('เกี่ยวข้องที่สุด')]].map(function (x) {
+          return '<button data-act="inbox-sort-set" data-v="' + x[0] + '"' + (cur === x[0] ? ' class="on"' : '') + '>' +
+            '<span class="pop-check">' + (cur === x[0] ? I('check', 13) : '') + '</span>' +
+            '<span class="grow">' + R.esc(x[1]) + '</span></button>';
+        }).join('') + '<div class="pop-note">' +
+          R.esc(L('เกี่ยวข้องที่สุด = ยังไม่อ่านก่อน แล้วเรียงตามความสำคัญ (พูดถึงฉัน มอบหมาย อนุมัติ ปลดล็อก กำหนดส่ง)')) + '</div>');
+        break;
+      }
+      case 'inbox-sort-set': closePops(); S.setInboxPref('sort', el.dataset.v); break;
+      case 'inbox-dense': S.setInboxPref('dense', el.dataset.v === '1'); break;
+      case 'go-inbox':
+        state.route = { type: 'inbox' }; clearSel(); renderAll();
+        break;
+
+      /* --- ห้ามรบกวน --- */
+      case 'dnd-menu': {
+        if (popIsOpenFor(el)) { closePops(); break; }
+        var dh = '<div class="pop-note strong">' + R.esc(L('หยุดการแจ้งเตือนชั่วคราว')) + '</div>';
+        [['30', 'นาน 30 นาที'], ['60', 'นาน 1 ชั่วโมง'], ['120', 'นาน 2 ชั่วโมง'], ['240', 'นาน 4 ชั่วโมง'],
+         ['480', 'นาน 8 ชั่วโมง'], ['tomorrow', 'ถึงพรุ่งนี้ 8 โมงเช้า']].forEach(function (x) {
+          dh += '<button data-act="dnd-set" data-v="' + x[0] + '">' + I('moon', 14) +
+            '<span class="grow">' + R.esc(L(x[1])) + '</span></button>';
+        });
+        var dcur = S.dndOf();
+        if (dcur.until && Date.parse(dcur.until) > Date.now()) {
+          dh += '<div class="pop-sep"></div><button data-act="dnd-off">' + I('bell', 14) +
+            '<span class="grow">' + R.esc(L('เลิกพักตอนนี้')) + '</span></button>';
+        }
+        dh += '<div class="pop-sep"></div><button data-act="open-settings" data-tab="notify">' + I('settings', 14) +
+          '<span class="grow">' + R.esc(L('ตั้งช่วงห้ามรบกวนประจำวัน…')) + '</span></button>';
+        openPop(el, dh);
+        break;
+      }
+      case 'dnd-set': {
+        closePops();
+        var dv = el.dataset.v, until;
+        if (dv === 'tomorrow') {
+          until = new Date();
+          until.setDate(until.getDate() + 1);
+          until.setHours(8, 0, 0, 0);
+        } else until = new Date(Date.now() + (+dv) * 60000);
+        S.setDnd({ until: until.toISOString() });
+        toast(L('ห้ามรบกวนถึง {t}', { t: R.fmtDate(S.iso(until)) + ' ' + R.fmtTime(until) }));
+        break;
+      }
+      case 'dnd-off':
+        closePops();
+        S.setDnd({ until: null });
+        toast(S.isDnd() ? L('ยังอยู่ในช่วงห้ามรบกวนประจำวันที่ตั้งไว้') : L('เลิกพักการแจ้งเตือนแล้ว'));
+        break;
+      case 'dnd-sched': {
+        var ds0 = S.dndOf();
+        if (ds0.from && ds0.to) S.setDnd({ from: null, to: null });
+        else S.setDnd({ from: '18:00', to: '08:00' });
+        openModal(settingsModal('notify'), true);
+        break;
+      }
+
+      /* --- การแจ้งเตือนรายโปรเจกต์ --- */
+      case 'proj-notify-menu':
+        closePops();
+        openModal(projNotifyModal(id));
+        break;
+      case 'proj-notify': {
+        var pn = S.projNotifyOf(id);
+        S.setProjNotify(id, el.dataset.k, !pn[el.dataset.k]);
+        openModal(projNotifyModal(id));
+        break;
+      }
+
+      /* --- งานส่วนตัว → สาธารณะ --- */
+      case 'make-public':
+        openModal(makePublicModal(id));
+        break;
+      case 'do-make-public': {
+        var mpP = (document.getElementById('mpProject') || {}).value;
+        var mpS = (document.getElementById('mpSection') || {}).value;
+        if (!mpP || !S.project(mpP)) { toast(L('เลือกโปรเจกต์ก่อน')); break; }
+        if (!S.canInProject(mpP, 'edit')) { denyToast(); break; }
+        closeModal();
+        S.addTaskToProject(id, mpP, mpS || null);
+        toast(L('งานนี้อยู่ใน {p} แล้ว ทุกคนที่เห็นโปรเจกต์เห็นงานนี้ด้วย', { p: S.project(mpP).name }),
+          L('ย้อนกลับ'), 'undo');
+        break;
+      }
+
+      /* --- งานของฉัน --- */
+      case 'mt-mode':
+        clearSel();
+        S.mtSetView({ mode: el.dataset.v });
+        break;
+      case 'mt-filter':
+      case 'mt-sort':
+      case 'mt-group': {
+        if (popIsOpenFor(el)) { closePops(); break; }
+        var mkind = act.slice(3);
+        var mpop = openPop(el, mtPop(mkind));
+        if (mpop) { mpop.dataset.kind = mkind; if (mkind === 'filter') mpop.classList.add('pop-tall'); }
+        break;
+      }
+      case 'mt-set': {
+        var mk = el.dataset.k, mval = el.dataset.v;
+        var mv0 = S.personalOf().mt.view;
+        var mpatch = {};
+        mpatch[mk] = mval;
+        if (mk === 'sort') mpatch.dir = (mval === mv0.sort && mval !== 'manual' && mv0.dir === 'asc') ? 'desc' : 'asc';
+        S.mtSetView(mpatch);
+        var mp2 = el.closest('.pop');
+        if (mp2 && mp2.dataset.kind) mp2.innerHTML = mtPop(mp2.dataset.kind);
+        break;
+      }
+      case 'mt-filter-clear':
+        e.stopPropagation();
+        closePops();
+        S.mtSetView({ show: 'open', due: 'any', project: '' });
+        break;
+      case 'mt-sort-clear':
+        e.stopPropagation();
+        closePops();
+        S.mtSetView({ sort: 'manual', dir: 'asc' });
+        break;
+      case 'mt-collapse':
+        if (state.mt.collapsed[sectionId]) delete state.mt.collapsed[sectionId];
+        else state.mt.collapsed[sectionId] = true;
+        renderViewBody();
+        break;
+      case 'mt-sec-add':
+        askText(L('ชื่อเซกชันใหม่'), '', function (v) { if (v) S.mtAddSection(v); },
+          { ok: L('เพิ่มเซกชัน'), placeholder: L('เช่น ทำวันนี้ รอคนอื่น อ่านทีหลัง') });
+        break;
+      case 'mt-sec-rename': {
+        var msec = S.mtSection(sectionId);
+        if (!msec) break;
+        var msid = sectionId;
+        askText(L('เปลี่ยนชื่อเซกชัน'), msec.name ? L(msec.name) : L('เพิ่งได้รับมอบหมาย'), function (v) {
+          if (v) S.mtRenameSection(msid, v);
+        });
+        break;
+      }
+      case 'mt-sec-move': S.mtMoveSection(sectionId, +el.dataset.delta); break;
+      case 'mt-sec-delete': {
+        var dsec = S.mtSection(sectionId);
+        if (!dsec) break;
+        var dsid = sectionId;
+        askConfirm(L('ลบเซกชัน “{s}”?', { s: L(dsec.name) }),
+          L('งานในเซกชันนี้จะกลับไปอยู่ “{r}” ไม่มีงานไหนถูกลบ', { r: recentLabel() }), function () {
+            S.mtDeleteSection(dsid);
+            toast(L('ลบเซกชันแล้ว'), L('ย้อนกลับ'), 'undo');
+          }, { ok: L('ลบ') });
+        break;
+      }
+      case 'mt-add': mtInlineAdd(el, sectionId); break;
+      case 'mt-add-top':
+        askText(L('ชื่องานใหม่'), '', function (v) {
+          if (!v) return;
+          var mmade = S.mtCreateTasks([v], S.MT_RECENT);
+          if (mmade[0]) openTask(mmade[0].id);
+        }, { ok: L('เพิ่มงาน'), pasteCtx: { mtSection: S.MT_RECENT },
+             note: L('งานที่สร้างจากงานของฉันเป็นงานส่วนตัว เห็นเฉพาะคุณจนกว่าจะเพิ่มเข้าโปรเจกต์') });
+        break;
+
+      /* --- ปฏิทินสัปดาห์/เดือน (R.calBoard) ใช้ได้ทุกขอบเขต --- */
+      case 'calx-nav': {
+        var cxs = calxScope(el), cx = calxGet(cxs);
+        var cd = +el.dataset.d;
+        calxSet(cxs, { anchor: !cd ? S.today()
+          : cx.mode === 'month' ? S.addMonths(cx.anchor, cd) : S.addDays(cx.anchor, 7 * cd) });
+        break;
+      }
+      case 'calx-mode': calxSet(calxScope(el), { mode: el.dataset.v }); break;
+      case 'calx-day': calxSet(calxScope(el), { mode: 'week', anchor: el.dataset.date }); break;
+      case 'calx-add': {
+        var cxa = calxScope(el), cdate = el.dataset.date;
+        if (cxa !== 'mt') break;            // ปฏิทินโปรเจกต์ (ชิ้นงาน 2b) จะเพิ่มทางของตัวเองที่นี่
+        askText(L('งานใหม่ ครบกำหนด {d}', { d: R.fmtDate(cdate) }), '', function (v) {
+          if (v) S.mtCreateTasks([v], S.MT_RECENT, { dueOn: cdate });
+        }, { ok: L('เพิ่มงาน'), pasteCtx: { mtSection: S.MT_RECENT, extra: { dueOn: cdate } } });
+        break;
+      }
+
+      /* --- หน้าแรก --- */
+      case 'home-edit':
+        state.home.edit = !state.home.edit;
+        renderViewBody();
+        break;
+      case 'home-w-add': {
+        var hla = S.homeLayout();
+        hla.push({ w: el.dataset.w, full: false });
+        S.setHomeLayout(hla);
+        break;
+      }
+      case 'home-w-remove': {
+        var hlr = S.homeLayout();
+        hlr.splice(+el.dataset.i, 1);
+        S.setHomeLayout(hlr);
+        toast(L('เอาวิดเจ็ตออกแล้ว'), L('ย้อนกลับ'), 'undo');
+        break;
+      }
+      case 'home-w-move': {
+        var hlm = S.homeLayout(), hi = +el.dataset.i, hj = hi + (+el.dataset.d);
+        if (hj < 0 || hj >= hlm.length) break;
+        var htmp = hlm[hi]; hlm[hi] = hlm[hj]; hlm[hj] = htmp;
+        S.setHomeLayout(hlm);
+        break;
+      }
+      case 'home-w-size': {
+        var hls = S.homeLayout(), hk = +el.dataset.i;
+        if (!hls[hk]) break;
+        hls[hk].full = !hls[hk].full;
+        S.setHomeLayout(hls);
+        break;
+      }
+      case 'home-w-reset':
+        S.setHomeLayout(null);
+        toast(L('คืนหน้าแรกเป็นค่าเริ่มต้นแล้ว'), L('ย้อนกลับ'), 'undo');
+        break;
+      case 'go-project-view':
+        closeSidebar();
+        goProject(id, el.dataset.view);
+        break;
 
       /* --- sections --- */
       case 'add-section': {
@@ -4909,6 +5472,21 @@
     if (act === 'photo-file') { takePhoto(el); return; }
     if (act === 'att-file') { takeAttachment(el); return; }
 
+    /* 2a — เลือกโปรเจกต์ตอนทำงานส่วนตัวให้เป็นสาธารณะ แล้วเปลี่ยนรายการคอลัมน์ตาม */
+    if (act === 'mp-project') {
+      var mps = document.getElementById('mpSection');
+      if (mps) mps.innerHTML = sectionOptions(el.value);
+      return;
+    }
+    if (act === 'dnd-from' || act === 'dnd-to') {
+      var dpatch = {};
+      dpatch[act === 'dnd-from' ? 'from' : 'to'] = el.value || null;
+      S.setDnd(dpatch);
+      openModal(settingsModal('notify'), true);
+      return;
+    }
+    if (act === 'notepad') { clearTimeout(noteTimer); S.setNotepad(el.value); return; }
+
     /* วันของงานย่อย บันทึกทันทีที่เลือก แล้ววาดใหม่ทั้งหน้าให้แถวอัปเดตตาม
      * เมนูยังเปิดค้างไว้ เพื่อให้ตั้งอีกวันต่อได้โดยไม่ต้องกดเปิดใหม่ */
     if (act === 'sub-start' || act === 'sub-due') {
@@ -5033,8 +5611,24 @@
     }
   });
 
+  /* สมุดโน้ตส่วนตัวบันทึกเองหลังหยุดพิมพ์ครู่หนึ่ง (และตอนออกจากช่องผ่าน change) */
+  var noteTimer = null;
+  global.addEventListener('beforeunload', function () {
+    var n = document.querySelector('.hnote');
+    if (n && noteTimer) { clearTimeout(noteTimer); noteTimer = null; S.setNotepad(n.value); }
+  });
+
   document.addEventListener('input', function (e) {
     if (e.target.classList && e.target.classList.contains('dw-title')) autoGrow(e.target);
+
+    if (e.target.classList && e.target.classList.contains('hnote')) {
+      var noteEl = e.target;
+      clearTimeout(noteTimer);
+      noteTimer = setTimeout(function () {
+        if (S.isActive()) S.setNotepad(noteEl.isConnected ? noteEl.value : (($view.querySelector('.hnote') || {}).value || ''));
+      }, 900);
+      return;
+    }
 
     if (e.target.id === 'depSearch') {
       var box = document.getElementById('depResults');
@@ -5115,7 +5709,8 @@
     var ctx = null;
     if (el.id === 'subAdd') ctx = { parentId: el.dataset.id };
     else if (el.classList.contains('inline-add-input')) {
-      ctx = { projectId: el.dataset.project, sectionId: el.dataset.section };
+      ctx = el.dataset.mtsec ? { mtSection: el.dataset.mtsec }
+        : { projectId: el.dataset.project, sectionId: el.dataset.section };
     } else if (el.id === 'askInput' && askPasteCtx) ctx = askPasteCtx;
     if (!ctx) return;
     var cd = e.clipboardData || global.clipboardData;
@@ -5125,7 +5720,10 @@
     if (!S.can('write', ctx.parentId || null)) { denyToast(); return; }
     var preview = lines.slice(0, 5).join(' · ') + (lines.length > 5 ? ' · …' : '');
     askConfirm(L('สร้าง {n} งานจากข้อความที่วาง?', { n: lines.length }), preview, function () {
-      var made = S.createTasks(lines, ctx.projectId || null, ctx.sectionId || null, ctx.parentId || null);
+      /* วางในงานของฉัน = งานส่วนตัวมอบให้ตัวเองทั้งชุด ลงเซกชันที่พิมพ์อยู่ */
+      var made = ctx.mtSection
+        ? S.mtCreateTasks(lines, ctx.mtSection, ctx.extra)
+        : S.createTasks(lines, ctx.projectId || null, ctx.sectionId || null, ctx.parentId || null);
       toast(L('สร้าง {n} งานแล้ว', { n: made.length }), L('ย้อนกลับ'), 'undo');
     }, { ok: L('สร้าง {n} งาน', { n: lines.length }), safe: true });
   });
@@ -5260,6 +5858,13 @@
         askText(L('ชื่องานใหม่'), '', function (v) {
           if (v) openTask(S.createTask({ name: v }, qp2.id, qp2.sections[0].id).id);
         }, { ok: L('เพิ่มงาน'), pasteCtx: { projectId: qp2.id, sectionId: qp2.sections[0].id } });
+      } else if (k === 'q' && state.route.type === 'mytasks') {
+        /* Tab+Q ในงานของฉัน = งานส่วนตัวใหม่ ลง "เพิ่งได้รับมอบหมาย" */
+        if (!S.can('write')) { denyToast(); return; }
+        askText(L('ชื่องานใหม่'), '', function (v) {
+          var mq = v ? S.mtCreateTasks([v], S.MT_RECENT) : [];
+          if (mq[0]) openTask(mq[0].id);
+        }, { ok: L('เพิ่มงาน'), pasteCtx: { mtSection: S.MT_RECENT } });
       } else if (k === 'm' && state.openTaskId) {
         if (!S.can('write', state.openTaskId)) { denyToast(); return; }
         S.updateTask(state.openTaskId, { assigneeId: S.db.currentUserId });
@@ -5660,8 +6265,122 @@
       } else toast(L('ย้ายไม่ได้ — งานที่เลือกเป็นงานย่อยของงานนี้อยู่แล้ว'));
       return;
     }
+    /* งานของฉัน — ย้ายเข้าเซกชันส่วนตัว ไม่แตะคอลัมน์ของโปรเจกต์ */
+    if (state.route.type === 'mytasks') {
+      if (S.mtMove(movingId, toSection, beforeId !== movingId ? beforeId : null)) {
+        var msec = S.mtSection(toSection);
+        toast(L('ย้ายไป “{s}” แล้ว', { s: msec && msec.name ? L(msec.name) : recentLabel() }),
+          L('ย้อนกลับ'), 'undo');
+      }
+      return;
+    }
     if (state.route.type !== 'project') return;
     S.moveTask(movingId, state.route.id, toSection, beforeId);
+  });
+
+  /* ---------- ลากในปฏิทินสัปดาห์/เดือน (R.calBoard) ----------
+   * ลากแถบหรือรายการ "ยังไม่มีวัน" ลงวัน — เลื่อนทั้งแท่งเท่ากับระยะที่ลาก (จับกลางแถบก็ไม่กระโดด)
+   * ลากกลับไปแถบข้าง = เอาวันออก ทุกอย่างย้อนกลับได้ */
+  var calDrag = null;
+
+  document.addEventListener('dragstart', function (e) {
+    if (isTouch()) return;
+    var el = e.target.closest ? e.target.closest('.calx-drag') : null;
+    if (!el) return;
+    if (!S.can('write', el.dataset.id)) { e.preventDefault(); denyToast(); return; }
+    var row = el.closest('.calx-row');
+    calDrag = { id: el.dataset.id, grab: row ? calxDateAt(row, e.clientX) : null };
+  });
+
+  document.addEventListener('dragend', function () {
+    calDrag = null;
+    clearCalMarks();
+  });
+
+  function clearCalMarks() {
+    Array.prototype.forEach.call(document.querySelectorAll('.calx-day.drop-day, .calx-side.drop-side'),
+      function (x) { x.classList.remove('drop-day', 'drop-side'); });
+  }
+
+  document.addEventListener('dragover', function (e) {
+    if (!calDrag) return;
+    var row = e.target.closest ? e.target.closest('.calx-row') : null;
+    var side = !row && e.target.closest ? e.target.closest('.calx-side') : null;
+    if (!row && !side) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    clearCalMarks();
+    if (side) { side.classList.add('drop-side'); return; }
+    var col = S.daysBetween(row.dataset.start, calxDateAt(row, e.clientX));
+    var cell = row.querySelectorAll('.calx-day')[col];
+    if (cell) cell.classList.add('drop-day');
+  });
+
+  document.addEventListener('drop', function (e) {
+    if (!calDrag) return;
+    var row = e.target.closest ? e.target.closest('.calx-row') : null;
+    var side = !row && e.target.closest ? e.target.closest('.calx-side') : null;
+    if (!row && !side) return;
+    e.preventDefault();
+    var cdg = calDrag;
+    calDrag = null;
+    clearCalMarks();
+    lastDragEnd = Date.now();
+    var t = S.task(cdg.id);
+    if (!t) return;
+    if (side) {
+      if (S.moveTaskDates(t.id, null)) toast(L('เอาวันออกแล้ว'), L('ย้อนกลับ'), 'undo');
+      return;
+    }
+    var dropAt = calxDateAt(row, e.clientX);
+    var end = t.dueOn || t.startOn;
+    var nd = end && cdg.grab ? S.addDays(end, S.daysBetween(cdg.grab, dropAt)) : dropAt;
+    if (S.moveTaskDates(t.id, nd)) {
+      toast(L('ครบกำหนด {d} แล้ว', { d: R.fmtDate(nd) }), L('ย้อนกลับ'), 'undo');
+    }
+  });
+
+  /* ---------- ลากสลับวิดเจ็ตบนหน้าแรก (โหมดปรับแต่ง) ---------- */
+  var homeDrag = null;
+
+  document.addEventListener('dragstart', function (e) {
+    var card = e.target.closest ? e.target.closest('.home-grid2.editing .hcard[data-w]') : null;
+    if (!card) return;
+    homeDrag = +card.dataset.i;
+    card.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', card.dataset.w); } catch (err) { /* ie */ }
+  });
+
+  document.addEventListener('dragend', function () {
+    homeDrag = null;
+    Array.prototype.forEach.call(document.querySelectorAll('.hcard.dragging, .hcard.drop-at'),
+      function (x) { x.classList.remove('dragging', 'drop-at'); });
+  });
+
+  document.addEventListener('dragover', function (e) {
+    if (homeDrag === null) return;
+    var card = e.target.closest ? e.target.closest('.home-grid2.editing .hcard[data-w]') : null;
+    if (!card) return;
+    e.preventDefault();
+    Array.prototype.forEach.call(document.querySelectorAll('.hcard.drop-at'),
+      function (x) { x.classList.remove('drop-at'); });
+    if (+card.dataset.i !== homeDrag) card.classList.add('drop-at');
+  });
+
+  document.addEventListener('drop', function (e) {
+    if (homeDrag === null) return;
+    var card = e.target.closest ? e.target.closest('.home-grid2.editing .hcard[data-w]') : null;
+    var from = homeDrag;
+    homeDrag = null;
+    if (!card) return;
+    e.preventDefault();
+    var to = +card.dataset.i;
+    if (to === from || !S.isActive()) return;
+    var hl = S.homeLayout();
+    var moved = hl.splice(from, 1)[0];
+    hl.splice(to, 0, moved);
+    S.setHomeLayout(hl);
   });
 
   /* ---------- บัญชีบริษัท ---------- */
@@ -5742,7 +6461,7 @@
   }
 
   /* ข้อมูลถูกแทนทั้งก้อนจากส่วนกลาง — ต้องวาดใหม่ ไม่งั้นหน้าจอค้างที่ของเก่า */
-  global.addEventListener('orbit:replaced', function () { renderAll(); });
+  global.addEventListener('orbit:replaced', function () { renderAll(); noticeNewInbox(); });
 
   /* ปิดหน้าต่างระหว่างที่ยังส่งไม่เสร็จ = งานหาย ต้องรีบส่งก่อน */
   global.addEventListener('beforeunload', function (e) {
@@ -5795,12 +6514,13 @@
 
   if (boot && !useLanding) {
     state.route = boot.route;
-    state.openTaskId = boot.taskId && S.task(boot.taskId) ? boot.taskId : null;
+    state.openTaskId = boot.taskId && S.task(boot.taskId) && S.canSeeTask(boot.taskId) ? boot.taskId : null;
     focusStory(boot.storyId);
   } else if (useLanding && land !== 'home') {
     state.route = { type: land };
   }
   renderAll();
+  noticeNewInbox();          // จำจำนวนที่ยังไม่อ่านตอนเปิดแอปไว้เป็นฐาน ไม่เด้งของเก่า
   bootAccount();
 
   /* เตือนกำหนดส่ง — ตอนเปิดแอปและทุกชั่วโมงที่เปิดค้างไว้ (ไม่มีเซิร์ฟเวอร์คอยปลุก)
