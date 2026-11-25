@@ -178,7 +178,19 @@
 | POST | `/api/inbox/archive` | ตัวเอง | `ids[]` เก็บเฉพาะที่เห็นอยู่ตามตัวกรอง |
 | PUT | `/api/me/dnd` | ตัวเอง | ห้ามรบกวน `{until, from, to}` — ยังสร้างแจ้งเตือนตามปกติ แค่ไม่เด้ง/ไม่ขึ้นตัวเลข |
 | PUT | `/api/projects/{id}/my-notify` | R ในโปรเจกต์ | `{status, messages, newTasks}` เฉพาะตัวเอง · สมาชิกได้สถานะ/ประกาศเป็นค่าเริ่มต้น งานใหม่ปิดไว้ |
-| GET | `/api/search?q=` | ทุกคน | **ค้นเฉพาะในโปรเจกต์ที่มองเห็น** — จุดรั่วที่พบบ่อยที่สุด |
+| GET | `/api/search?q=` | ทุกคน | **ค้นเฉพาะในโปรเจกต์ที่มองเห็น** — จุดรั่วที่พบบ่อยที่สุด · `q` รองรับ `"วลี"` `a \| b` (หรือ `OR`) `-คำ` `คำ*` `( )` และรหัสงาน `REQ-12` · `conds` = JSON เงื่อนไขชุดเดียวกับตัวกรองของมุมมอง บวก `project psection assignedBy followers attachment blocking subtask` · งานส่วนตัวของคนอื่นไม่คืน (2c) |
+| GET · POST · PUT · DELETE | `/api/me/saved-searches` | ตัวเอง | การค้นหาที่บันทึกไว้ (`saved_searches`) สูงสุด 50 |
+| GET | `/api/tags/{name}/tasks` | ทุกคน | งานที่มีแท็กนี้และผู้เรียกมองเห็น |
+| PUT · DELETE | `/api/tags/{name}` | ST | เปลี่ยนชื่อ (ชื่อซ้ำ = รวมแท็ก) / เอาออกจากทุกงาน · ลง audit `tag.rename` `tag.delete` |
+| GET · POST · PUT · DELETE | `/api/field-library` | ST (อ่าน: ทุกคน) | คลังฟิลด์ขององค์กร · แก้แล้ว `custom_fields` ที่อ้าง `library_field_id` เปลี่ยนตาม · ลง audit `field.lib-*` |
+| GET | `/api/tasks/by-code/{code}` | ทุกคน | หางานจากรหัส `REQ-12` (ใช้กับ @อ้างถึง) — **ต้องกรองด้วย `fn_VisibleTasks`** |
+| POST | `/api/projects/{id}/import` | E + ST | CSV + `map[]` ต่อคอลัมน์ (`name notes section assignee assigneeEmail collaborators start due priority type tags blockedBy dependents parent completed field:<id> new:<type> ignore`) · ลง audit |
+| GET | `/api/projects/{id}/export.json` · `/export.ics` | R | โปรเจกต์เดียว (งาน งานย่อย ค่าฟิลด์ ความเห็น) / ปฏิทินกิจกรรมทั้งวันของงานที่ยังไม่เสร็จ · ลง audit `project.export` |
+| GET | `/api/me/tasks.ics` | ตัวเอง | ปฏิทินงานของฉันที่มีวันและยังไม่เสร็จ |
+| PUT | `/api/projects/{id}/roles` | E + ST | `{userId: "บทบาท"}` ข้อความอิสระ ไม่ใช่สิทธิ์ |
+| POST | `/api/projects/{id}/access-requests` | ทุกคนที่ยังเข้าไม่ได้ | สร้างงานคำขอมอบให้เจ้าของ (ไม่มี = ผู้ดูแลโปรเจกต์ → ผู้ดูแลระบบ) · คำขอละหนึ่งต่อคน · ลง audit |
+| POST | `/api/projects/{id}/access-requests/{userId}` | PA / เจ้าของ / OA | `{grant, access}` เพิ่มสมาชิกแล้วปิดงานคำขอ |
+| POST | `/api/tasks/{id}/convert-to-project` | E + ST | ชื่อ → โปรเจกต์ ผู้รับผิดชอบ → เจ้าของ ผู้ติดตาม → สมาชิก งานย่อย → งาน · โปรเจกต์ปิดถ้างานต้นทางเป็นงานส่วนตัวหรืออยู่ในโปรเจกต์ปิด |
 | GET | `/api/calendar` | ทุกคน | รวมทุกโปรเจกต์ที่มองเห็น |
 
 `/api/home` รวมทุกอย่างไว้ในคำขอเดียวโดยตั้งใจ ถ้าแยกเป็นห้าคำขอ หน้าแรกจะเปิด

@@ -518,6 +518,13 @@
     });
     out = out.slice(0, ql ? 4 : 6);
     if (!ql) return out;
+    /* 2c — รหัสงาน @REQ-12 ขึ้นก่อนทุกอย่าง (findByCode กรองงานที่มองไม่เห็นออกแล้ว) */
+    if (S.findByCode && /^[a-z0-9]+-\d+$/i.test(ql)) {
+      var coded = S.findByCode(ql).slice(0, 3).map(function (t) {
+        return { kind: 'task', id: t.id, name: t.name, t: t, code: ql.toUpperCase() };
+      });
+      if (coded.length) return coded.concat(out);
+    }
     var projs = (S.visibleProjects ? S.visibleProjects() : S.db.projects).filter(function (p) {
       return !p.archived && p.name.toLowerCase().indexOf(ql) >= 0;
     }).slice(0, 3);
@@ -571,7 +578,7 @@
     } else {
       lead = '<span class="mi">' + (it.t.completed ? '✓' : '○') + '</span>';
       var homes = S.projectsOfTask(it.id);
-      sub = homes.length ? homes[0].project.name : L('งาน');
+      sub = (it.code ? it.code + ' · ' : '') + (homes.length ? homes[0].project.name : L('งาน'));
     }
     return '<button type="button" data-mi="' + i + '" class="' + (i === mention.i ? 'on' : '') + '">' +
       lead + '<span class="grow">' + esc(it.name) + '</span>' +

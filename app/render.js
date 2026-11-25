@@ -240,6 +240,18 @@
       h += '</div>';
     }
 
+    /* 2c — การค้นหาที่บันทึกไว้ของแต่ละคน ไม่มีก็ไม่มีหัวข้อ (ทางเข้าค้นหาขั้นสูงอยู่ที่ช่องค้นหาด้านบน) */
+    var saved = S.savedSearches();
+    if (saved.length) {
+      h += '<div class="sb-section"><div class="sb-label">' + L('การค้นหาที่บันทึก') + '</div>';
+      saved.forEach(function (s) {
+        h += '<button class="sb-item' + (route.type === 'search' && route.ss === s.id ? ' active' : '') +
+          '" data-act="open-ss" data-id="' + esc(s.id) + '">' + I(s.mode === 'calendar' ? 'calendar' : 'search') +
+          '<span class="grow">' + esc(s.name) + '</span></button>';
+      });
+      h += '</div>';
+    }
+
     h += '<div class="sb-section">';
     h += '<div class="sb-label"><button class="sb-labelbtn" data-act="go" data-route="projects" title="' +
       L('ดูโปรเจกต์ทั้งหมด') + '">' + L('โปรเจกต์') + '</button>' +
@@ -401,7 +413,13 @@
     } else if (route.type === 'trash') {
       h += '<div class="tb-title">' + I('trash', 20) + ' ' + L('ถังขยะ') + '</div>';
     } else if (route.type === 'search') {
-      h += '<div class="tb-title">' + L('ผลการค้นหา “') + esc(route.q) + '”</div>';
+      var ssT = route.ss ? S.savedSearch(route.ss) : null;
+      h += '<div class="tb-title">' + I('search', 18) + ' ' + (ssT ? esc(ssT.name)
+        : route.q ? L('ผลการค้นหา “') + esc(route.q) + '”' : L('ค้นหาขั้นสูง')) + '</div>';
+    } else if (route.type === 'tag') {
+      h += '<div class="tb-title"><span class="chip tag tb-tagchip">#' + esc(route.name) + '</span></div>';
+    } else if (route.type === 'noaccess') {
+      h += '<div class="tb-title">' + I('lock', 18) + ' ' + L('โปรเจกต์ปิด') + '</div>';
     }
 
     h += '<div class="tb-spacer"></div>';
@@ -409,7 +427,8 @@
     h += syncChip();
     h += '<div class="search">' + ICON.search +
          '<input id="searchInput" type="search" placeholder="' + L('ค้นหางาน…  (/)') + '" value="' +
-         esc(route.type === 'search' ? route.q : '') + '"></div>';
+         esc(route.type === 'search' ? route.q : '') + '">' +
+         '<button class="search-adv" data-act="adv-open" title="' + L('ค้นหาขั้นสูง') + '">' + I('filter', 13) + '</button></div>';
 
     if (route.type === 'project') {
       /* มุมมองที่มีแถบเครื่องมือ มีปุ่มเพิ่มงานอยู่ที่นั่นแล้ว
@@ -419,6 +438,9 @@
       }
       h += '<button class="btn btn-ghost" data-act="project-menu" data-id="' +
            esc(route.id) + '" title="' + L('เมนูโปรเจกต์') + '">' + I('more') + '</button>';
+    } else if (route.type === 'mytasks') {
+      h += '<button class="btn btn-ghost" data-act="mt-ics" title="' + L('ดาวน์โหลดปฏิทิน .ics ของงานที่มีวัน') + '">' +
+        I('calendar', 14) + '<span class="hide-sm">.ics</span></button>';
     } else if (route.type === 'inbox') {
       var dndOn = S.isDnd();
       h += '<button class="btn' + (dndOn ? ' btn-dnd-on' : '') + '" data-act="dnd-menu" title="' +
@@ -625,9 +647,13 @@
     }
     if (t.attachments.length) h += '<span class="chip">' + I('paperclip', 11) + ' ' + t.attachments.length + '</span>';
     if (t.likes.length) h += '<span class="chip">' + I('heart', 11) + ' ' + t.likes.length + '</span>';
-    t.tags.forEach(function (tg) { h += '<span class="chip tag">' + esc(tg) + '</span>'; });
+    /* แท็กกดแล้วไปหน้าแท็ก (#/tag/<ชื่อ>) */
+    t.tags.forEach(function (tg) {
+      h += '<button class="chip tag" data-act="go-tag" data-tag="' + esc(tg) + '">' + esc(tg) + '</button>';
+    });
 
     if (opts && opts.showProject) {
+      S.taskCodes(t).forEach(function (c) { h += '<span class="chip chip-code">' + esc(c) + '</span>'; });
       S.projectsOfTask(t.id).forEach(function (x) {
         h += '<span class="chip"><span class="swatch" style="background:' +
           esc(x.project.color) + '"></span>' + esc(x.project.name) + '</span>';
@@ -824,6 +850,7 @@
                : '<span class="cell-empty">—</span>';
     }
     if (f.type === 'date') return '<span class="cell-txt">' + fmtDate(v) + '</span>';
+    if (f.type === 'id') return '<span class="cell-txt code">' + esc(S.fieldText(f, v)) + '</span>';
     if (f.type === 'number') {
       return '<span class="cell-txt num">' + esc(S.formatNumber(f, v)) + '</span>';
     }
@@ -926,7 +953,9 @@
     h += '</div>';
 
     cols.forEach(function (c) {
-      if (c.field) {
+      if (c.field && c.field.type === 'id') {
+        h += '<div class="td td-ro">' + fieldCell(t, c.field) + '</div>';   // รหัสงานออกเลขเอง แก้ไม่ได้
+      } else if (c.field) {
         h += '<div class="td td-edit" data-act="edit-cell" data-cell="field" data-id="' + esc(t.id) +
           '" data-field="' + esc(c.field.id) + '">' + fieldCell(t, c.field) + '</div>';
       } else h += builtinCell(t, c);
@@ -945,7 +974,9 @@
       var f = c.field;
       var ft = S.FIELD_TYPES.filter(function (x) { return x.id === f.type; })[0];
       return '<div class="th th-field th-sortable" data-act="sort-col" data-key="field:' +
-        esc(f.id) + '" data-field="' + esc(f.id) + '">' + (ft ? I(ft.icon, 13) : '') +
+        esc(f.id) + '" data-field="' + esc(f.id) + '"' + (f.desc ? ' title="' + esc(f.desc) + '"' : '') + '>' +
+        (f.lib ? '<span class="th-lib" title="' + L('ฟิลด์จากคลังขององค์กร') + '">' + I('building', 11) + '</span>' : '') +
+        (ft ? I(ft.icon, 13) : '') +
         '<span class="th-nm">' + esc(f.name) + '</span>' + sortMark(view, 'field:' + f.id) +
         '<button class="th-menu" data-act="field-menu" data-field="' + esc(f.id) +
         '" title="' + L('เมนู') + '">' + I('chevronDown', 12) + '</button>' + resizer(f.id) + '</div>';
@@ -1486,10 +1517,11 @@
     } else {
       h += '<div class="ovw-people">';
       mem.forEach(function (m) {
+        var rl = (p.roles || {})[m.user.id];
         h += '<button class="prof-col" data-act="go-profile" data-id="' + esc(m.user.id) + '">' +
           avatar(m.user, 'md') + '<span class="grow"><b>' + esc(m.user.name) + '</b>' +
           '<em>' + esc(m.user.id === p.owner ? L('เจ้าของโปรเจกต์')
-                                             : accessLabel(m.access)) + '</em>' +
+                                             : accessLabel(m.access)) + (rl ? ' · ' + esc(rl) : '') + '</em>' +
           '</span></button>';
       });
       h += '</div>';
@@ -1497,6 +1529,23 @@
     if (owner && !mem.some(function (m) { return m.user.id === owner.id; })) {
       h += '<div class="ovw-kv"><span>' + L('เจ้าของโปรเจกต์') + '</span><b>' +
         esc(owner.name) + '</b></div>';
+    }
+    h += '</section>';
+
+    /* 2c — บทบาทในโปรเจกต์ ข้อความที่ทีมตั้งเอง (เช่น "ผู้อนุมัติงานออกแบบ") ไม่เกี่ยวกับสิทธิ์ */
+    var roles = S.projectRoles(p.id);
+    var canRole = S.can('structure') && S.canInProject(p.id, 'edit');
+    h += '<section class="ovw-card"><h3>' + L('บทบาทในโปรเจกต์') +
+      (canRole ? '<button class="as-link" data-act="project-roles" data-id="' + esc(p.id) + '">' +
+        L('แก้ไข') + '</button>' : '') + '</h3>';
+    if (!roles.length) {
+      h += '<div class="ovw-empty">' + L('ยังไม่ได้ตั้งบทบาท บอกทีมว่าใครดูแลเรื่องไหน เช่น ผู้อนุมัติ หรือผู้ประสานงาน') + '</div>';
+    } else {
+      h += '<div class="ovw-roles">';
+      roles.forEach(function (x) {
+        h += '<div class="ovw-role">' + avatar(x.user, 'sm') + '<b>' + esc(x.user.name) + '</b><em>' + esc(x.role) + '</em></div>';
+      });
+      h += '</div>';
     }
     h += '</section>';
     h += '</div></div>';
@@ -2913,9 +2962,15 @@
     field:   ['ฟิลด์', 'hash']
   };
 
-  function trashView() {
-    var list = S.trashItems();
+  function trashView(projectId) {
+    var list = S.trashItems(projectId || null);
     var h = '<div class="list-wrap trash-wrap">';
+    var tp = projectId ? S.project(projectId) : null;
+    if (projectId) {
+      h += '<div class="trash-filter">' + I('filter', 13) + '<span>' +
+        L('เฉพาะของที่ลบจากโปรเจกต์ {p}', { p: '<b>' + esc(tp ? tp.name : '?') + '</b>' }) + '</span>' +
+        '<button class="as-link" data-act="go" data-route="trash">' + L('ดูทั้งหมด') + '</button></div>';
+    }
     h += '<p class="trash-note">' + I('trash', 14) + '<span>' +
       L('ของที่ลบจะพักอยู่ที่นี่ {n} วัน แล้วถูกลบถาวรเอง', { n: S.TRASH_DAYS }) + ' ' +
       (S.isAdmin() ? L('ผู้ดูแลเห็นของที่ทุกคนลบ') : L('คุณเห็นเฉพาะของที่ตัวเองลบ')) + '</span></p>';
@@ -2951,18 +3006,90 @@
 
   /* ---------- search ---------- */
 
-  function searchView(q, sel) {
-    var res = S.search(q);
-    if (!res.length) {
-      return '<div class="empty"><div class="big">🔍</div>' + L('ไม่พบงานที่ตรงกับ “') + esc(q) + '”</div>';
+  /** วิธีใช้ตัวดำเนินการค้นหา — ใช้ทั้งหน้าว่างและปุ่ม ? */
+  function searchHelp() {
+    var rows = [['"ส่งของ ลาซาด้า"', L('ตรงทั้งวลี')], ['สบู่ | แชมพู', L('คำใดคำหนึ่ง (หรือพิมพ์ OR)')],
+      ['สบู่ -ตัวอย่าง', L('ไม่เอางานที่มีคำนี้')], ['launch*', L('คำที่ขึ้นต้นด้วย')],
+      ['(สบู่ | แชมพู) โปรโมชั่น', L('จัดกลุ่มด้วยวงเล็บ')], ['REQ-12', L('รหัสงาน')]];
+    return '<div class="adv-help">' + rows.map(function (r) {
+      return '<div><code>' + esc(r[0]) + '</code><span>' + esc(r[1]) + '</span></div>';
+    }).join('') + '</div>';
+  }
+
+  /**
+   * หน้าค้นหา (ค้นหาขั้นสูง) — ช่องค้นหา แผงเงื่อนไข (main.js วาดส่งมาใน opts.panel)
+   * ผลลัพธ์เป็นรายการหรือปฏิทิน
+   * opts = { conds, mode: list|calendar, anchor, panel, calMode }
+   */
+  function searchView(q, sel, opts) {
+    opts = opts || {};
+    var conds = opts.conds || [];
+    var h = '<div class="adv">' + (opts.panel || '');
+    if (!String(q || '').trim() && !conds.length) {
+      return h + '<div class="empty"><div class="big">🔍</div>' +
+        L('พิมพ์คำค้น หรือเพิ่มเงื่อนไขเพื่อค้นหางานทุกโปรเจกต์ที่คุณเห็น') + searchHelp() + '</div></div>';
     }
-    var h = '<div class="list-wrap">';
-    h += '<div class="bucket-head">' + L('พบ {n} รายการ', { n: '<span class="n">' + res.length + '</span>' }) + '</div>';
+    var res = S.searchAdv({ q: q, conds: conds });
+    if (opts.mode === 'calendar') {
+      var dated = res.filter(function (t) { return t.dueOn || t.startOn; });
+      var un = res.filter(function (t) { return !t.dueOn && !t.startOn; });
+      return h + calBoard({
+        scope: 'search', mode: opts.calMode || 'month', anchor: opts.anchor,
+        tasks: dated, unscheduled: un.slice(0, 80), unscheduledMore: Math.max(0, un.length - 80),
+        sideTitle: L('ไม่มีวัน'), addable: false
+      }) + '</div>';
+    }
+    if (!res.length) {
+      return h + '<div class="empty"><div class="big">🔍</div>' +
+        (q ? L('ไม่พบงานที่ตรงกับ “') + esc(q) + '”' : L('ไม่พบงานที่ตรงเงื่อนไข')) + '</div></div>';
+    }
+    h += '<div class="list-wrap">';
+    h += '<div class="bucket-head">' + L('พบ {n} รายการ', { n: '<span class="n">' + res.length + '</span>' }) +
+      (res.length >= 300 ? ' <span class="adv-cap">' + L('(แสดง 300 รายการแรก)') + '</span>' : '') + '</div>';
     res.forEach(function (t) {
       h += taskRow(t, { showProject: true, selectable: true, selected: !!sel[t.id] });
     });
-    h += '</div>';
+    h += '</div></div>';
     return h;
+  }
+
+  /* ---------- หน้าแท็ก #/tag/<ชื่อ> ---------- */
+  function tagView(name, sel) {
+    var list = S.tagTasks(name);
+    var open = list.filter(function (t) { return !t.completed; });
+    var done = list.filter(function (t) { return t.completed; });
+    var h = '<div class="list-wrap tagv">';
+    h += '<div class="tagv-head"><span class="chip tag">#' + esc(name) + '</span>' +
+      '<span class="tagv-n">' + L('{n} งาน', { n: list.length }) + '</span><span class="grow"></span>' +
+      (S.can('structure') ? '<button class="btn btn-sm" data-act="tag-rename" data-tag="' + esc(name) + '">' +
+        I('pencil', 13) + ' ' + L('เปลี่ยนชื่อแท็ก') + '</button>' +
+        '<button class="btn btn-sm btn-ghost danger" data-act="tag-delete" data-tag="' + esc(name) + '">' +
+        I('trash', 13) + ' ' + L('ลบแท็ก') + '</button>' : '') + '</div>';
+    if (!list.length) return h + '<div class="empty"><div class="big">🏷️</div>' + L('ไม่มีงานที่มีแท็กนี้') + '</div></div>';
+    open.forEach(function (t) { h += taskRow(t, { showProject: true, selectable: true, selected: !!sel[t.id] }); });
+    if (done.length) {
+      h += '<div class="bucket-head">' + L('ทำเสร็จแล้ว') + ' <span class="n">' + done.length + '</span></div>';
+      done.forEach(function (t) { h += taskRow(t, { showProject: true, selectable: true, selected: !!sel[t.id] }); });
+    }
+    return h + '</div>';
+  }
+
+  /* ---------- โปรเจกต์ปิดที่ยังไม่มีสิทธิ์ (เปิดจากลิงก์) ---------- */
+  function noAccessView(projectId) {
+    var p = S.project(projectId);
+    var pend = p ? S.pendingRequest(projectId) : null;
+    var h = '<div class="empty noaccess"><div class="big">🔒</div>';
+    if (!p) return h + L('ไม่พบโปรเจกต์นี้') + '</div>';
+    h += '<p><b>' + esc(p.name) + '</b></p><p>' + L('นี่คือโปรเจกต์ปิด คุณยังไม่ได้เป็นสมาชิก') + '</p>';
+    if (pend && S.task(pend.taskId)) {
+      h += '<p class="noaccess-sent">' + I('check', 13) + ' ' +
+        L('ส่งคำขอแล้วเมื่อ {when} รอเจ้าของโปรเจกต์ตอบ', { when: esc(fmtWhen(pend.at)) }) + '</p>';
+    } else if (S.isActive()) {
+      h += '<textarea id="reqNote" class="inp" rows="2" placeholder="' + esc(L('บอกเหตุผลสั้น ๆ (ไม่บังคับ)')) + '"></textarea>' +
+        '<button class="btn btn-primary" data-act="request-access" data-id="' + esc(p.id) + '">' +
+        L('ขอสิทธิ์เข้าถึง') + '</button>';
+    }
+    return h + '</div>';
   }
 
   /* ---------- bulk bar ---------- */
@@ -2984,8 +3111,27 @@
     });
     h += '</select>';
     h += '<button data-act="bulk-due">' + L('ตั้งกำหนดส่ง') + '</button>';
+    h += '<button data-act="bulk-more">' + L('เพิ่มเติม') + ' ' + I('chevronDown', 12) + '</button>';
     h += '<button data-act="bulk-delete">' + L('ลบ') + '</button>';
     h += '<button data-act="bulk-clear">' + L('ยกเลิก') + '</button>';
+    /* ผลรวมของฟิลด์ตัวเลขในงานที่เลือก (ฟิลด์ของโปรเจกต์ที่งานอยู่) */
+    var tasks = ids.map(S.task).filter(Boolean);
+    var nums = {}, order = [];
+    tasks.forEach(function (t) {
+      S.projectsOfTask(S.rootOf(t).id).forEach(function (x) {
+        (x.project.fields || []).forEach(function (f) {
+          if (f.type !== 'number' || nums[f.id]) return;
+          nums[f.id] = f;
+          order.push(f);
+        });
+      });
+    });
+    order.slice(0, 3).forEach(function (f) {
+      var sum = S.footValue(tasks, f.id, 'sum');
+      if (sum === null) return;
+      h += '<span class="bulk-sum" title="' + esc(L('ผลรวมของงานที่เลือก')) + '">Σ ' + esc(f.name) + ' ' +
+        esc(S.formatNumber(f, sum)) + '</span>';
+    });
     h += '</div>';
     return h;
   }
@@ -3086,6 +3232,20 @@
 
     h += '<textarea class="dw-title' + (t.completed ? ' done' : '') +
       '" data-act="edit-title" rows="1">' + esc(t.name) + '</textarea>';
+
+    /* 2c — งานคำขอเข้าโปรเจกต์ปิด เจ้าของ/ผู้ดูแลตอบได้จากตรงนี้เลย */
+    var areq = S.accessRequestOf(t.id);
+    if (areq && S.canAnswerAccess(areq.project.id)) {
+      var ru = S.user(areq.userId);
+      h += '<div class="dw-access">' + I('lock', 14) + '<span class="grow">' +
+        L('{who} ขอเข้าโปรเจกต์ {p}', { who: '<b>' + esc(ru ? ru.name : '?') + '</b>', p: '<b>' + esc(areq.project.name) + '</b>' }) +
+        '</span><select class="inp" id="arAccess">' + S.PROJECT_ACCESS.filter(function (x) { return x.id !== 'admin'; })
+          .map(function (x) { return '<option value="' + x.id + '">' + esc(L(x.label)) + '</option>'; }).join('') + '</select>' +
+        '<button class="btn btn-sm btn-primary" data-act="access-grant" data-id="' + esc(areq.project.id) +
+        '" data-user="' + esc(areq.userId) + '">' + L('ให้สิทธิ์') + '</button>' +
+        '<button class="btn btn-sm" data-act="access-deny" data-id="' + esc(areq.project.id) +
+        '" data-user="' + esc(areq.userId) + '">' + L('ปฏิเสธ') + '</button></div>';
+    }
 
     var blockers = S.blockers(t.id);
     if (blockers.length && !t.completed) {
@@ -3240,7 +3400,8 @@
     // แท็ก
     h += '<div class="fld"><label>' + L('แท็ก') + '</label><div class="val" style="padding-top:5px">';
     t.tags.forEach(function (tg) {
-      h += '<span class="chip tag" style="margin:0 5px 5px 0">' + esc(tg) +
+      h += '<span class="chip tag" style="margin:0 5px 5px 0"><button class="tag-go" data-act="go-tag" data-tag="' +
+        esc(tg) + '" title="' + L('ดูงานทั้งหมดที่มีแท็กนี้') + '">' + esc(tg) + '</button>' +
         '<button data-act="remove-tag" data-id="' + esc(t.id) + '" data-tag="' + esc(tg) +
         '" title="' + L('เอาแท็กออก') + '">' + I('close', 13) + '</button></span>';
     });
@@ -3260,6 +3421,11 @@
     function fieldInput(f) {
       var v = S.fieldValue(t.id, f.id);
       var s = '';
+      if (f.type === 'id') {
+        return '<span class="fld-code">' + (v == null ? '—' : esc(S.fieldText(f, v))) + '</span>' +
+          (v == null ? '' : '<button class="as-link" data-act="copy-code" data-v="' + esc(S.fieldText(f, v)) +
+            '">' + L('คัดลอก') + '</button>');
+      }
       if (f.type === 'select') {
         s += '<select class="inp" data-act="edit-field" data-field="' + esc(f.id) +
           '"><option value="">—</option>';
@@ -3323,7 +3489,8 @@
         '<b>' + esc(x.project.name) + '</b>' +
         (sec2 ? '<em>' + esc(sec2.name) + '</em>' : '') + '</div>';
       x.project.fields.forEach(function (f) {
-        h += '<div class="fld"><label>' + esc(f.name) + '</label>' +
+        h += '<div class="fld"><label' + (f.desc ? ' title="' + esc(f.desc) + '"' : '') + '>' + esc(f.name) +
+          (f.desc ? ' <span class="fld-q">?</span>' : '') + '</label>' +
           '<div class="val">' + fieldInput(f) + '</div></div>';
       });
       h += '</div>';
@@ -3901,7 +4068,7 @@
 
   var AUDIT_GROUP = {
     auth: 'การเข้าใช้งาน', user: 'จัดการสมาชิก', project: 'โปรเจกต์',
-    system: 'ระบบ', task: 'งาน', security: 'ความปลอดภัย'
+    system: 'ระบบ', task: 'งาน', security: 'ความปลอดภัย', field: 'ฟิลด์', tag: 'แท็ก'
   };
   function auditGroupLabel(g) { return AUDIT_GROUP[g] || g; }
 
@@ -3953,13 +4120,21 @@
     'portfolio.remove': 'ได้ถอดโปรเจกต์ออกจากพอร์ตโฟลิโอ',
     'system.reset': 'ได้ล้างข้อมูลทั้งหมด',
     'system.export': 'ได้ส่งออกข้อมูล',
-    'system.import': 'ได้นำเข้าข้อมูล'
+    'system.import': 'ได้นำเข้าข้อมูล',
+    /* 2c */
+    'project.access-request': 'ได้ขอสิทธิ์เข้าโปรเจกต์',
+    'project.restore': 'ได้กู้คืนโปรเจกต์',
+    'project.purge': 'ได้ลบโปรเจกต์ถาวร',
+    'field.lib-create': 'ได้เพิ่มฟิลด์เข้าคลังขององค์กร',
+    'field.lib-delete': 'ได้เอาฟิลด์ออกจากคลังขององค์กร',
+    'tag.rename': 'ได้เปลี่ยนชื่อแท็ก',
+    'tag.delete': 'ได้ลบแท็ก'
   };
   function auditText(a) { return AUDIT_TEXT[a] || a; }
 
   var AUDIT_ICON = {
     auth: 'signIn', user: 'users', project: 'archive',
-    system: 'settings', task: 'checkCircle', security: 'shield'
+    system: 'settings', task: 'checkCircle', security: 'shield', field: 'hash', tag: 'flag'
   };
   function auditIcon(a) { return AUDIT_ICON[a.split('.')[0]] || 'more'; }
   /** บอกว่าคนนี้เข้าระบบด้วยวิธีไหน ผู้ดูแลจะได้รู้ว่าต้องตัดสิทธิ์ที่ไหนบ้าง */
@@ -4190,6 +4365,7 @@
     filesList: filesList, privateChip: privateChip, newDot: newDot, fmtTime: fmtTime,
     projectCalendar: projectCalendar, globalCalendar: globalCalendar, colorFor: colorFor,
     groupLabel: groupLabel, searchView: searchView, drawer: drawer,
+    searchHelp: searchHelp, tagView: tagView, noAccessView: noAccessView, calColor: calColor,
     taskRow: taskRow, taskCard: taskCard
   };
 

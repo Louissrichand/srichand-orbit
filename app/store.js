@@ -10,7 +10,7 @@
 
   var KEY = 'orbit.db.v4';
   var LEGACY_KEYS = ['orbit.db.v3', 'orbit.db.v2', 'orbit.db.v1', 'taskflow.db.v1'];   // ชื่อ/เวอร์ชันเดิม
-  var SCHEMA = 10;
+  var SCHEMA = 11;
 
   /* ---------- utilities ---------- */
 
@@ -105,7 +105,9 @@
     { id: 'date',   label: 'วันที่',        icon: 'calendar' },
     { id: 'person', label: 'บุคคล',         icon: 'users' },
     { id: 'text',   label: 'ข้อความ',       icon: 'text' },
-    { id: 'number', label: 'ตัวเลข',        icon: 'hash' }
+    { id: 'number', label: 'ตัวเลข',        icon: 'hash' },
+    /* 2c — รหัสงานแบบ REQ-12 เลขรันต่อโปรเจกต์ แก้ด้วยมือไม่ได้ ค้นหาและ @อ้างถึงได้ */
+    { id: 'id',     label: 'รหัสงาน (ID)',  icon: 'hash', auto: true }
   ];
 
   /* สีของตัวเลือกในฟิลด์ — อ่อนพอที่ตัวอักษรเข้มยังอ่านออก */
@@ -204,6 +206,24 @@
       }
       return { name: o.name, color: o.color || OPTION_COLORS[i % OPTION_COLORS.length] };
     }).filter(function (o) { return o.name; });
+  }
+
+  /** คำนำหน้ารหัสงาน ตัวอักษรอังกฤษกับตัวเลขเท่านั้น (พิมพ์ @REQ-12 ได้จากทุกแป้นพิมพ์) */
+  function cleanPrefix(s) {
+    return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) || 'ID';
+  }
+
+  /** เติมช่องที่ฟิลด์รุ่นก่อนไม่มี (2c) — คำอธิบาย แจ้งเตือนเมื่อเปลี่ยน คำนำหน้าและเลขถัดไปของรหัสงาน */
+  function normalizeFieldDef(f) {
+    f.options = normalizeOptions(f.options);
+    if (typeof f.desc !== 'string') f.desc = '';
+    f.notify = !!f.notify && (f.type === 'select' || f.type === 'multi');
+    if (f.type === 'id') {
+      f.prefix = cleanPrefix(f.prefix);
+      f.next = Math.max(1, parseInt(f.next, 10) || 1);
+    }
+    if (f.lib !== true) delete f.lib;
+    return f;
   }
 
   /* ---------- seed ---------- */
@@ -552,6 +572,22 @@
       });
       if (p.defaultTab && !p.savedViews.some(function (v) { return v.id === p.defaultTab; })) p.defaultTab = null;
     });
+    /* v11 — ค้นหา ฟิลด์ และงานดูแลโปรเจกต์ (ชิ้นงาน 2c)
+     *   fieldLib[]           ฟิลด์ขององค์กร { id, name, type, options, format, desc, notify }
+     *                        โปรเจกต์ที่ใช้เก็บสำเนาในชื่อเดิม (id เดียวกัน) พร้อม lib: true
+     *                        แก้ที่คลังแล้วสำเนาทุกโปรเจกต์เปลี่ยนตาม ค่าที่กรอกเป็นค่าเดียวกันทุกโปรเจกต์
+     *   field.desc / notify  คำอธิบายฟิลด์ และแจ้งผู้ติดตามเมื่อค่าเปลี่ยน (ฟิลด์ตัวเลือก)
+     *   field (type id)      prefix + next เลขถัดไปของโปรเจกต์นั้น ค่าในงานเป็นตัวเลขล้วน
+     *   project.roles        { userId: 'บทบาทที่พิมพ์เอง' }
+     *   project.accessRequests [{ userId, taskId, at }] คำขอเข้าโปรเจกต์ปิดที่ยังไม่ได้ตอบ
+     *   personal.searches    การค้นหาที่บันทึกไว้ของแต่ละคน */
+    d.fieldLib = Array.isArray(d.fieldLib) ? d.fieldLib.filter(function (f) { return f && f.id; }) : [];
+    d.fieldLib.forEach(function (f) { normalizeFieldDef(f); delete f.lib; });
+    d.projects.forEach(function (p) {
+      (p.fields || []).forEach(function (f) { normalizeFieldDef(f); });
+      if (!p.roles || typeof p.roles !== 'object' || Array.isArray(p.roles)) p.roles = {};
+      p.accessRequests = Array.isArray(p.accessRequests) ? p.accessRequests : [];
+    });
     prunePersonal(d);
     if (!d.users.some(function (u) { return u.role === 'admin'; })) {
       var firstUser = d.users.filter(function (u) { return u.id === d.currentUserId; })[0] || d.users[0];
@@ -669,8 +705,26 @@
 
   var listeners = [];
   function onChange(fn) { listeners.push(fn); }
+
+  /* ---------- ชุดคำสั่ง (2c) ----------
+   * แก้หลายงานพร้อมกันผ่านฟังก์ชันเดิมที่ต่างคน snapshot/commit เอง
+   * ครอบด้วย batch แล้วจะได้จุดย้อนกลับเดียว และบันทึก/วาดใหม่ครั้งเดียวตอนจบ */
+  var batchDepth = 0;
+  function batch(label, params, fn) {
+    snapshot(label, params);
+    batchDepth++;
+    var out;
+    try { out = fn(); } finally { batchDepth--; }
+    commit();
+    return out;
+  }
   function commit() {
     dropIndex();          // ข้อมูลเปลี่ยนแล้ว ดัชนีเก่าใช้ไม่ได้
+    if (batchDepth) return;            // อยู่ในชุดคำสั่งเดียวกัน (batch) — บันทึกครั้งเดียวตอนจบ
+    /* รหัสงานเลขรันให้งานใหม่ในโปรเจกต์ที่มีฟิลด์ ID ก่อนบันทึก — ทุกทางที่งานเข้าโปรเจกต์
+     * (สร้าง นำเข้า ย้าย ทำซ้ำ คัดลอก) จึงได้เลขเองโดยไม่ต้องไล่แก้ทีละที่
+     * ข้อมูลที่มาจากส่วนกลาง (replaceDb) ไม่แตะ เครื่องที่สร้างงานเป็นคนออกเลขเอง */
+    if (db && !suppressRemote && assignIds()) dropIndex();
     persist();
     listeners.forEach(function (fn) { fn(); });
   }
@@ -775,14 +829,7 @@
     /* ฟิลด์ที่สร้างเองต่อท้ายหัวตาราง ตัวเลขออกมาตามรูปแบบที่ตั้งไว้ (เช่น ฿1,250.00)
      * เพราะไฟล์นี้มีไว้ให้คนเปิดอ่านใน Excel ไม่ใช่ให้เครื่องคำนวณต่อ */
     var fields = p.fields || [];
-    function fieldText(t, f) {
-      var v = fieldValue(t.id, f.id);
-      if (v === null || v === undefined || v === '') return '';
-      if (f.type === 'number') return formatNumber(f, v);
-      if (f.type === 'multi') return [].concat(v).join(' · ');
-      if (f.type === 'person') { var pu = user(v); return pu ? pu.name : ''; }
-      return String(v);
-    }
+    function cellText(t, f) { return fieldText(f, fieldValue(t.id, f.id)); }
     var lines = [CSV_COLS.concat(fields.map(function (f) { return f.name; }))
       .map(csvCell).join(',')];
     tasksInProject(projectId).forEach(function (x) {
@@ -799,7 +846,7 @@
         t.priority === 'none' ? '' : t.priority,
         t.type, t.completedAt || '',
         (t.tags || []).join(' · '), blockers, plainText(t.notes)
-      ].concat(fields.map(function (f) { return fieldText(t, f); })).map(csvCell).join(','));
+      ].concat(fields.map(function (f) { return cellText(t, f); })).map(csvCell).join(','));
     });
     /* ลงบันทึกไว้ด้วย การเอางานทั้งโปรเจกต์ออกไปเป็นไฟล์คือการนำข้อมูลออกนอกระบบ
      * ผู้ดูแลต้องตอบได้ว่าใครเอาอะไรออกไปเมื่อไร */
@@ -850,87 +897,8 @@
    * ถ้ามีชื่อคอลัมน์ Section/Column ที่ยังไม่มีในโปรเจกต์ จะสร้างคอลัมน์ให้ใหม่
    */
   function importTasksCsv(projectId, text) {
-    var p = project(projectId);
-    if (!p) throw new Error('ไม่พบโปรเจกต์');
-    var rows = parseCsv(text);
-    if (rows.length < 2) throw new Error('ไฟล์ว่างหรือไม่มีบรรทัดข้อมูล');
-
-    var head = rows[0];
-    var iName  = colIndex(head, ['Name', 'Task Name', 'ชื่องาน']);
-    if (iName < 0) throw new Error('ไม่พบคอลัมน์ Name');
-    var iSec   = colIndex(head, ['Section/Column', 'Section', 'คอลัมน์']);
-    var iAss   = colIndex(head, ['Assignee', 'ผู้รับผิดชอบ']);
-    var iMail  = colIndex(head, ['Assignee Email']);
-    var iStart = colIndex(head, ['Start Date', 'วันเริ่ม']);
-    var iDue   = colIndex(head, ['Due Date', 'กำหนดส่ง']);
-    var iPrio  = colIndex(head, ['Priority', 'ความสำคัญ']);
-    var iType  = colIndex(head, ['Type', 'ชนิดงาน']);
-    var iTags  = colIndex(head, ['Tags', 'แท็ก']);
-    var iNotes = colIndex(head, ['Notes', 'Description', 'รายละเอียด']);
-
-    snapshot('นำเข้างานจาก CSV');
-
-    var byName = {}, byMail = {};
-    db.users.forEach(function (u) {
-      byName[u.name.trim().toLowerCase()] = u.id;
-      if (u.email) byMail[u.email.trim().toLowerCase()] = u.id;
-    });
-    var secByName = {};
-    p.sections.forEach(function (s) { secByName[s.name.trim().toLowerCase()] = s.id; });
-
-    function cell(r, i) { return i >= 0 && r[i] != null ? String(r[i]).trim() : ''; }
-    function isoOrNull(v) { return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null; }
-
-    var made = 0, newSections = 0;
-    for (var r = 1; r < rows.length; r++) {
-      var row = rows[r];
-      var name = cell(row, iName);
-      if (!name) continue;
-
-      var secId = p.sections[0].id;
-      var secLabel = cell(row, iSec);
-      if (secLabel) {
-        var key = secLabel.toLowerCase();
-        if (!secByName[key]) {
-          var ns = { id: uid('s'), name: secLabel };
-          p.sections.push(ns);
-          secByName[key] = ns.id;
-          newSections++;
-        }
-        secId = secByName[key];
-      }
-
-      var who = byMail[cell(row, iMail).toLowerCase()] ||
-                byName[cell(row, iAss).toLowerCase()] || null;
-      var prio = cell(row, iPrio).toLowerCase();
-      if (['urgent', 'high', 'medium', 'low'].indexOf(prio) < 0) prio = 'none';
-      var type = cell(row, iType).toLowerCase();
-      if (['task', 'milestone', 'approval'].indexOf(type) < 0) type = 'task';
-
-      var t = blankTask({
-        name: name,
-        notes: cell(row, iNotes),
-        assigneeId: who,
-        startOn: isoOrNull(cell(row, iStart)),
-        dueOn: isoOrNull(cell(row, iDue)),
-        priority: prio,
-        type: type,
-        tags: cell(row, iTags) ? cell(row, iTags).split(/[·,;]/).map(function (s) {
-          return s.trim();
-        }).filter(Boolean) : [],
-        createdBy: db.currentUserId
-      });
-      db.tasks.push(t);
-      db.memberships.push({
-        id: uid('m'), taskId: t.id, projectId: projectId,
-        sectionId: secId, position: nextPosition(projectId, secId)
-      });
-      made++;
-    }
-
-    audit('project.import', p.name, 'นำเข้า {n} งาน', { n: made });
-    commit();
-    return { tasks: made, sections: newSections };
+    /* 2c — นำเข้าตามการจับคู่ที่เดาจากหัวตาราง (หน้าต่างดูก่อนนำเข้าใช้ importTasksCsvMapped ตรง) */
+    return importTasksCsvMapped(projectId, text, csvPreview(projectId, text).guess);
   }
   /* ---------- undo ---------- */
 
@@ -939,6 +907,7 @@
   /* label คือคีย์คำแปล ไม่ใช่ประโยคสำเร็จรูป — เก็บ params แยกไว้
    * เพื่อให้ข้อความ "ย้อนกลับแล้ว: …" แปลตามภาษาที่คนอ่านตั้งไว้ ไม่ใช่ภาษาตอนที่กด */
   function snapshot(label, params) {
+    if (batchDepth) return;            // ชุดคำสั่งเดียวกันย้อนกลับได้ในครั้งเดียว
     undoStack.push({ label: label, params: params || null, data: JSON.stringify(db) });
     if (undoStack.length > 25) undoStack.shift();
   }
@@ -1328,44 +1297,8 @@
    * และงานที่ทำเสร็จแล้วถูกลดคะแนนให้ไปอยู่ท้าย เพราะคนค้นหามักหาสิ่งที่ยังทำอยู่
    */
   function search(q) {
-    q = (q || '').trim().toLowerCase();
-    if (!q) return [];
-    var i = index();
-    var hits = [];
-
-    db.tasks.forEach(function (t) {
-      var name = t.name.toLowerCase();
-      var score = 0;
-      if (name === q) score = 100;
-      else if (name.indexOf(q) === 0) score = 80;
-      else if (name.indexOf(q) >= 0) score = 60;
-
-      if (!score && plainText(t.notes, true).toLowerCase().indexOf(q) >= 0) score = 30;
-      if (!score) {
-        var u = i.user[t.assigneeId];
-        if (u && u.name.toLowerCase().indexOf(q) >= 0) score = 25;
-      }
-      if (!score && (t.tags || []).some(function (g) {
-        return String(g).toLowerCase().indexOf(q) >= 0;
-      })) score = 22;
-      if (!score && (i.memByTask[t.id] || []).some(function (m) {
-        var p = i.project[m.projectId];
-        return p && p.name.toLowerCase().indexOf(q) >= 0;
-      })) score = 15;
-
-      if (!score) return;
-      if (!canSeeTask(t.id)) return;
-      if (t.completed) score -= 40;
-      hits.push({ t: t, s: score });
-    });
-
-    return hits
-      .sort(function (a, b) {
-        if (b.s !== a.s) return b.s - a.s;
-        return (a.t.dueOn || '9999') < (b.t.dueOn || '9999') ? -1 : 1;
-      })
-      .slice(0, 60)
-      .map(function (x) { return x.t; });
+    /* 2c — ตัวค้นหาตัวเดียวกับค้นหาขั้นสูง (searchAdv) รองรับ "วลี" a | b -คำ คำ* ( ) และรหัสงาน */
+    return searchAdv({ q: q, limit: 60 });
   }
 
   /** งานทั้งหมดที่เห็นได้ ใช้กับปฏิทินรวมที่ไม่ได้เจาะจงโปรเจกต์ */
@@ -1528,7 +1461,7 @@
       },
       home: null,
       inbox: { sort: 'new', dense: false },
-      notepad: '', pv: {}, cal: null
+      notepad: '', pv: {}, cal: null, searches: []
     };
   }
 
@@ -1556,6 +1489,13 @@
     if (typeof p.notepad !== 'string') p.notepad = '';
     if (!isObj(p.pv)) p.pv = {};
     if (!isObj(p.cal)) p.cal = null;
+    p.searches = Array.isArray(p.searches) ? p.searches.filter(function (s) { return isObj(s) && s.id; }) : [];
+    p.searches.forEach(function (s) {
+      if (typeof s.name !== 'string' || !s.name) s.name = 'การค้นหา';
+      if (typeof s.q !== 'string') s.q = '';
+      if (!Array.isArray(s.conds)) s.conds = [];
+      if (s.mode !== 'calendar') s.mode = 'list';
+    });
     return p;
   }
 
@@ -2507,12 +2447,46 @@
     bool:   [['yes', 'ใช่'], ['no', 'ไม่ใช่']]
   };
 
-  /** ฟิลด์ที่กรองได้ในโปรเจกต์นี้ — ของในตัวก่อน ตามด้วยฟิลด์ที่สร้างเอง */
+  /* ค้นหาขั้นสูง (2c) — เงื่อนไขชุดเดียวกับตัวกรองของโปรเจกต์ บวกของที่มีความหมายเมื่อค้นข้ามโปรเจกต์
+   * ใช้ projectId = '*' กับ filterFields / filterField / filterChoices */
+  var SEARCH_BUILTIN = [
+    { id: 'project',    label: 'โปรเจกต์',          kind: 'multi' },
+    { id: 'psection',   label: 'คอลัมน์ (เซกชัน)',   kind: 'multi' },
+    { id: 'assignedBy', label: 'มอบหมายโดย',        kind: 'person' },
+    { id: 'followers',  label: 'ผู้ติดตาม',          kind: 'multi' },
+    { id: 'attachment', label: 'มีไฟล์แนบ',         kind: 'bool' },
+    { id: 'blocking',   label: 'กำลังบล็อกงานอื่น',  kind: 'bool' },
+    { id: 'subtask',    label: 'เป็นงานย่อย',        kind: 'bool' }
+  ];
+
+  /** ฟิลด์ที่สร้างเองทุกอันที่คนนี้เห็น (โปรเจกต์ที่เข้าได้ + คลังฟิลด์) ไม่ซ้ำรหัส */
+  function visibleFieldDefs() {
+    var out = [], seen = {};
+    (db.fieldLib || []).forEach(function (f) { seen[f.id] = true; out.push({ f: f, lib: true }); });
+    visibleProjects().forEach(function (p) {
+      (p.fields || []).forEach(function (f) {
+        if (seen[f.id]) return;
+        seen[f.id] = true;
+        out.push({ f: f, p: p });
+      });
+    });
+    return out;
+  }
+
+  /** ฟิลด์ที่กรองได้ในโปรเจกต์นี้ — ของในตัวก่อน ตามด้วยฟิลด์ที่สร้างเอง  ('*' = ค้นหาขั้นสูง) */
   function filterFields(projectId) {
+    if (projectId === '*') {
+      var all = FILTER_BUILTIN.filter(function (x) { return x.id !== 'section'; }).concat(SEARCH_BUILTIN);
+      visibleFieldDefs().forEach(function (x) {
+        all.push({ id: 'field:' + x.f.id, label: x.f.name + (x.p ? ' · ' + x.p.name : ''),
+          kind: x.f.type === 'id' ? 'text' : x.f.type, field: x.f, custom: true });
+      });
+      return all;
+    }
     var p = project(projectId);
     var out = FILTER_BUILTIN.slice();
     ((p && p.fields) || []).forEach(function (f) {
-      out.push({ id: 'field:' + f.id, label: f.name, kind: f.type, field: f, custom: true });
+      out.push({ id: 'field:' + f.id, label: f.name, kind: f.type === 'id' ? 'text' : f.type, field: f, custom: true });
     });
     return out;
   }
@@ -2526,9 +2500,19 @@
     var p = project(projectId);
     var def = filterField(projectId, fid);
     if (!def) return [];
-    if (def.kind === 'person') {
+    if (def.kind === 'person' || fid === 'followers') {
       return [[ME, 'ฉัน', null]].concat(db.users.filter(function (u) { return u.active !== false; })
         .map(function (u) { return [u.id, u.name, u.color]; }));
+    }
+    if (fid === 'project') {
+      return visibleProjects().map(function (x) { return [x.id, x.name, x.color]; });
+    }
+    if (fid === 'psection') {
+      var secs = [];
+      visibleProjects().forEach(function (x) {
+        x.sections.forEach(function (s) { secs.push([s.id, x.name + ' › ' + s.name, x.color]); });
+      });
+      return secs;
     }
     if (fid === 'section') return (p ? p.sections : []).map(function (s) { return [s.id, s.name, null]; });
     if (fid === 'priority') return PRIORITIES.filter(function (x) { return x.id !== 'none'; })
@@ -2568,9 +2552,24 @@
       case 'completed':   return !!t.completed;
       case 'blocked':     return !t.completed && isBlocked(t.id);
       case 'name':        return t.name;
+      /* 2c — ค้นหาขั้นสูง โปรเจกต์/คอลัมน์ของงานย่อยยึดงานต้นทาง */
+      case 'assignedBy':  return t.assigneeId ? (t.assignedBy || null) : null;
+      case 'followers':   return t.followers || [];
+      case 'attachment':  return !!(t.attachments && t.attachments.length);
+      case 'blocking':    return blocking(t.id).some(function (x) { return !x.completed; });
+      case 'subtask':     return !!t.parentId;
+      case 'project':
+      case 'psection':
+        return (index().memByTask[rootOf(t).id] || []).map(function (x) {
+          return fid === 'project' ? x.projectId : x.sectionId;
+        });
     }
     if (fid && fid.indexOf('field:') === 0) {
       var v = fieldValue(t.id, fid.slice(6));
+      if (v !== null && v !== undefined) {
+        var fd = fieldDef(fid.slice(6));
+        if (fd && fd.type === 'id') return fieldText(fd, v);   // กรองรหัสงานด้วยข้อความ REQ-12
+      }
       return v === undefined ? null : v;
     }
     return null;
@@ -2581,14 +2580,11 @@
   }
 
   function condKind(fid) {
-    var b = FILTER_BUILTIN.filter(function (x) { return x.id === fid; })[0];
+    var b = FILTER_BUILTIN.concat(SEARCH_BUILTIN).filter(function (x) { return x.id === fid; })[0];
     if (b) return b.kind;
     if (fid && fid.indexOf('field:') === 0) {
-      var hit = null;
-      db.projects.forEach(function (p) {
-        (p.fields || []).forEach(function (f) { if ('field:' + f.id === fid) hit = f.type; });
-      });
-      return hit;
+      var f = fieldDef(fid.slice(6));
+      return f ? (f.type === 'id' ? 'text' : f.type) : null;
     }
     return null;
   }
@@ -3506,7 +3502,9 @@
     var kids = o.subtasks ? db.tasks.filter(function (x) { return x.parentId === src.id; }) : [];
     db.tasks.push(c);
     if (o.fields) {
-      db.fieldValues.filter(function (v) { return v.taskId === src.id; }).forEach(function (v) {
+      /* รหัสงาน (ID) ไม่คัดลอก — สำเนาได้เลขใหม่ของตัวเองตอน commit ไม่งั้นสองงานจะมีรหัสเดียวกัน */
+      var idf = idFieldSet();
+      db.fieldValues.filter(function (v) { return v.taskId === src.id && !idf[v.fieldId]; }).forEach(function (v) {
         db.fieldValues.push({ taskId: c.id, fieldId: v.fieldId, value: clone(v.value) });
       });
     }
@@ -3805,9 +3803,10 @@
   }
 
   /** ของในถังที่คนนี้เห็น — ของที่ตัวเองลบ ผู้ดูแลเห็นของทุกคน ใหม่สุดก่อน */
-  function trashItems() {
+  function trashItems(projectId) {
     var mine = db.currentUserId, admin = isAdmin();
     return (db.trash || []).filter(function (x) {
+      if (projectId && x.projectId !== projectId) return false;   // 2c — ถังขยะของโปรเจกต์เดียว
       return admin || x.deletedBy === mine;
     }).slice().sort(function (a, b) { return a.deletedAt < b.deletedAt ? 1 : -1; });
   }
@@ -4408,11 +4407,18 @@
   }
 
   function setFieldValue(taskId, fieldId, value) {
+    var def = fieldDef(fieldId);
+    if (def && def.type === 'id') return;          // รหัสงานออกเลขเอง แก้ด้วยมือไม่ได้
     var empty = (value === null || value === '' ||
                  (value && value.length === 0 && typeof value !== 'number'));
     var fv = db.fieldValues.filter(function (v) {
       return v.taskId === taskId && v.fieldId === fieldId;
     })[0];
+    /* ฟิลด์ที่เปิด "แจ้งเมื่อค่าเปลี่ยน" — ลงประวัติ แล้ว log() แจ้งผู้ติดตาม (ผู้รับผิดชอบเป็นผู้ติดตามอยู่แล้ว) */
+    if (def && def.notify && JSON.stringify(fv ? fv.value : null) !== JSON.stringify(empty ? null : value)) {
+      log(taskId, empty ? 'ล้างค่า {f}' : 'ตั้ง {f} เป็น {v}',
+        { f: def.name, v: empty ? '' : [].concat(value).join(', ') });
+    }
     if (fv) {
       if (empty) {
         db.fieldValues = db.fieldValues.filter(function (v) { return v !== fv; });
@@ -4641,6 +4647,14 @@
 
   function createProject(attrs) {
     snapshot('สร้างโปรเจกต์');
+    var p = createProjectRaw(attrs);
+    audit("project.create", p.name);
+    commit();
+    return p;
+  }
+
+  /** สร้างโปรเจกต์โดยไม่ snapshot/commit/audit — ให้ผู้เรียกครอบเอง (แปลงงานเป็นโปรเจกต์) */
+  function createProjectRaw(attrs) {
     var p = {
       id: uid('p'),
       name: attrs.name || 'โปรเจกต์ใหม่',
@@ -4656,11 +4670,11 @@
       depShift: { mode: 'consume', scope: 'downstream' },
       workDays: 'all',
       baseline: null,
-      fields: [], status: null, rules: [], savedViews: [], colWidths: {}
+      fields: [], status: null, rules: [], savedViews: [], colWidths: {},
+      visibility: 'org', locked: false, views: null, statusLog: [], messages: [],
+      defaultTab: null, roles: {}, accessRequests: []
     };
     db.projects.push(p);
-    audit("project.create", p.name);
-    commit();
     return p;
   }
 
@@ -4743,9 +4757,13 @@
     var fieldMap = {};
     p.fields.forEach(function (f) {
       var old = f.id;
-      f.id = uid('f');
+      /* ฟิลด์จากคลังใช้รหัสเดิม (ฟิลด์เดียวกันทั้งองค์กร) รหัสงานเริ่มนับใหม่ในโปรเจกต์สำเนา */
+      if (!f.lib) f.id = uid('f');
+      if (f.type === 'id') { f.next = 1; return; }
       fieldMap[old] = f.id;
     });
+    p.roles = {};
+    p.accessRequests = [];
     p.rules.forEach(function (r) {
       r.id = uid('r');
       r.whenSection = sectionMap[r.whenSection] || null;
@@ -4813,13 +4831,17 @@
 
   function addSection(projectId, name) {
     var p = project(projectId);
-    p.sections.push({ id: uid('s'), name: name || 'คอลัมน์ใหม่' });
+    if (!p) return null;
+    snapshot('เพิ่มคอลัมน์');           // 2c — เดิมเพิ่มแล้วย้อนกลับไม่ได้
+    var s = { id: uid('s'), name: name || 'คอลัมน์ใหม่' };
+    p.sections.push(s);
     commit();
+    return s;
   }
 
   function renameSection(projectId, sectionId, name) {
     var s = section(projectId, sectionId);
-    if (s) { s.name = name; commit(); }
+    if (s && s.name !== name) { snapshot('เปลี่ยนชื่อคอลัมน์'); s.name = name; commit(); }
   }
 
   function deleteSection(projectId, sectionId) {
@@ -4960,22 +4982,28 @@
 
   function addField(projectId, field) {
     var p = project(projectId);
-    var nf = {
-      id: uid('f'), name: field.name || 'ฟิลด์ใหม่',
-      type: field.type || 'text', options: normalizeOptions(field.options)
-    };
+    if (!p) return null;
+    snapshot('เพิ่มฟิลด์');
+    var nf = normalizeFieldDef({
+      id: uid('f'), name: String(field.name || 'ฟิลด์ใหม่').slice(0, 80),
+      type: field.type || 'text', options: field.options, desc: field.desc || '',
+      notify: !!field.notify, prefix: field.prefix
+    });
     if (nf.type === 'number') nf.format = normalizeFormat(field.format);
     p.fields.push(nf);
     commit();
+    return nf;
   }
 
   function renameField(projectId, fieldId, name) {
     var p = project(projectId);
     var f = p.fields.filter(function (x) { return x.id === fieldId; })[0];
-    if (f && name) { f.name = name; commit(); }
+    if (f && name) updateFieldDef(projectId, fieldId, { name: name });
   }
 
-  /** ลบฟิลด์ — ตัวฟิลด์กับค่าที่กรอกไว้ทั้งหมดไปพักในถังขยะ */
+  /** ลบฟิลด์ — ตัวฟิลด์กับค่าที่กรอกไว้ทั้งหมดไปพักในถังขยะ
+   *  ฟิลด์จากคลัง (หรือรหัสที่ยังใช้อยู่ในโปรเจกต์อื่น) = เอาออกจากโปรเจกต์นี้เท่านั้น
+   *  ค่าของงานที่ยังอยู่ในโปรเจกต์อื่นที่ใช้ฟิลด์เดียวกันไม่ถูกลบ */
   function deleteField(projectId, fieldId) {
     var p = project(projectId);
     if (!p) return;
@@ -4984,12 +5012,22 @@
     if (at < 0) return;
     snapshot('ลบฟิลด์');
     var f = p.fields[at];
+    var keepTask = {};
+    db.projects.forEach(function (op) {
+      if (op.id === projectId || !(op.fields || []).some(function (x) { return x.id === fieldId; })) return;
+      db.memberships.forEach(function (m) { if (m.projectId === op.id) keepTask[m.taskId] = true; });
+    });
+    var goes = function (v) {
+      if (v.fieldId !== fieldId) return false;
+      var t = task(v.taskId);
+      return !keepTask[(t ? rootOf(t) : { id: v.taskId }).id];
+    };
     trashPush('field', f.name, projectId, {
       field: clone(f), index: at,
-      values: clone(db.fieldValues.filter(function (v) { return v.fieldId === fieldId; }))
+      values: clone(db.fieldValues.filter(goes))
     });
     p.fields = p.fields.filter(function (x) { return x.id !== fieldId; });
-    db.fieldValues = db.fieldValues.filter(function (v) { return v.fieldId !== fieldId; });
+    db.fieldValues = db.fieldValues.filter(function (v) { return !goes(v); });
     commit();
   }
 
@@ -5000,6 +5038,7 @@
     if (!f || f.type !== 'number') return false;
     snapshot('ตั้งรูปแบบตัวเลข');
     f.format = normalizeFormat(format);
+    propagateField(f);
     commit();
     return true;
   }
@@ -5809,14 +5848,1045 @@
     return u.away.until >= today();
   }
 
+  /* ======================================================================
+   * 2c — ค้นหา ฟิลด์ (รหัสงาน คลังฟิลด์) แท็ก นำเข้า/ส่งออก และงานดูแลโปรเจกต์
+   * ====================================================================== */
+
+  /* ---------- นิยามฟิลด์ ---------- */
+
+  /** นิยามของฟิลด์จากรหัส — คลังก่อน แล้วไล่ทุกโปรเจกต์ */
+  function fieldDef(fieldId) {
+    if (!fieldId) return null;
+    var lib = (db.fieldLib || []).filter(function (f) { return f.id === fieldId; })[0];
+    if (lib) return lib;
+    for (var i = 0; i < db.projects.length; i++) {
+      var f = (db.projects[i].fields || []).filter(function (x) { return x.id === fieldId; })[0];
+      if (f) return f;
+    }
+    return null;
+  }
+
+  /** { fieldId: true } ของฟิลด์รหัสงานทุกอัน */
+  function idFieldSet() {
+    var out = {};
+    db.projects.forEach(function (p) {
+      (p.fields || []).forEach(function (f) { if (f.type === 'id') out[f.id] = true; });
+    });
+    return out;
+  }
+
+  /** ค่าฟิลด์เป็นข้อความอ่านได้ — ใช้ใน CSV ค้นหา และที่ไม่ได้วาดเป็นป้ายสี */
+  function fieldText(f, v) {
+    if (v === null || v === undefined || v === '') return '';
+    if (!f) return String(v);
+    if (f.type === 'id') return (f.prefix || 'ID') + '-' + v;
+    if (f.type === 'number') return formatNumber(f, v);
+    if (f.type === 'multi') return [].concat(v).join(' · ');
+    if (f.type === 'person') { var pu = user(v); return pu ? pu.name : ''; }
+    return String(v);
+  }
+
+  /** ออกเลขรหัสงานให้งานในโปรเจกต์ที่ยังไม่มี เรียงตามคอลัมน์แล้วตามลำดับในคอลัมน์
+   *  ไม่ commit (commit เรียกเอง) คืน true ถ้ามีอะไรเปลี่ยน */
+  function assignIds() {
+    var changed = false;
+    db.projects.forEach(function (p) {
+      var idfs = (p.fields || []).filter(function (f) { return f.type === 'id'; });
+      if (!idfs.length) return;
+      var secOrder = {};
+      p.sections.forEach(function (s, k) { secOrder[s.id] = k; });
+      var list = tasksInProject(p.id).slice().sort(function (a, b) {
+        return ((secOrder[a.membership.sectionId] || 0) - (secOrder[b.membership.sectionId] || 0)) ||
+          (a.membership.position - b.membership.position);
+      }).map(function (x) { return x.task.id; });
+      idfs.forEach(function (f) {
+        var have = {};
+        db.fieldValues.forEach(function (v) { if (v.fieldId === f.id) have[v.taskId] = true; });
+        list.forEach(function (tid) {
+          if (have[tid]) return;
+          db.fieldValues.push({ taskId: tid, fieldId: f.id, value: f.next });
+          f.next = (f.next || 1) + 1;
+          changed = true;
+        });
+      });
+    });
+    return changed;
+  }
+
+  /** รหัสงานทั้งหมดของงานหนึ่ง เช่น ['REQ-12'] */
+  function taskCodes(t) {
+    var out = [];
+    var row = index().fvByTask[t.id] || {};
+    Object.keys(row).forEach(function (fid) {
+      var f = fieldDef(fid);
+      if (f && f.type === 'id') out.push(fieldText(f, row[fid].value));
+    });
+    return out;
+  }
+
+  /** หางานจากรหัส (REQ-12) — เฉพาะงานที่คนนี้เห็น ใช้กับการ @อ้างถึงและค้นหา */
+  function findByCode(code) {
+    var m = String(code || '').trim().toUpperCase().match(/^([A-Z0-9]+)-(\d+)$/);
+    if (!m) return [];
+    var out = [];
+    db.projects.forEach(function (p) {
+      (p.fields || []).forEach(function (f) {
+        if (f.type !== 'id' || f.prefix !== m[1]) return;
+        db.fieldValues.forEach(function (v) {
+          if (v.fieldId === f.id && String(v.value) === String(+m[2])) {
+            var t = task(v.taskId);
+            if (t && canSeeTask(t.id) && out.indexOf(t) < 0) out.push(t);
+          }
+        });
+      });
+    });
+    return out;
+  }
+
+  /* ---------- คลังฟิลด์ขององค์กร ---------- */
+
+  var LIB_KEYS = ['name', 'type', 'options', 'format', 'desc', 'notify'];
+
+  function fieldLib() { return db.fieldLib || []; }
+  function libField(id) { return fieldLib().filter(function (f) { return f.id === id; })[0] || null; }
+
+  /** โปรเจกต์ที่ใช้ฟิลด์จากคลังนี้อยู่ */
+  function libUsage(libId) {
+    return db.projects.filter(function (p) {
+      return (p.fields || []).some(function (f) { return f.id === libId && f.lib; });
+    });
+  }
+
+  /** ฟิลด์จากคลัง — คัดลอกนิยามจากตัวที่เพิ่งแก้ไปให้คลังและทุกโปรเจกต์ที่ใช้ (ไม่ commit) */
+  function propagateField(src) {
+    if (!src) return;
+    var lib = libField(src.id);
+    if (!lib) return;
+    var targets = [lib];
+    db.projects.forEach(function (p) {
+      (p.fields || []).forEach(function (f) { if (f.id === src.id && f.lib) targets.push(f); });
+    });
+    targets.forEach(function (f) {
+      if (f === src) return;
+      LIB_KEYS.forEach(function (k) { f[k] = clone(src[k] === undefined ? null : src[k]); });
+      if (f.format === null && f.type !== 'number') delete f.format;
+    });
+  }
+
+  /**
+   * แก้นิยามฟิลด์ — ชื่อ คำอธิบาย ตัวเลือก (เปลี่ยนชื่อตัวเลือกแล้วค่าที่กรอกไว้เปลี่ยนตาม)
+   * แจ้งเตือนเมื่อเปลี่ยน คำนำหน้ารหัสงาน รูปแบบตัวเลข
+   * @param projectId  null = แก้ที่คลังฟิลด์โดยตรง
+   * @param patch      { name, desc, notify, options: [{name, color, old}], prefix, format }
+   */
+  function updateFieldDef(projectId, fieldId, patch) {
+    var f = projectId
+      ? ((project(projectId) || {}).fields || []).filter(function (x) { return x.id === fieldId; })[0]
+      : libField(fieldId);
+    if (!f) return false;
+    snapshot('แก้ไขฟิลด์ “{f}”', { f: f.name });
+    if (typeof patch.name === 'string' && patch.name.trim()) f.name = patch.name.trim().slice(0, 80);
+    if (typeof patch.desc === 'string') f.desc = patch.desc.trim().slice(0, 300);
+    if ('notify' in patch) f.notify = !!patch.notify && (f.type === 'select' || f.type === 'multi');
+    if (f.type === 'id' && patch.prefix) f.prefix = cleanPrefix(patch.prefix);
+    if (f.type === 'number' && 'format' in patch) f.format = normalizeFormat(patch.format);
+    if (Array.isArray(patch.options) && (f.type === 'select' || f.type === 'multi')) {
+      var ren = {};
+      patch.options.forEach(function (o) {
+        if (o && o.old && o.name && o.old !== o.name) ren[o.old] = o.name;
+      });
+      f.options = normalizeOptions(patch.options.map(function (o) { return { name: String(o.name || '').trim(), color: o.color }; }));
+      if (Object.keys(ren).length) {
+        db.fieldValues.forEach(function (v) {
+          if (v.fieldId !== f.id) return;
+          if (Array.isArray(v.value)) v.value = v.value.map(function (x) { return ren[x] || x; });
+          else if (ren[v.value]) v.value = ren[v.value];
+        });
+      }
+    }
+    propagateField(f);
+    commit();
+    return true;
+  }
+
+  /** สร้างฟิลด์ใหม่ในคลัง (รหัสงานเป็นของแต่ละโปรเจกต์ จึงอยู่ในคลังไม่ได้) */
+  function createLibField(def) {
+    if (!def || !def.name || def.type === 'id') return null;
+    snapshot('สร้างฟิลด์ในคลัง');
+    var f = normalizeFieldDef({
+      id: uid('f'), name: String(def.name).trim().slice(0, 80), type: def.type || 'text',
+      options: def.options, desc: def.desc || '', notify: !!def.notify
+    });
+    if (f.type === 'number') f.format = normalizeFormat(def.format);
+    db.fieldLib = db.fieldLib || [];
+    db.fieldLib.push(f);
+    audit('field.lib-create', f.name);
+    commit();
+    return f;
+  }
+
+  /** ใช้ฟิลด์จากคลังในโปรเจกต์ — ค่าเดียวกันทุกโปรเจกต์ที่ใช้ (งานที่อยู่สองโปรเจกต์เห็นค่าเดียว) */
+  function addLibFieldToProject(projectId, libId) {
+    var p = project(projectId), lf = libField(libId);
+    if (!p || !lf) return false;
+    if (p.fields.some(function (f) { return f.id === libId; })) return false;
+    snapshot('เพิ่มฟิลด์จากคลัง');
+    var c = clone(lf);
+    c.lib = true;
+    p.fields.push(c);
+    commit();
+    return true;
+  }
+
+  /** ยกฟิลด์ของโปรเจกต์ขึ้นคลัง ใช้รหัสเดิม ค่าที่กรอกไว้จึงตามไปด้วย */
+  function promoteFieldToLib(projectId, fieldId) {
+    var p = project(projectId);
+    var f = p && p.fields.filter(function (x) { return x.id === fieldId; })[0];
+    if (!f || f.lib || f.type === 'id' || libField(fieldId)) return false;
+    snapshot('บันทึกฟิลด์ลงคลัง');
+    var c = clone(f);
+    delete c.lib;
+    db.fieldLib = db.fieldLib || [];
+    db.fieldLib.push(c);
+    f.lib = true;
+    audit('field.lib-create', f.name, 'จากโปรเจกต์ {p}', { p: p.name });
+    commit();
+    return true;
+  }
+
+  /** เอาออกจากคลัง — โปรเจกต์ที่ใช้อยู่ยังมีฟิลด์และค่าเดิม แต่แก้แยกกันได้แล้ว */
+  function deleteLibField(libId) {
+    var lf = libField(libId);
+    if (!lf) return false;
+    snapshot('ลบฟิลด์ออกจากคลัง');
+    db.fieldLib = db.fieldLib.filter(function (f) { return f.id !== libId; });
+    db.projects.forEach(function (p) {
+      (p.fields || []).forEach(function (f) { if (f.id === libId) delete f.lib; });
+    });
+    audit('field.lib-delete', lf.name);
+    commit();
+    return true;
+  }
+
+  /* ---------- ค้นหาแบบมีตัวดำเนินการ ----------
+   *   "วลีตรงตัว"   a | b (หรือ a OR b)   -ไม่เอาคำนี้   คำนำ*   ( จัดกลุ่ม )
+   * ช่องว่าง = และ  คำธรรมดาค้นแบบมีอยู่ในข้อความ (ภาษาไทยไม่มีช่องว่างคั่นคำ)
+   * คำนำ* = ต้องขึ้นต้นคำ (ต้นข้อความหรือหลังช่องว่าง/เครื่องหมาย) */
+  function hasOperators(q) {
+    return /["|()]|\*(\s|$)|(^|\s)-\S|\sOR\s/.test(String(q || ''));
+  }
+
+  function parseQuery(q) {
+    var s = String(q || ''), toks = [], i = 0;
+    while (i < s.length) {
+      var c = s.charAt(i);
+      if (/\s/.test(c)) { i++; continue; }
+      if (c === '(' || c === ')' || c === '|') { toks.push({ k: c }); i++; continue; }
+      var neg = false;
+      if (c === '-' && i + 1 < s.length && !/\s/.test(s.charAt(i + 1))) { neg = true; i++; c = s.charAt(i); }
+      if (c === '(') { if (neg) toks.push({ k: 'neg' }); continue; }
+      if (c === '"') {
+        var j = s.indexOf('"', i + 1);
+        if (j < 0) j = s.length;
+        var ph = s.slice(i + 1, j).trim().toLowerCase();
+        i = j + 1;
+        if (ph) toks.push({ k: 'w', v: ph, phrase: true, neg: neg });
+        continue;
+      }
+      var j2 = i;
+      while (j2 < s.length && !/[\s()|"]/.test(s.charAt(j2))) j2++;
+      var w = s.slice(i, j2);
+      i = j2;
+      if (!neg && w === 'OR') { toks.push({ k: '|' }); continue; }
+      w = w.toLowerCase();
+      var pre = w.length > 1 && w.charAt(w.length - 1) === '*';
+      if (pre) w = w.replace(/\*+$/, '');
+      if (w) toks.push({ k: 'w', v: w, prefix: pre, neg: neg });
+    }
+    var pos = 0;
+    function peek() { return toks[pos]; }
+    function orE() {
+      var c2 = [andE()];
+      while (peek() && peek().k === '|') { pos++; c2.push(andE()); }
+      return c2.length === 1 ? c2[0] : { t: 'or', c: c2 };
+    }
+    function andE() {
+      var c3 = [];
+      while (peek() && peek().k !== ')' && peek().k !== '|') { var u = unary(); if (u) c3.push(u); }
+      return c3.length === 1 ? c3[0] : { t: 'and', c: c3 };
+    }
+    function unary() {
+      var tk = toks[pos++];
+      if (!tk) return null;
+      if (tk.k === 'neg') { var n = unary(); return n ? { t: 'not', c: n } : null; }
+      if (tk.k === '(') { var e = orE(); if (peek() && peek().k === ')') pos++; return e; }
+      if (tk.k === 'w') {
+        var node = { t: 'w', v: tk.v, prefix: !!tk.prefix, phrase: !!tk.phrase };
+        return tk.neg ? { t: 'not', c: node } : node;
+      }
+      return null;
+    }
+    var out = [];
+    while (pos < toks.length) {
+      var e2 = orE();
+      if (e2 && !(e2.t === 'and' && !e2.c.length)) out.push(e2);
+      if (peek() && peek().k === ')') pos++;
+    }
+    return out.length === 1 ? out[0] : { t: 'and', c: out };
+  }
+
+  function escRe(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+  function evalQuery(n, hay) {
+    if (!n) return true;
+    if (n.t === 'and') return n.c.every(function (x) { return evalQuery(x, hay); });
+    if (n.t === 'or') return n.c.some(function (x) { return evalQuery(x, hay); });
+    if (n.t === 'not') return !evalQuery(n.c, hay);
+    if (n.prefix) {
+      if (!n.re) n.re = new RegExp('(^|[\\s.,;:!?()\\[\\]{}"\'/\\\\|@#_\\-·])' + escRe(n.v));
+      return n.re.test(hay);
+    }
+    return hay.indexOf(n.v) >= 0;
+  }
+
+  /** คำที่ต้องมี (ไม่นับคำที่ขึ้นต้นด้วย -) ใช้ให้คะแนนว่าตรงที่ชื่องานไหม */
+  function queryTerms(n, out) {
+    out = out || [];
+    if (!n || n.t === 'not') return out;
+    if (n.t === 'w') out.push(n.v);
+    else (n.c || []).forEach(function (x) { queryTerms(x, out); });
+    return out;
+  }
+
+  /** ข้อความทั้งหมดของงานที่ค้นได้ — ชื่อ รายละเอียด แท็ก คน โปรเจกต์ รหัสงาน และค่าฟิลด์ข้อความ/ตัวเลือก */
+  function searchHay(t, i) {
+    var parts = [t.name, plainText(t.notes, true), (t.tags || []).join(' ')];
+    var u = i.user[t.assigneeId];
+    if (u) parts.push(u.name);
+    (i.memByTask[rootOf(t).id] || []).forEach(function (m) {
+      var p = i.project[m.projectId];
+      if (p) parts.push(p.name);
+    });
+    var row = i.fvByTask[t.id] || {};
+    Object.keys(row).forEach(function (fid) {
+      var f = fieldDef(fid);
+      if (!f || f.type === 'person' || f.type === 'date') return;
+      parts.push(fieldText(f, row[fid].value));
+    });
+    return parts.join(' \n ').toLowerCase();
+  }
+
+  /**
+   * ค้นหาขั้นสูง
+   * @param o { q, conds: [{f, op, v}], limit }
+   *   q      ข้อความค้นหา รองรับตัวดำเนินการ (hasOperators) — ไม่มีตัวดำเนินการ = ให้คะแนนแบบเดิม
+   *   conds  เงื่อนไขชุดเดียวกับตัวกรองของโปรเจกต์ (filterFields('*'))
+   * เห็นเฉพาะงานที่ canSeeTask — งานส่วนตัวของคนอื่นไม่หลุดมา
+   */
+  function searchAdv(o) {
+    o = o || {};
+    var q = String(o.q || '').trim();
+    var conds = (o.conds || []).filter(function (c) { return c && c.f; });
+    if (!q && !conds.length) return [];
+    var i = index();
+    var ops = q && hasOperators(q);
+    var ast = ops ? parseQuery(q) : null;
+    var ql = q.toLowerCase();
+    var terms = ast ? queryTerms(ast) : [ql];
+    var codeHits = {};
+    if (q && /^[A-Za-z0-9]+-\d+$/.test(q)) findByCode(q).forEach(function (t) { codeHits[t.id] = true; });
+    var hits = [];
+    db.tasks.forEach(function (t) {
+      var score = 1;
+      if (q) {
+        if (ast) {
+          if (!evalQuery(ast, searchHay(t, i))) return;
+          var nm = t.name.toLowerCase();
+          score = terms.some(function (w) { return nm.indexOf(w) >= 0; }) ? 60 : 30;
+        } else {
+          var name = t.name.toLowerCase();
+          score = 0;
+          if (codeHits[t.id]) score = 95;
+          else if (name === ql) score = 100;
+          else if (name.indexOf(ql) === 0) score = 80;
+          else if (name.indexOf(ql) >= 0) score = 60;
+          if (!score && plainText(t.notes, true).toLowerCase().indexOf(ql) >= 0) score = 30;
+          if (!score) {
+            var u = i.user[t.assigneeId];
+            if (u && u.name.toLowerCase().indexOf(ql) >= 0) score = 25;
+          }
+          if (!score && (t.tags || []).some(function (g) {
+            return String(g).toLowerCase().indexOf(ql) >= 0;
+          })) score = 22;
+          if (!score && (i.memByTask[rootOf(t).id] || []).some(function (m) {
+            var p = i.project[m.projectId];
+            return p && p.name.toLowerCase().indexOf(ql) >= 0;
+          })) score = 15;
+          if (!score && searchHay(t, i).indexOf(ql) >= 0) score = 12;   // ค่าฟิลด์ รหัสงาน
+          if (!score) return;
+        }
+      }
+      for (var k = 0; k < conds.length; k++) {
+        if (!matchCond(t, conds[k], null)) return;
+      }
+      if (!canSeeTask(t.id)) return;
+      if (t.completed) score -= 40;
+      hits.push({ t: t, s: score });
+    });
+    return hits
+      .sort(function (a, b) {
+        if (b.s !== a.s) return b.s - a.s;
+        return (a.t.dueOn || '9999') < (b.t.dueOn || '9999') ? -1 : 1;
+      })
+      .slice(0, o.limit || 300)
+      .map(function (x) { return x.t; });
+  }
+
+  /* ---------- การค้นหาที่บันทึกไว้ (ของแต่ละคน ใน db.personal) ---------- */
+
+  function savedSearches() { return personalOf().searches || []; }
+  function savedSearch(id) { return savedSearches().filter(function (s) { return s.id === id; })[0] || null; }
+
+  function saveSearch(o) {
+    if (!me()) return null;
+    var st = personalOf();
+    st.searches = st.searches || [];
+    if (st.searches.length >= 50) return null;
+    snapshot('บันทึกการค้นหา');
+    var s = {
+      id: uid('ss'), name: String(o.name || '').trim().slice(0, 60) || 'การค้นหา',
+      q: String(o.q || '').slice(0, 300), conds: clone(o.conds || []),
+      mode: o.mode === 'calendar' ? 'calendar' : 'list'
+    };
+    st.searches.push(s);
+    commit();
+    return s;
+  }
+
+  function updateSavedSearch(id, patch) {
+    var s = savedSearch(id);
+    if (!s) return false;
+    snapshot('แก้การค้นหาที่บันทึกไว้');
+    if (typeof patch.name === 'string' && patch.name.trim()) s.name = patch.name.trim().slice(0, 60);
+    if (typeof patch.q === 'string') s.q = patch.q.slice(0, 300);
+    if (Array.isArray(patch.conds)) s.conds = clone(patch.conds);
+    if (patch.mode) s.mode = patch.mode === 'calendar' ? 'calendar' : 'list';
+    commit();
+    return true;
+  }
+
+  function deleteSavedSearch(id) {
+    var st = personalOf();
+    if (!savedSearch(id)) return false;
+    snapshot('ลบการค้นหาที่บันทึกไว้');
+    st.searches = st.searches.filter(function (s) { return s.id !== id; });
+    commit();
+    return true;
+  }
+
+  /* ---------- แท็ก ---------- */
+
+  /** งานที่มีแท็กนี้และคนนี้เห็นได้ */
+  function tagTasks(name) {
+    return db.tasks.filter(function (t) {
+      return (t.tags || []).indexOf(name) >= 0 && canSeeTask(t.id);
+    });
+  }
+
+  /** เปลี่ยนชื่อแท็กทั้งองค์กร (รวมกฎอัตโนมัติที่เติมแท็กนี้) — ชื่อใหม่ที่มีอยู่แล้ว = รวมแท็ก */
+  function renameTag(oldName, newName) {
+    var nw = String(newName || '').trim().slice(0, 40);
+    if (!oldName || !nw || nw === oldName) return 0;
+    snapshot('เปลี่ยนชื่อแท็ก');
+    var n = 0;
+    db.tasks.forEach(function (t) {
+      var k = (t.tags || []).indexOf(oldName);
+      if (k < 0) return;
+      t.tags.splice(k, 1);
+      if (t.tags.indexOf(nw) < 0) t.tags.push(nw);
+      n++;
+    });
+    db.projects.forEach(function (p) {
+      (p.rules || []).forEach(function (r) { if (r.addTag === oldName) r.addTag = nw; });
+    });
+    audit('tag.rename', oldName, '→ {t} ({n})', { t: nw, n: n });
+    commit();
+    return n;
+  }
+
+  function deleteTag(name) {
+    if (!name) return 0;
+    snapshot('ลบแท็ก');
+    var n = 0;
+    db.tasks.forEach(function (t) {
+      var k = (t.tags || []).indexOf(name);
+      if (k >= 0) { t.tags.splice(k, 1); n++; }
+    });
+    db.projects.forEach(function (p) {
+      (p.rules || []).forEach(function (r) { if (r.addTag === name) r.addTag = ''; });
+    });
+    audit('tag.delete', name, '{n} งาน', { n: n });
+    commit();
+    return n;
+  }
+
+  /* ---------- นำเข้า CSV แบบจับคู่คอลัมน์ ---------- */
+
+  var CSV_TARGETS = [
+    { id: 'ignore',        label: 'ไม่นำเข้า' },
+    { id: 'name',          label: 'ชื่องาน',               names: ['Name', 'Task Name', 'Task', 'ชื่องาน', 'ชื่อ'] },
+    { id: 'notes',         label: 'รายละเอียด',            names: ['Notes', 'Description', 'รายละเอียด'] },
+    { id: 'section',       label: 'คอลัมน์ (เซกชัน)',       names: ['Section/Column', 'Section', 'Column', 'คอลัมน์', 'เซกชัน'] },
+    { id: 'assignee',      label: 'ผู้รับผิดชอบ',           names: ['Assignee', 'ผู้รับผิดชอบ'] },
+    { id: 'assigneeEmail', label: 'อีเมลผู้รับผิดชอบ',       names: ['Assignee Email'] },
+    { id: 'collaborators', label: 'ผู้ร่วมงาน (ผู้ติดตาม)', names: ['Collaborators', 'Followers', 'ผู้ติดตาม', 'ผู้ร่วมงาน'] },
+    { id: 'start',         label: 'วันเริ่ม',               names: ['Start Date', 'วันเริ่ม'] },
+    { id: 'due',           label: 'กำหนดส่ง',              names: ['Due Date', 'กำหนดส่ง'] },
+    { id: 'priority',      label: 'ความสำคัญ',             names: ['Priority', 'ความสำคัญ'] },
+    { id: 'type',          label: 'ชนิดงาน',               names: ['Type', 'ชนิดงาน'] },
+    { id: 'tags',          label: 'แท็ก',                  names: ['Tags', 'แท็ก'] },
+    { id: 'blockedBy',     label: 'รองาน (ถูกบล็อกโดย)',     names: ['Blocked By', 'Blocked By (Dependencies)', 'Dependencies', 'รองาน', 'ถูกบล็อกโดย'] },
+    { id: 'dependents',    label: 'งานที่รองานนี้ (กำลังบล็อก)', names: ['Blocking (Dependents)', 'Dependents', 'Blocking', 'กำลังบล็อก'] },
+    { id: 'parent',        label: 'เป็นงานย่อยของ',         names: ['Parent task', 'Parent Task', 'Parent', 'งานหลัก'] },
+    { id: 'completed',     label: 'ทำเสร็จเมื่อ',            names: ['Completed At', 'ทำเสร็จเมื่อ'] }
+  ];
+  var CSV_NEW_TYPES = ['text', 'number', 'select', 'date'];
+
+  /** ดูไฟล์ก่อนนำเข้า — หัวตาราง ตัวอย่างห้าแถว และการจับคู่ที่เดาให้ */
+  function csvPreview(projectId, text) {
+    var rows = parseCsv(text);
+    if (!rows.length) throw new Error('ไฟล์ว่างหรือไม่มีบรรทัดข้อมูล');
+    var head = rows[0];
+    var p = project(projectId);
+    var used = {};
+    var guess = head.map(function (h) {
+      var hl = String(h || '').trim().toLowerCase();
+      if (!hl || hl === 'task id') return 'ignore';
+      for (var k = 0; k < CSV_TARGETS.length; k++) {
+        var c = CSV_TARGETS[k];
+        if (c.names && !used[c.id] && c.names.some(function (n) { return n.toLowerCase() === hl; })) {
+          used[c.id] = true;
+          return c.id;
+        }
+      }
+      var f = ((p && p.fields) || []).filter(function (x) {
+        return x.type !== 'id' && x.name.trim().toLowerCase() === hl;
+      })[0];
+      return f ? 'field:' + f.id : 'ignore';
+    });
+    return { head: head, sample: rows.slice(1, 6), total: rows.length - 1, guess: guess };
+  }
+
+  /** วันที่จากไฟล์ — 2026-11-25, 2026/11/25, 25/11/2026 หรือ 25/11/2569 (พ.ศ.) */
+  function csvDate(v) {
+    var s = String(v || '').trim();
+    var m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (m) return m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
+    m = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/);
+    if (m) {
+      var y = +m[3];
+      if (y > 2400) y -= 543;
+      return y + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+    }
+    return null;
+  }
+
+  function csvList(v) {
+    return String(v || '').split(/\s*[·,;]\s*/).map(function (x) {
+      return x.replace(/\s*\((FS|SS|FF|SF)\)\s*$/, '').trim();
+    }).filter(Boolean);
+  }
+
+  /**
+   * นำเข้างานตามการจับคู่คอลัมน์
+   * @param map  อาร์เรย์ยาวเท่าหัวตาราง ค่า = id ใน CSV_TARGETS | 'field:<id>' | 'new:<text|number|select|date>'
+   * ทุกแถวเป็นงานใหม่ ไม่แตะงานเดิม งานหลัก/ลำดับก่อนหลังจับคู่จากชื่องาน (ในไฟล์ก่อน แล้วในโปรเจกต์)
+   */
+  function importTasksCsvMapped(projectId, text, map) {
+    var p = project(projectId);
+    if (!p) throw new Error('ไม่พบโปรเจกต์');
+    var rows = parseCsv(text);
+    if (rows.length < 2) throw new Error('ไฟล์ว่างหรือไม่มีบรรทัดข้อมูล');
+    var head = rows[0];
+    map = map || [];
+    var col = {};
+    map.forEach(function (tgt, k) { if (tgt && tgt !== 'ignore' && !(tgt in col)) col[tgt] = k; });
+    if (!('name' in col)) throw new Error('ต้องเลือกคอลัมน์ที่เป็นชื่องาน');
+    var res = { tasks: 0, sections: 0, fields: 0, subtasks: 0, deps: 0 };
+
+    batch('นำเข้างานจาก CSV', null, function () {
+      var byName = {}, byMail = {};
+      db.users.forEach(function (u) {
+        byName[u.name.trim().toLowerCase()] = u.id;
+        if (u.email) byMail[u.email.trim().toLowerCase()] = u.id;
+      });
+      function who(v) {
+        var k = String(v || '').trim().toLowerCase();
+        return k ? (byMail[k] || byName[k] || null) : null;
+      }
+      var secByName = {};
+      p.sections.forEach(function (s) { secByName[s.name.trim().toLowerCase()] = s.id; });
+      function cell(r, k) { return k >= 0 && r[k] != null ? String(r[k]).trim() : ''; }
+
+      /* ฟิลด์ใหม่จากคอลัมน์ที่เลือก "สร้างฟิลด์ใหม่" — ตัวเลือกเดียวได้ตัวเลือกจากค่าที่ไม่ซ้ำในไฟล์ */
+      var fieldCols = [];
+      map.forEach(function (tgt, k) {
+        if (!tgt) return;
+        if (tgt.indexOf('new:') === 0) {
+          var ty = tgt.slice(4);
+          if (CSV_NEW_TYPES.indexOf(ty) < 0) ty = 'text';
+          var opts = [];
+          if (ty === 'select') {
+            rows.slice(1).forEach(function (r) {
+              var v = cell(r, k);
+              if (v && opts.indexOf(v) < 0 && opts.length < 50) opts.push(v);
+            });
+          }
+          var nf = normalizeFieldDef({ id: uid('f'), name: String(head[k] || 'ฟิลด์').trim().slice(0, 80) || 'ฟิลด์',
+            type: ty, options: opts });
+          if (ty === 'number') nf.format = null;
+          p.fields.push(nf);
+          res.fields++;
+          fieldCols.push({ k: k, f: nf });
+        } else if (tgt.indexOf('field:') === 0) {
+          var ef = p.fields.filter(function (x) { return 'field:' + x.id === tgt; })[0];
+          if (ef && ef.type !== 'id') fieldCols.push({ k: k, f: ef });
+        }
+      });
+
+      var made = [];
+      for (var r = 1; r < rows.length; r++) {
+        var row = rows[r];
+        var name = cell(row, col.name);
+        if (!name) continue;
+        var secId = p.sections[0].id;
+        var secLabel = cell(row, col.section);
+        if (secLabel) {
+          var key = secLabel.toLowerCase();
+          if (!secByName[key]) {
+            var ns = { id: uid('s'), name: secLabel.slice(0, 120) };
+            p.sections.push(ns);
+            secByName[key] = ns.id;
+            res.sections++;
+          }
+          secId = secByName[key];
+        }
+        var prio = cell(row, col.priority).toLowerCase();
+        if (['urgent', 'high', 'medium', 'low'].indexOf(prio) < 0) prio = 'none';
+        var type = cell(row, col.type).toLowerCase();
+        if (['task', 'milestone', 'approval'].indexOf(type) < 0) type = 'task';
+        var assignee = who(cell(row, col.assigneeEmail)) || who(cell(row, col.assignee));
+        var fol = csvList(cell(row, col.collaborators)).map(who).filter(Boolean);
+        var doneAt = csvDate(cell(row, col.completed));
+        var t = blankTask({
+          name: name.slice(0, 500), notes: cell(row, col.notes),
+          assigneeId: assignee,
+          startOn: csvDate(cell(row, col.start)), dueOn: csvDate(cell(row, col.due)),
+          priority: prio, type: type,
+          tags: csvList(cell(row, col.tags)),
+          createdBy: db.currentUserId
+        });
+        fol.forEach(function (u) { if (t.followers.indexOf(u) < 0) t.followers.push(u); });
+        if (doneAt) { t.completed = true; t.completedAt = doneAt; }
+        db.tasks.push(t);
+        db.memberships.push({ id: uid('m'), taskId: t.id, projectId: projectId, sectionId: secId,
+          position: nextPosition(projectId, secId) });
+        fieldCols.forEach(function (fc) {
+          var raw = cell(row, fc.k);
+          if (!raw) return;
+          var f = fc.f, val = null;
+          if (f.type === 'number') {
+            var n = parseFloat(raw.replace(/[^\d.\-]/g, ''));
+            val = isNaN(n) ? null : n;
+          } else if (f.type === 'date') val = csvDate(raw);
+          else if (f.type === 'person') val = who(raw);
+          else if (f.type === 'select' || f.type === 'multi') {
+            var picks = f.type === 'multi' ? csvList(raw) : [raw];
+            picks = picks.map(function (x) {
+              var o = f.options.filter(function (y) { return y.name.toLowerCase() === x.toLowerCase(); })[0];
+              if (!o && f.options.length < 100) {
+                o = { name: x.slice(0, 60), color: OPTION_COLORS[f.options.length % OPTION_COLORS.length] };
+                f.options.push(o);
+                propagateField(f);
+              }
+              return o ? o.name : null;
+            }).filter(Boolean);
+            val = f.type === 'multi' ? picks : (picks[0] || null);
+          } else val = raw.slice(0, 1000);
+          if (val !== null && !(Array.isArray(val) && !val.length)) {
+            db.fieldValues.push({ taskId: t.id, fieldId: f.id, value: val });
+          }
+        });
+        made.push({ t: t, row: row });
+        res.tasks++;
+      }
+
+      /* งานหลักและลำดับก่อนหลัง — หาจากชื่อในไฟล์ก่อน ไม่เจอค่อยหาในโปรเจกต์ */
+      var nameMap = {};
+      tasksInProject(projectId).forEach(function (x) {
+        var k2 = x.task.name.trim().toLowerCase();
+        if (!nameMap[k2]) nameMap[k2] = x.task;
+      });
+      made.forEach(function (x) { nameMap[x.t.name.trim().toLowerCase()] = x.t; });
+      function byTaskName(n) { return nameMap[String(n || '').trim().toLowerCase()] || null; }
+      made.forEach(function (x) {
+        var par = byTaskName(cell(x.row, col.parent));
+        if (par && par.id !== x.t.id && !treeIds(x.t.id)[par.id]) {
+          x.t.parentId = par.id;
+          db.memberships = db.memberships.filter(function (m) { return m.taskId !== x.t.id; });
+          res.subtasks++;
+        }
+        csvList(cell(x.row, col.blockedBy)).forEach(function (n) {
+          var b = byTaskName(n);
+          if (b && b.id !== x.t.id && !x.t.dependsOn.some(function (d) { return d.id === b.id; }) &&
+              !dependsOnDeep(b.id, x.t.id)) {
+            x.t.dependsOn.push({ id: b.id, type: 'FS' });
+            res.deps++;
+          }
+        });
+        csvList(cell(x.row, col.dependents)).forEach(function (n) {
+          var d = byTaskName(n);
+          if (d && d.id !== x.t.id && !d.dependsOn.some(function (y) { return y.id === x.t.id; }) &&
+              !dependsOnDeep(x.t.id, d.id)) {
+            d.dependsOn.push({ id: x.t.id, type: 'FS' });
+            res.deps++;
+          }
+        });
+      });
+      audit('project.import', p.name, 'นำเข้า {n} งาน', { n: res.tasks });
+    });
+    return res;
+  }
+
+  /* ---------- ส่งออกโปรเจกต์เป็น JSON และปฏิทิน .ics ---------- */
+
+  /** โปรเจกต์เดียวพร้อมงาน งานย่อย ค่าฟิลด์ และความเห็น — ไม่รวมข้อมูลของโปรเจกต์อื่นหรือของส่วนตัว */
+  function projectJson(projectId) {
+    var p = project(projectId);
+    if (!p) return '';
+    var set = {};
+    tasksInProject(projectId).forEach(function (x) { treeIds(x.task.id, set); });
+    var tasks = db.tasks.filter(function (t) { return set[t.id]; });
+    var people = {};
+    tasks.forEach(function (t) {
+      [t.assigneeId, t.createdBy].concat(t.followers || []).forEach(function (u) { if (u) people[u] = true; });
+    });
+    var pc = clone(p);
+    delete pc.accessRequests;
+    var out = {
+      orbit: 'project', schema: SCHEMA, exportedAt: new Date().toISOString(),
+      project: pc,
+      memberships: clone(db.memberships.filter(function (m) { return m.projectId === projectId; })),
+      tasks: clone(tasks),
+      fieldValues: clone(db.fieldValues.filter(function (v) { return set[v.taskId]; })),
+      comments: clone(db.stories.filter(function (s) { return set[s.taskId] && s.type === 'comment' && !s.deleted; })),
+      users: Object.keys(people).map(function (id) {
+        var u = user(id);
+        return u ? { id: u.id, name: u.name, email: u.email || '' } : null;
+      }).filter(Boolean)
+    };
+    audit('project.export', p.name, 'ส่งออก {n} งานเป็น JSON', { n: tasks.length });
+    commit();
+    return JSON.stringify(out, null, 2);
+  }
+
+  function icsEsc(s) {
+    return String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,')
+      .replace(/\r?\n/g, '\\n');
+  }
+
+  /** ตัดบรรทัดที่ 75 ไบต์ตามมาตรฐาน RFC 5545 (นับไบต์ UTF-8 ภาษาไทยตัวละ 3 ไบต์) */
+  function icsFold(line) {
+    var out = '', bytes = 0;
+    for (var k = 0; k < line.length; k++) {
+      var ch = line.charAt(k);
+      var code = line.charCodeAt(k);
+      if (code >= 0xD800 && code <= 0xDBFF && k + 1 < line.length) { ch += line.charAt(++k); }
+      var b = ch.length > 1 ? 4 : code < 0x80 ? 1 : code < 0x800 ? 2 : 3;
+      if (bytes + b > 73) { out += '\r\n '; bytes = 1; }
+      out += ch;
+      bytes += b;
+    }
+    return out;
+  }
+
+  /** ปฏิทิน .ics — งานที่ยังไม่เสร็จและมีวัน เป็นกิจกรรมทั้งวัน (วันเริ่มถึงกำหนดส่ง) */
+  function icsText(tasks, calName, baseUrl) {
+    var stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+    var L2 = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Orbit//Tasks//TH', 'CALSCALE:GREGORIAN',
+      'METHOD:PUBLISH', 'X-WR-CALNAME:' + icsEsc(calName)];
+    var n = 0;
+    tasks.forEach(function (t) {
+      if (t.completed || (!t.dueOn && !t.startOn) || !canSeeTask(t.id)) return;
+      var a = t.startOn || t.dueOn, b = t.dueOn || t.startOn;
+      if (b < a) { var tmp = a; a = b; b = tmp; }
+      var desc = plainText(t.notes).slice(0, 800);
+      if (baseUrl) desc = (desc ? desc + '\n\n' : '') + baseUrl + '#/task/' + t.id;
+      L2.push('BEGIN:VEVENT', 'UID:' + t.id + '@orbit', 'DTSTAMP:' + stamp,
+        'DTSTART;VALUE=DATE:' + a.replace(/-/g, ''),
+        'DTEND;VALUE=DATE:' + addDays(b, 1).replace(/-/g, ''),
+        'SUMMARY:' + icsEsc(t.name));
+      if (desc) L2.push('DESCRIPTION:' + icsEsc(desc));
+      if (baseUrl) L2.push('URL:' + baseUrl + '#/task/' + t.id);
+      L2.push('END:VEVENT');
+      n++;
+    });
+    L2.push('END:VCALENDAR');
+    return { text: L2.map(icsFold).join('\r\n') + '\r\n', count: n };
+  }
+
+  function myTasksIcs(baseUrl) {
+    var list = db.tasks.filter(function (t) { return t.assigneeId === db.currentUserId; });
+    return icsText(list, L('งานของฉัน') + ' · Orbit', baseUrl);
+  }
+
+  function projectIcs(projectId, baseUrl) {
+    var p = project(projectId);
+    if (!p) return { text: '', count: 0 };
+    var set = {};
+    tasksInProject(projectId).forEach(function (x) { treeIds(x.task.id, set); });
+    var res = icsText(db.tasks.filter(function (t) { return set[t.id]; }), p.name + ' · Orbit', baseUrl);
+    audit('project.export', p.name, 'ส่งออกปฏิทิน .ics {n} งาน', { n: res.count });
+    commit();
+    return res;
+  }
+
+  /* ---------- บทบาทในโปรเจกต์ (ข้อความอิสระ ไม่ใช่สิทธิ์) ---------- */
+
+  function projectRoles(projectId) {
+    var p = project(projectId);
+    if (!p || !p.roles) return [];
+    return Object.keys(p.roles).map(function (id) { return { user: user(id), role: p.roles[id] }; })
+      .filter(function (x) { return x.user && x.role; })
+      .sort(function (a, b) { return a.user.name.localeCompare(b.user.name, 'th'); });
+  }
+
+  function setProjectRole(projectId, userId, text) {
+    var p = project(projectId);
+    if (!p || !user(userId)) return false;
+    var r = String(text || '').trim().slice(0, 60);
+    if ((p.roles[userId] || '') === r) return false;
+    snapshot('ตั้งบทบาทในโปรเจกต์');
+    if (r) p.roles[userId] = r; else delete p.roles[userId];
+    commit();
+    return true;
+  }
+
+  /* ---------- ขอสิทธิ์เข้าโปรเจกต์ปิด ----------
+   * คนที่ได้ลิงก์โปรเจกต์ปิดมาแต่ไม่ได้เป็นสมาชิก กดขอสิทธิ์ได้ → เกิดงานมอบหมายให้เจ้าของโปรเจกต์
+   * (ไม่มีเจ้าของ = ผู้ดูแลโปรเจกต์คนแรก แล้วค่อยผู้ดูแลระบบ) งานนี้เป็นงานส่วนตัว เห็นเฉพาะสองฝั่ง */
+  function accessOwner(p) {
+    var ok = function (id) { var u = user(id); return u && u.active !== false ? u : null; };
+    if (p.owner && ok(p.owner)) return ok(p.owner);
+    var adm = projectMembers(p.id).filter(function (m) { return m.access === 'admin' && ok(m.userId); })[0];
+    if (adm) return ok(adm.userId);
+    return db.users.filter(function (u) { return u.role === 'admin' && u.active !== false; })[0] || null;
+  }
+
+  function pendingRequest(projectId, userId) {
+    var p = project(projectId);
+    return p ? (p.accessRequests || []).filter(function (r) { return r.userId === (userId || db.currentUserId); })[0] || null : null;
+  }
+
+  function requestAccess(projectId, note) {
+    var p = project(projectId), u = me();
+    if (!p || !u) return { ok: false, reason: 'ไม่พบโปรเจกต์' };
+    if (projectAccess(projectId)) return { ok: false, reason: 'คุณเข้าโปรเจกต์นี้ได้อยู่แล้ว' };
+    var pend = pendingRequest(projectId);
+    if (pend && task(pend.taskId)) return { ok: false, reason: 'ส่งคำขอไปแล้ว รอเจ้าของโปรเจกต์ตอบ', taskId: pend.taskId };
+    var owner = accessOwner(p);
+    if (!owner) return { ok: false, reason: 'โปรเจกต์นี้ไม่มีเจ้าของให้ส่งคำขอ' };
+    var t = batch('ขอสิทธิ์เข้าโปรเจกต์', null, function () {
+      var nt = createTaskRaw({
+        name: L('ขอสิทธิ์เข้าถึงโปรเจกต์ “{p}”', { p: p.name }),
+        assigneeId: owner.id,
+        notes: L('{who} ขอเข้าถึงโปรเจกต์', { who: u.name }) + ' @[' + refLabel(p.name) + '](' + p.id + ')' +
+          (note ? '\n\n' + String(note).slice(0, 1000) : '')
+      }, null, null);
+      notifyOnly(nt.id, [owner.id], 'มอบหมายงาน “{t}” ให้คุณ', 'assigned', { t: nt.name });
+      p.accessRequests = (p.accessRequests || []).filter(function (r) { return r.userId !== u.id; });
+      p.accessRequests.push({ userId: u.id, taskId: nt.id, at: new Date().toISOString() });
+      audit('project.access-request', p.name, u.name);
+      return nt;
+    });
+    return { ok: true, taskId: t.id, owner: owner };
+  }
+
+  /** งานนี้เป็นคำขอเข้าโปรเจกต์ที่ยังไม่ได้ตอบไหม คืน { project, userId } */
+  function accessRequestOf(taskId) {
+    for (var k = 0; k < db.projects.length; k++) {
+      var r = (db.projects[k].accessRequests || []).filter(function (x) { return x.taskId === taskId; })[0];
+      if (r) return { project: db.projects[k], userId: r.userId };
+    }
+    return null;
+  }
+
+  function canAnswerAccess(projectId) {
+    var p = project(projectId);
+    return !!p && (can('manage') || canInProject(projectId, 'admin') || p.owner === db.currentUserId);
+  }
+
+  /** ตอบคำขอ — grant = เพิ่มเป็นสมาชิกสิทธิ์ access (ค่าเริ่มต้นแก้ไขได้) แล้วปิดงานคำขอ */
+  function answerAccess(projectId, userId, grant, access) {
+    var p = project(projectId);
+    var r = pendingRequest(projectId, userId);
+    if (!p || !r || !canAnswerAccess(projectId)) return false;
+    batch(grant ? 'ให้สิทธิ์เข้าโปรเจกต์' : 'ปฏิเสธคำขอเข้าโปรเจกต์', null, function () {
+      if (grant) {
+        setProjectMember(projectId, userId, ACCESS_RANK[access] ? access : 'edit', true);
+        audit('project.member', p.name, (user(userId) || {}).name + ' → ' + (access || 'edit'));
+      }
+      p.accessRequests = p.accessRequests.filter(function (x) { return x !== r; });
+      var t = task(r.taskId);
+      if (t && !t.completed) updateTask(t.id, { completed: true }, { quiet: true });
+      if (t) log(t.id, grant ? 'ให้สิทธิ์เข้าโปรเจกต์แล้ว' : 'ปฏิเสธคำขอเข้าโปรเจกต์');
+      notifyOnly(null, [userId], grant ? 'คุณได้รับสิทธิ์เข้าโปรเจกต์ {p}' : 'คำขอเข้าโปรเจกต์ {p} ถูกปฏิเสธ',
+        'activity', { p: p.name }, false, grant ? { projectId: projectId, route: 'p-overview' } : null);
+    });
+    return true;
+  }
+
+  /* ---------- แปลงงานเป็นโปรเจกต์ ----------
+   * ชื่องาน → ชื่อโปรเจกต์  ผู้รับผิดชอบ → เจ้าของ  ผู้ติดตาม → สมาชิก  งานย่อย → งานในโปรเจกต์
+   * รายละเอียดของงานเป็นคำอธิบายโปรเจกต์ และสองฝั่งลิงก์หากัน งานเดิมยังอยู่ (ไม่ลบ) */
+  function convertToProject(taskId) {
+    var t = task(taskId);
+    if (!t) return null;
+    var homes = projectsOfTask(rootOf(t).id).map(function (x) { return x.project; });
+    var secret = !homes.length || homes.some(function (h) { return h.visibility === 'private'; });
+    return batch('แปลงงานเป็นโปรเจกต์', null, function () {
+      var owner = t.assigneeId && user(t.assigneeId) ? t.assigneeId : db.currentUserId;
+      var p = createProjectRaw({
+        name: t.name, owner: owner, dueOn: t.dueOn || null,
+        description: (t.notes ? t.notes + '\n\n' : '') +
+          L('แปลงมาจากงาน') + ' @[' + refLabel(t.name) + '](' + t.id + ')'
+      });
+      p.visibility = secret ? 'private' : 'org';
+      var people = [owner, db.currentUserId].concat(t.followers || []);
+      people.forEach(function (u, k) {
+        if (!user(u) || people.indexOf(u) !== k) return;
+        setProjectMember(p.id, u, u === owner || u === db.currentUserId ? 'admin' : 'edit', true);
+      });
+      var pos = 1;
+      subtasks(taskId).slice().forEach(function (s) {
+        s.parentId = null;
+        db.memberships.push({ id: uid('m'), taskId: s.id, projectId: p.id, sectionId: p.sections[0].id, position: pos++ });
+        log(s.id, 'ย้ายมาอยู่ในโปรเจกต์ {p}', { p: p.name });
+      });
+      t.notes = (t.notes ? t.notes + '\n\n' : '') + L('แปลงเป็นโปรเจกต์') + ' @[' + refLabel(p.name) + '](' + p.id + ')';
+      log(taskId, 'แปลงเป็นโปรเจกต์ {p}', { p: p.name });
+      audit('project.create', p.name, 'แปลงจากงาน “{t}”', { t: t.name });
+      return p;
+    });
+  }
+
+  /* ---------- แก้หลายงานพร้อมกัน (ย้อนกลับได้ครั้งเดียว) ---------- */
+
+  function rootsOnly(ids) {
+    return (ids || []).filter(function (id) { var t = task(id); return t && !t.parentId; });
+  }
+
+  function bulkAddToProject(ids, projectId, sectionId) {
+    var list = rootsOnly(ids);
+    if (!project(projectId) || !list.length) return 0;
+    return batch('เพิ่ม {n} งานเข้าโปรเจกต์', { n: list.length }, function () {
+      list.forEach(function (id) { addTaskToProject(id, projectId, sectionId); });
+      return list.length;
+    });
+  }
+
+  function bulkMoveSection(ids, projectId, sectionId) {
+    var s = section(projectId, sectionId);
+    if (!s) return 0;
+    var list = rootsOnly(ids).filter(function (id) {
+      return db.memberships.some(function (m) { return m.taskId === id && m.projectId === projectId; });
+    });
+    if (!list.length) return 0;
+    return batch('ย้าย {n} งาน', { n: list.length }, function () {
+      list.forEach(function (id) { applyGroupValue(id, projectId, 'section', sectionId, null); });
+      return list.length;
+    });
+  }
+
+  function bulkSetField(ids, fieldId, value) {
+    var f = fieldDef(fieldId);
+    if (!f || f.type === 'id' || !ids.length) return 0;
+    return batch('ตั้ง {f} ให้ {n} งาน', { f: f.name, n: ids.length }, function () {
+      ids.forEach(function (id) { setFieldValue(id, fieldId, clone(value)); });
+      return ids.length;
+    });
+  }
+
+  function bulkAddFollowers(ids, userIds) {
+    var people = (userIds || []).filter(function (u) { return !!user(u); });
+    if (!people.length || !ids.length) return 0;
+    return batch('เพิ่มผู้ติดตามให้ {n} งาน', { n: ids.length }, function () {
+      ids.forEach(function (id) {
+        var t = task(id);
+        if (!t) return;
+        people.forEach(function (u) { if (t.followers.indexOf(u) < 0) t.followers.push(u); });
+      });
+      return ids.length;
+    });
+  }
+
+  function bulkAddTag(ids, tag) {
+    var tg = String(tag || '').trim().slice(0, 40);
+    if (!tg || !ids.length) return 0;
+    return batch('เพิ่มแท็กให้ {n} งาน', { n: ids.length }, function () {
+      ids.forEach(function (id) {
+        var t = task(id);
+        if (t && t.tags.indexOf(tg) < 0) updateTask(id, { tags: t.tags.concat([tg]) }, { quiet: true });
+      });
+      return ids.length;
+    });
+  }
+
+  /** ทุกงานที่เลือกรองานนี้ — คืนจำนวนที่ผูกได้ (ข้ามที่จะวนลูป) */
+  function bulkDependOn(ids, blockerId) {
+    if (!task(blockerId)) return 0;
+    var n = 0;
+    batch('ตั้งให้ {n} งานรองานอื่น', { n: ids.length }, function () {
+      ids.forEach(function (id) { if (addDependency(id, blockerId, 'FS')) n++; });
+    });
+    return n;
+  }
+
+  /** รวมงานที่เลือกเข้ากับงานหลักหนึ่งชิ้น */
+  function bulkMerge(ids, masterId) {
+    var n = 0;
+    batch('รวมงานซ้ำ', null, function () {
+      ids.forEach(function (id) { if (id !== masterId && mergeDuplicate(id, masterId)) n++; });
+    });
+    return n;
+  }
+
   /* ---------- backup ---------- */
 
-  function exportJSON() { return JSON.stringify(db, null, 2); }
+  /* สำรองทั้งก้อนสำหรับผู้ดูแล — สมุดโน้ตส่วนตัวของคนอื่นไม่ออกไปกับไฟล์ (2c)
+   * สมุดโน้ตเป็นของเจ้าตัวคนเดียว ผู้ดูแลมีสิทธิ์สำรองระบบ ไม่ได้มีสิทธิ์อ่านโน้ตของใคร
+   * ของตัวเองยังอยู่ในไฟล์ เพราะคนกดคือเจ้าของ */
+  function exportJSON() {
+    var out = JSON.parse(JSON.stringify(db));
+    Object.keys(out.personal || {}).forEach(function (who) {
+      if (who !== db.currentUserId && out.personal[who]) delete out.personal[who].notepad;
+    });
+    return JSON.stringify(out, null, 2);
+  }
 
   function importJSON(text) {
     var parsed = JSON.parse(text);
     if (!parsed.projects || !parsed.tasks) throw new Error('ไฟล์ไม่ถูกรูปแบบ');
     snapshot('กู้คืนข้อมูล');
+    /* ไฟล์สำรองไม่มีสมุดโน้ตของคนอื่น (ดู exportJSON) — กู้คืนแล้วต้องไม่ล้างโน้ตที่มีอยู่ทิ้ง */
+    if (!parsed.personal || typeof parsed.personal !== 'object' || Array.isArray(parsed.personal)) parsed.personal = {};
+    Object.keys(db.personal || {}).forEach(function (who) {
+      var cur = db.personal[who];
+      if (!cur || !cur.notepad) return;
+      var inc = parsed.personal[who];
+      if (!inc || typeof inc !== 'object') parsed.personal[who] = inc = {};
+      if (typeof inc.notepad !== 'string') inc.notepad = cur.notepad;
+    });
     db = migrate(parsed);
     dropIndex();
     commit();
@@ -5974,6 +7044,27 @@
     audit: audit, auditLog: auditLog, auditGroups: auditGroups, auditCsv: auditCsv,
     signedInUsers: signedInUsers, recentActivity: recentActivity,
     setSetting: setSetting,
+
+    /* 2c — ค้นหา ฟิลด์ แท็ก นำเข้า/ส่งออก และงานดูแลโปรเจกต์ */
+    batch: batch, searchAdv: searchAdv, parseQuery: parseQuery, hasOperators: hasOperators,
+    SEARCH_BUILTIN: SEARCH_BUILTIN,
+    savedSearches: savedSearches, savedSearch: savedSearch, saveSearch: saveSearch,
+    updateSavedSearch: updateSavedSearch, deleteSavedSearch: deleteSavedSearch,
+    fieldDef: fieldDef, fieldText: fieldText, taskCodes: taskCodes, findByCode: findByCode,
+    fieldLib: fieldLib, libField: libField, libUsage: libUsage, updateFieldDef: updateFieldDef,
+    createLibField: createLibField, addLibFieldToProject: addLibFieldToProject,
+    promoteFieldToLib: promoteFieldToLib, deleteLibField: deleteLibField,
+    tagTasks: tagTasks, renameTag: renameTag, deleteTag: deleteTag,
+    CSV_TARGETS: CSV_TARGETS, CSV_NEW_TYPES: CSV_NEW_TYPES, csvPreview: csvPreview,
+    importTasksCsvMapped: importTasksCsvMapped,
+    projectJson: projectJson, myTasksIcs: myTasksIcs, projectIcs: projectIcs,
+    projectRoles: projectRoles, setProjectRole: setProjectRole,
+    requestAccess: requestAccess, pendingRequest: pendingRequest, accessRequestOf: accessRequestOf,
+    canAnswerAccess: canAnswerAccess, answerAccess: answerAccess, accessOwner: accessOwner,
+    convertToProject: convertToProject,
+    bulkAddToProject: bulkAddToProject, bulkMoveSection: bulkMoveSection, bulkSetField: bulkSetField,
+    bulkAddFollowers: bulkAddFollowers, bulkAddTag: bulkAddTag, bulkDependOn: bulkDependOn,
+    bulkMerge: bulkMerge,
 
     exportJSON: exportJSON, importJSON: importJSON, reset: reset
   };

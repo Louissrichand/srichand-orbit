@@ -48,7 +48,10 @@
     subOpen: {},             // งานที่กางงานย่อยไว้ในรายการ
     cursor: null,            // งานที่ถูกชี้อยู่ในรายการ (Enter เพิ่มงานต่อจากแถวนี้ Ctrl+↑/↓ ย้ายแถวนี้)
     selAnchor: null,         // จุดเริ่มของการเลือกช่วงด้วย Shift+คลิก
-    calx: {}                 // วันที่ที่ปฏิทินแต่ละขอบเขตกำลังแสดง
+    calx: {},                // วันที่ที่ปฏิทินแต่ละขอบเขตกำลังแสดง
+    /* 2c — ค้นหาขั้นสูง เงื่อนไขอยู่แค่ในหน้าจอจนกว่าจะกดบันทึก (ของที่บันทึกแล้วอยู่ใน db.personal) */
+    adv: { conds: [], mode: 'list', open: false, help: false },
+    csv: null                // ไฟล์ CSV ที่กำลังจับคู่คอลัมน์ { pid, file, text, enc, map }
   };
 
   /* มุมมองที่ทำงานอยู่ของโปรเจกต์
@@ -175,7 +178,10 @@
     var r = state.route, parts;
     if (r.type === 'project') parts = ['project', r.id, r.sv || r.view];
     else if (r.type === 'portfolio') parts = ['portfolio', r.id, r.view || 'list'];
-    else if (r.type === 'search') parts = ['search', encodeURIComponent(r.q)];
+    else if (r.type === 'search') parts = r.ss ? ['saved', r.ss] : (r.q ? ['search', encodeURIComponent(r.q)] : ['search']);
+    else if (r.type === 'tag') parts = ['tag', encodeURIComponent(r.name)];
+    else if (r.type === 'noaccess') parts = ['project', r.id];
+    else if (r.type === 'trash' && r.pid) parts = ['trash', r.pid];
     else if (r.type === 'profile') parts = ['profile', r.id];
     else parts = [r.type];
     if (state.openTaskId) parts.push(state.openTaskId);
@@ -249,8 +255,24 @@
       var pok = R.PF_TABS.some(function (x) { return x[0] === pv; });
       return { route: { type: 'portfolio', id: seg[1], view: pok ? pv : 'list' }, taskId: taskId };
     }
-    if (type === 'search' && seg[1]) {
-      return { route: { type: 'search', q: decodeURIComponent(seg[1]) }, taskId: taskId };
+    if (type === 'search') {
+      var sq = '';
+      try { sq = seg[1] ? decodeURIComponent(seg[1]) : ''; } catch (e) { sq = seg[1] || ''; }
+      return { route: { type: 'search', q: sq }, taskId: taskId };
+    }
+    /* 2c — การค้นหาที่บันทึกไว้ #/saved/<id> และหน้าแท็ก #/tag/<ชื่อ> */
+    if (type === 'saved' && seg[1]) {
+      var ssv = S.savedSearch(seg[1]);
+      if (!ssv) return null;
+      return { route: { type: 'search', q: ssv.q, ss: ssv.id }, taskId: taskId, ss: ssv };
+    }
+    if (type === 'tag' && seg[1]) {
+      var tg;
+      try { tg = decodeURIComponent(seg[1]); } catch (e2) { tg = seg[1]; }
+      return { route: { type: 'tag', name: tg }, taskId: taskId };
+    }
+    if (type === 'trash' && seg[1] && S.project(seg[1])) {
+      return { route: { type: 'trash', pid: seg[1] }, taskId: taskId };
     }
     if (type === 'profile') {
       /* ไม่ระบุใคร = โปรไฟล์ของตัวเอง ทำให้ลิงก์ #/profile ใช้ได้กับทุกคน */
@@ -269,6 +291,7 @@
     var parsed = readHash();
     if (!parsed) return;
     state.route = parsed.route;
+    loadSavedSearch(parsed.ss);
     var prevTask = state.openTaskId;
     state.openTaskId = parsed.taskId && S.task(parsed.taskId) &&
       (!S.canSeeTask || S.canSeeTask(parsed.taskId)) ? parsed.taskId : null;
@@ -307,7 +330,11 @@
       if (!p) { state.route = { type: 'home' }; return renderAll(); }
       /* ไม่มีสิทธิ์เห็นโปรเจกต์นี้ — ถอยออกเงียบ ๆ เหมือนโปรเจกต์ไม่มีอยู่จริง
        * ไม่บอกว่า "ไม่มีสิทธิ์" เพราะนั่นเท่ากับยืนยันว่าโปรเจกต์นี้มีอยู่ */
-      if (!S.projectAccess(r.id)) { state.route = { type: "home" }; return renderAll(); }
+      /* 2c — ยกเว้นโปรเจกต์ปิดที่เปิดจากลิงก์ ให้ขอสิทธิ์เข้าถึงได้แบบ Asana (ลิงก์มีคนส่งมาให้แล้ว) */
+      if (!S.projectAccess(r.id)) {
+        state.route = p.visibility === 'private' && S.isActive() ? { type: 'noaccess', id: r.id } : { type: 'home' };
+        return renderAll();
+      }
       var v = viewFor(r.id);
       if (r.view === 'board') body = R.boardView(r.id, v, state.sel);
       else if (r.view === 'timeline') body = R.timelineView(r.id, v, state.tlZoom);
@@ -338,9 +365,18 @@
       if (!S.isAdmin()) { state.route = { type: 'home' }; return renderAll(); }
       body = R.adminView(state.auditFilter);
     } else if (r.type === 'search') {
-      body = R.searchView(r.q, state.sel);
+      body = R.searchView(r.q, state.sel, {
+        conds: state.adv.conds, mode: state.adv.mode, panel: advPanelHtml(),
+        anchor: calxGet('search').anchor, calMode: calxGet('search').mode
+      });
+    } else if (r.type === 'tag') {
+      body = R.tagView(r.name, state.sel);
+    } else if (r.type === 'noaccess') {
+      if (!S.project(r.id)) { state.route = { type: 'home' }; return renderAll(); }
+      if (S.projectAccess(r.id)) return goProject(r.id);
+      body = R.noAccessView(r.id);
     } else if (r.type === 'trash') {
-      body = R.trashView();
+      body = R.trashView(r.pid);
     }
 
     // ออกจาก Gantt แล้วแผงตัวเลือกไม่มีความหมายอีก ปล่อยค้างไว้จะบังหน้าจอเปล่า ๆ
@@ -366,6 +402,7 @@
     resumeInlineAdd();
     restoreTimelineScroll();
     restoreGanttScroll();
+    markKbCursor();
   }
 
   /* ---------- แถบเครื่องมือ Gantt ----------
@@ -753,7 +790,8 @@
   }
 
   /** ช่องค่าของเงื่อนไขหนึ่งแถว ตามชนิดฟิลด์และตัวดำเนินการ */
-  function fltValueHtml(pid, c, i) {
+  function fltValueHtml(pid, c, i, pre) {
+    pre = pre || 'flt';             // 'as' = ค้นหาขั้นสูง (ชุดคำสั่งแยกจากตัวกรองของโปรเจกต์)
     var def = S.filterField(pid, c.f);
     if (!def) return '';
     var kind = def.kind, op = c.op;
@@ -764,32 +802,33 @@
       var ch = S.filterChoices(pid, c.f);
       var cur = [].concat(c.v || []);
       if (!ch.length) return '<div class="flt-none">' + L('ยังไม่มีตัวเลือกให้เลือก') + '</div>';
-      var userText = def.custom || c.f === 'tags' || c.f === 'section' || kind === 'person';
+      var userText = def.custom || c.f === 'tags' || c.f === 'section' || kind === 'person' ||
+        c.f === 'followers' || c.f === 'project' || c.f === 'psection';
       return '<div class="flt-chips">' + ch.map(function (o) {
         var on = cur.indexOf(o[0]) >= 0;
-        return '<button class="flt-chip' + (on ? ' on' : '') + '" data-act="flt-opt"' + di +
+        return '<button class="flt-chip' + (on ? ' on' : '') + '" data-act="' + pre + '-opt"' + di +
           ' data-v="' + esc(o[0]) + '">' + (o[2] ? '<i class="flt-dot" style="background:' + esc(o[2]) + '"></i>' : '') +
           (o[0] === S.ME ? I('users', 11) + ' ' + L('ฉัน') : esc(userText ? o[1] : L(o[1]))) + '</button>';
       }).join('') + '</div>';
     }
     if (kind === 'date') {
       if (op === 'next' || op === 'last') {
-        return '<div class="flt-val"><input type="number" min="0" max="3650" class="opt-select flt-n" data-act="flt-val"' + di +
+        return '<div class="flt-val"><input type="number" min="0" max="3650" class="opt-select flt-n" data-act="' + pre + '-val"' + di +
           ' value="' + esc(c.v == null ? '' : c.v) + '"><span>' + L('วัน') + '</span></div>';
       }
       if (op === 'between') {
         var a = (c.v && c.v[0]) || '', b = (c.v && c.v[1]) || '';
-        return '<div class="flt-val"><input type="date" class="opt-select" data-act="flt-val"' + di + ' value="' + esc(a) + '">' +
-          '<span>–</span><input type="date" class="opt-select" data-act="flt-val2"' + di + ' value="' + esc(b) + '"></div>';
+        return '<div class="flt-val"><input type="date" class="opt-select" data-act="' + pre + '-val"' + di + ' value="' + esc(a) + '">' +
+          '<span>–</span><input type="date" class="opt-select" data-act="' + pre + '-val2"' + di + ' value="' + esc(b) + '"></div>';
       }
-      return '<div class="flt-val"><input type="date" class="opt-select" data-act="flt-val"' + di +
+      return '<div class="flt-val"><input type="date" class="opt-select" data-act="' + pre + '-val"' + di +
         ' value="' + esc(c.v || '') + '"></div>';
     }
     if (kind === 'number') {
-      return '<div class="flt-val"><input type="number" step="any" class="opt-select" data-act="flt-val"' + di +
+      return '<div class="flt-val"><input type="number" step="any" class="opt-select" data-act="' + pre + '-val"' + di +
         ' value="' + esc(c.v == null ? '' : c.v) + '"></div>';
     }
-    return '<div class="flt-val"><input type="text" class="opt-select" data-act="flt-val"' + di +
+    return '<div class="flt-val"><input type="text" class="opt-select" data-act="' + pre + '-val"' + di +
       ' value="' + esc(c.v || '') + '" placeholder="' + esc(L('พิมพ์คำ')) + '"></div>';
   }
 
@@ -1528,30 +1567,45 @@
       I('close', 13) + '</button></div>';
   }
 
-  function addFieldModal(type) {
-    var ft = S.FIELD_TYPES.filter(function (x) { return x.id === type; })[0] || S.FIELD_TYPES[0];
-    var h = '<h2>' + L('เพิ่มฟิลด์') + '</h2>';
+  /** @param forLib  true = สร้างในคลังฟิลด์ขององค์กร (ไม่มีชนิดรหัสงาน) */
+  function addFieldModal(type, forLib) {
+    var types = S.FIELD_TYPES.filter(function (x) { return !forLib || x.id !== 'id'; });
+    var ft = types.filter(function (x) { return x.id === type; })[0] || types[0];
+    var h = '<h2>' + (forLib ? L('สร้างฟิลด์ในคลัง') : L('เพิ่มฟิลด์')) + '</h2>';
 
     h += '<div class="field"><label>' + L('ชื่อฟิลด์') + ' *</label>' +
       '<input id="nfName" placeholder="' + L('เช่น สถานะ, ผู้อนุมัติ, งบ') + '"></div>';
 
     h += '<div class="field"><label>' + L('ชนิด') + '</label><select id="nfType" data-act="nf-type">';
-    S.FIELD_TYPES.forEach(function (x) {
+    types.forEach(function (x) {
       h += '<option value="' + x.id + '"' + (x.id === ft.id ? ' selected' : '') +
         '>' + L(x.label) + '</option>';
     });
     h += '</select></div>';
 
+    h += '<div class="field"><label>' + L('คำอธิบาย') + '</label><input id="nfDesc" placeholder="' +
+      L('บอกทีมว่าฟิลด์นี้ใช้กรอกอะไร (ไม่บังคับ)') + '"></div>';
+
     h += '<div class="field" id="nfOptWrap"' + (ft.hasOptions ? '' : ' style="display:none"') + '>' +
       '<label>' + L('ตัวเลือก') + ' *</label><div id="nfOpts">' +
       optionRow('', S.OPTION_COLORS[3]) + optionRow('', S.OPTION_COLORS[0]) + '</div>' +
       '<button type="button" class="btn btn-sm btn-ghost" data-act="add-option">' +
-      I('plus', 13) + ' ' + L('เพิ่มตัวเลือก') + '</button></div>';
+      I('plus', 13) + ' ' + L('เพิ่มตัวเลือก') + '</button>' +
+      '<label class="chk"><input type="checkbox" id="nfNotify"> ' + L('แจ้งผู้ติดตามงานเมื่อค่าในฟิลด์นี้เปลี่ยน') + '</label></div>';
+
+    h += '<div class="field" id="nfIdWrap"' + (ft.id === 'id' ? '' : ' hidden') + '><label>' + L('คำนำหน้ารหัส') + '</label>' +
+      '<input id="nfPrefix" maxlength="8" value="ID" placeholder="REQ"><div class="fld-hint">' +
+      L('งานในโปรเจกต์ได้เลขรันเอง เช่น REQ-1, REQ-2 ค้นหาและพิมพ์ @REQ-2 ในความเห็นได้') + '</div></div>';
 
     h += '<div id="nfNumWrap"' + (ft.id === 'number' ? '' : ' hidden') + '>' + numberFormatFields(null) + '</div>';
 
+    if (!forLib) {
+      h += '<label class="chk" id="nfLibWrap"' + (ft.id === 'id' ? ' hidden' : '') + '><input type="checkbox" id="nfLib"> ' +
+        L('บันทึกลงคลังฟิลด์ขององค์กรด้วย (โปรเจกต์อื่นใช้ได้)') + '</label>';
+    }
+
     h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') +
-      '</button><button class="btn btn-primary" data-act="create-field">' +
+      '</button><button class="btn btn-primary" data-act="create-field"' + (forLib ? ' data-lib="1"' : '') + '>' +
       L('สร้างฟิลด์') + '</button></div>';
     return h;
   }
@@ -1709,6 +1763,10 @@
     h += '<div class="pop-sep"></div>';
     h += item('import-csv', 'archive', L('นำเข้างานจาก CSV'));
     h += item('export-csv', 'send', L('ส่งออกเป็น CSV'));
+    h += item('export-json', 'send', L('ส่งออกเป็น JSON'));
+    h += item('export-ics', 'calendar', L('ดาวน์โหลดปฏิทิน .ics'));
+    h += item('print-list', 'note', L('พิมพ์รายการงาน'));
+    h += item('project-trash', 'trash', L('ถังขยะของโปรเจกต์นี้'));
     h += '<div class="pop-sep"></div>';
     h += item('toggle-archive', p.archived ? 'arrowLeft' : 'archive',
       p.archived ? L('เอากลับจากคลัง') : L('เก็บโปรเจกต์เข้าคลัง'));
@@ -2015,6 +2073,7 @@
         : item('make-subtask', 'subtask', L('แปลงเป็นงานย่อยของ…'))) +
       (t.recur ? item('stop-recur', 'repeat', L('หยุดทำซ้ำ')) : '') +
       item('save-template', 'star', L('บันทึกเป็นเทมเพลต')) +
+      (!t.parentId ? item('to-project', 'grid', L('แปลงเป็นโปรเจกต์…')) : '') +
       item('copy-link', 'link', L('คัดลอกลิงก์ของงานนี้')) +
       '<button class="btn btn-danger" data-act="delete-task" data-id="' + q + '">' + I('trash', 14) + ' ' + L('ลบงาน') + '</button>' +
       '</div>';
@@ -2250,10 +2309,20 @@
   /** แถวที่ถูกชี้ในรายการ — แต่งคลาสตรง ๆ ไม่วาดใหม่ทั้งหน้า */
   function setCursor(id) {
     state.cursor = id;
-    Array.prototype.forEach.call($view.querySelectorAll('.tr.cursor'), function (n) { n.classList.remove('cursor'); });
-    var row = $view.querySelector('.tr[data-id="' + id + '"]');
+    Array.prototype.forEach.call($view.querySelectorAll('.tr.cursor, .row.cursor, .card.cursor'), function (n) { n.classList.remove('cursor'); });
+    /* 2c — แถวในงานของฉัน ค้นหา แท็ก และการ์ดบอร์ดก็ถูกชี้ได้ (ลูกศรขึ้นลง Tab+คีย์) */
+    var row = $view.querySelector('.tr[data-id="' + id + '"], .row[data-id="' + id + '"], .card[data-id="' + id + '"]');
     if (row) row.classList.add('cursor');
   }
+
+  /** Tab+O — จอกว้างซ่อนแถบซ้ายถาวร (จำไว้ในเบราว์เซอร์นี้) จอแคบเปิดปิดแบบเลื่อนทับ */
+  function toggleSidebarCollapse(force) {
+    if (global.innerWidth <= 860) { setSidebar(!document.getElementById('sidebar').classList.contains('open')); return; }
+    var on = typeof force === 'boolean' ? force : !document.body.classList.contains('sb-collapsed');
+    document.body.classList.toggle('sb-collapsed', on);
+    try { global.localStorage.setItem('orbit.sbCollapsed', on ? '1' : ''); } catch (e) { /* ไม่มีที่เก็บก็ไม่จำ */ }
+  }
+  try { if (global.localStorage.getItem('orbit.sbCollapsed') === '1') document.body.classList.add('sb-collapsed'); } catch (e) { /* ไม่เป็นไร */ }
 
   /** เมนูปุ่ม + ท้ายหัวตาราง — เปิดปิดคอลัมน์ และเพิ่มฟิลด์ใหม่ */
   function colMenu() {
@@ -2839,37 +2908,6 @@
     }).join('');
   }
 
-  function fieldsModal(projectId) {
-    var p = S.project(projectId);
-    var h = '<h2>' + L('ฟิลด์ของ') + ' ' + R.esc(p.name) + '</h2>';
-    if (!p.fields.length) {
-      h += '<div style="color:var(--fg-faint);margin-bottom:12px">' + L('ยังไม่มีฟิลด์') + '</div>';
-    }
-    p.fields.forEach(function (f) {
-      var typeLabel = S.FIELD_TYPES.filter(function (x) { return x.id === f.type; })[0];
-      h += '<div class="mini-row"><div class="grow"><div>' + R.esc(f.name) + '</div>' +
-        '<div class="sub">' + R.esc(typeLabel ? L(typeLabel.label) : f.type) +
-        (f.options.length ? ' · ' + R.esc(f.options.map(function (o) {
-          return typeof o === 'string' ? o : o.name;
-        }).join(', ')) : '') + '</div></div>' +
-        '<button class="btn btn-sm btn-danger" data-act="delete-field" data-project="' +
-        R.esc(projectId) + '" data-field="' + R.esc(f.id) + '">' + L('ลบ') + '</button></div>';
-    });
-    h += '<div class="field" style="margin-top:16px"><label>' + L('ชื่อฟิลด์ใหม่') + '</label>' +
-      '<input id="fName" placeholder="' + L('เช่น ช่องทาง, งบประมาณ') + '"></div>';
-    h += '<div class="field"><label>' + L('ชนิด') + '</label><select id="fType">';
-    S.FIELD_TYPES.forEach(function (t) {
-      h += '<option value="' + t.id + '">' + R.esc(L(t.label)) + '</option>';
-    });
-    h += '</select></div>';
-    h += '<div class="field"><label>' + L('ตัวเลือก (เฉพาะชนิด “ตัวเลือก” คั่นด้วยจุลภาค)') + '</label>' +
-      '<input id="fOptions" placeholder="Shopee, Lazada, TikTok"></div>';
-    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button>' +
-      '<button class="btn btn-primary" data-act="add-field" data-project="' + R.esc(projectId) +
-      '">' + L('เพิ่มฟิลด์') + '</button></div>';
-    return h;
-  }
-
   function addHomeModal(taskId) {
     var current = {};
     S.projectsOfTask(taskId).forEach(function (x) { current[x.project.id] = true; });
@@ -2997,11 +3035,28 @@
       ['Tab + Z', L('ไปงานของฉัน')],
       ['Tab + I', L('ไปกล่องข้อความ')],
       ['Tab + Q', L('เพิ่มงานด่วน')],
+      ['Tab + O', L('ซ่อน/แสดงแถบซ้าย')],
+      ['Tab + Enter', L('เปิดรายละเอียดของงานที่เลือก')],
+      ['↑ / ↓', L('เลือกงานก่อนหน้า / ถัดไป')],
+      ['Ctrl + Enter', L('ทำเครื่องหมายว่าเสร็จ (งานที่เลือก) / ส่งความเห็น')],
+      ['Tab + D', L('ตั้งกำหนดส่ง')],
+      ['Tab + A', L('มอบหมายงาน')],
       ['Tab + M', L('มอบหมายงานที่เปิดอยู่ให้ตัวเอง')],
+      ['Tab + T', L('เพิ่มแท็ก')],
+      ['Tab + P', L('เพิ่มเข้าโปรเจกต์')],
+      ['Tab + S', L('เพิ่มงานย่อย')],
+      ['Tab + F', L('เพิ่มผู้ติดตาม')],
+      ['Tab + J / Tab + L', L('ติดตาม / เลิกติดตามงาน')],
+      ['Tab + K', L('ถูกใจงาน')],
+      ['Tab + R', L('แก้รายละเอียด')],
       ['Tab + C', L('ไปที่ช่องความเห็น')],
+      ['Tab + Delete', L('ลบงานที่เลือก')],
       ['Tab + X', L('ขยายงานที่เปิดอยู่เต็มจอ (ไม่ได้เปิดงาน = สลับสว่าง/มืด)')],
       ['Shift + Tab + F', L('สร้างงานติดตามผลของงานที่เปิดอยู่')],
       ['Tab + N', L('เพิ่มคอลัมน์ใหม่ในโปรเจกต์')],
+      ['J / K', L('กล่องข้อความ: รายการถัดไป / ก่อนหน้า')],
+      ['F / I / U', L('กล่องข้อความ: บุ๊กมาร์ก / เก็บ / อ่านแล้ว-ยังไม่อ่าน')],
+      [L('แป้นภาษาไทย'), L('คีย์ลัดทุกตัวใช้ได้ทั้งแป้นอังกฤษและแป้นไทย (ดูตำแหน่งปุ่ม ไม่ใช่ตัวอักษร)')],
       ['Enter / Shift + Enter', L('เพิ่มงานใต้ / เหนือแถวที่เลือก (มุมมองรายการ)')],
       ['Ctrl + ↑ / ↓', L('เลื่อนงานขึ้น / ลงในคอลัมน์')],
       ['Ctrl + Shift + ↑ / ↓', L('ย้ายงานไปคอลัมน์ก่อนหน้า / ถัดไป')],
@@ -3012,7 +3067,8 @@
       ['Ctrl + Shift + X / M', L('ขีดฆ่า / โค้ด')],
       ['Ctrl + Shift + 8 / 7', L('หัวข้อย่อย / ลำดับเลข')],
       ['Ctrl + K', L('ใส่ลิงก์')],
-      ['@', L('อ้างถึงคน งาน หรือโปรเจกต์')],
+      ['@', L('อ้างถึงคน งาน หรือโปรเจกต์ (พิมพ์รหัสงานเช่น @REQ-12 ได้)')],
+      ['"…"  a | b  -a  a*  ( )', L('ตัวดำเนินการในช่องค้นหา: วลี หรือ ไม่เอา ขึ้นต้นด้วย จัดกลุ่ม')],
       [L('Enter ในช่องเพิ่มงาน'), L('บันทึกแล้วเปิดช่องต่อทันที')],
       ['Delete', L('ลบงานที่เลือกไว้')],
       [L('คลิกช่องสี่เหลี่ยม'), L('เลือกหลายงานเพื่อแก้พร้อมกัน')]
@@ -3025,6 +3081,556 @@
     h += '</div><div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
     return h;
   }
+
+  /* ======================================================================
+   * 2c — ค้นหาขั้นสูง ฟิลด์ นำเข้า CSV แก้หลายงาน และงานดูแลโปรเจกต์
+   * ====================================================================== */
+
+  /** เอาเงื่อนไขของการค้นหาที่บันทึกไว้มาใส่หน้าจอ */
+  function loadSavedSearch(ss) {
+    if (!ss) return;
+    state.adv.conds = S.clone(ss.conds || []);
+    state.adv.mode = ss.mode === 'calendar' ? 'calendar' : 'list';
+    state.adv.open = !!state.adv.conds.length;
+  }
+
+  function goSavedSearch(id) {
+    var ss = S.savedSearch(id);
+    if (!ss) return;
+    state.route = { type: 'search', q: ss.q, ss: ss.id };
+    loadSavedSearch(ss);
+    clearSel();
+    renderAll();
+  }
+
+  /** การค้นหาที่บันทึกไว้ถูกแก้ค้างอยู่ (ยังไม่บันทึกทับ) */
+  function advDirty() {
+    var r = state.route;
+    var ss = r.ss ? S.savedSearch(r.ss) : null;
+    if (!ss) return false;
+    return ss.q !== (r.q || '') || ss.mode !== state.adv.mode ||
+      JSON.stringify(ss.conds || []) !== JSON.stringify(state.adv.conds);
+  }
+
+  /** แถบบนของหน้าค้นหา — ตัวกรอง ทางลัด รายการ/ปฏิทิน บันทึก และแถวเงื่อนไข */
+  function advPanelHtml() {
+    var a = state.adv, r = state.route;
+    var ss = r.ss ? S.savedSearch(r.ss) : null;
+    var n = a.conds.length;
+    var meOn = a.conds.some(isMeFilter);
+    var openOn = a.conds.some(function (c) { return c.f === 'completed' && c.op === 'no'; });
+    var h = '<div class="adv-panel"><div class="adv-bar">';
+    h += '<button class="vtb-btn' + (n || a.open ? ' on' : '') + '" data-act="adv-toggle">' + I('filter', 14) +
+      '<span>' + L('ตัวกรอง') + '</span>' + (n ? '<span class="vtb-n">' + n + '</span>' : '') + '</button>';
+    h += '<button class="flt-chip' + (openOn ? ' on' : '') + '" data-act="as-quick" data-v="open">' +
+      I('checkCircle', 12) + ' ' + L('ยังไม่เสร็จ') + '</button>';
+    h += '<button class="flt-chip' + (meOn ? ' on' : '') + '" data-act="as-quick" data-v="me">' +
+      I('users', 12) + ' ' + L('ผู้รับผิดชอบคือฉัน') + '</button>';
+    h += '<span class="grow"></span>';
+    h += '<div class="segmented adv-mode">' +
+      '<button data-act="adv-mode" data-v="list" class="' + (a.mode !== 'calendar' ? 'on' : '') + '">' + L('รายการ') + '</button>' +
+      '<button data-act="adv-mode" data-v="calendar" class="' + (a.mode === 'calendar' ? 'on' : '') + '">' + L('ปฏิทิน') + '</button></div>';
+    h += '<button class="vtb-btn icon' + (a.help ? ' on' : '') + '" data-act="adv-help" title="' +
+      L('วิธีใช้ตัวดำเนินการค้นหา') + '">?</button>';
+    if (ss) {
+      if (advDirty()) {
+        h += '<button class="btn btn-sm btn-primary" data-act="ss-update" data-id="' + esc(ss.id) + '">' + L('บันทึกทับ') + '</button>';
+      }
+      h += '<button class="btn btn-sm btn-ghost" data-act="ss-rename" data-id="' + esc(ss.id) + '" title="' +
+        L('เปลี่ยนชื่อ') + '">' + I('pencil', 13) + '</button>' +
+        '<button class="btn btn-sm btn-ghost" data-act="ss-delete" data-id="' + esc(ss.id) + '" title="' +
+        L('ลบการค้นหาที่บันทึกไว้') + '">' + I('trash', 13) + '</button>';
+    } else if ((r.q || '').trim() || n) {
+      h += '<button class="btn btn-sm" data-act="ss-save" title="' + L('บันทึกไว้ที่แถบซ้าย') + '">' +
+        I('star', 13) + ' ' + L('บันทึกการค้นหา') + '</button>';
+    }
+    h += '</div>';
+    if (a.help) h += R.searchHelp();
+    if (a.open || n) {
+      var ffs = S.filterFields('*');
+      h += '<div class="adv-conds">';
+      a.conds.forEach(function (c, i) {
+        var def = S.filterField('*', c.f);
+        var ops = def ? S.FILTER_OPS[def.kind] || [] : [];
+        h += '<div class="flt-row">' + (i ? '<span class="flt-and">' + L('และ') + '</span>' : '') +
+          '<div class="flt-line">' +
+          optSelect('as-field', ffs.map(function (x) { return [x.id, x.custom ? x.label : L(x.label)]; })
+            .concat(def ? [] : [[c.f, L('(ฟิลด์ถูกลบแล้ว)')]]), c.f, ' data-i="' + i + '"') +
+          optSelect('as-op', ops.map(function (o) { return [o[0], L(o[1])]; }), c.op, ' data-i="' + i + '"') +
+          '<button class="flt-del" data-act="as-del" data-i="' + i + '" title="' + L('เอาเงื่อนไขนี้ออก') + '">' +
+          I('close', 13) + '</button></div>' + fltValueHtml('*', c, i, 'as') + '</div>';
+      });
+      h += '<div class="opt-acts"><button class="btn btn-sm" data-act="as-add">' + I('plus', 13) + ' ' +
+        L('เพิ่มตัวกรอง') + '</button>' +
+        (n ? '<button class="btn btn-sm btn-ghost" data-act="as-clear">' + L('ล้างตัวกรอง') + '</button>' : '') + '</div>';
+      h += '<p class="opt-note">' + L('ทุกเงื่อนไขต้องตรงพร้อมกัน ค้นได้ทุกโปรเจกต์ที่คุณเห็น งานส่วนตัวของคนอื่นไม่แสดง') + '</p>';
+      h += '</div>';
+    }
+    return h + '</div>';
+  }
+
+  /** วาดหน้าค้นหาใหม่โดยไม่เสียโฟกัสช่องค้นหาด้านบน */
+  function refreshSearch() {
+    $sidebar.innerHTML = R.sidebar(state.route);
+    renderViewBody();
+    syncHash();
+  }
+
+  /* ---------- คีย์ลัดบนแป้นภาษาไทย ----------
+   * Tab+D บนแป้นไทยได้ e.key = 'ก' จึงจับคู่ไม่เจอ — ดูตำแหน่งปุ่มจาก e.code (KeyD, Slash …) ก่อน */
+  function keyOf(e) {
+    var c = e.code || '';
+    var m = c.match(/^Key([A-Z])$/);
+    if (m) return m[1].toLowerCase();
+    m = c.match(/^Digit(\d)$/);
+    if (m) return m[1];
+    if (c === 'Slash') return '/';
+    return String(e.key || '').toLowerCase();
+  }
+
+  /** งานที่คีย์ลัดจะทำกับ — งานที่เปิดอยู่ ไม่มีก็แถวที่ถูกชี้ หรืองานที่เลือกไว้ชิ้นเดียว */
+  function focusTaskId() {
+    if (state.openTaskId && S.task(state.openTaskId)) return state.openTaskId;
+    if (state.cursor && S.task(state.cursor)) return state.cursor;
+    var ids = selectedIds();
+    return ids.length === 1 ? ids[0] : null;
+  }
+
+  /** เปิดแผงงาน (ถ้ายังไม่เปิด) แล้วทำต่อกับปุ่ม/ช่องในแผง */
+  function withDrawer(fn) {
+    var id = focusTaskId();
+    if (!id) { toast(L('เลือกงานก่อน (คลิกแถว หรือใช้ลูกศรขึ้นลง)')); return; }
+    if (state.openTaskId !== id) openTask(id);
+    setTimeout(function () { fn(id); }, 0);
+  }
+
+  /** แถวงานที่เห็นบนหน้าจอตามลำดับ ใช้กับลูกศรขึ้นลง */
+  function visibleTaskIds() {
+    var out = [];
+    Array.prototype.forEach.call($view.querySelectorAll('.tr[data-id], .row[data-id], .card[data-id]'), function (n) {
+      var id = n.dataset.id;
+      if (id && out.indexOf(id) < 0 && n.offsetParent !== null) out.push(id);
+    });
+    return out;
+  }
+
+  function moveSelection(delta) {
+    var ids = visibleTaskIds();
+    if (!ids.length) return false;
+    var cur = state.cursor || state.openTaskId;
+    var i = ids.indexOf(cur);
+    var j = i < 0 ? (delta > 0 ? 0 : ids.length - 1) : Math.max(0, Math.min(ids.length - 1, i + delta));
+    var id = ids[j];
+    setCursor(id);
+    state.selAnchor = id;
+    if (state.openTaskId) openTask(id);
+    var node = $view.querySelector('[data-id="' + id + '"].tr, [data-id="' + id + '"].row, [data-id="' + id + '"].card');
+    if (node && node.scrollIntoView) node.scrollIntoView({ block: 'nearest' });
+    return true;
+  }
+
+  /** ไฮไลต์รายการที่เลือกด้วยแป้นพิมพ์ในกล่องข้อความ (J/K) */
+  function markKbCursor() {
+    if (state.cursor) {
+      var cr = $view.querySelector('.row[data-id="' + state.cursor + '"], .card[data-id="' + state.cursor + '"]');
+      if (cr) cr.classList.add('cursor');
+    }
+    if (state.route.type !== 'inbox' || !state.inbox.cur) return;
+    var n = $view.querySelector('.nrow[data-id="' + state.inbox.cur + '"]');
+    if (n) n.classList.add('kb-cur');
+  }
+
+  function inboxKey(k) {
+    var rows = Array.prototype.slice.call($view.querySelectorAll('.nrow[data-id]'));
+    if (!rows.length) return false;
+    var ids = rows.map(function (r) { return r.dataset.id; });
+    var i = ids.indexOf(state.inbox.cur);
+    if (k === 'j' || k === 'k') {
+      var j = i < 0 ? 0 : Math.max(0, Math.min(ids.length - 1, i + (k === 'j' ? 1 : -1)));
+      state.inbox.cur = ids[j];
+      rows.forEach(function (r) { r.classList.toggle('kb-cur', r.dataset.id === state.inbox.cur); });
+      if (rows[j].scrollIntoView) rows[j].scrollIntoView({ block: 'nearest' });
+      return true;
+    }
+    if (i < 0) { toast(L('กด J หรือ K เพื่อเลือกรายการก่อน')); return true; }
+    var nid = ids[i], n = S.notification(nid);
+    if (!n) return false;
+    if (!S.isActive()) { denyToast(); return true; }
+    if (k === 'f') {
+      var bm = S.toggleBookmark(nid);
+      toast(bm ? L('บุ๊กมาร์กไว้แล้ว ดูได้ที่แท็บบุ๊กมาร์ก') : L('เอาบุ๊กมาร์กออกแล้ว'));
+    } else if (k === 'i') {
+      /* เก็บแล้วเลื่อนไปรายการถัดไปเอง ไล่เก็บได้รวดเดียว */
+      state.inbox.cur = ids[i + 1] || ids[i - 1] || null;
+      if (n.archived) S.unarchiveNotification(nid); else S.archiveNotification(nid);
+      toast(n.archived ? L('ย้ายกลับไปกิจกรรมแล้ว') : L('เก็บแล้ว'));
+    } else if (k === 'u') {
+      S.setNotifRead(nid, !n.read);
+    } else if (k === 'enter') {
+      var row = rows[i];
+      if (row) row.click();
+    } else return false;
+    return true;
+  }
+
+  /* ---------- ฟิลด์ คลังฟิลด์ ---------- */
+
+  function fieldTypeLabel(type) {
+    var ft = S.FIELD_TYPES.filter(function (x) { return x.id === type; })[0];
+    return ft ? L(ft.label) : type;
+  }
+
+  /** จัดการฟิลด์ของโปรเจกต์ — แก้ไข ยกขึ้นคลัง เอาออก เพิ่มใหม่ หรือหยิบจากคลัง */
+  function fieldsModal(projectId) {
+    var p = S.project(projectId);
+    var h = '<h2>' + L('ฟิลด์ของ') + ' ' + R.esc(p.name) + '</h2>';
+    if (!p.fields.length) {
+      h += '<div class="prj-note">' + L('ยังไม่มีฟิลด์') + '</div>';
+    }
+    p.fields.forEach(function (f) {
+      h += '<div class="mini-row fld-row"><div class="grow"><div>' +
+        (f.lib ? '<span class="lib-badge" title="' + L('ฟิลด์จากคลังขององค์กร') + '">' + I('building', 11) + '</span> ' : '') +
+        R.esc(f.name) + '</div>' +
+        '<div class="sub">' + R.esc(fieldTypeLabel(f.type)) +
+        (f.type === 'id' ? ' · ' + R.esc(f.prefix + '-' + f.next) + ' ' + L('(เลขถัดไป)') : '') +
+        (f.options && f.options.length ? ' · ' + R.esc(f.options.map(function (o) { return o.name; }).join(', ')) : '') +
+        (f.notify ? ' · ' + L('แจ้งเมื่อค่าเปลี่ยน') : '') +
+        (f.desc ? '<br>' + R.esc(f.desc) : '') + '</div></div>' +
+        '<button class="btn btn-sm" data-act="field-edit" data-project="' + R.esc(projectId) + '" data-field="' +
+        R.esc(f.id) + '">' + L('แก้ไข') + '</button>' +
+        (!f.lib && f.type !== 'id' ? '<button class="btn btn-sm btn-ghost" data-act="field-promote" data-project="' +
+          R.esc(projectId) + '" data-field="' + R.esc(f.id) + '" title="' + L('ให้ทุกโปรเจกต์ใช้ฟิลด์นี้ได้') + '">' +
+          L('บันทึกลงคลัง') + '</button>' : '') +
+        '<button class="btn btn-sm btn-danger" data-act="delete-field" data-project="' +
+        R.esc(projectId) + '" data-field="' + R.esc(f.id) + '">' + (f.lib ? L('เอาออก') : L('ลบ')) + '</button></div>';
+    });
+    h += '<div class="modal-acts fld-acts">' +
+      '<button class="btn" data-act="field-lib">' + I('building', 13) + ' ' + L('คลังฟิลด์ขององค์กร') + '</button>' +
+      '<span class="grow"></span>' +
+      '<button class="btn" data-act="field-lib-pick" data-project="' + R.esc(projectId) + '">' + L('+ จากคลังฟิลด์') + '</button>' +
+      '<button class="btn btn-primary" data-act="pick-ftype" data-v="text">' + L('+ ฟิลด์ใหม่') + '</button></div>';
+    return h;
+  }
+
+  /** เลือกฟิลด์จากคลังมาใช้ในโปรเจกต์ */
+  function libPickModal(projectId) {
+    var p = S.project(projectId);
+    var have = {};
+    p.fields.forEach(function (f) { have[f.id] = true; });
+    var list = S.fieldLib().filter(function (f) { return !have[f.id]; });
+    var h = '<h2>' + L('เพิ่มฟิลด์จากคลัง') + '</h2><p class="prj-note">' +
+      L('ฟิลด์จากคลังเป็นฟิลด์เดียวกันทุกโปรเจกต์ แก้ชื่อหรือตัวเลือกที่ใดก็เปลี่ยนทุกที่ งานที่อยู่สองโปรเจกต์มีค่าเดียว') + '</p>';
+    if (!list.length) h += '<div class="prj-note">' + L('ไม่มีฟิลด์ในคลังที่ยังไม่ได้ใช้') + '</div>';
+    list.forEach(function (f) {
+      h += '<div class="mini-row"><div class="grow"><div>' + R.esc(f.name) + '</div><div class="sub">' +
+        R.esc(fieldTypeLabel(f.type)) + (f.desc ? ' · ' + R.esc(f.desc) : '') + '</div></div>' +
+        '<button class="btn btn-sm btn-primary" data-act="field-lib-use" data-project="' + R.esc(projectId) +
+        '" data-field="' + R.esc(f.id) + '">' + L('ใช้') + '</button></div>';
+    });
+    h += '<div class="modal-acts"><button class="btn" data-act="manage-fields" data-id="' + R.esc(projectId) + '">' +
+      L('ย้อนกลับ') + '</button></div>';
+    return h;
+  }
+
+  /** คลังฟิลด์ขององค์กร — สร้าง แก้ (เปลี่ยนตามทุกโปรเจกต์) เอาออกจากคลัง */
+  function libModal() {
+    var list = S.fieldLib();
+    var h = '<h2>' + L('คลังฟิลด์ขององค์กร') + '</h2><p class="prj-note">' +
+      L('ฟิลด์ที่ใช้ร่วมกันได้ทุกโปรเจกต์ แก้ที่นี่แล้วทุกโปรเจกต์ที่ใช้อยู่เปลี่ยนตาม') + '</p>';
+    if (!list.length) h += '<div class="prj-note">' + L('ยังไม่มีฟิลด์ในคลัง') + '</div>';
+    list.forEach(function (f) {
+      var used = S.libUsage(f.id);
+      h += '<div class="mini-row"><div class="grow"><div>' + R.esc(f.name) + '</div><div class="sub">' +
+        R.esc(fieldTypeLabel(f.type)) + ' · ' + L('ใช้ใน {n} โปรเจกต์', { n: used.length }) +
+        (f.desc ? '<br>' + R.esc(f.desc) : '') + '</div></div>' +
+        '<button class="btn btn-sm" data-act="field-edit" data-field="' + R.esc(f.id) + '">' + L('แก้ไข') + '</button>' +
+        '<button class="btn btn-sm btn-danger" data-act="lib-delete" data-field="' + R.esc(f.id) + '">' +
+        L('เอาออกจากคลัง') + '</button></div>';
+    });
+    var back = state.route.type === 'project'
+      ? '<button class="btn" data-act="manage-fields" data-id="' + R.esc(state.route.id) + '">' + L('ย้อนกลับ') + '</button>'
+      : '<button class="btn" data-act="close-modal">' + L('ปิด') + '</button>';
+    h += '<div class="modal-acts">' + back + '<span class="grow"></span>' +
+      '<button class="btn btn-primary" data-act="lib-new">' + L('+ สร้างฟิลด์ในคลัง') + '</button></div>';
+    return h;
+  }
+
+  /** แก้นิยามฟิลด์ (ของโปรเจกต์ หรือในคลังเมื่อไม่ส่ง projectId) */
+  function fieldEditModal(projectId, fieldId) {
+    var f = projectId ? (S.project(projectId).fields.filter(function (x) { return x.id === fieldId; })[0])
+                      : S.libField(fieldId);
+    if (!f) return '';
+    var hasOpt = f.type === 'select' || f.type === 'multi';
+    var h = '<h2>' + L('แก้ไขฟิลด์') + '</h2>';
+    if (f.lib || !projectId) {
+      h += '<p class="prj-note">' + I('building', 12) + ' ' +
+        L('ฟิลด์จากคลัง — แก้แล้วเปลี่ยนตามทุกโปรเจกต์ที่ใช้ ({n} โปรเจกต์)', { n: S.libUsage(f.id).length }) + '</p>';
+    }
+    h += '<div class="field"><label>' + L('ชื่อฟิลด์') + ' *</label><input id="feName" value="' + R.esc(f.name) + '"></div>';
+    h += '<div class="field"><label>' + L('คำอธิบาย') + '</label><textarea id="feDesc" rows="2" placeholder="' +
+      L('บอกทีมว่าฟิลด์นี้ใช้กรอกอะไร') + '">' + R.esc(f.desc || '') + '</textarea></div>';
+    if (f.type === 'id') {
+      h += '<div class="field"><label>' + L('คำนำหน้ารหัส') + '</label><input id="fePrefix" value="' + R.esc(f.prefix) +
+        '" maxlength="8"><div class="fld-hint">' + L('ตัวอักษรอังกฤษหรือตัวเลข เช่น REQ → REQ-12 เลขถัดไปคือ {n}', { n: f.next }) + '</div></div>';
+    }
+    if (hasOpt) {
+      h += '<div class="field"><label>' + L('ตัวเลือก') + '</label><div id="nfOpts">';
+      f.options.forEach(function (o) { h += optionRow(o.name, o.color).replace('class="opt-name"', 'class="opt-name" data-old="' + R.esc(o.name) + '"'); });
+      h += '</div><button type="button" class="btn btn-sm btn-ghost" data-act="add-option">' + I('plus', 13) + ' ' +
+        L('เพิ่มตัวเลือก') + '</button><div class="fld-hint">' + L('เปลี่ยนชื่อตัวเลือกแล้วค่าในงานเปลี่ยนตาม') + '</div></div>';
+      h += '<label class="chk"><input type="checkbox" id="feNotify"' + (f.notify ? ' checked' : '') + '> ' +
+        L('แจ้งผู้ติดตามงานเมื่อค่าในฟิลด์นี้เปลี่ยน') + '</label>';
+    }
+    if (f.type === 'number') h += numberFormatFields(f.format);
+    h += '<div class="modal-acts"><button class="btn" data-act="' + (projectId ? 'manage-fields' : 'field-lib') +
+      '" data-id="' + R.esc(projectId || '') + '">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="do-field-edit" data-project="' + R.esc(projectId || '') +
+      '" data-field="' + R.esc(f.id) + '">' + L('บันทึก') + '</button></div>';
+    return h;
+  }
+
+  /** ตัวเลือกที่กรอกในหน้าต่าง { name, color, old } */
+  function readOptionRows() {
+    var out = [];
+    Array.prototype.forEach.call(document.querySelectorAll('#nfOpts .opt-row'), function (r) {
+      var inp = r.querySelector('.opt-name');
+      var v = inp.value.trim();
+      if (v) out.push({ name: v, color: rgbToHex(r.querySelector('.opt-dot').style.background), old: inp.dataset.old || null });
+    });
+    return out;
+  }
+
+  /* ---------- นำเข้า CSV แบบจับคู่คอลัมน์ ---------- */
+
+  function csvTargetOptions(pid, cur) {
+    var p = S.project(pid);
+    var opts = S.CSV_TARGETS.map(function (c) { return [c.id, L(c.label)]; });
+    (p.fields || []).forEach(function (f) {
+      if (f.type !== 'id') opts.push(['field:' + f.id, L('ฟิลด์: {f}', { f: f.name })]);
+    });
+    S.CSV_NEW_TYPES.forEach(function (t) {
+      opts.push(['new:' + t, L('สร้างฟิลด์ใหม่ ({t})', { t: fieldTypeLabel(t) })]);
+    });
+    return opts.map(function (o) {
+      return '<option value="' + R.esc(o[0]) + '"' + (o[0] === cur ? ' selected' : '') + '>' + R.esc(o[1]) + '</option>';
+    }).join('');
+  }
+
+  function csvMapModal() {
+    var c = state.csv;
+    var pv;
+    try { pv = S.csvPreview(c.pid, c.text); } catch (err) {
+      return '<h2>' + L('นำเข้างานจาก CSV') + '</h2><p class="prj-note">' + R.esc(L(err.message)) + '</p>' +
+        '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
+    }
+    if (!c.map || c.map.length !== pv.head.length) c.map = pv.guess.slice();
+    var h = '<h2>' + L('นำเข้างานจาก CSV') + '</h2>';
+    h += '<div class="csv-top"><span>' + L('{n} แถว · {c} คอลัมน์', { n: pv.total, c: pv.head.length }) + '</span>' +
+      '<label>' + L('การเข้ารหัสไฟล์') + ' <select id="csvEnc" data-act="csv-enc">' +
+      '<option value="utf-8"' + (c.enc === 'utf-8' ? ' selected' : '') + '>UTF-8</option>' +
+      '<option value="windows-874"' + (c.enc === 'windows-874' ? ' selected' : '') + '>Windows-874 (' + L('ภาษาไทยจาก Excel รุ่นเก่า') + ')</option>' +
+      '</select></label></div>';
+    h += '<p class="prj-note">' + L('เลือกว่าแต่ละคอลัมน์คืออะไร ถ้าภาษาไทยเป็นตัวประหลาด ให้เปลี่ยนการเข้ารหัส (Excel: บันทึกเป็น “CSV UTF-8” จะได้ผลดีที่สุด) ทุกแถวเป็นงานใหม่ งานหลักและลำดับก่อนหลังจับคู่จากชื่องาน') + '</p>';
+    h += '<div class="csv-map">';
+    pv.head.forEach(function (hd, k) {
+      var samples = pv.sample.map(function (r) { return r[k] || ''; }).filter(Boolean).slice(0, 3);
+      h += '<div class="csv-row"><div class="csv-col"><b>' + R.esc(hd || L('(ไม่มีชื่อ)')) + '</b><em>' +
+        R.esc(samples.join(' · ').slice(0, 90) || '—') + '</em></div>' +
+        '<select class="inp csv-sel" data-act="csv-map" data-k="' + k + '">' + csvTargetOptions(c.pid, c.map[k]) + '</select></div>';
+    });
+    h += '</div>';
+    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="do-csv-import">' + L('นำเข้า {n} งาน', { n: pv.total }) + '</button></div>';
+    return h;
+  }
+
+  function readCsvFile(enc) {
+    var c = state.csv;
+    if (!c || !c.file) return;
+    var fr = new FileReader();
+    fr.onload = function () {
+      c.text = String(fr.result || '');
+      c.enc = enc;
+      c.map = null;
+      openModal(csvMapModal(), true);
+    };
+    fr.onerror = function () { toast(L('อ่านไฟล์ไม่สำเร็จ')); };
+    try { fr.readAsText(c.file, enc); } catch (e) { fr.readAsText(c.file); }
+  }
+
+  /* ---------- บทบาทในโปรเจกต์ ---------- */
+
+  function rolesModal(projectId) {
+    var p = S.project(projectId);
+    var ids = [];
+    function add(id) { if (id && ids.indexOf(id) < 0 && S.user(id) && S.user(id).active !== false) ids.push(id); }
+    add(p.owner);
+    S.projectMembers(projectId).forEach(function (m) { add(m.userId); });
+    Object.keys(p.roles || {}).forEach(add);
+    /* โปรเจกต์เปิดทั้งองค์กรไม่มีรายชื่อสมาชิก — ให้เลือกจากคนที่ถืองานในโปรเจกต์ แล้วค่อยทุกคน */
+    S.tasksInProject(projectId).forEach(function (x) { add(x.task.assigneeId); });
+    if (ids.length < 3) S.db.users.forEach(function (u) { add(u.id); });
+    var h = '<h2>' + L('บทบาทในโปรเจกต์') + '</h2><p class="prj-note">' +
+      L('พิมพ์บทบาทของแต่ละคน เช่น ผู้อนุมัติ ผู้ประสานงาน ฝ่ายออกแบบ แสดงที่หน้าภาพรวม ไม่เกี่ยวกับสิทธิ์') + '</p>';
+    h += '<div class="roles-grid">';
+    ids.forEach(function (id) {
+      var u = S.user(id);
+      h += '<label class="role-row">' + R.avatar(u, 'sm') + '<span class="nm">' + R.esc(u.name) + '</span>' +
+        '<input class="inp role-in" data-user="' + R.esc(id) + '" maxlength="60" value="' +
+        R.esc((p.roles || {})[id] || '') + '" placeholder="' + L('บทบาท') + '"></label>';
+    });
+    h += '</div><div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="do-roles" data-id="' + R.esc(projectId) + '">' + L('บันทึก') + '</button></div>';
+    return h;
+  }
+
+  /* ---------- แก้หลายงานพร้อมกัน ---------- */
+
+  function bulkMoreMenu() {
+    var r = state.route;
+    var h = '';
+    function item(act, icon, label, extra) {
+      return '<button data-act="' + act + '"' + (extra || '') + '>' + I(icon, 14) + '<span class="grow">' + label + '</span></button>';
+    }
+    if (r.type === 'project' && S.project(r.id)) h += item('bulk-section', 'grid', L('ย้ายไปคอลัมน์…'));
+    h += item('bulk-project', 'plus', L('เพิ่มเข้าโปรเจกต์…'));
+    h += item('bulk-field', 'hash', L('ตั้งค่าฟิลด์…'));
+    h += item('bulk-followers', 'users', L('เพิ่มผู้ติดตาม…'));
+    h += item('bulk-tag', 'flag', L('เพิ่มแท็ก…'));
+    h += '<div class="pop-sep"></div>';
+    h += item('bulk-type', 'diamond', L('ทำเป็นหมุดหมาย'), ' data-v="milestone"');
+    h += item('bulk-type', 'checkCircle', L('ทำเป็นงานขออนุมัติ'), ' data-v="approval"');
+    h += item('bulk-type', 'check', L('ทำเป็นงานธรรมดา'), ' data-v="task"');
+    h += '<div class="pop-sep"></div>';
+    h += item('bulk-dep', 'blocked', L('ให้รองานอื่น…'));
+    h += item('bulk-merge', 'copy', L('รวมเป็นงานซ้ำ…'));
+    h += item('bulk-links', 'link', L('คัดลอกลิงก์'));
+    return h;
+  }
+
+  /** เลือกโปรเจกต์และคอลัมน์ (ใช้กับเพิ่มหลายงานเข้าโปรเจกต์) */
+  function bulkProjectModal() {
+    var projs = S.visibleProjects().filter(function (p) { return S.canInProject(p.id, 'edit'); });
+    var first = projs[0];
+    var h = '<h2>' + L('เพิ่ม {n} งานเข้าโปรเจกต์', { n: selCount() }) + '</h2>';
+    h += '<div class="field"><label>' + L('โปรเจกต์') + '</label><select id="mpProject" data-act="mp-project">' +
+      projs.map(function (p) { return '<option value="' + R.esc(p.id) + '">' + R.esc(p.icon + ' ' + p.name) + '</option>'; }).join('') +
+      '</select></div>';
+    h += '<div class="field"><label>' + L('คอลัมน์') + '</label><select id="mpSection">' +
+      (first ? sectionOptions(first.id) : '') + '</select></div>';
+    h += '<p class="prj-note">' + L('งานยังอยู่ในโปรเจกต์เดิมด้วย (อยู่ได้หลายโปรเจกต์) งานย่อยไม่ถูกเพิ่ม') + '</p>';
+    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="do-bulk-project"' + (first ? '' : ' disabled') + '>' + L('เพิ่ม') + '</button></div>';
+    return h;
+  }
+
+  /** ฟิลด์ที่ตั้งได้กับงานที่เลือก — ฟิลด์ของโปรเจกต์ที่งานเหล่านั้นอยู่ (ไม่รวมรหัสงาน) */
+  function bulkFieldList() {
+    var seen = {}, out = [];
+    selectedIds().forEach(function (id) {
+      var t = S.task(id);
+      if (!t) return;
+      S.projectsOfTask(S.rootOf(t).id).forEach(function (x) {
+        (x.project.fields || []).forEach(function (f) {
+          if (seen[f.id] || f.type === 'id') return;
+          seen[f.id] = true;
+          out.push({ f: f, p: x.project });
+        });
+      });
+    });
+    return out;
+  }
+
+  function bulkFieldValueInput(f) {
+    if (!f) return '';
+    if (f.type === 'select' || f.type === 'multi') {
+      return '<div class="flt-chips" id="bfVal">' + f.options.map(function (o) {
+        return '<button type="button" class="flt-chip" data-act="bf-opt" data-v="' + R.esc(o.name) + '"' +
+          (f.type === 'select' ? ' data-single="1"' : '') + '><i class="flt-dot" style="background:' + R.esc(o.color) +
+          '"></i>' + R.esc(o.name) + '</button>';
+      }).join('') + '</div>';
+    }
+    if (f.type === 'person') {
+      return '<select id="bfVal" class="inp"><option value="">—</option>' + S.db.users.filter(function (u) {
+        return u.active !== false;
+      }).map(function (u) { return '<option value="' + R.esc(u.id) + '">' + R.esc(u.name) + '</option>'; }).join('') + '</select>';
+    }
+    return '<input id="bfVal" class="inp" type="' + (f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text') +
+      '"' + (f.type === 'number' ? ' step="any"' : '') + '>';
+  }
+
+  function bulkFieldModal(fid) {
+    var list = bulkFieldList();
+    var h = '<h2>' + L('ตั้งค่าฟิลด์ให้ {n} งาน', { n: selCount() }) + '</h2>';
+    if (!list.length) {
+      return h + '<p class="prj-note">' + L('งานที่เลือกไม่ได้อยู่ในโปรเจกต์ที่มีฟิลด์') + '</p>' +
+        '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
+    }
+    var cur = list.filter(function (x) { return x.f.id === fid; })[0] || list[0];
+    h += '<div class="field"><label>' + L('ฟิลด์') + '</label><select id="bfField" data-act="bf-field">' +
+      list.map(function (x) {
+        return '<option value="' + R.esc(x.f.id) + '"' + (x === cur ? ' selected' : '') + '>' + R.esc(x.f.name + ' · ' + x.p.name) + '</option>';
+      }).join('') + '</select></div>';
+    h += '<div class="field"><label>' + L('ค่า') + '</label>' + bulkFieldValueInput(cur.f) + '</div>';
+    h += '<p class="prj-note">' + L('เว้นว่าง = ล้างค่า') + '</p>';
+    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="do-bulk-field" data-field="' + R.esc(cur.f.id) + '">' + L('ตั้งค่า') + '</button></div>';
+    return h;
+  }
+
+  function bulkFollowersModal() {
+    var h = '<h2>' + L('เพิ่มผู้ติดตามให้ {n} งาน', { n: selCount() }) + '</h2><div class="dup-grid people">';
+    S.db.users.forEach(function (u) {
+      if (u.active === false) return;
+      h += '<label class="chk"><input type="checkbox" class="bf-user" value="' + R.esc(u.id) + '"> ' +
+        R.avatar(u, 'sm') + ' ' + R.esc(u.name) + '</label>';
+    });
+    h += '</div><div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="do-bulk-followers">' + L('เพิ่ม') + '</button></div>';
+    return h;
+  }
+
+  function bulkDepModal() {
+    return '<h2>' + L('ให้ {n} งานที่เลือกรองานไหน', { n: selCount() }) + '</h2>' +
+      '<p class="prj-note">' + L('งานที่เลือกทั้งหมดจะรองานนี้ให้เสร็จก่อน (จบ → เริ่ม)') + '</p>' +
+      '<div class="field"><input id="bdSearch" placeholder="' + L('พิมพ์เพื่อค้นหางาน') + '"></div>' +
+      '<div id="bdResults">' + bulkDepResults('') + '</div>' +
+      '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
+  }
+
+  function bulkDepResults(q) {
+    var sel = state.sel;
+    q = (q || '').trim();
+    var list = q ? S.searchAdv({ q: q, limit: 40 }) : S.db.tasks.filter(function (t) {
+      return !t.completed && S.canSeeTask(t.id);
+    }).slice(0, 40);
+    list = list.filter(function (t) { return !sel[t.id]; }).slice(0, 12);
+    if (!list.length) return '<div class="prj-note">' + L('ไม่พบงาน') + '</div>';
+    return list.map(function (x) {
+      var home = S.projectsOfTask(S.rootOf(x).id)[0];
+      return '<div class="mini-row"><div class="grow"><div>' + R.esc(x.name) + '</div><div class="sub">' +
+        R.esc(home ? home.project.name : L('ไม่อยู่ในโปรเจกต์')) + '</div></div>' +
+        '<button class="btn btn-sm btn-primary" data-act="do-bulk-dep" data-target="' + R.esc(x.id) + '">' +
+        L('เลือก') + '</button></div>';
+    }).join('');
+  }
+
+  function bulkMergeModal() {
+    var ids = selectedIds();
+    var h = '<h2>' + L('รวม {n} งานเป็นงานเดียว', { n: ids.length }) + '</h2><p class="prj-note">' +
+      L('เลือกงานหลักที่จะเก็บไว้ งานที่เหลือจะถูกติ๊กเสร็จและเติม [ซ้ำ] หน้าชื่อ แท็ก ผู้ติดตาม และคนที่ถูกใจย้ายไปที่งานหลัก') + '</p>';
+    ids.forEach(function (id) {
+      var t = S.task(id);
+      if (!t) return;
+      h += '<div class="mini-row"><div class="grow"><div>' + R.esc(t.name) + '</div></div>' +
+        '<button class="btn btn-sm btn-primary" data-act="do-bulk-merge" data-target="' + R.esc(id) + '">' +
+        L('เก็บงานนี้') + '</button></div>';
+    });
+    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button></div>';
+    return h;
+  }
+
+  function appUrl() { return global.location.origin + global.location.pathname; }
 
   /* ---------- สลับบัญชีเพื่อดูมุมของคนอื่น ----------
    *
@@ -3542,19 +4148,10 @@
     inp.addEventListener('change', function () {
       var f = inp.files[0];
       if (!f) return;
-      var fr = new FileReader();
-      fr.onload = function () {
-        try {
-          var res = S.importTasksCsv(projectId, fr.result);
-          renderAll();
-          toast(res.sections
-            ? L('นำเข้า {n} งาน และสร้างคอลัมน์ใหม่ {s} คอลัมน์', { n: res.tasks, s: res.sections })
-            : L('นำเข้า {n} งานแล้ว', { n: res.tasks }), L('ย้อนกลับ'), 'undo');
-        } catch (err) {
-          toast(L('นำเข้าไม่สำเร็จ:') + ' ' + err.message);
-        }
-      };
-      fr.readAsText(f, 'utf-8');
+      if (f.size > 5 * 1024 * 1024) { toast(L('ไฟล์ใหญ่เกิน 5 MB')); return; }
+      /* 2c — ดูก่อนนำเข้า: จับคู่คอลัมน์ เลือกการเข้ารหัส แล้วค่อยกดนำเข้า */
+      state.csv = { pid: projectId, file: f, text: '', enc: 'utf-8', map: null };
+      readCsvFile('utf-8');
     });
     inp.click();
   }
@@ -3659,9 +4256,9 @@
 
   function doUndo() {
     if (!S.canUndo()) { toast(L('ไม่มีอะไรให้ย้อนกลับ')); return; }
+    clearSel();          // ก่อน undo — undo วาดหน้าใหม่ทันที ถ้าล้างทีหลังแถวยังขึ้นว่าเลือกอยู่
     S.undo();
     var u = S.undoLabel();
-    clearSel();
     if (state.openTaskId && !S.task(state.openTaskId)) state.openTaskId = null;
     toast(L('ย้อนกลับแล้ว:') + ' ' + L(u.label, u.params || undefined));
   }
@@ -3766,6 +4363,20 @@
       'bcol-toggle', 'bcol-all', 'bcard', 'bsize', 'b-group', 'b-swim',
       'cal-weekends', 'cal-colorby', 'tl-colorby', 'sv-discard'
     ]);
+    /* 2c — แก้หลายงาน (เดิม bulk-assignee/bulk-priority ไม่ได้ลงทะเบียน ใครก็เปลี่ยนได้) */
+    put('write', [
+      'bulk-assignee', 'bulk-priority', 'bulk-more', 'bulk-section', 'bulk-section-pick',
+      'bulk-project', 'do-bulk-project', 'bulk-field', 'do-bulk-field', 'bulk-followers', 'do-bulk-followers',
+      'bulk-tag', 'bulk-type', 'bulk-dep', 'do-bulk-dep', 'bulk-merge', 'do-bulk-merge'
+    ]);
+    /* ฟิลด์ คลังฟิลด์ แท็กทั้งองค์กร บทบาท แปลงเป็นโปรเจกต์ นำเข้า = แก้โครงสร้าง */
+    put('structure', [
+      'create-field', 'field-edit', 'do-field-edit', 'field-promote', 'field-lib-use', 'field-lib-pick',
+      'lib-new', 'lib-delete', 'tag-rename', 'tag-delete', 'project-roles', 'do-roles', 'to-project',
+      'do-csv-import'
+    ]);
+    /* การค้นหาที่บันทึกไว้เป็นของตัวเอง ขอสิทธิ์/ตอบคำขอ (store ตรวจว่าเป็นเจ้าของหรือผู้ดูแลโปรเจกต์) */
+    put('self', ['ss-save', 'ss-update', 'ss-rename', 'ss-delete', 'request-access', 'access-grant', 'access-deny']);
     return map;
   })();
 
@@ -3811,6 +4422,10 @@
            (state.route.type !== "project" || S.canInProject(state.route.id, "edit"));
     }
     else ok = S.can(need);
+    /* 2c — แก้หลายงาน: ทุกงานที่เลือกต้องแก้ได้ (เดิมตรวจแค่บทบาท งานในโปรเจกต์ที่ดูได้อย่างเดียวก็ถูกแก้ได้) */
+    if (ok && /^(do-)?bulk-/.test(act) && act !== 'bulk-clear' && act !== 'bulk-links') {
+      ok = selectedIds().every(function (tid) { return S.can('write', tid); });
+    }
     if (!ok) denyToast();
     return ok;
   }
@@ -3834,7 +4449,7 @@
          'add-tag', 'tag-search', 'sub-dates', 'sub-assign',
          'sub-start', 'sub-due', 'comment-menu', 'dw-field-multi',
          'mt-filter', 'mt-sort', 'mt-group', 'inbox-filter', 'inbox-sort', 'dnd-menu',
-         'sec-menu', 'foot-menu', 'tab-menu', 'col-menu'].indexOf(el.dataset.act) < 0) {
+         'sec-menu', 'foot-menu', 'tab-menu', 'col-menu', 'bulk-more', 'bulk-section'].indexOf(el.dataset.act) < 0) {
       if (!e.target.closest || !e.target.closest('.pop')) closePops();
     }
 
@@ -3854,6 +4469,7 @@
 
       /* --- navigation --- */
       case 'toggle-sidebar':
+        if (global.innerWidth > 860 && document.body.classList.contains('sb-collapsed')) { toggleSidebarCollapse(false); break; }
         setSidebar(!document.getElementById('sidebar').classList.contains('open'));
         break;
 
@@ -3984,10 +4600,73 @@
           });
           if (!opts.length) { toast(L('ใส่ตัวเลือกอย่างน้อย 1 รายการ')); return; }
         }
-        S.addField(state.route.id, { name: nm, type: ty, options: opts,
-          format: ty === 'number' ? readNumberFormat() : null });
+        var fdef = { name: nm, type: ty, options: opts,
+          format: ty === 'number' ? readNumberFormat() : null,
+          desc: ((document.getElementById('nfDesc') || {}).value || '').trim(),
+          notify: !!(document.getElementById('nfNotify') || {}).checked,
+          prefix: (document.getElementById('nfPrefix') || {}).value };
+        if (el.dataset.lib) {
+          S.createLibField(fdef);
+          openModal(libModal());
+          toast(L('สร้างฟิลด์ในคลังแล้ว'), L('ย้อนกลับ'), 'undo');
+          break;
+        }
+        var toLib = !!(document.getElementById('nfLib') || {}).checked && ty !== 'id';
+        var cfPid = state.route.id;
+        S.batch('เพิ่มฟิลด์', null, function () {
+          var nfx = S.addField(cfPid, fdef);
+          if (nfx && toLib) S.promoteFieldToLib(cfPid, nfx.id);
+        });
         closeModal();
-        toast(L('เพิ่มฟิลด์แล้ว'));
+        toast(L('เพิ่มฟิลด์แล้ว'), L('ย้อนกลับ'), 'undo');
+        break;
+      }
+      /* --- 2c: แก้ฟิลด์ คลังฟิลด์ --- */
+      case 'field-edit':
+        closePops();
+        openModal(fieldEditModal(el.dataset.project || null, el.dataset.field));
+        break;
+      case 'do-field-edit': {
+        var fePid = el.dataset.project || null;
+        var feName = (document.getElementById('feName') || {}).value || '';
+        if (!feName.trim()) { toast(L('ใส่ชื่อฟิลด์ก่อน')); break; }
+        var fePatch = { name: feName, desc: (document.getElementById('feDesc') || {}).value || '' };
+        if (document.getElementById('nfOpts')) {
+          fePatch.options = readOptionRows();
+          if (!fePatch.options.length) { toast(L('ใส่ตัวเลือกอย่างน้อย 1 รายการ')); break; }
+          fePatch.notify = !!(document.getElementById('feNotify') || {}).checked;
+        }
+        if (document.getElementById('fePrefix')) fePatch.prefix = document.getElementById('fePrefix').value;
+        if (document.getElementById('nfKind')) fePatch.format = readNumberFormat();
+        S.updateFieldDef(fePid, el.dataset.field, fePatch);
+        openModal(fePid ? fieldsModal(fePid) : libModal());
+        toast(L('บันทึกฟิลด์แล้ว'), L('ย้อนกลับ'), 'undo');
+        break;
+      }
+      case 'field-promote':
+        if (S.promoteFieldToLib(el.dataset.project, el.dataset.field)) {
+          openModal(fieldsModal(el.dataset.project));
+          toast(L('บันทึกลงคลังฟิลด์แล้ว โปรเจกต์อื่นหยิบไปใช้ได้'), L('ย้อนกลับ'), 'undo');
+        }
+        break;
+      case 'field-lib': openModal(libModal()); break;
+      case 'field-lib-pick': openModal(libPickModal(el.dataset.project)); break;
+      case 'field-lib-use':
+        if (S.addLibFieldToProject(el.dataset.project, el.dataset.field)) {
+          openModal(fieldsModal(el.dataset.project));
+          toast(L('เพิ่มฟิลด์จากคลังแล้ว'), L('ย้อนกลับ'), 'undo');
+        }
+        break;
+      case 'lib-new': openModal(addFieldModal('text', true)); break;
+      case 'lib-delete': {
+        var ldf = S.libField(el.dataset.field);
+        if (!ldf) break;
+        askConfirm(L('เอา “{f}” ออกจากคลัง?', { f: ldf.name }),
+          L('โปรเจกต์ที่ใช้อยู่ยังมีฟิลด์และค่าเดิม แต่จะแก้แยกกันแล้ว'), function () {
+            S.deleteLibField(ldf.id);
+            openModal(libModal());
+            toast(L('เอาออกจากคลังแล้ว'), L('ย้อนกลับ'), 'undo');
+          }, { ok: L('เอาออก') });
         break;
       }
       case 'field-menu': {
@@ -3996,6 +4675,8 @@
         var fid = el.dataset.field;
         var fmObj = findField(fid);
         openPop(el,
+          '<button data-act="field-edit" data-project="' + R.esc(state.route.id) + '" data-field="' + R.esc(fid) + '">' +
+          I('settings', 14) + ' ' + L('แก้ไขฟิลด์…') + '</button>' +
           '<button data-act="rename-field" data-field="' + R.esc(fid) + '">' +
           I('pencil', 14) + ' ' + L('เปลี่ยนชื่อ') + '</button>' +
           (fmObj && fmObj.type === 'number'
@@ -5187,6 +5868,315 @@
       }
       case 'bulk-clear': clearSelUI(); break;
 
+      /* --- 2c: แก้หลายงานพร้อมกัน (เมนูเพิ่มเติม) — ทุกคำสั่งย้อนกลับได้ในครั้งเดียว --- */
+      case 'bulk-more':
+        if (popIsOpenFor(el)) { closePops(); break; }
+        openPop(el, bulkMoreMenu());
+        break;
+      case 'bulk-section': {
+        var bsp = S.project(state.route.id);
+        if (!bsp) break;
+        /* เปลี่ยนเนื้อในเมนูเดิมเป็นรายชื่อคอลัมน์ (เปิดเมนูใหม่ที่ปุ่มเดิม = ปิดเมนู) */
+        var bsHtml = bsp.sections.map(function (s) {
+          return '<button data-act="bulk-section-pick" data-section="' + R.esc(s.id) + '">' + R.esc(s.name) + '</button>';
+        }).join('');
+        var bsPop = el.closest('.pop');
+        if (bsPop) bsPop.innerHTML = bsHtml; else openPop(el, bsHtml);
+        break;
+      }
+      case 'bulk-section-pick': {
+        var bsn = S.bulkMoveSection(selectedIds(), state.route.id, sectionId);
+        toast(bsn ? L('ย้าย {n} งานแล้ว', { n: bsn }) : L('งานที่เลือกไม่ได้อยู่ในโปรเจกต์นี้'), bsn ? L('ย้อนกลับ') : null, 'undo');
+        break;
+      }
+      case 'bulk-project': openModal(bulkProjectModal()); break;
+      case 'do-bulk-project': {
+        var bpp = (document.getElementById('mpProject') || {}).value;
+        var bps = (document.getElementById('mpSection') || {}).value;
+        if (!bpp || !S.canInProject(bpp, 'edit')) { denyToast(); break; }
+        var bpn = S.bulkAddToProject(selectedIds(), bpp, bps);
+        closeModal();
+        toast(L('เพิ่ม {n} งานเข้าโปรเจกต์แล้ว', { n: bpn }), L('ย้อนกลับ'), 'undo');
+        break;
+      }
+      case 'bulk-field': openModal(bulkFieldModal()); break;
+      case 'bf-opt': {
+        if (el.dataset.single) {
+          Array.prototype.forEach.call(document.querySelectorAll('#bfVal .flt-chip'), function (b) {
+            if (b !== el) b.classList.remove('on');
+          });
+        }
+        el.classList.toggle('on');
+        break;
+      }
+      case 'do-bulk-field': {
+        var bff = S.fieldDef(el.dataset.field);
+        if (!bff) break;
+        var bfv = null;
+        if (bff.type === 'select' || bff.type === 'multi') {
+          var picks = Array.prototype.map.call(document.querySelectorAll('#bfVal .flt-chip.on'), function (b) { return b.dataset.v; });
+          bfv = bff.type === 'multi' ? picks : (picks[0] || null);
+        } else {
+          var bfi = document.getElementById('bfVal');
+          bfv = bfi ? bfi.value : '';
+          if (bff.type === 'number') bfv = bfv === '' ? null : Number(bfv);
+        }
+        var bfn = S.bulkSetField(selectedIds(), bff.id, bfv);
+        closeModal();
+        toast(L('ตั้ง {f} ให้ {n} งานแล้ว', { f: bff.name, n: bfn }), L('ย้อนกลับ'), 'undo');
+        break;
+      }
+      case 'bulk-followers': openModal(bulkFollowersModal()); break;
+      case 'do-bulk-followers': {
+        var bfu = Array.prototype.map.call(document.querySelectorAll('.bf-user:checked'), function (c) { return c.value; });
+        if (!bfu.length) { toast(L('เลือกอย่างน้อย 1 คน')); break; }
+        S.bulkAddFollowers(selectedIds(), bfu);
+        closeModal();
+        toast(L('เพิ่มผู้ติดตามแล้ว'), L('ย้อนกลับ'), 'undo');
+        break;
+      }
+      case 'bulk-tag': {
+        var btIds = selectedIds();
+        askText(L('เพิ่มแท็กให้ {n} งาน', { n: btIds.length }), '', function (v) {
+          if (!v || !v.trim()) return;
+          S.bulkAddTag(btIds, v);
+          toast(L('เพิ่มแท็กแล้ว'), L('ย้อนกลับ'), 'undo');
+        }, { ok: L('เพิ่ม') });
+        break;
+      }
+      case 'bulk-type':
+        S.bulkUpdate(selectedIds(), { type: el.dataset.v });
+        toast(L('เปลี่ยนชนิดงานแล้ว'), L('ย้อนกลับ'), 'undo');
+        break;
+      case 'bulk-dep': openModal(bulkDepModal()); break;
+      case 'do-bulk-dep': {
+        var bdn = S.bulkDependOn(selectedIds(), el.dataset.target);
+        closeModal();
+        toast(bdn ? L('ตั้งให้ {n} งานรองานนี้แล้ว', { n: bdn }) : L('ผูกไม่ได้ — จะทำให้รอกันเป็นวง'), bdn ? L('ย้อนกลับ') : null, 'undo');
+        break;
+      }
+      case 'bulk-merge':
+        if (selCount() < 2) { toast(L('เลือกอย่างน้อย 2 งาน')); break; }
+        openModal(bulkMergeModal());
+        break;
+      case 'do-bulk-merge': {
+        var bmn = S.bulkMerge(selectedIds(), el.dataset.target);
+        closeModal();
+        clearSel();
+        renderAll();
+        toast(L('รวม {n} งานเข้ากับงานหลักแล้ว', { n: bmn }), L('ย้อนกลับ'), 'undo');
+        break;
+      }
+      case 'bulk-links': {
+        var lines = selectedIds().map(function (x) {
+          var lt = S.task(x);
+          return lt ? lt.name + ' — ' + appUrl() + '#/task/' + x : '';
+        }).filter(Boolean);
+        copyText(lines.join('\n'), L('คัดลอกลิงก์ {n} งานแล้ว', { n: lines.length }));
+        break;
+      }
+
+      /* --- 2c: แท็ก --- */
+      case 'go-tag':
+        e.stopPropagation();
+        closeModal();
+        closeSidebar();
+        state.route = { type: 'tag', name: el.dataset.tag };
+        clearSel();
+        renderAll();
+        break;
+      case 'tag-rename': {
+        var trOld = el.dataset.tag;
+        askText(L('เปลี่ยนชื่อแท็ก “{t}”', { t: trOld }), trOld, function (v) {
+          v = (v || '').trim();
+          if (!v || v === trOld) return;
+          var trn = S.renameTag(trOld, v);
+          state.route = { type: 'tag', name: v.slice(0, 40) };
+          renderAll();
+          toast(L('เปลี่ยนชื่อแท็กใน {n} งานแล้ว', { n: trn }), L('ย้อนกลับ'), 'undo');
+        }, { ok: L('เปลี่ยนชื่อ'), note: L('ถ้ามีแท็กชื่อนี้อยู่แล้ว สองแท็กจะรวมกัน') });
+        break;
+      }
+      case 'tag-delete': {
+        var tdName = el.dataset.tag;
+        askConfirm(L('ลบแท็ก “{t}”?', { t: tdName }), L('แท็กจะถูกเอาออกจากทุกงาน (ตัวงานไม่ถูกลบ)'), function () {
+          var tdn = S.deleteTag(tdName);
+          state.route = { type: 'home' };
+          renderAll();
+          toast(L('ลบแท็กออกจาก {n} งานแล้ว', { n: tdn }), L('ย้อนกลับ'), 'undo');
+        }, { ok: L('ลบแท็ก') });
+        break;
+      }
+
+      /* --- 2c: ค้นหาขั้นสูงและการค้นหาที่บันทึกไว้ --- */
+      case 'open-ss': closeSidebar(); goSavedSearch(id); break;
+      case 'adv-open': {
+        var aq = (document.getElementById('searchInput') || {}).value || '';
+        state.route = { type: 'search', q: aq.trim() };
+        state.adv.open = true;
+        if (!state.adv.conds.length) state.adv.conds.push({ f: 'assignee', op: 'is', v: [] });
+        clearSel();
+        renderAll();
+        break;
+      }
+      case 'adv-toggle':
+        state.adv.open = !state.adv.open;
+        if (state.adv.open && !state.adv.conds.length) state.adv.conds.push({ f: 'assignee', op: 'is', v: [] });
+        refreshSearch();
+        break;
+      case 'adv-mode': state.adv.mode = el.dataset.v === 'calendar' ? 'calendar' : 'list'; refreshSearch(); break;
+      case 'adv-help': state.adv.help = !state.adv.help; refreshSearch(); break;
+      case 'as-add': state.adv.conds.push({ f: 'assignee', op: 'is', v: [] }); state.adv.open = true; refreshSearch(); break;
+      case 'as-del': state.adv.conds.splice(+el.dataset.i, 1); refreshSearch(); break;
+      case 'as-clear': state.adv.conds = []; refreshSearch(); break;
+      case 'as-opt': {
+        var ac = state.adv.conds[+el.dataset.i];
+        if (!ac) break;
+        var av = Array.isArray(ac.v) ? ac.v.slice() : [];
+        var aat = av.indexOf(el.dataset.v);
+        if (aat >= 0) av.splice(aat, 1); else av.push(el.dataset.v);
+        ac.v = av;
+        refreshSearch();
+        break;
+      }
+      case 'as-quick': {
+        var isQ = el.dataset.v === 'me' ? isMeFilter
+          : function (c) { return c.f === 'completed' && c.op === 'no'; };
+        var hadQ = state.adv.conds.some(isQ);
+        state.adv.conds = state.adv.conds.filter(function (c) { return !isQ(c); });
+        if (!hadQ) state.adv.conds.push(el.dataset.v === 'me' ? { f: 'assignee', op: 'is', v: [S.ME] }
+                                                               : { f: 'completed', op: 'no', v: null });
+        refreshSearch();
+        break;
+      }
+      case 'ss-save': {
+        var sq = state.route.q || '';
+        askText(L('ตั้งชื่อการค้นหานี้'), sq || L('การค้นหาของฉัน'), function (v) {
+          var ns = S.saveSearch({ name: v, q: sq, conds: state.adv.conds, mode: state.adv.mode });
+          if (!ns) { toast(L('บันทึกไม่ได้ (สูงสุด 50 รายการ)')); return; }
+          state.route = { type: 'search', q: ns.q, ss: ns.id };
+          renderAll();
+          toast(L('บันทึกไว้ที่แถบซ้ายแล้ว'), L('ย้อนกลับ'), 'undo');
+        }, { ok: L('บันทึก') });
+        break;
+      }
+      case 'ss-update':
+        S.updateSavedSearch(id, { q: state.route.q || '', conds: state.adv.conds, mode: state.adv.mode });
+        toast(L('บันทึกทับแล้ว'), L('ย้อนกลับ'), 'undo');
+        break;
+      case 'ss-rename': {
+        var ssr = S.savedSearch(id);
+        if (!ssr) break;
+        askText(L('เปลี่ยนชื่อ'), ssr.name, function (v) { if (v) S.updateSavedSearch(id, { name: v }); }, { ok: L('บันทึก') });
+        break;
+      }
+      case 'ss-delete': {
+        var ssd = S.savedSearch(id);
+        if (!ssd) break;
+        askConfirm(L('ลบการค้นหา “{n}”?', { n: ssd.name }), '', function () {
+          S.deleteSavedSearch(id);
+          state.route = { type: 'search', q: state.route.q || '' };
+          renderAll();
+          toast(L('ลบแล้ว'), L('ย้อนกลับ'), 'undo');
+        }, { ok: L('ลบ') });
+        break;
+      }
+
+      /* --- 2c: รหัสงาน ขอสิทธิ์ บทบาท แปลงเป็นโปรเจกต์ ส่งออก พิมพ์ --- */
+      case 'copy-code': copyText(el.dataset.v, L('คัดลอก {c} แล้ว', { c: el.dataset.v })); break;
+      case 'request-access': {
+        var rq = S.requestAccess(id, ((document.getElementById('reqNote') || {}).value || '').trim());
+        if (!rq.ok) { toast(L(rq.reason)); renderViewBody(); break; }
+        renderAll();
+        toast(L('ส่งคำขอถึง {who} แล้ว', { who: rq.owner.name }));
+        break;
+      }
+      case 'access-grant':
+      case 'access-deny': {
+        var arAcc = (document.getElementById('arAccess') || {}).value || 'edit';
+        if (!S.answerAccess(id, el.dataset.user, act === 'access-grant', arAcc)) { denyToast(); break; }
+        toast(act === 'access-grant' ? L('ให้สิทธิ์แล้ว') : L('ปฏิเสธคำขอแล้ว'), L('ย้อนกลับ'), 'undo');
+        break;
+      }
+      case 'project-roles': openModal(rolesModal(id)); break;
+      case 'do-roles': {
+        var rPid = id;
+        S.batch('ตั้งบทบาทในโปรเจกต์', null, function () {
+          Array.prototype.forEach.call(document.querySelectorAll('.role-in'), function (inp) {
+            S.setProjectRole(rPid, inp.dataset.user, inp.value);
+          });
+        });
+        closeModal();
+        toast(L('บันทึกบทบาทแล้ว'), L('ย้อนกลับ'), 'undo');
+        break;
+      }
+      case 'to-project': {
+        var tpT = S.task(id);
+        if (!tpT || !S.can('write', id)) { denyToast(); break; }
+        askConfirm(L('แปลง “{t}” เป็นโปรเจกต์?', { t: tpT.name }),
+          L('ผู้รับผิดชอบเป็นเจ้าของ ผู้ติดตามเป็นสมาชิก งานย่อย {n} งานย้ายไปเป็นงานในโปรเจกต์ งานเดิมยังอยู่และลิงก์ไปหาโปรเจกต์ใหม่',
+            { n: S.subtasks(id).length }), function () {
+            var np = S.convertToProject(id);
+            closeModal();
+            state.openTaskId = null;
+            if (np) goProject(np.id, 'list');
+            toast(L('สร้างโปรเจกต์ “{p}” แล้ว', { p: np ? np.name : '' }), L('ย้อนกลับ'), 'undo');
+          }, { ok: L('แปลงเป็นโปรเจกต์'), safe: true });
+        break;
+      }
+      case 'export-json': {
+        closePops();
+        var pj = S.project(id);
+        downloadText(S.projectJson(id), safeFileName(pj.name) + '.json', 'application/json');
+        toast(L('ส่งออกไฟล์ JSON แล้ว'));
+        break;
+      }
+      case 'export-ics': {
+        closePops();
+        var pi = S.project(id);
+        var ics = S.projectIcs(id, appUrl());
+        downloadText(ics.text, safeFileName(pi.name) + '.ics', 'text/calendar;charset=utf-8');
+        toast(L('ส่งออกปฏิทิน {n} งานแล้ว', { n: ics.count }));
+        break;
+      }
+      case 'mt-ics': {
+        var mics = S.myTasksIcs(appUrl());
+        downloadText(mics.text, 'orbit-my-tasks.ics', 'text/calendar;charset=utf-8');
+        toast(L('ส่งออกปฏิทิน {n} งานแล้ว', { n: mics.count }));
+        break;
+      }
+      case 'print-list': {
+        closePops();
+        if (state.route.type === 'project' && (state.route.view !== 'list' || state.route.sv)) goProject(state.route.id, 'list');
+        setTimeout(function () { global.print(); }, 60);
+        break;
+      }
+      case 'project-trash':
+        closePops();
+        state.route = { type: 'trash', pid: id };
+        clearSel();
+        renderAll();
+        break;
+      case 'do-csv-import': {
+        var cv = state.csv;
+        if (!cv) break;
+        try {
+          var cres = S.importTasksCsvMapped(cv.pid, cv.text, cv.map);
+          closeModal();
+          state.csv = null;
+          renderAll();
+          var bits = [L('นำเข้า {n} งานแล้ว', { n: cres.tasks })];
+          if (cres.sections) bits.push(L('คอลัมน์ใหม่ {n}', { n: cres.sections }));
+          if (cres.fields) bits.push(L('ฟิลด์ใหม่ {n}', { n: cres.fields }));
+          if (cres.subtasks) bits.push(L('งานย่อย {n}', { n: cres.subtasks }));
+          if (cres.deps) bits.push(L('ลำดับก่อนหลัง {n}', { n: cres.deps }));
+          toast(bits.join(' · '), L('ย้อนกลับ'), 'undo');
+        } catch (err) {
+          toast(L('นำเข้าไม่สำเร็จ:') + ' ' + L(err.message));
+        }
+        break;
+      }
+
       /* --- inbox --- */
       case 'inbox-tab':
         state.inbox.tab = el.dataset.tab || 'activity';
@@ -5894,6 +6884,7 @@
       case 'delete-field':
         S.deleteField(projectId, el.dataset.field);
         openModal(fieldsModal(projectId));
+        toast(L('ย้ายฟิลด์ไปถังขยะแล้ว'), L('ย้อนกลับ'), 'undo');
         break;
 
       /* --- rules --- */
@@ -6338,6 +7329,37 @@
       return;
     }
 
+    /* 2c — เงื่อนไขของค้นหาขั้นสูง (อยู่ในหน้าจอ ไม่แตะข้อมูล) */
+    if (/^as-(field|op|val|val2)$/.test(act)) {
+      var ai = +el.dataset.i, acn = state.adv.conds[ai];
+      if (!acn) return;
+      if (act === 'as-field') {
+        var adef = S.filterField('*', el.value);
+        var aop = adef ? S.FILTER_OPS[adef.kind][0][0] : 'is';
+        state.adv.conds[ai] = { f: el.value, op: aop, v: adef ? fltDefaultV(adef.kind, aop) : [] };
+      } else if (act === 'as-op') {
+        var aodef = S.filterField('*', acn.f);
+        var aold = JSON.stringify(fltDefaultV(aodef ? aodef.kind : '', acn.op));
+        acn.op = el.value;
+        if (aodef && JSON.stringify(fltDefaultV(aodef.kind, el.value)) !== aold) acn.v = fltDefaultV(aodef.kind, el.value);
+      } else if (act === 'as-val') {
+        if (acn.op === 'between') acn.v = [el.value || '', (acn.v && acn.v[1]) || ''];
+        else if (acn.op === 'next' || acn.op === 'last') acn.v = Math.max(0, parseInt(el.value, 10) || 0);
+        else if (el.type === 'number') acn.v = el.value === '' ? '' : Number(el.value);
+        else acn.v = el.value;
+      } else {
+        acn.v = [(acn.v && acn.v[0]) || '', el.value || ''];
+      }
+      refreshSearch();
+      return;
+    }
+    if (act === 'csv-enc') { readCsvFile(el.value); return; }
+    if (act === 'csv-map') {
+      if (state.csv && state.csv.map) state.csv.map[+el.dataset.k] = el.value;
+      return;
+    }
+    if (act === 'bf-field') { openModal(bulkFieldModal(el.value)); return; }
+
     /* 2b — ตัวสร้างตัวกรอง การเรียงหลายชั้น บอร์ด สี — ทุกอย่างอยู่ในมุมมอง ไม่แตะงาน */
     if (act === 'cal-colorby' && state.route.type === 'calendar') { S.setCalPrefs({ colorBy: el.value }); return; }
     if (state.route.type === 'project' && /^(flt-|srt-key$|b-group$|b-swim$|cal-colorby$|tl-colorby$)/.test(act)) {
@@ -6419,6 +7441,10 @@
       if (wrapx) wrapx.style.display = (ftx && ftx.hasOptions) ? '' : 'none';
       var numx = document.getElementById('nfNumWrap');
       if (numx) numx.hidden = el.value !== 'number';
+      var idx2 = document.getElementById('nfIdWrap');
+      if (idx2) idx2.hidden = el.value !== 'id';
+      var libx = document.getElementById('nfLibWrap');
+      if (libx) libx.hidden = el.value === 'id';
       return;
     }
     if (act === 'nf-kind') {
@@ -6549,15 +7575,21 @@
       return;
     }
 
+    if (e.target.id === 'bdSearch') {
+      var bdBox = document.getElementById('bdResults');
+      if (bdBox) bdBox.innerHTML = bulkDepResults(e.target.value);
+      return;
+    }
+
     if (e.target.id === 'searchInput') {
       var q = e.target.value;
       clearTimeout(searchTimer);
       searchTimer = setTimeout(function () {
-        if (q.trim()) {
-          state.route = { type: 'search', q: q.trim() };
-          $sidebar.innerHTML = R.sidebar(state.route);
-          renderViewBody();
-          syncHash();
+        /* อยู่ในหน้าค้นหาที่มีเงื่อนไขหรือเป็นการค้นหาที่บันทึกไว้ — ลบคำค้นหมดแล้วยังอยู่หน้าเดิม */
+        var keep = state.route.type === 'search' && (state.adv.conds.length || state.route.ss);
+        if (q.trim() || keep) {
+          state.route = { type: 'search', q: q.trim(), ss: state.route.type === 'search' ? state.route.ss : null };
+          refreshSearch();
         } else if (state.route.type === 'search') {
           state.route = { type: 'home' };
           renderAll();
@@ -6703,17 +7735,29 @@
       } else if (e.target.dataset && e.target.dataset.save === 'notes') {
         e.preventDefault();
         e.target.blur();          // Ctrl+Enter ในรายละเอียด = บันทึกแล้วออกจากช่อง
+      } else if (!typing && !$mdBack.classList.contains('open')) {
+        /* 2c — Ctrl+Enter นอกช่องพิมพ์ = ทำเครื่องหมายว่าเสร็จ (งานที่เปิดอยู่หรือแถวที่เลือก) */
+        var ceId = focusTaskId();
+        if (ceId) {
+          e.preventDefault();
+          if (!S.can('write', ceId)) { denyToast(); return; }
+          var ceT = S.task(ceId);
+          S.updateTask(ceId, { completed: !ceT.completed });
+          toast(ceT.completed ? L('ทำเสร็จแล้ว') : L('เปิดงานนี้อีกครั้ง'), L('ย้อนกลับ'), 'undo');
+        }
       }
       return;
     }
 
-    if (e.ctrlKey && (e.key === 'z' || e.key === 'Z') && !typing) {
+    /* แป้นภาษาไทย: ดูตำแหน่งปุ่ม (e.code) ไม่ใช่ตัวอักษรที่ได้ — Ctrl+Z / Ctrl+/ ด้วย */
+    var kc = keyOf(e);
+    if (e.ctrlKey && kc === 'z' && !typing) {
       e.preventDefault();
       if (!S.can('write')) { denyToast(); return; }
       doUndo();
       return;
     }
-    if (e.ctrlKey && e.key === '/') {
+    if (e.ctrlKey && (e.key === '/' || kc === '/')) {
       e.preventDefault();
       openModal(shortcutsModal(), true);
       return;
@@ -6744,9 +7788,77 @@
       return;
     }
     if (tabHeld && !typing) {
-      var k = e.key.toLowerCase();
+      var k = kc;
       var handled = true;
+      var ft = focusTaskId();
       if (k === 'h') { state.route = { type: 'home' }; clearSel(); renderAll(); }
+      /* 2c — คีย์ลัดของงาน ใช้กับงานที่เปิดอยู่ ไม่มีก็แถวที่ถูกชี้/เลือกไว้ */
+      else if (k === 'o') { toggleSidebarCollapse(); }
+      else if (k === 'enter') {
+        if (ft) openTask(ft); else toast(L('เลือกงานก่อน (คลิกแถว หรือใช้ลูกศรขึ้นลง)'));
+      } else if ((k === 'delete' || k === 'backspace') && ft) {
+        if (!S.can('write', ft)) { denyToast(); return; }
+        var dT = S.task(ft);
+        askConfirm(L('ลบงาน “{t}”?', { t: dT.name }), '', function () {
+          if (state.openTaskId === ft) state.openTaskId = null;
+          S.deleteTask(ft);
+          delete state.sel[ft];
+          if (state.cursor === ft) state.cursor = null;
+          renderAll();
+          toast(L('ย้ายไปถังขยะแล้ว'), L('ย้อนกลับ'), 'undo');
+        }, { ok: L('ลบ') });
+      } else if (k === 'd' && !e.shiftKey) {
+        withDrawer(function () {
+          var dd = $drawer.querySelector('[data-act="edit-due"]');
+          if (!dd) return;
+          dd.focus();
+          try { if (dd.showPicker) dd.showPicker(); } catch (er) { /* บางเบราว์เซอร์ไม่ให้เปิดเอง */ }
+        });
+      } else if (k === 'a' && !e.shiftKey) {
+        withDrawer(function (id) {
+          if (!S.can('write', id)) { denyToast(); return; }
+          var pa = $drawer.querySelector('[data-act="pick-assignee"]');
+          if (pa) pa.click();
+        });
+      } else if (k === 't') {
+        withDrawer(function (id) {
+          if (!S.can('comment', id)) { denyToast(); return; }
+          var at = $drawer.querySelector('[data-act="add-tag"]');
+          if (at) at.click();
+        });
+      } else if (k === 'p' && ft) {
+        if (!S.can('write', ft)) { denyToast(); return; }
+        if (S.isPrivate(ft) && !S.task(ft).parentId) openModal(makePublicModal(ft));
+        else openModal(addHomeModal(ft));
+      } else if (k === 's' && !e.shiftKey) {
+        withDrawer(function (id) {
+          if (!S.can('write', id)) { denyToast(); return; }
+          var sa = document.getElementById('subAdd');
+          if (sa) { sa.scrollIntoView({ block: 'center' }); sa.focus(); }
+        });
+      } else if (k === 'f' && !e.shiftKey) {
+        withDrawer(function (id) {
+          if (!S.can('comment', id)) { denyToast(); return; }
+          var pf = $drawer.querySelector('[data-act="pick-follower"]');
+          if (pf) pf.click();
+        });
+      } else if ((k === 'j' || k === 'l') && ft) {
+        if (!S.can('comment', ft)) { denyToast(); return; }
+        var jt = S.task(ft), meId = S.db.currentUserId;
+        var isF = jt.followers.indexOf(meId) >= 0;
+        if ((k === 'j') !== isF) S.toggleFollower(ft, meId);
+        toast(k === 'j' ? L('ติดตามงานนี้แล้ว') : L('เลิกติดตามงานนี้แล้ว'));
+      } else if (k === 'k' && ft) {
+        if (!S.can('comment', ft)) { denyToast(); return; }
+        S.toggleLike(ft);
+        toast(S.task(ft).likes.indexOf(S.db.currentUserId) >= 0 ? L('ถูกใจแล้ว') : L('เลิกถูกใจแล้ว'));
+      } else if (k === 'r') {
+        withDrawer(function (id) {
+          if (!S.can('write', id)) { denyToast(); return; }
+          var rn = $drawer.querySelector('.rte[data-save="notes"]');
+          if (rn) { rn.scrollIntoView({ block: 'center' }); global.RichText.focusEnd(rn); }
+        });
+      }
       else if (k === 'z') { state.route = { type: 'mytasks' }; clearSel(); renderAll(); }
       else if (k === 'i') { state.route = { type: 'inbox' }; clearSel(); renderAll(); }
       else if (k === 'q' && state.route.type === 'project') {
@@ -6795,7 +7907,27 @@
       if (handled) { e.preventDefault(); tabHeld = false; return; }
     }
 
-    if (e.key === '/' && !typing) { focusSearch(); e.preventDefault(); return; }
+    if ((e.key === '/' || (kc === '/' && !e.shiftKey)) && !typing && !e.ctrlKey && !e.metaKey) {
+      focusSearch(); e.preventDefault(); return;
+    }
+
+    var noMod = !e.ctrlKey && !e.metaKey && !e.altKey && !tabHeld;
+    var modalOpen = $mdBack.classList.contains('open') || !!document.querySelector('.pop');
+
+    /* 2c — กล่องข้อความ J/K เลื่อน F บุ๊กมาร์ก I เก็บ U อ่านแล้ว/ยังไม่อ่าน (แป้นไทยใช้ได้ผ่าน e.code) */
+    if (state.route.type === 'inbox' && !typing && noMod && !modalOpen && !e.shiftKey &&
+        ['j', 'k', 'f', 'i', 'u'].indexOf(kc) >= 0) {
+      if (inboxKey(kc)) { e.preventDefault(); return; }
+    }
+    if (state.route.type === 'inbox' && !typing && noMod && !modalOpen && e.key === 'Enter' && state.inbox.cur) {
+      if (inboxKey('enter')) { e.preventDefault(); return; }
+    }
+
+    /* 2c — ↑/↓ เปลี่ยนงานที่เลือก (แผงงานเปิดอยู่ก็เปิดงานถัดไปตาม) */
+    if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !typing && noMod && !e.shiftKey && !modalOpen &&
+        state.route.type !== 'inbox') {
+      if (moveSelection(e.key === 'ArrowUp' ? -1 : 1)) { e.preventDefault(); return; }
+    }
 
     if ((e.key === 'Delete' || e.key === 'Backspace') && !typing && selCount()) {
       e.preventDefault();
@@ -7516,7 +8648,7 @@
     if ((global.location.hash || '').indexOf('#/task/') === 0) return true;
     if (!parsed) return false;
     if (parsed.taskId) return true;
-    return ['project', 'portfolio', 'search', 'profile'].indexOf(parsed.route.type) >= 0;
+    return ['project', 'portfolio', 'search', 'profile', 'tag'].indexOf(parsed.route.type) >= 0;
   }
 
   var boot = readHash();
@@ -7525,6 +8657,7 @@
 
   if (boot && !useLanding) {
     state.route = boot.route;
+    loadSavedSearch(boot.ss);
     state.openTaskId = boot.taskId && S.task(boot.taskId) && S.canSeeTask(boot.taskId) ? boot.taskId : null;
     focusStory(boot.storyId);
   } else if (useLanding && land !== 'home') {

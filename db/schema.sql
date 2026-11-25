@@ -652,3 +652,57 @@ CREATE TABLE dbo.user_project_views (
     CONSTRAINT pk_user_project_views PRIMARY KEY (user_id, project_id)
 );
 GO
+
+/* ---------------------------------------------------------------
+   ชิ้นงาน 2c (SCHEMA 11) — คลังฟิลด์ รหัสงาน บทบาท คำขอเข้าโปรเจกต์ การค้นหาที่บันทึกไว้
+   --------------------------------------------------------------- */
+/* ฟิลด์ชนิดรหัสงาน (id) เลขรันต่อโปรเจกต์ ค่าใน task_field_values เป็นตัวเลขล้วน แสดงเป็น prefix-เลข */
+ALTER TABLE dbo.custom_fields DROP CONSTRAINT ck_field_type;
+ALTER TABLE dbo.custom_fields ADD CONSTRAINT ck_field_type
+    CHECK (field_type IN ('text','number','select','multi','date','person','id'));
+ALTER TABLE dbo.custom_fields ADD
+    description NVARCHAR(300) NULL,                 -- คำอธิบายฟิลด์
+    notify_on_change BIT NOT NULL DEFAULT 0,        -- แจ้งผู้ติดตามเมื่อค่าเปลี่ยน (ตัวเลือก)
+    id_prefix   VARCHAR(8)    NULL,                 -- รหัสงาน: คำนำหน้า เช่น REQ
+    id_next     INT           NULL,                 -- รหัสงาน: เลขถัดไปของโปรเจกต์นี้
+    library_field_id UNIQUEIDENTIFIER NULL;         -- ใช้ฟิลด์จากคลัง (ค่าเดียวกันทุกโปรเจกต์ที่ใช้)
+GO
+/* คลังฟิลด์ขององค์กร — โปรเจกต์ที่ใช้อ้างถึงผ่าน custom_fields.library_field_id แก้ที่คลังแล้วทุกโปรเจกต์เปลี่ยนตาม */
+CREATE TABLE dbo.library_fields (
+    id          UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    name        NVARCHAR(200)    NOT NULL,
+    field_type  VARCHAR(10)      NOT NULL,           -- ไม่มี 'id' (รหัสงานเป็นของแต่ละโปรเจกต์)
+    format_json NVARCHAR(200)    NULL,
+    options_json NVARCHAR(MAX)   NULL,               -- [{"name","color"}]
+    description NVARCHAR(300)    NULL,
+    notify_on_change BIT NOT NULL DEFAULT 0,
+    created_by  UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    CONSTRAINT ck_library_field_type CHECK (field_type IN ('text','number','select','multi','date','person'))
+);
+/* บทบาทในโปรเจกต์ (ข้อความอิสระ ไม่ใช่สิทธิ์) — ตรงกับ project.roles */
+CREATE TABLE dbo.project_roles (
+    project_id  UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.projects(id) ON DELETE CASCADE,
+    user_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.users(id),
+    role_text   NVARCHAR(60)     NOT NULL,
+    CONSTRAINT pk_project_roles PRIMARY KEY (project_id, user_id)
+);
+/* คำขอเข้าโปรเจกต์ปิด — ตรงกับ project.accessRequests งานคำขอมอบให้เจ้าของโปรเจกต์ */
+CREATE TABLE dbo.project_access_requests (
+    project_id  UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.projects(id) ON DELETE CASCADE,
+    user_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.users(id),
+    task_id     UNIQUEIDENTIFIER NULL REFERENCES dbo.tasks(id),
+    requested_at DATETIME2(0)    NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT pk_access_requests PRIMARY KEY (project_id, user_id)
+);
+/* การค้นหาที่บันทึกไว้ของแต่ละคน — ตรงกับ db.personal[userId].searches
+   conds_json รูปแบบเดียวกับตัวกรองของมุมมอง [{f,op,v}] บวก project psection assignedBy followers attachment blocking subtask */
+CREATE TABLE dbo.saved_searches (
+    id          UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    user_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.users(id) ON DELETE CASCADE,
+    name        NVARCHAR(60)     NOT NULL,
+    query_text  NVARCHAR(300)    NULL,
+    conds_json  NVARCHAR(MAX)    NULL,
+    mode        VARCHAR(10)      NOT NULL DEFAULT 'list',  -- list | calendar
+    position    INT              NOT NULL DEFAULT 0
+);
+GO

@@ -3728,3 +3728,142 @@ button.prof-away:hover { color: var(--accent); }
 @media (hover: none) {
   .tb-tab-caret { width: 24px; height: 24px; }
 }
+
+/* ======================================================================
+ * 2c — ค้นหาขั้นสูง แท็ก รหัสงาน คลังฟิลด์ แก้หลายงาน นำเข้า CSV บทบาท พิมพ์
+ * ====================================================================== */
+.search { position: relative; }
+.search-adv {
+  flex: 0 0 auto; display: grid; place-items: center; width: 22px; height: 22px;
+  margin-right: -6px; border-radius: 50%; color: var(--fg-faint);
+}
+.search-adv:hover { background: var(--bg-inset); color: var(--accent-dk); }
+
+.adv { min-height: 100%; }
+.adv-panel { padding: 12px 24px 4px; border-bottom: 1px solid var(--line-soft); }
+.adv-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.adv-bar .grow { flex: 1; }
+.adv-bar .vtb-btn.icon { font-weight: 700; width: 30px; justify-content: center; }
+.adv-conds { padding: 10px 0 4px; max-width: 720px; }
+.adv-conds .flt-line { display: flex; gap: 6px; align-items: center; }
+.adv-conds .opt-select { max-width: 260px; }
+.adv-help {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px 18px;
+  margin: 12px auto 4px; max-width: 760px; text-align: left; font-size: 13px; color: var(--fg-soft);
+}
+.adv-help div { display: flex; gap: 10px; align-items: baseline; }
+.adv-help code {
+  font-family: ui-monospace, Consolas, monospace; font-size: 12px; background: var(--bg-inset);
+  color: var(--fg); padding: 1px 6px; border-radius: 5px; white-space: nowrap;
+}
+.adv-panel .adv-help { margin: 10px 0 4px; }
+.adv-cap { font-size: 12px; color: var(--fg-faint); font-weight: 400; }
+.adv .calx { margin-top: 8px; }
+
+button.chip { cursor: pointer; border: none; font: inherit; font-size: 12px; }
+button.chip.tag:hover { filter: brightness(.94); text-decoration: underline; }
+.chip.tag .tag-go { padding: 0; color: inherit; font: inherit; }
+.chip.tag .tag-go:hover { text-decoration: underline; }
+.chip-code, .cell-txt.code, .fld-code { font-family: ui-monospace, Consolas, monospace; letter-spacing: .02em; }
+.chip-code { background: var(--bg-inset); color: var(--fg); font-size: 11.5px; }
+.cell-txt.code { color: var(--fg-soft); font-size: 12.5px; }
+.fld-code { display: inline-block; padding: 5px 0; font-size: 13.5px; font-weight: 600; margin-right: 10px; }
+.fld-q {
+  display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 50%;
+  font-size: 10px; background: var(--bg-inset); color: var(--fg-faint); cursor: help;
+}
+.th-lib, .lib-badge { color: var(--accent-dk); display: inline-flex; margin-right: 2px; }
+.fld-row .btn { flex: 0 0 auto; }
+.fld-acts { flex-wrap: wrap; }
+.fld-acts .grow { flex: 1; }
+
+.tagv { padding-top: 14px; }
+.tagv-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.tagv-head .chip.tag { font-size: 14px; padding: 4px 12px; font-weight: 600; }
+.tagv-n { color: var(--fg-faint); font-size: 13px; }
+.tagv-head .grow { flex: 1; }
+.btn.danger { color: var(--danger); }
+.tb-tagchip { font-size: 15px; padding: 3px 12px; font-weight: 600; }
+
+.noaccess { max-width: 440px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.noaccess p { margin: 0; }
+.noaccess textarea { width: 100%; resize: vertical; }
+.noaccess-sent { color: var(--ok); display: inline-flex; gap: 6px; align-items: center; }
+
+.dw-access {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0 12px;
+  padding: 10px 12px; border-radius: var(--radius); background: var(--accent-bg); color: var(--fg); font-size: 13px;
+}
+.dw-access .grow { flex: 1 1 180px; }
+.dw-access select { width: auto; flex: 0 0 auto; }
+
+.bulk-sum {
+  font-size: 12.5px; color: var(--sidebar-on); padding: 3px 9px; border-radius: 12px;
+  background: rgba(255,255,255,.12); white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+
+.ovw-roles { display: flex; flex-direction: column; gap: 8px; }
+.ovw-role { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.ovw-role em { margin-left: auto; font-style: normal; color: var(--fg-soft); text-align: right; }
+
+.trash-filter {
+  display: flex; align-items: center; gap: 8px; margin: 0 0 12px; padding: 8px 12px; font-size: 13px;
+  border-radius: var(--radius); background: var(--bg-sunk); color: var(--fg-soft);
+}
+.trash-filter span { flex: 1; }
+
+.csv-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  font-size: 13px; color: var(--fg-soft); margin-bottom: 6px; }
+.csv-top select { margin-left: 6px; }
+.csv-map { display: flex; flex-direction: column; gap: 6px; max-height: 52vh; overflow: auto; padding-right: 4px; }
+.csv-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border: 1px solid var(--line-soft);
+  border-radius: var(--radius); }
+.csv-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.csv-col b { font-size: 13px; }
+.csv-col em { font-style: normal; font-size: 12px; color: var(--fg-faint); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.csv-sel { flex: 0 0 210px; width: 210px; }
+
+.roles-grid { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow: auto; }
+.role-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.role-row .nm { flex: 0 0 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.role-row input { flex: 1; min-width: 0; }
+
+.row.cursor { box-shadow: inset 3px 0 0 var(--accent); }
+.card.cursor { outline: 2px solid var(--accent); outline-offset: -1px; }
+.nrow.kb-cur { box-shadow: inset 3px 0 0 var(--accent); background: var(--accent-bg); }
+
+@media (min-width: 861px) {
+  body.sb-collapsed .sidebar { display: none; }
+  body.sb-collapsed .menu-btn {
+    display: grid; place-items: center; flex: 0 0 38px; width: 38px; height: 38px;
+    border-radius: var(--radius); font-size: 19px; color: var(--fg);
+  }
+  body.sb-collapsed .menu-btn:hover { background: var(--bg-sunk); }
+}
+
+@media (max-width: 620px) {
+  .adv-panel { padding: 10px 12px 4px; }
+  .adv-conds .flt-line { flex-wrap: wrap; }
+  .adv-conds .opt-select { flex: 1 1 40%; max-width: none; }
+  .adv-help { grid-template-columns: 1fr; padding: 0 4px; }
+  .csv-row { flex-direction: column; align-items: stretch; }
+  .csv-sel { flex: 1 1 auto; width: 100%; }
+  .role-row .nm { flex-basis: 96px; }
+  .search-adv { display: none; }
+}
+
+/* ---- พิมพ์รายการงาน (เมนูโปรเจกต์ → พิมพ์รายการงาน) ---- */
+@media print {
+  @page { margin: 12mm; }
+  html, body { background: #fff !important; color: #000 !important; height: auto !important; }
+  .sidebar, .sb-scrim, .drawer, .drawer-backdrop, .modal-backdrop, .toast, .bulkbar,
+  .vtb, .tb-tabs, .search, .menu-btn, .tb-row .btn, .tb-star, .tb-people,
+  .opt-panel, .td-add, .th-menu, .selbox, .sub-caret, .rte-mention, .tbl-add, .add-row,
+  .sec-caret, .tb-tab-caret, .search-adv { display: none !important; }
+  .app, .main, .view { display: block !important; height: auto !important; overflow: visible !important; }
+  .topbar { border: none !important; padding: 0 0 8px !important; position: static !important; }
+  .tr, .th, .row { break-inside: avoid; }
+  .tr, .row { background: #fff !important; }
+  .chip, .opt-pill { background: #fff !important; color: #000 !important; border: 1px solid #bbb; }
+}
