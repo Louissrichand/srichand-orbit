@@ -10,7 +10,7 @@
 
   var KEY = 'orbit.db.v4';
   var LEGACY_KEYS = ['orbit.db.v3', 'orbit.db.v2', 'orbit.db.v1', 'taskflow.db.v1'];   // ชื่อ/เวอร์ชันเดิม
-  var SCHEMA = 6;
+  var SCHEMA = 7;
 
   /* ---------- utilities ---------- */
 
@@ -442,6 +442,17 @@
         if (d.settings.lang && !meNow.prefs.lang) meNow.prefs.lang = d.settings.lang;
       }
     }
+    /* v7 — ความเห็นตอบกลับเป็นเธรด แก้ไข ลบ และปักหมุดได้
+     *   parentId  ความเห็นแม่ (ตอบได้ชั้นเดียว)   editedAt  เวลาแก้ล่าสุด
+     *   pinned    ปักไว้บนสุดของแท็บความเห็น      deleted   ลบแล้วแต่ยังมีคนตอบอยู่ใต้มัน
+     * ใส่ค่าเริ่มต้นให้ความเห็นเก่าทุกอัน โค้ดหน้าจอจะได้ไม่ต้องเดาว่าช่องไหนมีหรือไม่มี */
+    (d.stories || []).forEach(function (s) {
+      if (s.type !== 'comment') return;
+      if (!('parentId' in s)) s.parentId = null;
+      if (!('editedAt' in s)) s.editedAt = null;
+      if (!('pinned' in s)) s.pinned = false;
+      if (!('deleted' in s)) s.deleted = false;
+    });
     if (!d.users.some(function (u) { return u.role === 'admin'; })) {
       var firstUser = d.users.filter(function (u) { return u.id === d.currentUserId; })[0] || d.users[0];
       if (firstUser) firstUser.role = 'admin';
@@ -675,7 +686,7 @@
         t.startOn || '', t.dueOn || '',
         t.priority === 'none' ? '' : t.priority,
         t.type, t.completedAt || '',
-        (t.tags || []).join(' · '), blockers, t.notes || ''
+        (t.tags || []).join(' · '), blockers, plainText(t.notes)
       ].map(csvCell).join(','));
     });
     /* ลงบันทึกไว้ด้วย การเอางานทั้งโปรเจกต์ออกไปเป็นไฟล์คือการนำข้อมูลออกนอกระบบ
@@ -1215,7 +1226,7 @@
       else if (name.indexOf(q) === 0) score = 80;
       else if (name.indexOf(q) >= 0) score = 60;
 
-      if (!score && (t.notes || '').toLowerCase().indexOf(q) >= 0) score = 30;
+      if (!score && plainText(t.notes, true).toLowerCase().indexOf(q) >= 0) score = 30;
       if (!score) {
         var u = i.user[t.assigneeId];
         if (u && u.name.toLowerCase().indexOf(q) >= 0) score = 25;
@@ -1562,7 +1573,7 @@
       var q = f.q.trim().toLowerCase();
       if (q) {
         var au = user(t.assigneeId);
-        var hay = (t.name + ' ' + (t.notes || '') + ' ' + (t.tags || []).join(' ') +
+        var hay = (t.name + ' ' + plainText(t.notes, true) + ' ' + (t.tags || []).join(' ') +
                    ' ' + (au ? au.name : '')).toLowerCase();
         if (hay.indexOf(q) < 0) return false;
       }
@@ -1812,6 +1823,65 @@
       db.currentUserId, null, 'activity', exclude, key, params, actor);
   }
 
+  /* ---------- ข้อความมีรูปแบบ (รายละเอียดงานและความเห็น) ----------
+   *
+   * เก็บเป็นมาร์กดาวน์ย่อชุดเดียวกับที่ความเห็นใช้มาตั้งแต่แรก ไม่ใช่ HTML
+   *   **หนา**  *เอียง*  ++ขีดเส้นใต้++  ~~ขีดฆ่า~~  `โค้ด`  [ข้อความ](https://…)
+   *   - หัวข้อย่อย / 1. ลำดับเลข (เว้นสองช่องต่อหนึ่งชั้น)   # หัวข้อ
+   *   @ชื่อคน   @[ชื่องาน](t_…)   @[ชื่อโปรเจกต์](p_…)
+   *
+   * เหตุผลที่ไม่เก็บ HTML: ข้อความเก่าทั้งหมดใช้ต่อได้โดยไม่ต้องแปลง ค้นหาเจอ
+   * ส่งออก CSV แล้วยังอ่านรู้เรื่อง ไฟล์ข้อมูลกลางไม่บวม และไม่มีทางที่ HTML
+   * ของใครจะหลุดไปรันในเครื่องคนอื่น เพราะตอนแสดงผลทุกอย่างผ่านตัวกันอักขระก่อนเสมอ
+   * ตัวแก้ไขแบบเห็นภาพ (app/richtext.js) แปลงไปกลับระหว่างรูปแบบนี้กับหน้าจอเอง */
+  var REF_RE = /@\[([^\]\n]{1,200})\]\(([tp]_[A-Za-z0-9_]+)\)/g;
+
+  /** งานกับโปรเจกต์ที่ข้อความนี้อ้างถึง */
+  function textRefs(text) {
+    var out = { tasks: [], projects: [] };
+    String(text || '').replace(REF_RE, function (m, label, id) {
+      var list = id.charAt(0) === 't' ? out.tasks : out.projects;
+      if (list.indexOf(id) < 0) list.push(id);
+      return m;
+    });
+    return out;
+  }
+
+  /** ตัดเครื่องหมายจัดรูปแบบออก ใช้กับการค้นหาและไฟล์ CSV
+   *  @param forSearch ลิงก์เหลือแค่ข้อความ แล้วต่อที่อยู่ไว้ท้ายบรรทัด
+   *                   ไม่งั้นค้นวลีที่คร่อมลิงก์ ("registration documents") จะไม่เจอ */
+  function plainText(text, forSearch) {
+    return String(text || '').split('\n').map(function (line) {
+      var urls = [];
+      var out = line
+        .replace(/^(\s*)#{1,3}\s+/, '$1')
+        .replace(REF_RE, function (m, label) { return '@' + label; })
+        .replace(/\[([^\]\n]+)\]\(((?:https?:|mailto:)[^\s)]+)\)/g, function (m, t, u) {
+          if (!forSearch) return t + ' (' + u + ')';
+          urls.push(u);
+          return t;
+        })
+        .replace(/\*\*([^*]+)\*\*/g, '$1')
+        .replace(/~~([^~]+)~~/g, '$1')
+        .replace(/\+\+([^+]+)\+\+/g, '$1')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/(^|[\s(])\*([^*\n]+)\*/g, '$1$2');
+      return urls.length ? out + ' ' + urls.join(' ') : out;
+    }).join('\n');
+  }
+
+  /** งานใหม่ที่ถูกอ้างถึง ลงบรรทัด "งานที่เกี่ยวข้อง" ไว้ที่งานปลายทาง
+   *  คนที่เปิดงานปลายทางจะรู้ว่ามีงานอื่นพูดถึงมันอยู่ โดยไม่ต้องไล่ค้นเอง */
+  function logConnected(fromTaskId, before, after) {
+    var src = task(fromTaskId);
+    if (!src) return;
+    var was = textRefs(before).tasks;
+    textRefs(after).tasks.forEach(function (tid) {
+      if (tid === fromTaskId || was.indexOf(tid) >= 0 || !task(tid)) return;
+      log(tid, 'อ้างถึงงานนี้ใน “{t}”', { t: src.name });
+    });
+  }
+
   /** แทนค่าในคีย์แบบเดียวกับ I18N.t แต่ไม่แปล ใช้กับข้อความสำรองตอนยังไม่รู้ภาษา */
   function fill(s, p) {
     var out = String(s);
@@ -1960,6 +2030,7 @@
     }
     if ('notes' in patch && (patch.notes || '') !== (t.notes || '')) {
       log(id, (patch.notes || '').trim() ? 'แก้ไขรายละเอียด' : 'ลบรายละเอียด');
+      logConnected(id, t.notes, patch.notes);
     }
     if ('tags' in patch) {
       var was = t.tags || [], now = patch.tags || [];
@@ -2251,14 +2322,38 @@
     return j < 0;
   }
 
-  function addComment(taskId, text) {
-    if (!text || !text.trim()) return;
-    var clean = text.trim();
-    db.stories.push({
-      id: uid('st'), taskId: taskId, actorId: db.currentUserId,
-      type: 'comment', text: clean, createdAt: new Date().toISOString()
-    });
+  function story(id) {
+    for (var i = 0; i < db.stories.length; i++) {
+      if (db.stories[i].id === id) return db.stories[i];
+    }
+    return null;
+  }
+
+  function repliesOf(storyId) {
+    return db.stories.filter(function (s) {
+      return s.type === 'comment' && s.parentId === storyId;
+    }).sort(function (a, b) { return a.createdAt < b.createdAt ? -1 : 1; });
+  }
+
+  /**
+   * @param parentId ตอบกลับความเห็นไหน — ตอบได้ชั้นเดียวแบบ Asana
+   *                 ถ้าส่งรหัสของคำตอบมา จะเกาะไปที่ความเห็นแม่ของมันแทน
+   */
+  function addComment(taskId, text, parentId) {
+    if (!text || !text.trim()) return null;
     var t = task(taskId);
+    if (!t) return null;
+    var clean = text.trim();
+    var parent = parentId ? story(parentId) : null;
+    if (parent && parent.parentId) parent = story(parent.parentId);
+    if (parent && (parent.type !== 'comment' || parent.taskId !== taskId)) parent = null;
+
+    var s = {
+      id: uid('st'), taskId: taskId, actorId: db.currentUserId,
+      type: 'comment', text: clean, createdAt: new Date().toISOString(),
+      parentId: parent ? parent.id : null, editedAt: null, pinned: false, deleted: false
+    };
+    db.stories.push(s);
     var mentioned = parseMentions(clean);
     mentioned.forEach(function (u) {
       if (t.followers.indexOf(u) < 0) t.followers.push(u);
@@ -2269,9 +2364,83 @@
     if (mentioned.length) {
       notifyOnly(taskId, mentioned, 'พูดถึงคุณในความเห็น', 'mention');
     }
-    notify(taskId, (actor ? actor.name : 'มีคน') + ' แสดงความเห็น',
-      db.currentUserId, [], 'comment', mentioned, 'แสดงความเห็น', null, actor);
+    if (parent) {
+      /* คำตอบในเธรดแจ้งเฉพาะคนที่อยู่ในบทสนทนานั้น ไม่กระจายไปหาผู้ติดตามทั้งงาน
+       * งานที่มีคนติดตามยี่สิบคน ถ้าทุกคำตอบสั้น ๆ เด้งหาทุกคน กล่องข้อความจะไม่มีใครอ่าน */
+      var inThread = [parent.actorId];
+      repliesOf(parent.id).forEach(function (r) {
+        if (inThread.indexOf(r.actorId) < 0) inThread.push(r.actorId);
+      });
+      notifyOnly(taskId, inThread.filter(function (u) { return mentioned.indexOf(u) < 0; }),
+        'ตอบกลับความเห็นในงาน “{t}”', 'comment', { t: t.name });
+    } else {
+      notify(taskId, (actor ? actor.name : 'มีคน') + ' แสดงความเห็น',
+        db.currentUserId, [], 'comment', mentioned, 'แสดงความเห็น', null, actor);
+    }
+    logConnected(taskId, '', clean);
     commit();
+    return s;
+  }
+
+  /** แก้ความเห็นของตัวเองเท่านั้น — ข้อความของคนอื่นไม่ควรมีใครเปลี่ยนคำพูดแทนได้ */
+  function editComment(storyId, text) {
+    var s = story(storyId);
+    if (!s || s.type !== 'comment' || s.deleted) return false;
+    if (s.actorId !== db.currentUserId) return false;
+    var clean = (text || '').trim();
+    if (!clean || clean === s.text) return false;
+    snapshot('แก้ไขความเห็น');
+    var before = s.text;
+    var wasMentioned = parseMentions(before);
+    s.text = clean;
+    s.editedAt = new Date().toISOString();
+    var fresh = parseMentions(clean).filter(function (u) { return wasMentioned.indexOf(u) < 0; });
+    var t = task(s.taskId);
+    if (t) {
+      fresh.forEach(function (u) { if (t.followers.indexOf(u) < 0) t.followers.push(u); });
+      if (fresh.length) notifyOnly(s.taskId, fresh, 'พูดถึงคุณในความเห็น', 'mention');
+      logConnected(s.taskId, before, clean);
+    }
+    commit();
+    return true;
+  }
+
+  /**
+   * ลบความเห็นของตัวเอง
+   *
+   * ถ้ามีคนตอบอยู่ใต้มันแล้ว เก็บตัวความเห็นไว้เป็นป้าย "ความเห็นนี้ถูกลบแล้ว"
+   * ไม่งั้นคำตอบทั้งเธรดจะลอยอยู่โดยไม่รู้ว่าตอบเรื่องอะไร
+   * พอคำตอบสุดท้ายถูกลบ ป้ายนั้นก็หายตามไปเอง
+   */
+  function deleteComment(storyId) {
+    var s = story(storyId);
+    if (!s || s.type !== 'comment' || s.deleted) return false;
+    if (s.actorId !== db.currentUserId) return false;
+    snapshot('ลบความเห็น');
+    if (repliesOf(s.id).length) {
+      s.deleted = true;
+      s.text = '';
+      s.pinned = false;
+      delete s.reactions;
+    } else {
+      db.stories = db.stories.filter(function (x) { return x !== s; });
+      var p = s.parentId ? story(s.parentId) : null;
+      if (p && p.deleted && !repliesOf(p.id).length) {
+        db.stories = db.stories.filter(function (x) { return x !== p; });
+      }
+    }
+    commit();
+    return true;
+  }
+
+  /** ปักหมุดความเห็นที่เป็นข้อสรุปไว้บนสุด คนที่มาทีหลังไม่ต้องไล่อ่านทั้งเธรด */
+  function togglePinComment(storyId) {
+    var s = story(storyId);
+    if (!s || s.type !== 'comment' || s.deleted || s.parentId) return null;
+    snapshot(s.pinned ? 'เลิกปักหมุดความเห็น' : 'ปักหมุดความเห็น');
+    s.pinned = !s.pinned;
+    commit();
+    return s.pinned;
   }
 
   function setFieldValue(taskId, fieldId, value) {
@@ -3549,6 +3718,9 @@
     toggleFollower: toggleFollower, toggleLike: toggleLike,
     addAttachment: addAttachment, removeAttachment: removeAttachment,
     addComment: addComment, setFieldValue: setFieldValue,
+    story: story, repliesOf: repliesOf, editComment: editComment,
+    deleteComment: deleteComment, togglePinComment: togglePinComment,
+    textRefs: textRefs, plainText: plainText,
     bulkUpdate: bulkUpdate, bulkMove: bulkMove,
 
     markRead: markRead, markAllRead: markAllRead,

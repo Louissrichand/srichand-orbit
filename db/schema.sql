@@ -35,6 +35,16 @@ CREATE TABLE dbo.users (
     org_role        VARCHAR(10)       NOT NULL DEFAULT 'member', -- admin | member | guest | viewer
     is_active       BIT               NOT NULL DEFAULT 1,
     last_seen_at    DATETIME2(0)      NULL,                      -- NULL = ยังไม่เคยล็อกอิน
+    auth_by         VARCHAR(10)       NULL,                      -- microsoft | password
+    dept            NVARCHAR(200)     NULL,
+    about           NVARCHAR(1000)    NULL,
+    pronouns        NVARCHAR(40)      NULL,
+    /* รูปโปรไฟล์ย่อแล้ว (ฝั่งเบราว์เซอร์เก็บเป็น data URI ≤ PHOTO_MAX_BYTES)
+       ตอนย้ายขึ้นฐานข้อมูลจริงให้เก็บไฟล์ที่ Blob แล้วเหลือแค่ที่อยู่ไว้ตรงนี้ */
+    photo_url       NVARCHAR(600)     NULL,
+    /* สถานะไม่อยู่ (users.away = { until, note }) มีวันสิ้นสุดเสมอและหมดอายุเอง */
+    away_until      DATE              NULL,
+    away_note       NVARCHAR(300)     NULL,
     created_at      DATETIME2(0)      NOT NULL DEFAULT SYSUTCDATETIME(),
     /* ชุดนี้ต้องตรงกับ ROLES ใน app/store.js เสมอ
        guest  = บุคคลภายนอก เห็นเฉพาะโปรเจกต์ที่ถูกเชิญ
@@ -74,9 +84,17 @@ CREATE TABLE dbo.projects (
     deleted_at    DATETIME2(0)     NULL,
     created_by    UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
     created_at    DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME(),
+    due_on        DATE             NULL,
+    /* ตั้งค่าการเลื่อนงานที่รออยู่ (depShift) และวันทำงาน (workDays) ของ Gantt */
+    dep_shift_json NVARCHAR(200)   NULL,
+    work_days     VARCHAR(10)      NOT NULL DEFAULT 'all',
+    /* มุมมองที่เปิดใช้ (NULL = ทุกมุมมอง) เก็บเป็นอาร์เรย์ JSON ของ PROJECT_VIEWS */
+    views_json    NVARCHAR(300)    NULL,
     row_ver       ROWVERSION,
     CONSTRAINT ck_proj_vis  CHECK (visibility IN ('org','private')),
-    CONSTRAINT ck_proj_view CHECK (default_view IN ('list','board','calendar','timeline','gantt','dashboard'))
+    /* ต้องตรงกับ PROJECT_VIEWS ใน app/store.js */
+    CONSTRAINT ck_proj_view CHECK (default_view IN ('overview','list','board','timeline','gantt',
+                                                    'calendar','dashboard','messages','files'))
 );
 CREATE INDEX ix_projects_live ON dbo.projects(deleted_at, archived_at) INCLUDE (name, visibility);
 GO
@@ -265,12 +283,33 @@ CREATE TABLE dbo.stories (
     task_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.tasks(id) ON DELETE CASCADE,
     actor_id    UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
     story_type  VARCHAR(10)      NOT NULL,          -- comment | log
+    /* comment: ข้อความมาร์กดาวน์ย่อ (ดู "ข้อความมีรูปแบบ" ใน app/store.js) ไม่ใช่ HTML
+       log:     คีย์คำแปล + params_json แปลตอนแสดงผล */
     body        NVARCHAR(MAX)    NOT NULL,
+    params_json NVARCHAR(1000)   NULL,
+    /* เธรดตอบกลับได้ชั้นเดียว — คำตอบชี้ไปที่ความเห็นหลัก ไม่ใช่คำตอบด้วยกัน */
+    parent_story_id BIGINT       NULL REFERENCES dbo.stories(id),
+    is_pinned   BIT              NOT NULL DEFAULT 0,
+    edited_at   DATETIME2(0)     NULL,
+    /* ลบความเห็นที่มีคนตอบแล้ว = ล้าง body แล้วตั้ง deleted_at ไว้เป็นป้าย "ถูกลบแล้ว" */
+    deleted_at  DATETIME2(0)     NULL,
     created_at  DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME(),
     CONSTRAINT ck_story_type CHECK (story_type IN ('comment','log'))
 );
 CREATE INDEX ix_stories_task ON dbo.stories(task_id, created_at DESC);
+CREATE INDEX ix_stories_thread ON dbo.stories(parent_story_id) WHERE parent_story_id IS NOT NULL;
 GO
+
+/* อีโมจิตอบรับความเห็น — ชุดที่ยอมรับตรงกับ REACTIONS ใน app/store.js */
+CREATE TABLE dbo.story_reactions (
+    story_id  BIGINT           NOT NULL REFERENCES dbo.stories(id) ON DELETE CASCADE,
+    user_id   UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.users(id),
+    emoji     NVARCHAR(8)      NOT NULL,
+    CONSTRAINT pk_story_reactions PRIMARY KEY (story_id, user_id, emoji)
+);
+GO
+
+/* ร่างความเห็นไม่ได้อยู่ในฐานข้อมูลโดยตั้งใจ — เก็บที่ localStorage ของเครื่อง (orbit.drafts) */
 
 CREATE TABLE dbo.notifications (
     id           BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
@@ -288,11 +327,11 @@ GO
 CREATE TABLE dbo.project_status_updates (
     id          BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
     project_id  UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.projects(id) ON DELETE CASCADE,
-    state       VARCHAR(10)      NOT NULL,   -- on_track | at_risk | off_track
+    state       VARCHAR(10)      NOT NULL,   -- ตรงกับ PROJECT_STATES ใน app/store.js
     body        NVARCHAR(MAX)    NULL,
     author_id   UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
     created_at  DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME(),
-    CONSTRAINT ck_status_state CHECK (state IN ('on_track','at_risk','off_track'))
+    CONSTRAINT ck_status_state CHECK (state IN ('on_track','at_risk','off_track','on_hold','complete','dropped'))
 );
 CREATE INDEX ix_status_project ON dbo.project_status_updates(project_id, created_at DESC);
 GO
@@ -323,6 +362,90 @@ CREATE TABLE dbo.audit_log (
 );
 CREATE INDEX ix_audit_time  ON dbo.audit_log(created_at DESC);
 CREATE INDEX ix_audit_actor ON dbo.audit_log(actor_id, created_at DESC);
+GO
+
+/* ---------------------------------------------------------------
+   ของที่ฝั่งเบราว์เซอร์มีแล้วแต่ไฟล์นี้ยังไม่เคยบันทึกไว้
+   ตรงกับรูปข้อมูลใน app/store.js (SCHEMA 7) — แก้ที่ไหนต้องแก้อีกที่ด้วย
+   --------------------------------------------------------------- */
+
+/* ประกาศของโปรเจกต์ (projects[].messages) — เรื่องที่ไม่ได้ผูกกับงานชิ้นไหน */
+CREATE TABLE dbo.project_messages (
+    id          UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    project_id  UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.projects(id) ON DELETE CASCADE,
+    title       NVARCHAR(300)    NULL,
+    body        NVARCHAR(MAX)    NOT NULL,     -- มาร์กดาวน์ย่อชุดเดียวกับความเห็น
+    author_id   UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    created_at  DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME()
+);
+CREATE INDEX ix_pmsg_project ON dbo.project_messages(project_id, created_at DESC);
+GO
+
+/* กฎอัตโนมัติแบบเดิม (projects[].rules) — ลากเข้าเซกชันไหนแล้วทำอะไร
+   ชิ้นงาน 3a จะแทนด้วยตาราง automations ที่มีหลายเงื่อนไขหลายการกระทำ */
+CREATE TABLE dbo.project_rules (
+    id              UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    project_id      UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.projects(id) ON DELETE CASCADE,
+    when_section_id UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.sections(id),
+    set_completed   BIT              NOT NULL DEFAULT 0,
+    set_assignee_id UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    set_priority    VARCHAR(10)      NULL,
+    add_tag         NVARCHAR(100)    NULL
+);
+GO
+
+/* เทมเพลตงาน (db.taskTemplates) — payload เก็บชื่อ รายละเอียด ชนิด ความสำคัญ แท็ก และชื่องานย่อย */
+CREATE TABLE dbo.task_templates (
+    id            UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    name          NVARCHAR(300)    NOT NULL,
+    payload_json  NVARCHAR(MAX)    NOT NULL,
+    created_by    UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    created_at    DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME()
+);
+GO
+
+/* เส้นฐานของ Gantt (projects[].baseline) — วันที่ของทุกงานตอนกดตั้ง เก็บไว้เทียบว่าหลุดแผนไปเท่าไร */
+CREATE TABLE dbo.project_baselines (
+    project_id  UNIQUEIDENTIFIER NOT NULL PRIMARY KEY REFERENCES dbo.projects(id) ON DELETE CASCADE,
+    set_at      DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME(),
+    set_by      UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id)
+);
+CREATE TABLE dbo.project_baseline_tasks (
+    project_id  UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.project_baselines(project_id) ON DELETE CASCADE,
+    task_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.tasks(id),
+    start_on    DATE NULL,
+    due_on      DATE NULL,
+    CONSTRAINT pk_baseline_tasks PRIMARY KEY (project_id, task_id)
+);
+GO
+
+/* พอร์ตโฟลิโอ (db.portfolios) — กล่องรวมโปรเจกต์ สิทธิ์ยังยึดตามแต่ละโปรเจกต์
+   สถานะใช้ชุดเดียวกับ PROJECT_STATES และเก็บย้อนหลังแบบเดียวกับ project_status_updates */
+CREATE TABLE dbo.portfolios (
+    id          UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    name        NVARCHAR(300)    NOT NULL,
+    description NVARCHAR(MAX)    NULL,
+    icon        NVARCHAR(16)     NULL,
+    color       CHAR(7)          NOT NULL DEFAULT '#796eff',
+    owner_id    UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    created_by  UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    created_at  DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME(),
+    deleted_at  DATETIME2(0)     NULL
+);
+CREATE TABLE dbo.portfolio_projects (
+    portfolio_id UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.portfolios(id) ON DELETE CASCADE,
+    project_id   UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.projects(id) ON DELETE CASCADE,
+    position     DECIMAL(18,9)    NOT NULL DEFAULT 0,
+    CONSTRAINT pk_portfolio_projects PRIMARY KEY (portfolio_id, project_id)
+);
+CREATE TABLE dbo.portfolio_status_updates (
+    id           BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    portfolio_id UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.portfolios(id) ON DELETE CASCADE,
+    state        VARCHAR(10)      NOT NULL,
+    body         NVARCHAR(MAX)    NULL,
+    author_id    UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    created_at   DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME()
+);
 GO
 
 /* =============================================================

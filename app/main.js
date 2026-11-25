@@ -35,7 +35,10 @@
     tlScrollLeft: null,      // ตำแหน่งเลื่อนไทม์ไลน์ (null = ให้เลื่อนไปวันนี้เอง)
     suppressHash: false,
     auditFilter: { group: '', q: '' },  // ตัวกรองบันทึกการทำงานในหน้าผู้ดูแล
-    setTab: 'general'                   // แท็บที่เปิดอยู่ในหน้าตั้งค่าของฉัน
+    setTab: 'general',                  // แท็บที่เปิดอยู่ในหน้าตั้งค่าของฉัน
+    openThreads: {},         // เธรดความเห็นที่กางอยู่ (รหัสความเห็นแม่ -> true)
+    editStory: null,         // ความเห็นที่กำลังแก้อยู่
+    flashStory: null         // ความเห็นที่ต้องเลื่อนไปหาและไฮไลต์ครั้งถัดไปที่วาดแผงงาน
   };
 
   function viewFor(projectId) {
@@ -148,16 +151,44 @@
     setTimeout(function () { state.suppressHash = false; }, 0);
   }
 
+  /* ลิงก์ตรงถึงความเห็นต่อท้ายด้วย /c_<รหัสความเห็น> และลิงก์สั้นถึงงาน #/task/<รหัสงาน>
+   * เดิม #/task/... อ่านได้เฉพาะตอนเปิดแอปครั้งแรก คนที่เปิดแอปค้างไว้แล้ววางลิงก์ลงช่องที่อยู่
+   * จะไม่เกิดอะไรขึ้นเลย เพราะตัวรับ hashchange ไม่รู้จักรูปแบบนี้ */
   function readHash() {
     var raw = (global.location.hash || '').replace(/^#\/?/, '');
     if (!raw) return null;
     var seg = raw.split('/').filter(function (s) { return s !== ''; });
     if (!seg.length) return null;
 
+    var storyId = null;
+    if (seg[seg.length - 1].indexOf('c_') === 0) storyId = seg.pop().slice(2);
+    if (!seg.length) return null;
     var taskId = null;
     if (seg[seg.length - 1].indexOf('t_') === 0) taskId = seg.pop();
 
-    var type = seg[0];
+    var out = routeOf(seg, taskId);
+    if (out) out.storyId = storyId;
+    return out;
+  }
+
+  /** งานที่เปิดจากลิงก์สั้น — พาไปโปรเจกต์แรกของงานที่เข้าได้ ไม่มีก็ไปงานของฉัน */
+  function homeRouteOf(taskId) {
+    var homes = S.projectsOfTask(taskId).filter(function (x) { return S.projectAccess(x.project.id); });
+    if (homes.length) {
+      var pid = homes[0].project.id;
+      var okV = S.projectViews(pid);
+      var dv = homes[0].project.defaultView;
+      return { type: 'project', id: pid, view: okV.indexOf(dv) >= 0 ? dv : okV[0] };
+    }
+    return { type: 'mytasks' };
+  }
+
+  function routeOf(seg, taskId) {
+    var type = seg.length ? seg[0] : 'task';
+    if (type === 'task') {
+      if (!taskId || !S.task(taskId)) return null;
+      return { route: homeRouteOf(taskId), taskId: taskId };
+    }
     if (type === 'project' && seg[1]) {
       var p = S.project(seg[1]);
       if (!p) return null;
@@ -194,10 +225,24 @@
     var parsed = readHash();
     if (!parsed) return;
     state.route = parsed.route;
-    state.openTaskId = parsed.taskId && S.task(parsed.taskId) ? parsed.taskId : null;
+    var prevTask = state.openTaskId;
+    state.openTaskId = parsed.taskId && S.task(parsed.taskId) &&
+      (!S.canSeeTask || S.canSeeTask(parsed.taskId)) ? parsed.taskId : null;
+    if (state.openTaskId && state.openTaskId !== prevTask) resetDrawerState();
+    focusStory(parsed.storyId);
     clearSel();
     renderAll(true);
   });
+
+  /** เปิดแผงงานมาที่ความเห็นนี้ — กางเธรดถ้าเป็นคำตอบ แล้วเลื่อนไปหาพร้อมไฮไลต์ */
+  function focusStory(storyId) {
+    if (!storyId) return;
+    var st = S.story(storyId);
+    if (!st || st.taskId !== state.openTaskId) return;
+    state.actTab = 'comments';
+    if (st.parentId) state.openThreads[st.parentId] = true;
+    state.flashStory = storyId;
+  }
 
   /* ---------- render ---------- */
 
@@ -647,17 +692,158 @@
     if (!skipHash) syncHash();
   }
 
+  /* ---------- ร่างความเห็น ----------
+   *
+   * พิมพ์ความเห็นยาว ๆ ค้างไว้แล้วเผลอปิดแผง หรือมีคนอื่นแก้งานจนหน้าจอวาดใหม่
+   * ข้อความไม่ควรหาย เก็บแยกต่อคนต่อช่อง (ความเห็นของงาน คำตอบในเธรด การแก้ความเห็น)
+   * ไว้ในหน่วยความจำกับ localStorage ของเครื่องนี้ ไม่ใส่ในข้อมูลกลาง
+   * เพราะร่างเป็นของส่วนตัว และไม่ควรทำให้ไฟล์ของทั้งทีมเปลี่ยนทุกครั้งที่กดแป้น
+   */
+  var DRAFT_KEY = 'orbit.drafts';
+  var drafts = (function () {
+    try { return JSON.parse(global.localStorage.getItem(DRAFT_KEY) || '{}') || {}; }
+    catch (e) { return {}; }
+  })();
+  function draftId(key) { return (S.db.currentUserId || '') + '|' + key; }
+  function getDraft(key) { return drafts[draftId(key)] || ''; }
+  function setDraft(key, md) {
+    if (md && md.trim()) drafts[draftId(key)] = md; else delete drafts[draftId(key)];
+    try { global.localStorage.setItem(DRAFT_KEY, JSON.stringify(drafts)); } catch (e) {}
+  }
+
+  /** ตัวแก้ไขที่โฟกัสอยู่ในแผงงาน — เก็บไว้ก่อนวาดใหม่ แล้วคืนเนื้อหาและเคอร์เซอร์ให้หลังวาด
+   *  ไม่งั้นทุกครั้งที่ซิงก์ข้อมูลเข้ามาระหว่างพิมพ์ ข้อความที่ยังไม่บันทึกจะหายและโฟกัสหลุด */
+  function captureEditor() {
+    var ae = document.activeElement;
+    if (!ae || !ae.classList || !ae.classList.contains('rte') || !$drawer.contains(ae)) return null;
+    return { key: ae.dataset.key, html: ae.innerHTML, off: global.RichText.caretOffsets(ae) };
+  }
+  function restoreEditor(keep) {
+    if (!keep) return;
+    var ne = $drawer.querySelector('.rte[data-key="' + keep.key + '"]');
+    if (!ne) return;
+    ne.innerHTML = keep.html;
+    ne.focus();
+    global.RichText.setOffsets(ne, keep.off);
+  }
+
+  var drawerRendering = false;
+
+  /** ส่งจากช่องพิมพ์ช่องไหนก็ได้ — ความเห็นใหม่ คำตอบในเธรด หรือบันทึกการแก้ความเห็น */
+  function submitComposer(ed) {
+    var key = ed.dataset.key || '';
+    var kind = key.charAt(0), ref = key.slice(2);
+    var act = kind === 'c' ? 'send-comment' : kind === 'r' ? 'send-reply' : 'comment-save';
+    if (!allowed(act, ed)) return;
+    var md = global.RichText.fromNode(ed);
+    if (!md.trim()) { if (kind !== 'e') toast(L('พิมพ์ข้อความก่อน')); return; }
+    /* ล้างช่องก่อนบันทึก การบันทึกทำให้แผงวาดใหม่และคืนเนื้อหาของช่องที่โฟกัสอยู่
+     * ถ้ายังไม่ล้าง ข้อความที่เพิ่งส่งไปจะเด้งกลับมาอยู่ในช่องอีกรอบ */
+    ed.innerHTML = '';
+    setDraft(key, '');
+    if (kind === 'c') S.addComment(ref, md);
+    else if (kind === 'r') { state.openThreads[ref] = true; S.addComment(ed.dataset.id, md, ref); }
+    else {
+      state.editStory = null;
+      if (!S.editComment(ref, md)) renderDrawer();   // ไม่ได้แก้อะไร ก็แค่ปิดโหมดแก้
+    }
+  }
+
+  /** เปิดงานใหม่ เริ่มแผงจากสภาพตั้งต้นเสมอ */
+  function resetDrawerState() {
+    /* เปิดงานใหม่ให้กลับมาที่แท็บความเห็นเสมอ
+     * ถ้าจำแท็บข้ามงาน คนที่เผลอเปิดค้างไว้ที่ความเคลื่อนไหวทั้งหมด
+     * จะเจอบันทึกอัตโนมัติกองหนึ่งทุกครั้งที่เปิดงาน แทนที่จะเจอสิ่งที่ทีมคุยกันไว้ */
+    state.actTab = 'comments';
+    state.actAll = false;
+    state.dwMore = false;      // เปิดงานใหม่เริ่มที่มุมมองสั้นเสมอ
+    state.openThreads = {};
+    state.editStory = null;
+  }
+
+  /* ---------- บันทึกรายละเอียดงานตอนออกจากช่อง ----------
+   *
+   * ปัญหาของการบันทึกตอน blur คือมันเกิดตอนกดเมาส์ลงบนปุ่มอื่น ก่อนปล่อยเมาส์
+   * การบันทึกทำให้แผงวาดใหม่ทั้งแผง ปุ่มที่กำลังกดอยู่จึงถูกแทนที่ก่อนจะเกิด click
+   * ผลคือกดครั้งแรกหลังพิมพ์รายละเอียดแล้วไม่มีอะไรเกิดขึ้น
+   * จึงเลื่อนการบันทึกไปทำหลังปล่อยเมาส์ ให้ click ของปุ่มนั้นทำงานกับหน้าจอเดิมก่อน */
+  var mouseIsDown = false, afterMouse = [];
+  document.addEventListener('mousedown', function () { mouseIsDown = true; }, true);
+  document.addEventListener('mouseup', function () {
+    mouseIsDown = false;
+    if (!afterMouse.length) return;
+    var run = afterMouse;
+    afterMouse = [];
+    setTimeout(function () { run.forEach(function (fn) { fn(); }); }, 0);
+  }, true);
+  function afterClick(fn) { if (mouseIsDown) afterMouse.push(fn); else fn(); }
+
+  function saveNotes(ed) {
+    if (drawerRendering) return;
+    var tid = ed.dataset.id;
+    var t = S.task(tid);
+    if (!t) return;
+    var md = global.RichText.fromNode(ed);
+    if (md === (t.notes || '')) return;
+    if (!allowed('edit-notes', ed)) return;
+    afterClick(function () { if (S.task(tid)) S.updateTask(tid, { notes: md }); });
+  }
+
+  document.addEventListener('focusout', function (e) {
+    var ed = e.target;
+    if (ed && ed.classList && ed.classList.contains('rte') && ed.dataset.save === 'notes') saveNotes(ed);
+  });
+
+  /* ช่องความเห็นเก็บร่างทุกครั้งที่พิมพ์ */
+  document.addEventListener('input', function (e) {
+    var ed = e.target;
+    if (!ed || !ed.classList || !ed.classList.contains('rte-compose')) return;
+    setDraft(ed.dataset.key, global.RichText.fromNode(ed));
+  });
+
+  /* ลิงก์ในตัวแก้ไข ถามด้วยหน้าต่างของแอป ไม่ใช่ prompt() ของเบราว์เซอร์ */
+  global.RichText.ask = function (title, value, cb) {
+    askText(title, value, cb, { type: 'url', ok: L('ใส่ลิงก์'),
+      note: L('เว้นว่างแล้วกดตกลงเพื่อเอาลิงก์ออก') });
+  };
+
   function renderDrawer() {
     if (state.openTaskId && S.task(state.openTaskId)) {
+      var keep = captureEditor();
+      var body = $drawer.querySelector('.dw-body');
+      var sameTask = $drawer.dataset.task === state.openTaskId;
+      var scroll = body && sameTask ? body.scrollTop : 0;
+      if (state.editStory && !S.story(state.editStory)) state.editStory = null;
+      drawerRendering = true;
+      global.RichText.closeMention();
       $drawer.innerHTML = R.drawer(state.openTaskId,
         { actTab: state.actTab, actSort: state.actSort, actAll: state.actAll,
-          wide: state.dwWide, moreFields: state.dwMore });
+          wide: state.dwWide, moreFields: state.dwMore,
+          draft: getDraft, openThreads: state.openThreads,
+          editStory: state.editStory, flashStory: state.flashStory });
+      drawerRendering = false;
+      $drawer.dataset.task = state.openTaskId;
       $drawer.classList.toggle('wide', !!state.dwWide);
       $drawer.classList.add('open');
       $dwBack.classList.add('open');
       $drawer.setAttribute('aria-hidden', 'false');
       autoGrow($drawer.querySelector('.dw-title'));
+      var nb = $drawer.querySelector('.dw-body');
+      if (nb) nb.scrollTop = scroll;
+      restoreEditor(keep);
+      if (state.flashStory) {
+        var fs = document.getElementById('st-' + state.flashStory);
+        state.flashStory = null;
+        /* เลื่อนทันที ไม่ใช้ smooth เพราะแผงยังเลื่อนเข้ามาจากขอบจออยู่ แอนิเมชันจะตีกันจนไม่ถึงที่ */
+        var scrollToStory = function () {
+          if (!fs.isConnected || !nb) return;
+          var top = fs.getBoundingClientRect().top - nb.getBoundingClientRect().top;
+          nb.scrollTop += top - Math.max(0, (nb.clientHeight - fs.offsetHeight) / 2);
+        };
+        if (fs) { scrollToStory(); setTimeout(scrollToStory, 220); }
+      }
     } else {
+      delete $drawer.dataset.task;
       $drawer.classList.remove('open');
       $dwBack.classList.remove('open');
       $drawer.setAttribute('aria-hidden', 'true');
@@ -683,6 +869,43 @@
       var h = Number(x).toString(16);
       return h.length < 2 ? '0' + h : h;
     }).join('');
+  }
+
+  /** เมนูเลือกค่าของฟิลด์ตัวเลือก ใช้ทั้งเซลล์ในตารางและแผงงาน */
+  function optionMenu(tid, f) {
+    var fid = f.id;
+    var cur = S.fieldValue(tid, fid);
+    var multi = f.type === 'multi';
+    var chosen = multi ? [].concat(cur || []) : [cur];
+    var oh = '';
+    if (!multi) {
+      oh += '<button data-act="cell-set-option" data-id="' + R.esc(tid) + '" data-field="' +
+        R.esc(fid) + '" data-v="">' + L('ไม่ระบุ') + '</button>';
+    }
+    (f.options || []).forEach(function (o) {
+      var on = chosen.indexOf(o.name) >= 0;
+      oh += '<button data-act="' + (multi ? 'cell-toggle-option' : 'cell-set-option') +
+        '" data-id="' + R.esc(tid) + '" data-field="' + R.esc(fid) +
+        '" data-v="' + R.esc(o.name) + '">' +
+        '<span class="opt-pill" style="background:' + R.esc(o.color) + '22;color:' +
+        R.esc(o.color) + '">' + R.esc(o.name) + '</span>' +
+        (on ? '<span style="margin-left:auto">' + I('check', 13) + '</span>' : '') +
+        '</button>';
+    });
+    if (!(f.options || []).length) {
+      oh += '<div style="padding:8px 10px;font-size:13px;color:var(--fg-faint)">' +
+        L('ฟิลด์นี้ยังไม่มีตัวเลือก') + '</div>';
+    }
+    return oh;
+  }
+
+  /** หาฟิลด์จากรหัส — ฟิลด์เป็นของโปรเจกต์ แต่แผงงานไม่รู้ว่ามาจากโปรเจกต์ไหน */
+  function findField(fid) {
+    var hit = null;
+    S.db.projects.forEach(function (p) {
+      (p.fields || []).forEach(function (f) { if (f.id === fid) hit = f; });
+    });
+    return hit;
   }
 
   /** แก้ค่าในเซลล์ตาราง — เลือกวิธีตามชนิดของคอลัมน์ */
@@ -717,25 +940,8 @@
 
     if (f.type === 'select' || f.type === 'multi') {
       if (popIsOpenFor(cell)) { closePops(); return; }
-      var multi = f.type === 'multi';
-      var chosen = multi ? [].concat(cur || []) : [cur];
-      var oh = '';
-      if (!multi) {
-        oh += '<button data-act="cell-set-option" data-id="' + R.esc(tid) + '" data-field="' +
-          R.esc(fid) + '" data-v="">' + L('ไม่ระบุ') + '</button>';
-      }
-      (f.options || []).forEach(function (o) {
-        var on = chosen.indexOf(o.name) >= 0;
-        oh += '<button data-act="' + (multi ? 'cell-toggle-option' : 'cell-set-option') +
-          '" data-id="' + R.esc(tid) + '" data-field="' + R.esc(fid) +
-          '" data-v="' + R.esc(o.name) + '">' +
-          '<span class="opt-pill" style="background:' + R.esc(o.color) + '22;color:' +
-          R.esc(o.color) + '">' + R.esc(o.name) + '</span>' +
-          (on ? '<span style="margin-left:auto">' + I('check', 13) + '</span>' : '') +
-          '</button>';
-      });
       cell.style.position = 'relative';
-      openPop(cell, oh);
+      openPop(cell, optionMenu(tid, f));
       return;
     }
 
@@ -930,18 +1136,21 @@
 
   function openTask(id) {
     if (!S.task(id)) return;
+    flushEditor();
+    if (state.openTaskId !== id) resetDrawerState();
     state.openTaskId = id;
-    /* เปิดงานใหม่ให้กลับมาที่แท็บความเห็นเสมอ
-     * ถ้าจำแท็บข้ามงาน คนที่เผลอเปิดค้างไว้ที่ความเคลื่อนไหวทั้งหมด
-     * จะเจอบันทึกอัตโนมัติกองหนึ่งทุกครั้งที่เปิดงาน แทนที่จะเจอสิ่งที่ทีมคุยกันไว้ */
-    state.actTab = 'comments';
-    state.actAll = false;
-    state.dwMore = false;      // เปิดงานใหม่เริ่มที่มุมมองสั้นเสมอ
     renderDrawer();
     syncHash();
   }
 
+  /** ออกจากตัวแก้ไขที่โฟกัสอยู่ในแผงงาน ให้รายละเอียดที่พิมพ์ค้างถูกบันทึกก่อนแผงเปลี่ยน */
+  function flushEditor() {
+    var ae = document.activeElement;
+    if (ae && ae.classList && ae.classList.contains('rte') && $drawer.contains(ae)) ae.blur();
+  }
+
   function closeDrawer() {
+    flushEditor();
     state.openTaskId = null;
     renderDrawer();
     syncHash();
@@ -1745,7 +1954,9 @@
       var typeLabel = S.FIELD_TYPES.filter(function (x) { return x.id === f.type; })[0];
       h += '<div class="mini-row"><div class="grow"><div>' + R.esc(f.name) + '</div>' +
         '<div class="sub">' + R.esc(typeLabel ? L(typeLabel.label) : f.type) +
-        (f.options.length ? ' · ' + R.esc(f.options.join(', ')) : '') + '</div></div>' +
+        (f.options.length ? ' · ' + R.esc(f.options.map(function (o) {
+          return typeof o === 'string' ? o : o.name;
+        }).join(', ')) : '') + '</div></div>' +
         '<button class="btn btn-sm btn-danger" data-act="delete-field" data-project="' +
         R.esc(projectId) + '" data-field="' + R.esc(f.id) + '">' + L('ลบ') + '</button></div>';
     });
@@ -1893,7 +2104,12 @@
       ['Tab + Q', L('เพิ่มงานด่วน')],
       ['Tab + M', L('มอบหมายงานที่เปิดอยู่ให้ตัวเอง')],
       ['Tab + C', L('ไปที่ช่องความเห็น')],
-      ['Tab + X', L('สลับโหมดสว่าง/มืด')],
+      ['Tab + X', L('ขยายงานที่เปิดอยู่เต็มจอ (ไม่ได้เปิดงาน = สลับสว่าง/มืด)')],
+      ['Ctrl + B / I / U', L('ตัวหนา / ตัวเอียง / ขีดเส้นใต้ (ในรายละเอียดและความเห็น)')],
+      ['Ctrl + Shift + X / M', L('ขีดฆ่า / โค้ด')],
+      ['Ctrl + Shift + 8 / 7', L('หัวข้อย่อย / ลำดับเลข')],
+      ['Ctrl + K', L('ใส่ลิงก์')],
+      ['@', L('อ้างถึงคน งาน หรือโปรเจกต์')],
       [L('Enter ในช่องเพิ่มงาน'), L('บันทึกแล้วเปิดช่องต่อทันที')],
       ['Delete', L('ลบงานที่เลือกไว้')],
       [L('คลิกช่องสี่เหลี่ยม'), L('เลือกหลายงานเพื่อแก้พร้อมกัน')]
@@ -2582,13 +2798,16 @@
       'add-dependency', 'do-add-dependency', 'remove-dependency', 'g-del-dep',
       'add-attachment', 'remove-attachment',
       'add-tag', 'remove-tag',
-      'edit-cell', 'cell-set-assignee', 'cell-set-option', 'cell-toggle-option'
+      'edit-cell', 'cell-set-assignee', 'cell-set-option', 'cell-toggle-option',
+      'dw-field-multi'
     ]);
     put('comment', [
       'send-comment', 'toggle-follow', 'do-follow', 'remove-follower',
       'pick-follower', 'toggle-like', 'react', 'react-menu', 'pick-tag',
       'pick-file', 'att-file', 'sub-dates', 'sub-assign', 'set-sub-assignee',
-      'sub-start', 'sub-due', 'sub-clear-dates'
+      'sub-start', 'sub-due', 'sub-clear-dates',
+      /* ความเห็นแบบเธรด — แก้และลบได้เฉพาะของตัวเอง ตรวจซ้ำที่ store อีกชั้น */
+      'send-reply', 'comment-reply', 'comment-edit', 'comment-save', 'comment-delete', 'comment-pin'
     ]);
     return map;
   })();
@@ -2655,7 +2874,7 @@
          'project-menu', 'status-menu', 'g-zoom-menu', 'g-views-menu', 'pf-menu', 'pf-status',
          'view-menu', 'toggle-view', 'add-menu', 'react-menu',
          'add-tag', 'tag-search', 'sub-dates', 'sub-assign',
-         'sub-start', 'sub-due'].indexOf(el.dataset.act) < 0) {
+         'sub-start', 'sub-due', 'comment-menu', 'dw-field-multi'].indexOf(el.dataset.act) < 0) {
       if (!e.target.closest || !e.target.closest('.pop')) closePops();
     }
 
@@ -2849,6 +3068,17 @@
         var at = curv.indexOf(ov);
         if (at >= 0) curv.splice(at, 1); else curv.push(ov);
         S.setFieldValue(tid2, fid2, curv.length ? curv : null);
+        /* เมนูยังเปิดค้างไว้ให้ติ๊กต่อได้ แต่เครื่องหมายถูกต้องตรงกับค่าใหม่ด้วย
+         * เดิมกดแล้วค่าเปลี่ยนแต่เมนูยังโชว์ของเก่า ดูเหมือนกดไม่ติด */
+        var openPopEl = document.querySelector('.pop');
+        var fobj = findField(fid2);
+        if (openPopEl && fobj) openPopEl.innerHTML = optionMenu(tid2, fobj);
+        break;
+      }
+      case 'dw-field-multi': {
+        if (popIsOpenFor(el)) { closePops(); break; }
+        var mf = findField(el.dataset.field);
+        if (mf) openPop(el, optionMenu(el.dataset.id, mf));
         break;
       }
 
@@ -3134,12 +3364,19 @@
       case 'delete-task': {
         var tk2 = S.task(id);
         if (!tk2) break;
-        /* ถามยืนยันตามที่ผู้ใช้ตั้งไว้ ปิดได้เพราะลบงานย้อนกลับได้ด้วย Ctrl+Z อยู่แล้ว */
-        if (S.pref('confirmDelete') && !confirm(L('ลบงาน “') + tk2.name + '” ?')) break;
-        if (state.openTaskId === id) state.openTaskId = null;
-        closeModal();
-        S.deleteTask(id);
-        toast(L('ลบงานแล้ว'), L('ย้อนกลับ'), 'undo');
+        /* ถามยืนยันตามที่ผู้ใช้ตั้งไว้ ปิดได้เพราะลบงานย้อนกลับได้ด้วย Ctrl+Z อยู่แล้ว
+         * ใช้หน้าต่างของแอปเอง confirm() ของเบราว์เซอร์ถูกบล็อกเงียบในหน้าที่ถูก sandbox */
+        var delId = id;
+        var doDelete = function () {
+          if (state.openTaskId === delId) state.openTaskId = null;
+          closeModal();
+          S.deleteTask(delId);
+          toast(L('ลบงานแล้ว'), L('ย้อนกลับ'), 'undo');
+        };
+        if (S.pref('confirmDelete')) {
+          askConfirm(L('ลบงาน “{t}” ?', { t: tk2.name }),
+            L('ลบแล้วกด “ย้อนกลับ” หรือ Ctrl+Z ได้ทันที'), doDelete, { ok: L('ลบ') });
+        } else doDelete();
         break;
       }
       case 'ask-ok': {
@@ -3413,9 +3650,99 @@
       /* --- comment --- */
       case 'send-comment': {
         var box = document.getElementById('commentInput');
-        if (box && box.value.trim()) S.addComment(id, box.value);
+        if (box) submitComposer(box);
         break;
       }
+      case 'send-reply': {
+        var rbox = $drawer.querySelector('.rte[data-key="r:' + el.dataset.story + '"]');
+        if (rbox) submitComposer(rbox);
+        break;
+      }
+      case 'comment-save': {
+        var ebox = $drawer.querySelector('.rte[data-key="e:' + el.dataset.story + '"]');
+        if (ebox) submitComposer(ebox);
+        break;
+      }
+      case 'comment-cancel':
+        setDraft('e:' + el.dataset.story, '');
+        state.editStory = null;
+        renderDrawer();
+        break;
+      case 'comment-menu': {
+        if (popIsOpenFor(el)) { closePops(); break; }
+        var cs = S.story(el.dataset.story);
+        if (!cs) break;
+        var mineC = cs.actorId === S.db.currentUserId;
+        var mh = '';
+        if (!cs.parentId) {
+          mh += '<button data-act="comment-pin" data-story="' + R.esc(cs.id) + '">' + I('flag', 14) +
+            (cs.pinned ? L('เลิกปักหมุด') : L('ปักหมุดไว้บนสุด')) + '</button>';
+        }
+        mh += '<button data-act="comment-link" data-story="' + R.esc(cs.id) + '">' + I('link', 14) +
+          L('คัดลอกลิงก์ความเห็น') + '</button>';
+        if (mineC) {
+          mh += '<button data-act="comment-edit" data-story="' + R.esc(cs.id) + '">' + I('pencil', 14) +
+            L('แก้ไขความเห็น') + '</button>' +
+            '<button class="danger" data-act="comment-delete" data-story="' + R.esc(cs.id) + '">' +
+            I('trash', 14) + L('ลบความเห็น') + '</button>';
+        }
+        openPop(el, mh);
+        break;
+      }
+      case 'comment-pin': {
+        closePops();
+        var pinnedNow = S.togglePinComment(el.dataset.story);
+        if (pinnedNow !== null) {
+          toast(pinnedNow ? L('ปักหมุดความเห็นแล้ว') : L('เลิกปักหมุดแล้ว'), L('ย้อนกลับ'), 'undo');
+        }
+        break;
+      }
+      case 'comment-link': {
+        closePops();
+        var ls = S.story(el.dataset.story);
+        if (!ls) break;
+        copyText(global.location.href.split('#')[0] + '#/task/' + ls.taskId + '/c_' + ls.id,
+          L('คัดลอกลิงก์ความเห็นแล้ว'));
+        break;
+      }
+      case 'comment-edit': {
+        closePops();
+        var es = S.story(el.dataset.story);
+        if (!es || es.actorId !== S.db.currentUserId) break;
+        state.editStory = es.id;
+        renderDrawer();
+        global.RichText.focusEnd($drawer.querySelector('.rte[data-key="e:' + es.id + '"]'));
+        break;
+      }
+      case 'comment-delete': {
+        closePops();
+        var dsid = el.dataset.story;
+        var ds = S.story(dsid);
+        if (!ds || ds.actorId !== S.db.currentUserId) break;
+        askConfirm(L('ลบความเห็นนี้?'),
+          S.repliesOf(dsid).length ? L('ยังมีคนตอบอยู่ใต้ความเห็นนี้ คำตอบจะยังอยู่ และจะขึ้นว่า “ความเห็นนี้ถูกลบแล้ว” แทน') : '',
+          function () {
+            if (state.editStory === dsid) state.editStory = null;
+            if (S.deleteComment(dsid)) toast(L('ลบความเห็นแล้ว'), L('ย้อนกลับ'), 'undo');
+          }, { ok: L('ลบ') });
+        break;
+      }
+      case 'comment-reply': {
+        var rsid = el.dataset.story;
+        state.openThreads[rsid] = true;
+        renderDrawer();
+        global.RichText.focusEnd($drawer.querySelector('.rte[data-key="r:' + rsid + '"]'));
+        break;
+      }
+      case 'thread-toggle':
+        if (state.openThreads[el.dataset.story]) delete state.openThreads[el.dataset.story];
+        else state.openThreads[el.dataset.story] = true;
+        renderDrawer();
+        break;
+      case 'jump-story':
+        state.flashStory = el.dataset.story;
+        renderDrawer();
+        break;
 
       /* --- bulk --- */
       case 'bulk-complete': S.bulkUpdate(selectedIds(), { completed: true }); clearSel(); break;
@@ -3848,8 +4175,12 @@
         if (!fn) { toast(L('ใส่ชื่อฟิลด์ก่อน')); break; }
         var opts = document.getElementById('fOptions').value
           .split(',').map(function (x) { return x.trim(); })
-          .filter(function (x) { return x; });
-        S.addField(projectId, { name: fn, type: document.getElementById('fType').value, options: opts });
+          .filter(function (x) { return x; })
+          /* ส่งเป็น { name, color } ตรงรูปแบบที่เก็บ ไม่พึ่งให้ store แปลงจากสตริงให้ */
+          .map(function (x, i) { return { name: x, color: S.OPTION_COLORS[i % S.OPTION_COLORS.length] }; });
+        var ftype = document.getElementById('fType').value;
+        var ftDef = S.FIELD_TYPES.filter(function (x) { return x.id === ftype; })[0];
+        S.addField(projectId, { name: fn, type: ftype, options: ftDef && ftDef.hasOptions ? opts : [] });
         openModal(fieldsModal(projectId));
         break;
       }
@@ -4486,7 +4817,10 @@
   global.addEventListener('blur', function () { tabHeld = false; });
 
   document.addEventListener('keydown', function (e) {
-    var typing = ['INPUT', 'TEXTAREA', 'SELECT'].indexOf(e.target.tagName) >= 0;
+    /* ตัวแก้ไขแบบเห็นภาพเป็น div ไม่ใช่ช่องกรอก ต้องนับเป็น "กำลังพิมพ์" ด้วย
+     * ไม่งั้น Ctrl+Z, / และ Tab+ปุ่ม จะถูกแอปแย่งไปขณะพิมพ์รายละเอียด */
+    var typing = ['INPUT', 'TEXTAREA', 'SELECT'].indexOf(e.target.tagName) >= 0 ||
+      !!e.target.isContentEditable;
 
     /* เพิ่มงานย่อยด้วยการกด Enter แล้วช่องยังโฟกัสอยู่
      * พิมพ์รายการยาว ๆ ต่อได้รวดเดียวโดยไม่ต้องกดปุ่มใหม่ทุกครั้ง */
@@ -4519,12 +4853,14 @@
       return;
     }
 
-    if (e.key === 'Enter' && e.ctrlKey) {
-      var box = document.getElementById('commentInput');
-      if (box && document.activeElement === box && box.value.trim()) {
-        if (!S.can('comment')) { denyToast(); e.preventDefault(); return; }
-        S.addComment(state.openTaskId, box.value);
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      var box = e.target.closest && e.target.closest('.rte-compose');
+      if (box) {
         e.preventDefault();
+        submitComposer(box);
+      } else if (e.target.dataset && e.target.dataset.save === 'notes') {
+        e.preventDefault();
+        e.target.blur();          // Ctrl+Enter ในรายละเอียด = บันทึกแล้วออกจากช่อง
       }
       return;
     }
@@ -4564,11 +4900,20 @@
         S.updateTask(state.openTaskId, { assigneeId: S.db.currentUserId });
         toast(L('มอบหมายให้ตัวเองแล้ว'));
       } else if (k === 'c' && state.openTaskId) {
-        var ci = document.getElementById('commentInput');
-        if (ci) ci.focus();
+        global.RichText.focusEnd(document.getElementById('commentInput'));
+      } else if (k === 'x' && state.openTaskId) {
+        /* Asana ใช้ Tab+X ขยายงานเต็มจอ — เปิดงานอยู่ก็ทำแบบนั้น ไม่ได้เปิดงานค่อยสลับธีม */
+        state.dwWide = !state.dwWide;
+        renderDrawer();
       } else if (k === 'x') {
-        var cur2 = (S.db.settings && S.db.settings.theme) || 'auto';
-        S.setSetting('theme', cur2 === 'dark' ? 'light' : 'dark');
+        /* ธีมเป็นค่าของแต่ละคน (prefs) เดิมเขียนลง db.settings ซึ่งถูกย้ายออกไปแล้ว
+         * กดแล้วจึงไม่มีอะไรเปลี่ยน ทั้งที่ขึ้นข้อความว่าสลับแล้ว */
+        var curT = S.pref('theme') || 'auto';
+        if (curT === 'auto') {
+          curT = global.matchMedia && global.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        S.setPref('theme', curT === 'dark' ? 'light' : 'dark');
+        applyTheme();
         toast(L('สลับธีมแล้ว'));
       } else { handled = false; }
       if (handled) { e.preventDefault(); tabHeld = false; return; }
@@ -5069,11 +5414,9 @@
   if (boot && !useLanding) {
     state.route = boot.route;
     state.openTaskId = boot.taskId && S.task(boot.taskId) ? boot.taskId : null;
+    focusStory(boot.storyId);
   } else if (useLanding && land !== 'home') {
     state.route = { type: land };
-  } else if (!boot && (global.location.hash || '').indexOf('#/task/') === 0) {
-    var tid2 = global.location.hash.replace('#/task/', '');
-    if (S.task(tid2)) state.openTaskId = tid2;
   }
   renderAll();
   bootAccount();

@@ -1173,6 +1173,46 @@
     'ดูตามกำหนดส่งรายเดือน': 'See work by due date, month by month',
     'ตัวเลขรวมและความคืบหน้า': 'Totals and progress at a glance',
 
+    /* --- ตัวแก้ไขแบบเห็นภาพ / ความเห็นแบบเธรด (ชิ้นงาน 0 + 1a) --- */
+    'ตัวหนา': 'Bold', 'ตัวเอียง': 'Italic', 'ขีดเส้นใต้': 'Underline', 'ขีดฆ่า': 'Strikethrough',
+    'โค้ด': 'Code', 'หัวข้อย่อย': 'Bulleted list', 'ลำดับเลข': 'Numbered list',
+    'หัวข้อ': 'Heading', 'ลิงก์': 'Link',
+    'อ้างถึงคน งาน หรือโปรเจกต์': 'Mention a person, task or project',
+    'ใส่ลิงก์': 'Add link', 'เว้นว่างแล้วกดตกลงเพื่อเอาลิงก์ออก': 'Leave empty and press OK to remove the link',
+    'ไม่พบคน งาน หรือโปรเจกต์ที่ตรงกัน': 'No matching people, tasks or projects',
+    'เพิ่มรายละเอียด… พิมพ์ @ เพื่ออ้างถึงคน งาน หรือโปรเจกต์':
+      'Add a description… type @ to mention a person, task or project',
+    'ไม่มีรายละเอียด': 'No description',
+    'เขียนความเห็น… พิมพ์ @ เพื่ออ้างถึงคน งาน หรือโปรเจกต์ (Ctrl+Enter ส่ง)':
+      'Write a comment… type @ to mention a person, task or project (Ctrl+Enter to send)',
+    'อ้างถึงงานนี้ใน “{t}”': 'referenced this task in “{t}”',
+    'ตอบกลับความเห็นในงาน “{t}”': 'replied to a comment on “{t}”',
+    'ความเห็นที่ปักหมุด': 'Pinned comments', 'ปักหมุด': 'Pinned',
+    'ความเห็นนี้ถูกลบแล้ว': 'This comment was deleted', '(แก้ไขแล้ว)': '(edited)',
+    'ตัวเลือกความเห็น': 'Comment options', 'แก้ไขความเห็น…': 'Edit comment…',
+    'ตอบกลับ': 'Reply', '{n} การตอบกลับ': '{n} [n|reply|replies]',
+    'ตอบกลับ… (Ctrl+Enter ส่ง)': 'Reply… (Ctrl+Enter to send)',
+    'ซ่อนการตอบกลับ': 'Hide replies',
+    'เลิกปักหมุด': 'Unpin', 'ปักหมุดไว้บนสุด': 'Pin to top',
+    'คัดลอกลิงก์ความเห็น': 'Copy comment link', 'แก้ไขความเห็น': 'Edit comment',
+    'ลบความเห็น': 'Delete comment', 'ปักหมุดความเห็น': 'Pin comment',
+    'เลิกปักหมุดความเห็น': 'Unpin comment',
+    'ปักหมุดความเห็นแล้ว': 'Comment pinned', 'เลิกปักหมุดแล้ว': 'Comment unpinned',
+    'คัดลอกลิงก์ความเห็นแล้ว': 'Comment link copied',
+    'ลบความเห็นนี้?': 'Delete this comment?', 'ลบความเห็นแล้ว': 'Comment deleted',
+    'ยังมีคนตอบอยู่ใต้ความเห็นนี้ คำตอบจะยังอยู่ และจะขึ้นว่า “ความเห็นนี้ถูกลบแล้ว” แทน':
+      'People have replied to this comment. The replies stay, and the comment shows “This comment was deleted”.',
+    'พิมพ์ข้อความก่อน': 'Type a message first',
+    'ลบงาน “{t}” ?': 'Delete task “{t}”?',
+    'ลบแล้วกด “ย้อนกลับ” หรือ Ctrl+Z ได้ทันที': 'You can undo right after with “Undo” or Ctrl+Z.',
+    'ฟิลด์นี้ยังไม่มีตัวเลือก': 'This field has no options yet',
+    'ขยายงานที่เปิดอยู่เต็มจอ (ไม่ได้เปิดงาน = สลับสว่าง/มืด)':
+      'Expand the open task to full screen (no task open = toggle light/dark)',
+    'ตัวหนา / ตัวเอียง / ขีดเส้นใต้ (ในรายละเอียดและความเห็น)':
+      'Bold / italic / underline (in descriptions and comments)',
+    'ขีดฆ่า / โค้ด': 'Strikethrough / code',
+    'หัวข้อย่อย / ลำดับเลข': 'Bulleted / numbered list',
+
     /* --- ชื่อเดือน / วัน --- */
     '__monthsShort': 'Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec',
     '__monthsFull': 'January,February,March,April,May,June,July,August,September,October,November,December',

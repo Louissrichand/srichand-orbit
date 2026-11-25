@@ -124,7 +124,11 @@
 | Method | Path | สิทธิ์ | หมายเหตุ |
 |---|---|---|---|
 | GET | `/api/tasks/{id}/stories` | R | ความเห็น + บันทึกกิจกรรม เรียงตามเวลา |
-| POST | `/api/tasks/{id}/comments` | C | รองรับ @mention → สร้าง notification |
+| POST | `/api/tasks/{id}/comments` | C | รองรับ @mention → สร้าง notification · ส่ง `parent_story_id` = ตอบในเธรด (ชั้นเดียว แจ้งเฉพาะคนในเธรด + คนที่ถูก @) · `@[ชื่อ](t_…)` ที่อ้างถึงงานอื่นลงบันทึก "อ้างถึงงานนี้" ที่งานปลายทาง |
+| PATCH | `/api/stories/{id}` | C + เป็นเจ้าของ | แก้ข้อความความเห็นของตัวเอง → ตั้ง `edited_at` |
+| DELETE | `/api/stories/{id}` | C + เป็นเจ้าของ | ถ้ามีคนตอบแล้ว ให้ตั้ง `deleted_at` และล้าง `body` แทนการลบ แถวจะหายเองเมื่อคำตอบสุดท้ายถูกลบ |
+| POST | `/api/stories/{id}/pin` · `DELETE …/pin` | C | ปักหมุดความเห็นหลัก (ไม่ใช่คำตอบ) ไว้บนสุดของงาน |
+| POST · DELETE | `/api/stories/{id}/reactions/{emoji}` | C | อีโมจิตอบรับ ชุดที่ยอมรับตรงกับ `REACTIONS` ใน store.js |
 | POST | `/api/tasks/{id}/followers` | C | — |
 | POST | `/api/tasks/{id}/attachments` | E | ขอ SAS URL อัปโหลดตรงเข้า Blob · จำกัดขนาดต่อไฟล์ |
 | GET | `/api/attachments/{id}` | R | คืน SAS อ่านอายุสั้น · **ปฏิเสธถ้า `scan_status <> 'clean'`** |

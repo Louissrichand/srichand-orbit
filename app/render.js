@@ -2043,45 +2043,7 @@
 
   /* ---------- drawer ---------- */
 
-  function mentionize(text) {
-    var out = esc(text);
-    S.db.users.forEach(function (u) {
-      var needle = '@' + esc(u.name);
-      out = out.split(needle).join('<span class="men">' + needle + '</span>');
-    });
-    return out;
-  }
-
-  /* ---------- ข้อความมีรูปแบบในความเห็น ----------
-   *
-   * ความเห็นจริงของทีมคือสรุปประชุม ซึ่งเป็นหัวข้อย่อยซ้อนกันหลายชั้น
-   * เดิมเก็บและแสดงเป็นข้อความเปล่า ทุกอย่างจึงยุบเป็นก้อนเดียวอ่านไม่ออก
-   *
-   * เลือกทำแบบมาร์กดาวน์ย่อ ไม่ใช่ตัวแก้ไขแบบเห็นภาพจริง เพราะสามเหตุผล
-   *   เก็บเป็นข้อความล้วนเหมือนเดิม ค้นหาเจอ ส่งออก CSV แล้วยังอ่านรู้เรื่อง
-   *   วางจากที่อื่นมาแล้วติดรูปแบบมาเลย ขีดนำหน้าคือหัวข้อย่อยอยู่แล้วโดยธรรมชาติ
-   *   ไม่ต้องพึ่ง contenteditable ซึ่งพฤติกรรมต่างกันทุกเบราว์เซอร์
-   *
-   * ทุกอย่างผ่าน esc ก่อนเสมอ แล้วค่อยใส่แท็กที่เราสร้างเอง
-   * ข้อความของผู้ใช้จึงไม่มีทางกลายเป็น HTML ได้
-   */
-  function inlineFmt(s) {
-    var out = mentionize(s);
-    /* ลิงก์ก่อน เพื่อไม่ให้เครื่องหมายในลิงก์โดนตีความเป็นตัวหนา */
-    out = out.replace(/(https?:\/\/[^\s<]+)/g, function (m) {
-      return '<a href="' + m + '" target="_blank" rel="noopener noreferrer">' + m + '</a>';
-    });
-    out = out.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
-    out = out.replace(/(^|[\s(])\*([^*\n]+)\*/g, '$1<i>$2</i>');
-    out = out.replace(/`([^`]+)`/g, '<code>$1</code>');
-    return out;
-  }
-
-  /** ระดับการเยื้องของหัวข้อย่อย นับจากช่องว่างหน้าบรรทัด สองช่องเท่ากับหนึ่งชั้น */
-  function bulletDepth(raw) {
-    var lead = raw.match(/^[ \t]*/)[0].replace(/\t/g, '  ');
-    return Math.min(Math.floor(lead.length / 2), 3);
-  }
+  /* ข้อความมีรูปแบบ (ความเห็น รายละเอียด ประกาศ) อยู่ที่ app/richtext.js ใช้ร่วมกับตัวแก้ไข */
 
   /* แถวอีโมจิใต้ความเห็น — โชว์เฉพาะอันที่มีคนกดแล้ว บวกปุ่มเพิ่ม
    * ถ้าโชว์ครบทุกอีโมจิตลอดเวลา ทุกความเห็นจะมีแถบไอคอนหกอันห้อยอยู่จนรก */
@@ -2115,33 +2077,16 @@
     return h + '</div>';
   }
 
-  function richText(text) {
-    var lines = String(text == null ? '' : text).split('\n');
-    var h = '', listDepth = -1;
+  function richText(text) { return global.RichText.toHtml(text); }
 
-    function closeTo(d) {
-      while (listDepth > d) { h += '</ul>'; listDepth--; }
-    }
-
-    lines.forEach(function (raw) {
-      var line = raw.replace(/\s+$/, '');
-      var m = line.match(/^[ \t]*(?:[-*•]|\d+[.)])\s+(.*)$/);
-      if (m) {
-        var d = bulletDepth(raw);
-        if (d > listDepth) { while (listDepth < d) { h += '<ul>'; listDepth++; } }
-        else closeTo(d);
-        h += '<li>' + inlineFmt(m[1]) + '</li>';
-        return;
-      }
-      closeTo(-1);
-      if (!line.trim()) { h += '<div class="rt-gap"></div>'; return; }
-      /* หัวข้อแบบ # ใช้บ่อยเวลาวางสรุปประชุมมาจากที่อื่น */
-      var hd = line.match(/^#{1,3}\s+(.*)$/);
-      h += hd ? '<div class="rt-h">' + inlineFmt(hd[1]) + '</div>'
-              : '<div>' + inlineFmt(line) + '</div>';
-    });
-    closeTo(-1);
-    return '<div class="rt">' + h + '</div>';
+  /** ช่องพิมพ์ความเห็น/คำตอบ/แก้ความเห็น — ตัวแก้ไขแบบเห็นภาพพร้อมแถบเครื่องมือย่อ
+   *  key บอกว่าเป็นช่องไหน (c: งาน, r: เธรด, e: แก้ความเห็น) ใช้ทั้งเก็บร่างและคืนโฟกัส */
+  function composerHtml(key, taskId, placeholder, md, domId) {
+    return '<div class="rte-wrap rte-mini">' + global.RichText.toolbar(true) +
+      '<div class="rte rte-compose" contenteditable="true" spellcheck="true"' +
+      (domId ? ' id="' + esc(domId) + '"' : '') + ' data-key="' + esc(key) +
+      '" data-id="' + esc(taskId) + '" data-placeholder="' + esc(placeholder) + '">' +
+      global.RichText.toHtml(md || '', { editable: true }) + '</div></div>';
   }
 
   function drawer(taskId, opts) {
@@ -2305,10 +2250,26 @@
       if (f.type === 'select') {
         s += '<select class="inp" data-act="edit-field" data-field="' + esc(f.id) +
           '"><option value="">—</option>';
+        /* ตัวเลือกเก็บเป็น { name, color } มาตั้งแต่ v4 แล้ว
+         * เดิมเอาทั้งก้อนไปต่อสตริงจึงขึ้นเป็น [object Object] และเลือกอะไรไม่ได้เลย */
         f.options.forEach(function (o) {
-          s += '<option' + (v === o ? ' selected' : '') + '>' + esc(o) + '</option>';
+          s += '<option value="' + esc(o.name) + '"' + (v === o.name ? ' selected' : '') + '>' +
+            esc(o.name) + '</option>';
         });
         s += '</select>';
+      } else if (f.type === 'multi') {
+        /* หลายตัวเลือก — เดิมตกไปเป็นช่องข้อความ พิมพ์อะไรลงไปก็กลายเป็นสตริงเดี่ยว
+         * ทำเป็นป้ายสีแบบเดียวกับในตาราง กดแล้วเปิดเมนูติ๊กเลือกได้หลายอัน */
+        var chosen = [].concat(v || []);
+        s += '<button class="fld-multi" data-act="dw-field-multi" data-id="' + esc(t.id) +
+          '" data-field="' + esc(f.id) + '">';
+        f.options.forEach(function (o) {
+          if (chosen.indexOf(o.name) < 0) return;
+          s += '<span class="opt-pill" style="background:' + esc(o.color) + '22;color:' +
+            esc(o.color) + '">' + esc(o.name) + '</span>';
+        });
+        if (!chosen.length) s += '<span class="fld-multi-empty">—</span>';
+        s += '</button>';
       } else if (f.type === 'person') {
         s += '<select class="inp" data-act="edit-field" data-field="' + esc(f.id) +
           '"><option value="">—</option>';
@@ -2373,8 +2334,19 @@
 
     // รายละเอียด
     h += '<div class="dw-sec-title">' + L('รายละเอียด') + '</div>';
-    h += '<textarea class="inp" data-act="edit-notes" placeholder="' + L('เพิ่มรายละเอียด…') + '">' +
-      esc(t.notes) + '</textarea>';
+    /* แก้ได้ในที่เลย ไม่มีโหมดดู/โหมดแก้แยกกัน แบบเดียวกับ Asana
+     * บันทึกตอนออกจากช่อง (main.js) ส่วนคนที่แก้งานนี้ไม่ได้เห็นเป็นข้อความอ่านอย่างเดียว */
+    if (S.can('write', t.id)) {
+      h += '<div class="rte-wrap rte-notes-wrap">' + global.RichText.toolbar(false) +
+        '<div class="rte rte-notes" contenteditable="true" spellcheck="true" data-save="notes" data-key="n:' +
+        esc(t.id) + '" data-id="' + esc(t.id) + '" data-placeholder="' +
+        esc(L('เพิ่มรายละเอียด… พิมพ์ @ เพื่ออ้างถึงคน งาน หรือโปรเจกต์')) + '">' +
+        global.RichText.toHtml(t.notes, { editable: true }) + '</div></div>';
+    } else {
+      h += '<div class="rte rte-notes ro">' + (t.notes && t.notes.trim()
+        ? richText(t.notes)
+        : '<span class="rte-none">' + L('ไม่มีรายละเอียด') + '</span>') + '</div>';
+    }
 
     // ลำดับก่อนหลัง
     h += '<div class="dw-sec-title">' + L('ลำดับก่อนหลัง') +
@@ -2490,9 +2462,23 @@
      *
      * แยกเป็นสองแท็บแบบ Asana เปิดมาที่ความเห็นก่อน เพราะเป็นสิ่งที่คนเปิดงานมาหา
      */
-    var onlyComments = stories.filter(function (s) { return s.type === 'comment'; });
+    /* ---- เธรด ----
+     * ตอบได้ชั้นเดียวแบบ Asana คำตอบไม่ได้นับเป็นความเห็นหลัก ไม่ขึ้นในสายหลัก
+     * แต่อยู่ใต้ความเห็นแม่เสมอ เรียงเก่าก่อนเสมอไม่ว่าสายหลักจะเรียงทางไหน
+     * เพราะบทสนทนาย่อยอ่านกลับหัวแล้วไม่รู้เรื่อง */
+    var cById = {}, repliesBy = {};
+    stories.forEach(function (s) { if (s.type === 'comment') cById[s.id] = s; });
+    function isReply(s) { return s.type === 'comment' && s.parentId && cById[s.parentId]; }
+    stories.forEach(function (s) {
+      if (isReply(s)) (repliesBy[s.parentId] = repliesBy[s.parentId] || []).push(s);
+    });
+
+    var onlyComments = stories.filter(function (s) { return s.type === 'comment' && !isReply(s); });
+    var liveCount = onlyComments.filter(function (s) { return !s.deleted; }).length;
     var tab = (opts && opts.actTab) === 'all' ? 'all' : 'comments';
-    var shown = (tab === 'all' ? stories : onlyComments).slice();
+    var shown = (tab === 'all'
+      ? stories.filter(function (s) { return !isReply(s); })
+      : onlyComments).slice();
 
     /* เรียงเก่าก่อนเป็นค่าตั้งต้น เพราะสรุปประชุมอ่านไล่ตามลำดับเวลาถึงจะได้เรื่อง
      * แต่งานที่คุยกันยาวเป็นเดือน คนมักอยากเห็นล่าสุดก่อน จึงสลับได้ */
@@ -2512,7 +2498,7 @@
     h += '<div class="dw-acttabs">' +
       '<button class="dw-acttab' + (tab === 'comments' ? ' on' : '') +
       '" data-act="dw-act-tab" data-tab="comments">' + L('ความเห็น') +
-      (onlyComments.length ? ' <span class="n">' + onlyComments.length + '</span>' : '') +
+      (liveCount ? ' <span class="n">' + liveCount + '</span>' : '') +
       '</button>' +
       '<button class="dw-acttab' + (tab === 'all' ? ' on' : '') +
       '" data-act="dw-act-tab" data-tab="all">' + L('ความเคลื่อนไหวทั้งหมด') + '</button>' +
@@ -2521,6 +2507,22 @@
       L('สลับลำดับเวลา') + '">' + I(sortNewest ? 'arrowDown' : 'arrowUp', 13) +
       (sortNewest ? L('ใหม่ก่อน') : L('เก่าก่อน')) + '</button>' +
       '</div>';
+
+    /* ความเห็นที่ปักหมุดขึ้นซ้ำไว้บนสุดอีกที่ ตัวจริงยังอยู่ตามลำดับเวลาเดิม
+     * คนที่เปิดงานมาทีหลังเห็นข้อสรุปก่อน ส่วนคนที่ไล่อ่านก็ไม่เสียบริบท */
+    var pinned = onlyComments.filter(function (s) { return s.pinned && !s.deleted; });
+    if (pinned.length && tab === 'comments') {
+      h += '<div class="pin-box"><div class="pin-h">' + I('flag', 12) + L('ความเห็นที่ปักหมุด') + '</div>';
+      pinned.forEach(function (s) {
+        var pa = S.user(s.actorId);
+        var snip = S.plainText(s.text).replace(/\s+/g, ' ');
+        if (snip.length > 140) snip = snip.slice(0, 140) + '…';
+        h += '<button class="pin-row" data-act="jump-story" data-story="' + esc(s.id) + '">' +
+          avatar(pa, 'sm') + '<b>' + esc(pa ? pa.name : '?') + '</b><span class="pin-snip">' + esc(snip) +
+          '</span></button>';
+      });
+      h += '</div>';
+    }
 
     /* ปุ่มกางของเก่าอยู่บนสุดตอนเรียงเก่าก่อน และอยู่ล่างสุดตอนเรียงใหม่ก่อน
      * ให้ตรงกับทิศที่ของเก่าถูกซ่อนไป ไม่งั้นกดแล้วเนื้อหาจะโผล่คนละทางกับที่คาด */
@@ -2535,14 +2537,83 @@
         ? L('ยังไม่มีความเคลื่อนไหว')
         : L('ยังไม่มีใครแสดงความเห็น เริ่มคนแรกได้เลย')) + '</div>';
     }
+
+    var meId = S.db.currentUserId;
+    var canComment = S.can('comment', t.id);
+    var draft = (opts && opts.draft) || function () { return ''; };
+    var openThreads = (opts && opts.openThreads) || {};
+
+    function commentHtml(s, reply) {
+      var actor = S.user(s.actorId);
+      var mine = s.actorId === meId;
+      var c = '<div class="story cmt' + (reply ? ' reply' : '') + (s.pinned ? ' pinned' : '') +
+        (opts && opts.flashStory === s.id ? ' flash' : '') + '" id="st-' + esc(s.id) + '">' +
+        avatar(actor, reply ? 'sm' : '') + '<div class="body">';
+      if (s.deleted) {
+        c += '<div class="txt cmt-gone">' + L('ความเห็นนี้ถูกลบแล้ว') + '</div>';
+      } else {
+        c += '<div class="who"><span class="nm">' + esc(actor ? actor.name : '?') + '</span>' +
+          whenTag(s.createdAt) +
+          (s.editedAt ? '<span class="cmt-edited" title="' + esc(fmtExact(s.editedAt)) + '">' +
+            L('(แก้ไขแล้ว)') + '</span>' : '') +
+          (s.pinned ? '<span class="cmt-pin">' + I('flag', 11) + L('ปักหมุด') + '</span>' : '') +
+          '<span class="grow"></span>' +
+          '<button class="cmt-more" data-act="comment-menu" data-story="' + esc(s.id) +
+          '" title="' + L('ตัวเลือกความเห็น') + '">' + I('more', 14) + '</button></div>';
+        if (opts && opts.editStory === s.id && mine) {
+          var dk = 'e:' + s.id;
+          c += composerHtml(dk, t.id, L('แก้ไขความเห็น…'), draft(dk) || s.text) +
+            '<div class="cmt-editacts"><button class="btn btn-sm" data-act="comment-cancel" data-story="' +
+            esc(s.id) + '">' + L('ยกเลิก') + '</button><button class="btn btn-sm btn-primary" ' +
+            'data-act="comment-save" data-story="' + esc(s.id) + '" data-id="' + esc(t.id) + '">' +
+            L('บันทึก') + '</button></div>';
+        } else {
+          c += '<div class="txt">' + richText(s.text) + '</div>';
+        }
+        c += '<div class="cmt-foot">' + reactionRow(s) +
+          (!reply && canComment ? '<button class="cmt-reply" data-act="comment-reply" data-story="' +
+            esc(s.id) + '">' + L('ตอบกลับ') + '</button>' : '') + '</div>';
+      }
+      if (!reply) c += threadHtml(s);
+      return c + '</div></div>';
+    }
+
+    function threadHtml(s) {
+      var reps = repliesBy[s.id] || [];
+      var open = !!openThreads[s.id];
+      var c = '';
+      if (reps.length && !open) {
+        var who = [];
+        reps.forEach(function (r) { if (who.indexOf(r.actorId) < 0) who.push(r.actorId); });
+        c += '<button class="thread-row" data-act="thread-toggle" data-story="' + esc(s.id) + '">' +
+          '<span class="thread-av">' + who.slice(0, 4).map(function (u) {
+            return avatar(S.user(u), 'sm');
+          }).join('') + '</span><b>' + L('{n} การตอบกลับ', { n: reps.length }) + '</b>' +
+          whenTag(reps[reps.length - 1].createdAt) + '</button>';
+      }
+      if (open) {
+        c += '<div class="thread">';
+        reps.forEach(function (r) { c += commentHtml(r, true); });
+        if (canComment) {
+          var rk = 'r:' + s.id;
+          c += '<div class="reply-box">' + avatar(S.me(), 'sm') +
+            composerHtml(rk, t.id, L('ตอบกลับ… (Ctrl+Enter ส่ง)'), draft(rk)) +
+            '<button class="btn btn-primary btn-sm" data-act="send-reply" data-story="' + esc(s.id) +
+            '" data-id="' + esc(t.id) + '">' + L('ส่ง') + '</button></div>';
+        }
+        if (reps.length) {
+          c += '<button class="thread-hide" data-act="thread-toggle" data-story="' + esc(s.id) + '">' +
+            L('ซ่อนการตอบกลับ') + '</button>';
+        }
+        c += '</div>';
+      }
+      return c;
+    }
+
     shown.forEach(function (s) {
       var actor = S.user(s.actorId);
       if (s.type === 'comment') {
-        h += '<div class="story">' + avatar(actor) + '<div class="body">' +
-          '<div class="who">' + esc(actor ? actor.name : '?') +
-          whenTag(s.createdAt) + '</div>' +
-          '<div class="txt">' + richText(s.text) + '</div>' +
-          reactionRow(s) + '</div></div>';
+        h += commentHtml(s, false);
       } else {
         h += '<div class="story log">' + avatar(actor, 'sm') +
           '<div class="txt">' + esc(actor ? actor.name : '?') + ' ' + esc(storyText(s)) +
@@ -2553,12 +2624,14 @@
 
     h += '</div>';
 
+    /* ช่องความเห็นเป็นตัวแก้ไขแบบเห็นภาพชุดเดียวกับรายละเอียด
+     * ร่างที่พิมพ์ค้างไว้เก็บแยกต่อคนต่องาน (main.js) ปิดแผงหรือรีเฟรชแล้วยังอยู่ */
+    var ck = 'c:' + t.id;
     h += '<div class="dw-foot"><div class="comment-box">' + avatar(S.me()) +
-      '<textarea id="commentInput" placeholder="' + L('เขียนความเห็น… พิมพ์ @ชื่อ เพื่อแจ้งเตือน (Ctrl+Enter ส่ง)') + '"></textarea>' +
+      composerHtml(ck, t.id, L('เขียนความเห็น… พิมพ์ @ เพื่ออ้างถึงคน งาน หรือโปรเจกต์ (Ctrl+Enter ส่ง)'),
+        draft(ck), 'commentInput') +
       '<button class="btn btn-primary btn-sm" data-act="send-comment" data-id="' +
-      esc(t.id) + '">' + L('ส่ง') + '</button></div>' +
-      '<div class="rt-hint">' + L('ขึ้นต้นด้วย - เพื่อทำหัวข้อย่อย เว้นสองช่องเพื่อย่อยลงอีกชั้น · **ตัวหนา**') +
-      '</div></div>';
+      esc(t.id) + '">' + L('ส่ง') + '</button></div></div>';
 
     return h;
   }
