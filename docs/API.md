@@ -186,6 +186,16 @@
 | GET | `/api/projects/{id}/automation-runs` | R | ประวัติการรัน 200 ครั้งล่าสุด (`automation_runs`) |
 | — | (งานเบื้องหลัง) | ระบบ | ทริกเกอร์ตามเวลา (ใกล้ครบกำหนด เลยกำหนด ตามกำหนดเวลา) ตอนนี้รันในเบราว์เซอร์ที่เปิดอยู่ · ตอนมีเซิร์ฟเวอร์ให้ย้ายไปตัวตั้งเวลา และใช้ `automation_fired` (UNIQUE) กันรันซ้ำ · ทริกเกอร์ตามเหตุการณ์ต้องรันในธุรกรรมเดียวกับการแก้ที่ปลุกมัน (ย้อนกลับได้ทั้งชุด) |
 | GET · POST · PUT · DELETE | `/api/me/automations` | ตัวเอง | อัตโนมัติของงานของฉัน (ใกล้ครบกำหนด / เลยกำหนด / ทำเสร็จ → ย้ายเซกชันของตัวเอง) |
+| GET · POST · PUT · DELETE | `/api/projects/{id}/forms[/{fid}]` | E + ST (อ่าน: R) | ฟอร์มของโปรเจกต์ (`forms`) สูงสุด 20 · คำถาม แตกแขนง 5 ชั้น ผูกฟิลด์ ตั้งค่า (3b) |
+| GET | `/api/forms/{fid}` | ล็อกอินแล้ว | โครงฟอร์มสำหรับหน้า `#/form/{fid}` (ไม่ต้องเป็นสมาชิกโปรเจกต์) |
+| POST | `/api/forms/{fid}/submit` | ล็อกอินแล้ว | `{ answers: { qid: ค่า } }` → สร้างงานหนึ่งชิ้นในธุรกรรมเดียว (ค่าฟิลด์ ไฟล์แนบ ≤ 2 MB ผู้ติดตาม) แล้วปลุกอัตโนมัติ `added` + `form` · ฟอร์มสาธารณะไม่ล็อกอิน = เฟส 5 |
+| GET · POST · PUT · DELETE | `/api/projects/{id}/task-types[/{tid}]` | E + ST (อ่าน: R) | ชนิดงานกำหนดเองและสถานะ (`task_types`, `task_type_statuses`) · ลบชนิด = งานกลับเป็นงานทั่วไป · `PUT /api/projects/{id}` `default_type` |
+| PUT | `/api/tasks/{id}/type` · `/api/tasks/{id}/status` | E | ตั้งชนิด/สถานะ — สถานะ `counts_complete` ติ๊กเสร็จ (และกลับกัน) ปลุกอัตโนมัติ `cstatus` |
+| GET · POST · PUT · DELETE | `/api/project-templates[/{id}]` | ST (อ่าน/ใช้: org หรือ access ระบุตัว) | เทมเพลตโปรเจกต์ (`project_templates`, `project_template_access` edit/use) · เทมเพลตตั้งต้นอยู่ในโค้ด |
+| POST | `/api/project-templates/{id}/use` | ST + use | `{ name, start, roles: { r0: userId }, skipWeekends }` → โปรเจกต์ใหม่ (รหัสคอลัมน์ ฟิลด์ ชนิด สถานะ ฟอร์ม เทมเพลตงาน ในอัตโนมัติชี้ของใหม่) |
+| GET · POST · PUT · DELETE | `/api/task-templates` · `/api/projects/{id}/task-templates` | ST (ใช้: E) | เทมเพลตงานทั้งองค์กร / รายโปรเจกต์ · `POST …/{tid}/apply { sectionId }` |
+| POST | `/api/projects/{id}/status-updates` | E + ST | `{ state, title, blocks[], highlights[], period }` ไฮไลต์คำนวณที่เซิร์ฟเวอร์ตอนโพสต์ (ภาพนิ่ง) · ปิดงานเตือนของสัปดาห์ · `GET/POST/DELETE /api/status-templates` |
+| — | (งานเบื้องหลัง) | ระบบ | เตือนรายงานสถานะวันศุกร์ (`projects.status_remind`) ตอนนี้สร้างตอนมีคนเปิดแอปวันศุกร์ กันซ้ำด้วย `remind_key` · ตอนมีเซิร์ฟเวอร์ให้ย้ายไปตัวตั้งเวลา |
 | GET | `/api/tags/{name}/tasks` | ทุกคน | งานที่มีแท็กนี้และผู้เรียกมองเห็น |
 | PUT · DELETE | `/api/tags/{name}` | ST | เปลี่ยนชื่อ (ชื่อซ้ำ = รวมแท็ก) / เอาออกจากทุกงาน · ลง audit `tag.rename` `tag.delete` |
 | GET · POST · PUT · DELETE | `/api/field-library` | ST (อ่าน: ทุกคน) | คลังฟิลด์ขององค์กร · แก้แล้ว `custom_fields` ที่อ้าง `library_field_id` เปลี่ยนตาม · ลง audit `field.lib-*` |

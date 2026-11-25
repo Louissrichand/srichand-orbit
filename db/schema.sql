@@ -458,14 +458,109 @@ CREATE TABLE dbo.automation_fired (
 );
 GO
 
-/* เทมเพลตงาน (db.taskTemplates) — payload เก็บชื่อ รายละเอียด ชนิด ความสำคัญ แท็ก และชื่องานย่อย */
+/* เทมเพลตงาน (db.taskTemplates = ทั้งองค์กร, project.taskTemplates = เฉพาะโปรเจกต์) — 3b
+   payload_json = { name, notes, type, ctype, prio, assignee {mode,user}, followers, tags, fields {fieldId: ค่า},
+   due/start {n, unit days|workdays} นับจากวันที่สร้างงาน, subs [{k, name, notes, assignee, due, deps [k]}] } */
 CREATE TABLE dbo.task_templates (
     id            UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    project_id    UNIQUEIDENTIFIER NULL REFERENCES dbo.projects(id) ON DELETE CASCADE,   -- NULL = ใช้ได้ทุกโปรเจกต์
     name          NVARCHAR(300)    NOT NULL,
     payload_json  NVARCHAR(MAX)    NOT NULL,
     created_by    UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
     created_at    DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME()
 );
+GO
+
+/* ---------- 3b — ชนิดงานกำหนดเอง ----------
+   งานเก็บ tasks.custom_type_id + custom_status_id ส่วน tasks.type ยังเป็นชนิดพื้นฐาน (task)
+   สถานะที่ counts_complete = 1 ผูกกับ tasks.completed ทั้งสองทาง · โปรเจกต์ละไม่เกิน 20 ชนิด ชนิดละ 12 สถานะ */
+CREATE TABLE dbo.task_types (
+    id          UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    project_id  UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.projects(id) ON DELETE CASCADE,
+    name        NVARCHAR(60)     NOT NULL,
+    icon        NVARCHAR(8)      NULL,
+    base_type   NVARCHAR(12)     NOT NULL DEFAULT 'task',
+    position    INT              NOT NULL DEFAULT 0
+);
+CREATE TABLE dbo.task_type_statuses (
+    id               UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    type_id          UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.task_types(id) ON DELETE CASCADE,
+    name             NVARCHAR(40)     NOT NULL,
+    color            CHAR(7)          NOT NULL,
+    counts_complete  BIT              NOT NULL DEFAULT 0,
+    position         INT              NOT NULL DEFAULT 0
+);
+ALTER TABLE dbo.tasks ADD custom_type_id   UNIQUEIDENTIFIER NULL REFERENCES dbo.task_types(id),
+                          custom_status_id UNIQUEIDENTIFIER NULL REFERENCES dbo.task_type_statuses(id);
+ALTER TABLE dbo.projects ADD default_type NVARCHAR(40) NULL;          -- task | milestone | approval | รหัส task_types
+GO
+
+/* ---------- 3b — ฟอร์ม ----------
+   items_json = [{ id, kind (heading|text|long|select|multi|number|date|range|person|file), label, help, req, opts,
+                   map ('' | name | notes | due | start | dates | assignee | followers | tags | field:<id>),
+                   cond { q, v[] } (แตกแขนงจากคำถามตัวเลือกก่อนหน้า ลึกสุด 5 ชั้น) }]
+   ส่งได้เฉพาะผู้ใช้ที่ล็อกอิน · ฟอร์มสาธารณะ (คนนอก) รอเฟส 5 */
+CREATE TABLE dbo.forms (
+    id                UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    project_id        UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.projects(id) ON DELETE CASCADE,
+    name              NVARCHAR(120)    NOT NULL,
+    description       NVARCHAR(4000)   NULL,
+    is_open           BIT              NOT NULL DEFAULT 1,
+    items_json        NVARCHAR(MAX)    NOT NULL,
+    section_id        UNIQUEIDENTIFIER NULL REFERENCES dbo.sections(id),
+    title_question    NVARCHAR(40)     NULL,
+    default_assignee  UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    copy_answers      BIT              NOT NULL DEFAULT 1,
+    add_submitter     BIT              NOT NULL DEFAULT 1,
+    allow_again       BIT              NOT NULL DEFAULT 1,
+    confirm_text      NVARCHAR(1000)   NULL,
+    submissions       INT              NOT NULL DEFAULT 0,
+    last_submitted_at DATETIME2(0)     NULL,
+    created_by        UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    created_at        DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME()
+);
+CREATE INDEX ix_forms_project ON dbo.forms(project_id);
+GO
+
+/* ---------- 3b — เทมเพลตโปรเจกต์ ----------
+   data_json = { sections, fields (คลังฟิลด์เก็บแค่ id), automations, forms, types, defaultType, taskTemplates,
+                 roles [{k, name, user, text}], tasks [{k, name, …, sec, role, s, d (ระยะห่างจากวันเริ่ม), deps, subs}] }
+   เทมเพลตตั้งต้น 6 แบบอยู่ในโค้ด ไม่อยู่ในตาราง */
+CREATE TABLE dbo.project_templates (
+    id             UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    name           NVARCHAR(120)    NOT NULL,
+    description    NVARCHAR(1000)   NULL,
+    icon           NVARCHAR(8)      NULL,
+    color          CHAR(7)          NULL,
+    org_can_use    BIT              NOT NULL DEFAULT 1,
+    skip_weekends  BIT              NOT NULL DEFAULT 0,
+    data_json      NVARCHAR(MAX)    NOT NULL,
+    created_by     UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    created_at     DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME()
+);
+CREATE TABLE dbo.project_template_access (
+    template_id  UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.project_templates(id) ON DELETE CASCADE,
+    user_id      UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.users(id),
+    access       NVARCHAR(8)      NOT NULL CONSTRAINT ck_pt_access CHECK (access IN ('edit', 'use')),
+    PRIMARY KEY (template_id, user_id)
+);
+GO
+
+/* ---------- 3b — รายงานสถานะแบบบล็อก ----------
+   project_status_updates ได้ title, blocks_json [{k, title, text}], highlights_json (ภาพนิ่ง), period_days
+   projects: status_layout_json (เลย์เอาต์ล่าสุด), status_remind (เตือนวันศุกร์), remind_key, remind_task_id */
+CREATE TABLE dbo.status_templates (
+    id            UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    name          NVARCHAR(80)     NOT NULL,
+    layout_json   NVARCHAR(MAX)    NOT NULL,
+    created_by    UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id)
+);
+ALTER TABLE dbo.project_status_updates ADD title NVARCHAR(120) NULL, blocks_json NVARCHAR(MAX) NULL,
+                                           highlights_json NVARCHAR(MAX) NULL, period_days INT NULL;
+ALTER TABLE dbo.projects ADD status_layout_json NVARCHAR(MAX) NULL,
+                             status_remind      BIT          NOT NULL DEFAULT 0,
+                             remind_key         DATE         NULL,
+                             remind_task_id     UNIQUEIDENTIFIER NULL;
 GO
 
 /* เส้นฐานของ Gantt (projects[].baseline) — วันที่ของทุกงานตอนกดตั้ง เก็บไว้เทียบว่าหลุดแผนไปเท่าไร */

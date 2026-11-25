@@ -10,7 +10,7 @@
 
   var KEY = 'orbit.db.v4';
   var LEGACY_KEYS = ['orbit.db.v3', 'orbit.db.v2', 'orbit.db.v1', 'taskflow.db.v1'];   // ชื่อ/เวอร์ชันเดิม
-  var SCHEMA = 12;
+  var SCHEMA = 13;
 
   /* ---------- utilities ---------- */
 
@@ -175,6 +175,9 @@
       attachments: attrs.attachments || [],
       recur: attrs.recur || null,
       coverId: attrs.coverId || null,
+      /* 3b — ชนิดงานกำหนดเองของโปรเจกต์ (type ยังเป็นชนิดพื้นฐาน task) และสถานะของชนิดนั้น */
+      ctype: attrs.ctype || null,
+      cstatus: attrs.cstatus || null,
       createdBy: attrs.createdBy || 'u_me',
       createdAt: attrs.createdAt || today(),
       /* ได้รับมอบหมายเมื่อไร โดยใคร — ตัดสินว่างานไปลง "เพิ่งได้รับมอบหมาย" ในงานของฉัน
@@ -617,6 +620,41 @@
       p.autoRuns = Array.isArray(p.autoRuns) ? p.autoRuns.slice(-AUTO_RUNS_MAX) : [];
     });
     d.autoFired = pruneFired(d.autoFired);
+    /* v13 — ฟอร์ม ชนิดงานกำหนดเอง เทมเพลตโปรเจกต์ เทมเพลตงานรายโปรเจกต์ รายงานสถานะแบบบล็อก (ชิ้นงาน 3b)
+     *   project.forms[]        { id, name, desc, on, items: [{ id, kind, label, help, req, opts, map, cond }],
+     *                            sec, titleQ, assignee, copy, follow, confirm, again, n, last, by, at }
+     *   project.types[]        { id, name, icon, base, statuses: [{ id, name, color, done }] }  defaultType
+     *   task.ctype / cstatus   ชนิดงานกำหนดเองและสถานะ (type ยังเป็นชนิดพื้นฐาน)
+     *   project.taskTemplates[] / db.taskTemplates[]  { id, name, by, at, t: { name, notes, type, ctype, prio,
+     *                            assignee, followers, tags, fields, due, start, subs } } — แบบเดิม (payload) แปลงที่นี่
+     *   db.projectTemplates[]  { id, name, desc, icon, color, by, at, editors, users, org, skipWeekends, data }
+     *   project.statusLayout   บล็อกและไฮไลต์ที่ใช้ครั้งล่าสุด  statusRemind / remindKey / remindTask เตือนวันศุกร์
+     *   statusLog[].title / blocks / hl   db.statusTemplates[] */
+    d.tasks.forEach(function (t) {
+      if (!('ctype' in t)) t.ctype = null;
+      if (!('cstatus' in t)) t.cstatus = null;
+    });
+    d.taskTemplates = (Array.isArray(d.taskTemplates) ? d.taskTemplates : []).map(upgradeTaskTemplate).filter(Boolean);
+    d.projectTemplates = Array.isArray(d.projectTemplates) ? d.projectTemplates.filter(function (x) { return x && x.id && x.data; }) : [];
+    d.projectTemplates.forEach(function (x) {
+      x.editors = Array.isArray(x.editors) ? x.editors : (x.by ? [x.by] : []);
+      x.users = Array.isArray(x.users) ? x.users : [];
+      x.org = x.org !== false;
+      x.skipWeekends = !!x.skipWeekends;
+    });
+    d.statusTemplates = Array.isArray(d.statusTemplates) ? d.statusTemplates.filter(function (x) { return x && x.id; }) : [];
+    d.projects.forEach(function (p) {
+      p.forms = Array.isArray(p.forms) ? p.forms.filter(function (f) { return f && f.id; }) : [];
+      p.forms.forEach(normalizeForm);
+      p.types = Array.isArray(p.types) ? p.types.filter(function (x) { return x && x.id; }) : [];
+      p.types.forEach(normalizeType);
+      if (typeof p.defaultType !== 'string') p.defaultType = '';
+      p.taskTemplates = (Array.isArray(p.taskTemplates) ? p.taskTemplates : []).map(upgradeTaskTemplate).filter(Boolean);
+      if (!('statusLayout' in p)) p.statusLayout = null;
+      p.statusRemind = !!p.statusRemind;
+      if (!('remindKey' in p)) p.remindKey = null;
+      if (!('remindTask' in p)) p.remindTask = null;
+    });
     prunePersonal(d);
     if (!d.users.some(function (u) { return u.role === 'admin'; })) {
       var firstUser = d.users.filter(function (u) { return u.id === d.currentUserId; })[0] || d.users[0];
@@ -1001,10 +1039,17 @@
       sig: '', user: {}, project: {}, task: {},
       memByTask: {}, memByProject: {}, subsByParent: {},
       storyByTask: {}, fvByTask: {}, blockedByMe: {},
-      pmByProject: {}, access: {}
+      pmByProject: {}, access: {}, types: {}, statuses: {}
     };
     db.users.forEach(function (u) { i.user[u.id] = u; });
-    db.projects.forEach(function (p) { i.project[p.id] = p; });
+    db.projects.forEach(function (p) {
+      i.project[p.id] = p;
+      /* 3b — ชนิดงานกำหนดเองและสถานะ รหัสไม่ซ้ำทั้งระบบ งานที่อยู่หลายโปรเจกต์จึงหาชนิดของตัวเองเจอเสมอ */
+      (p.types || []).forEach(function (ty) {
+        i.types[ty.id] = ty;
+        (ty.statuses || []).forEach(function (s, k) { i.statuses[s.id] = { st: s, ty: ty, p: p, k: k }; });
+      });
+    });
     db.tasks.forEach(function (t) {
       i.task[t.id] = t;
       if (t.parentId) (i.subsByParent[t.parentId] = i.subsByParent[t.parentId] || []).push(t);
@@ -1902,7 +1947,8 @@
     { id: 'notepad',  label: 'สมุดโน้ตส่วนตัว',     icon: 'note' },
     { id: 'drafts',   label: 'ร่างความเห็น',        icon: 'pencil' },
     { id: 'stats',    label: 'สถิติงานเสร็จ',       icon: 'chart' },
-    { id: 'activity', label: 'กิจกรรมล่าสุด',       icon: 'bell' }
+    { id: 'activity', label: 'กิจกรรมล่าสุด',       icon: 'bell' },
+    { id: 'forms',    label: 'ฟอร์ม',              icon: 'note' }       // 3b — ฟอร์มที่ส่งได้
   ];
   var HOME_DEFAULT = [
     { w: 'mine', full: false }, { w: 'projects', full: false },
@@ -2471,6 +2517,7 @@
     { id: 'section',     label: 'คอลัมน์',       kind: 'select' },
     { id: 'priority',    label: 'ความสำคัญ',    kind: 'select' },
     { id: 'type',        label: 'ชนิดงาน',      kind: 'select' },
+    { id: 'cstatus',     label: 'สถานะ (ชนิดงาน)', kind: 'select' },
     { id: 'tags',        label: 'แท็ก',         kind: 'multi' },
     { id: 'due',         label: 'กำหนดส่ง',     kind: 'date' },
     { id: 'start',       label: 'วันเริ่ม',      kind: 'date' },
@@ -2572,7 +2619,8 @@
     if (fid === 'section') return (p ? p.sections : []).map(function (s) { return [s.id, s.name, null]; });
     if (fid === 'priority') return PRIORITIES.filter(function (x) { return x.id !== 'none'; })
       .map(function (x) { return [x.id, x.label, x.color]; });
-    if (fid === 'type') return TASK_TYPES.map(function (x) { return [x.id, x.label, null]; });
+    if (fid === 'type') return typeChoices(projectId).map(function (x) { return [x.id, (x.custom ? x.icon + ' ' : '') + x.label, null]; });
+    if (fid === 'cstatus') return statusChoices(projectId);
     if (fid === 'tags') return allTags().map(function (x) { return [x, x, null]; });
     if (def.field && def.field.options) {
       return def.field.options.map(function (o) { return [o.name, o.name, o.color]; });
@@ -2597,7 +2645,8 @@
       case 'createdBy':   return t.createdBy || null;
       case 'section':     return m ? m.sectionId : null;
       case 'priority':    return t.priority && t.priority !== 'none' ? t.priority : null;
-      case 'type':        return t.type || 'task';
+      case 'type':        return t.ctype || t.type || 'task';     // 3b — ชนิดกำหนดเองแทนชนิดพื้นฐาน
+      case 'cstatus':     return t.cstatus || null;
       case 'tags':        return t.tags || [];
       case 'due':         return t.dueOn || null;
       case 'start':       return t.startOn || null;
@@ -2770,6 +2819,8 @@
       va = ta.priority === 'none' ? null : prioRank(ta.priority);
       vb = tb.priority === 'none' ? null : prioRank(tb.priority);
     } else if (sort === 'name') { va = ta.name; vb = tb.name; }
+    else if (sort === 'cstatus') { va = statusRank(ta); vb = statusRank(tb); }      // 3b — ตามลำดับสถานะ
+    else if (sort === 'type') { va = L(typeName(ta)); vb = L(typeName(tb)); }
     else if (sort === 'assignee' || sort === 'createdBy') {
       var ua = user(sort === 'assignee' ? ta.assigneeId : ta.createdBy);
       var ub = user(sort === 'assignee' ? tb.assigneeId : tb.createdBy);
@@ -2872,6 +2923,28 @@
         items: items.filter(function (x) { return !fieldValue(x.task.id, f.id); }) });
     } else if (f) {
       out.push({ key: 'all', label: 'ทั้งหมด', items: items, set: null });
+    } else if (group === 'cstatus') {
+      /* 3b — คอลัมน์ตามสถานะของชนิดงานกำหนดเอง ลากลง = ตั้งสถานะ (เปลี่ยนชนิดให้ถ้ายังไม่ใช่ชนิดนั้น) */
+      var tys = projectTypes(projectId), known = {};
+      tys.forEach(function (ty) {
+        ty.statuses.forEach(function (s) {
+          known[s.id] = true;
+          push({ key: s.id, label: tys.length > 1 ? ty.name + ' · ' + s.name : s.name, color: s.color,
+            set: { by: 'cstatus', key: s.id },
+            items: items.filter(function (x) { return x.task.cstatus === s.id; }) });
+        });
+      });
+      push({ key: '', label: 'ไม่มีสถานะ', set: null,
+        items: items.filter(function (x) { return !known[x.task.cstatus]; }) });
+    } else if (group === 'type') {
+      var seenTy = {};
+      typeChoices(projectId).forEach(function (c) {
+        seenTy[c.id] = true;
+        push({ key: c.id, label: c.label, set: { by: 'type', key: c.id },
+          items: items.filter(function (x) { return (x.task.ctype || x.task.type || 'task') === c.id; }) });
+      });
+      push({ key: '_other', label: 'ชนิดของโปรเจกต์อื่น', set: null,
+        items: items.filter(function (x) { return !seenTy[x.task.ctype || x.task.type || 'task']; }) });
     } else if (group === 'priority') {
       PRIORITIES.forEach(function (p) {
         push({ key: p.id, label: p.label, color: p.id === 'none' ? null : p.color,
@@ -2939,15 +3012,19 @@
     { id: 'completedOn', label: 'วันที่ทำเสร็จ', w: 140, on: false, sort: 'completedOn' },
     { id: 'modified',    label: 'แก้ไขล่าสุด',   w: 140, on: false, sort: 'modified' },
     { id: 'blockedBy',   label: 'ถูกบล็อกโดย',   w: 190, on: false },
-    { id: 'blocking',    label: 'กำลังบล็อก',    w: 190, on: false }
+    { id: 'blocking',    label: 'กำลังบล็อก',    w: 190, on: false },
+    { id: 'cstatus',     label: 'สถานะ',        w: 150, on: false, sort: 'cstatus' }
   ];
 
   /** ทุกคอลัมน์ตามลำดับที่ผู้ใช้จัด พร้อมสถานะเปิด/ปิด */
   function listColumns(projectId, v) {
     var p = project(projectId);
+    var hasTypes = !!(p && p.types && p.types.length);
     var all = LIST_COLS.map(function (c) {
+      /* 3b — คอลัมน์สถานะเปิดเองเมื่อโปรเจกต์มีชนิดงานกำหนดเอง */
+      var dflt = c.id === 'cstatus' ? hasTypes : c.on;
       return { id: c.id, label: c.label, w: c.w, sort: c.sort || null, builtin: true,
-        on: v.colShow && (c.id in v.colShow) ? !!v.colShow[c.id] : c.on, wkey: c.id };
+        on: v.colShow && (c.id in v.colShow) ? !!v.colShow[c.id] : dflt, wkey: c.id };
     });
     ((p && p.fields) || []).forEach(function (f) {
       var id = 'field:' + f.id;
@@ -3027,6 +3104,8 @@
       if ((t.priority || 'none') !== (key || 'none')) updateTask(taskId, { priority: key || 'none' }, { quiet: true });
       return;
     }
+    if (by === 'cstatus') { if (key) setStatusRaw(t, key); return; }       // 3b
+    if (by === 'type') { if (key) setTypeRaw(t, key); return; }
     if (by.indexOf('field:') === 0) {
       var fid = by.slice(6);
       var cur = fieldValue(taskId, fid);
@@ -3041,11 +3120,12 @@
     ids = (ids || []).filter(function (id) { return !!task(id); });
     sets = (sets || []).filter(function (s) { return s && s.by; });
     if (!ids.length || !sets.length) return false;
-    snapshot(ids.length > 1 ? 'ย้าย {n} งาน' : 'ย้ายงาน', { n: ids.length });
-    ids.forEach(function (id) {
-      sets.forEach(function (s) { applyGroupValue(id, projectId, s.by, s.key, ids.length === 1 ? beforeId : null); });
+    /* batch — ค่าที่ต้องผ่าน updateTask (ผู้รับผิดชอบ ความสำคัญ สถานะ) ไม่บันทึกกลางทาง */
+    batch(ids.length > 1 ? 'ย้าย {n} งาน' : 'ย้ายงาน', { n: ids.length }, function () {
+      ids.forEach(function (id) {
+        sets.forEach(function (s) { applyGroupValue(id, projectId, s.by, s.key, ids.length === 1 ? beforeId : null); });
+      });
     });
-    commit();
     return true;
   }
 
@@ -3461,6 +3541,7 @@
 
   /** สร้างงานหนึ่งชิ้นโดยไม่ snapshot และไม่ commit — ให้ผู้เรียกครอบเป็นก้อนเดียว */
   function createTaskRaw(attrs, projectId, sectionId) {
+    attrs = applyDefaultType(attrs || {}, projectId);
     var t = blankTask(attrs);
     if (t.followers.indexOf(db.currentUserId) < 0) t.followers.push(db.currentUserId);
     t.createdBy = db.currentUserId;
@@ -3561,6 +3642,13 @@
       createdBy: db.currentUserId
     });
     if (c.type === 'approval') c.approval = 'pending';
+    /* 3b — ชนิดงานกำหนดเองไปด้วย สถานะที่ "นับว่าเสร็จ" กลับไปสถานะแรกที่ยังไม่เสร็จ (สำเนายังไม่เสร็จ) */
+    var sty = src.ctype ? typeDef(src.ctype) : null;
+    if (sty) {
+      var ssd = statusDef(src.cstatus);
+      c.ctype = sty.id;
+      c.cstatus = ssd && !ssd.st.done ? ssd.st.id : ((firstStatus(sty, false) || {}).id || null);
+    }
     if (c.followers.indexOf(db.currentUserId) < 0) c.followers.push(db.currentUserId);
     if (c.assigneeId && c.followers.indexOf(c.assigneeId) < 0) c.followers.push(c.assigneeId);
     /* เก็บรายชื่องานย่อยก่อน push เพราะดัชนีจะถูกสร้างใหม่ทันทีที่ความยาวอาเรย์เปลี่ยน */
@@ -3584,6 +3672,8 @@
         id: uid('m'), taskId: toId, projectId: m.projectId, sectionId: m.sectionId,
         position: nextPosition(m.projectId, m.sectionId)
       });
+      /* 3b — สำเนา รอบถัดไปของงานทำซ้ำ งานติดตามผล และงานย่อยที่ย้ายออกมา = งานเข้าโปรเจกต์ (อัตโนมัติ "added") */
+      notifyNewTask(task(toId), m.projectId);
     });
   }
 
@@ -3614,10 +3704,24 @@
     if (!t) return null;
     if (!opts || !opts.quiet) snapshot('แก้ไขงาน');
 
+    /* 3b — เปลี่ยนเป็นชนิดในตัวแล้ว ชนิดกำหนดเองหลุดออก (ยกเว้นตอน setTypeRaw ตั้งชนิดพื้นฐานให้เอง) */
+    if ('type' in patch && t.ctype && !(opts && opts.keepCtype)) { patch.ctype = null; patch.cstatus = null; }
     if ('completed' in patch && patch.completed !== t.completed) {
       patch.completedAt = patch.completed ? today() : null;
       log(id, patch.completed ? 'ทำงานนี้เสร็จแล้ว' : 'เปิดงานนี้อีกครั้ง');
       autoFire('completed', id, { v: !!patch.completed });
+      /* 3b — ติ๊กเสร็จ/เปิดใหม่ของงานที่มีชนิดกำหนดเอง ย้ายไปสถานะแรกที่ "นับว่าเสร็จ" (หรือไม่นับ) ให้ตรงกัน */
+      if (t.ctype && !(opts && opts.keepStatus)) {
+        var cty = typeDef(t.ctype), cur = statusDef(t.cstatus);
+        if (cty && (!cur || !!cur.st.done !== !!patch.completed)) {
+          var nst = firstStatus(cty, patch.completed);
+          if (nst) {
+            patch.cstatus = nst.id;
+            log(id, 'ตั้งสถานะเป็น “{s}”', { s: nst.name });
+            autoFire('cstatus', id, { type: cty.id, v: nst.id, old: t.cstatus || null });
+          }
+        }
+      }
       if (patch.completed) {
         spawnRecurrence(t);
         // ปลดล็อกงานที่รออยู่ แล้วแจ้งผู้รับผิดชอบ
@@ -3696,7 +3800,7 @@
       var pn = PRIORITIES.filter(function (x) { return x.id === patch.priority; })[0];
       log(id, 'ตั้งความสำคัญเป็น {p}', { p: pn ? pn.label : patch.priority });
     }
-    if ('type' in patch && patch.type !== t.type) {
+    if ('type' in patch && (patch.type !== t.type || (t.ctype && patch.ctype === null)) && !(opts && opts.noTypeLog)) {
       var tn = TASK_TYPES.filter(function (x) { return x.id === patch.type; })[0];
       log(id, 'เปลี่ยนชนิดงานเป็น {p}', { p: tn ? tn.label : patch.type });
     }
@@ -4725,7 +4829,9 @@
       baseline: null,
       fields: [], status: null, automations: [], autoRuns: [], savedViews: [], colWidths: {},
       visibility: 'org', locked: false, views: null, statusLog: [], messages: [],
-      defaultTab: null, roles: {}, accessRequests: []
+      defaultTab: null, roles: {}, accessRequests: [],
+      forms: [], types: [], defaultType: '', taskTemplates: [],
+      statusLayout: null, statusRemind: false, remindKey: null, remindTask: null
     };
     db.projects.push(p);
     return p;
@@ -4773,6 +4879,7 @@
       notifyOnly(null, watchers, 'อัปเดตสถานะของ {p}', 'status', { p: p.name }, false,
         { projectId: id, route: 'p-overview' });
     }
+    closeRemindTask(p);       // 3b — รายงานแล้ว งานเตือนวันศุกร์ปิดเอง
     commit();
   }
 
@@ -4821,10 +4928,16 @@
     var idMap = {};
     Object.keys(sectionMap).forEach(function (k) { idMap[k] = sectionMap[k]; });
     Object.keys(fieldMap).forEach(function (k) { idMap[k] = fieldMap[k]; });
+    /* 3b — ชนิดงาน สถานะ ฟอร์ม และเทมเพลตงานได้รหัสใหม่ แล้วทุกที่ที่อ้างถึงชี้ไปของในสำเนา */
+    renewStructIds(p, idMap);
+    remapStruct(p, idMap);
     p.automations = (p.automations || []).map(function (a) { return remapAuto(a, idMap); });
     p.autoRuns = [];
     p.savedViews = [];
+    p.remindKey = null;
+    p.remindTask = null;
     db.projects.push(p);
+    dropIndex();
     audit("project.duplicate", p.name, "คัดลอกจากโปรเจกต์เดิม");
 
     if (withTasks) {
@@ -4835,6 +4948,12 @@
         copy.completedAt = null;
         copy.likes = [];
         copy.dependsOn = [];
+        if (copy.ctype && idMap[copy.ctype]) {
+          var cty = typeDef(idMap[copy.ctype]);
+          var cst = cty && cty.statuses.filter(function (s) { return s.id === idMap[x.task.cstatus]; })[0];
+          copy.ctype = cty ? cty.id : null;
+          copy.cstatus = cst && !cst.done ? cst.id : ((cty && firstStatus(cty, false)) || {}).id || null;
+        }
         db.tasks.push(copy);
         db.memberships.push({
           id: uid('m'), taskId: copy.id, projectId: p.id,
@@ -4961,6 +5080,7 @@
       if (!keep.assignee) { c.assigneeId = null; c.assignedAt = null; c.assignedBy = null; }
       db.memberships.push({ id: uid('m'), taskId: c.id, projectId: toPid, sectionId: ns.id, position: pos++ });
       log(c.id, 'คัดลอกมาจาก “{t}”', { t: t.name });
+      notifyNewTask(c, toPid);     // 3b — สำเนาในคอลัมน์ใหม่ = งานเข้าโปรเจกต์
     });
     audit('section.duplicate', dest.name, '{s} → {d}', { s: src.name, d: name });
     commit();
@@ -5169,41 +5289,6 @@
     if (p.defaultTab === viewId) p.defaultTab = null;
     commit();
     return true;
-  }
-
-  /* ---------- task templates ---------- */
-
-  function saveTaskTemplate(taskId, name) {
-    var t = task(taskId);
-    if (!t) return;
-    db.taskTemplates.push({
-      id: uid('tt'), name: name || t.name,
-      payload: {
-        name: t.name, notes: t.notes, type: t.type, priority: t.priority,
-        assigneeId: t.assigneeId, tags: t.tags.slice(),
-        subtaskNames: subtasks(taskId).map(function (s) { return s.name; })
-      }
-    });
-    commit();
-  }
-
-  function applyTaskTemplate(templateId, projectId, sectionId) {
-    var tpl = db.taskTemplates.filter(function (x) { return x.id === templateId; })[0];
-    if (!tpl) return null;
-    var payload = clone(tpl.payload);
-    var names = payload.subtaskNames || [];
-    delete payload.subtaskNames;
-    var t = createTask(payload, projectId, sectionId);
-    names.forEach(function (n) {
-      db.tasks.push(blankTask({ name: n, parentId: t.id, createdBy: db.currentUserId }));
-    });
-    commit();
-    return t;
-  }
-
-  function deleteTaskTemplate(id) {
-    db.taskTemplates = db.taskTemplates.filter(function (x) { return x.id !== id; });
-    commit();
   }
 
   /* ---------- reporting ---------- */
@@ -6583,6 +6668,8 @@
           }
         });
       });
+      /* 3b — งานหลักที่นำเข้า = งานเข้าโปรเจกต์ (อัตโนมัติ "added" รันตอน commit หลังใส่ค่าฟิลด์และงานหลักครบ) */
+      made.forEach(function (x) { if (!x.t.parentId) notifyNewTask(x.t, projectId); });
       audit('project.import', p.name, 'นำเข้า {n} งาน', { n: res.tasks });
     });
     return res;
@@ -7599,6 +7686,1350 @@
     });
   }
 
+  /* ======================================================================
+   * 3b — ชนิดงานกำหนดเอง ฟอร์ม เทมเพลตงาน เทมเพลตโปรเจกต์ และรายงานสถานะ
+   * ====================================================================== */
+
+  /* ---------- ชนิดงานกำหนดเอง ----------
+   * ของโปรเจกต์ (project.types) งานเก็บ ctype + cstatus ส่วน type ยังเป็นชนิดพื้นฐาน (task)
+   * จึงอยู่ร่วมกับหมุดหมาย/ขออนุมัติได้ และโค้ดเดิมที่อ่าน t.type ยังถูกต้อง
+   * สถานะที่ "นับว่าเสร็จ" ผูกกับการติ๊กเสร็จทั้งสองทาง (setStatusRaw / updateTask) */
+  var TYPE_MAX = 20, STATUS_MAX = 12;
+
+  function isBuiltinType(id) { return TASK_TYPES.some(function (x) { return x.id === id; }); }
+  function typeDef(id) { return id ? (index().types[id] || null) : null; }
+  /** { st, ty, p, k } ของสถานะ */
+  function statusDef(sid) { return sid ? (index().statuses[sid] || null) : null; }
+  function typeOf(t) { return t && t.ctype ? typeDef(t.ctype) : null; }
+  function projectTypes(pid) { var p = project(pid); return (p && p.types) || []; }
+  function visibleTypes() {
+    var out = [];
+    visibleProjects().forEach(function (p) { (p.types || []).forEach(function (ty) { out.push(ty); }); });
+    return out;
+  }
+
+  /** ชนิดที่เลือกได้ [{ id, label, icon, custom, ty }] — pid '*' = ทุกโปรเจกต์ที่เห็น  null = ในตัวอย่างเดียว */
+  function typeChoices(pid) {
+    var out = TASK_TYPES.map(function (x) { return { id: x.id, label: x.label, icon: x.icon, custom: false }; });
+    if (!pid) return out;
+    (pid === '*' ? visibleTypes() : projectTypes(pid)).forEach(function (ty) {
+      out.push({ id: ty.id, label: ty.name, icon: ty.icon || '◇', custom: true, ty: ty });
+    });
+    return out;
+  }
+
+  /** ชนิดที่ตั้งให้งานนี้ได้ — ของในตัว + ชนิดของทุกโปรเจกต์ที่งานต้นทางอยู่ */
+  function typeChoicesFor(taskId) {
+    var t = task(taskId);
+    if (!t) return [];
+    var out = typeChoices(null), seen = {};
+    (index().memByTask[rootOf(t).id] || []).forEach(function (m) {
+      projectTypes(m.projectId).forEach(function (ty) {
+        if (seen[ty.id]) return;
+        seen[ty.id] = true;
+        out.push({ id: ty.id, label: ty.name, icon: ty.icon || '◇', custom: true, ty: ty });
+      });
+    });
+    var own = typeOf(t);
+    if (own && !seen[own.id]) out.push({ id: own.id, label: own.name, icon: own.icon || '◇', custom: true, ty: own });
+    return out;
+  }
+
+  /** ชื่อชนิดของงาน (ชนิดในตัวคืนคีย์คำแปล ให้หน้าจอแปลเอง) */
+  function typeName(t) {
+    var ty = typeOf(t);
+    if (ty) return ty.name;
+    var b = TASK_TYPES.filter(function (x) { return x.id === (t.type || 'task'); })[0];
+    return b ? b.label : '';
+  }
+
+  /** ตัวเลือกสถานะสำหรับตัวกรอง [[id, ป้าย, สี]] */
+  function statusChoices(pid) {
+    var tys = pid === '*' ? visibleTypes() : projectTypes(pid), out = [];
+    tys.forEach(function (ty) {
+      ty.statuses.forEach(function (s) {
+        out.push([s.id, (tys.length > 1 ? ty.name + ' · ' : '') + s.name, s.color]);
+      });
+    });
+    return out;
+  }
+
+  function statusRank(t) {
+    var sd = statusDef(t.cstatus);
+    if (!sd) return null;
+    return (sd.p.types || []).indexOf(sd.ty) * 100 + sd.k;
+  }
+
+  /** สถานะแรกที่นับว่าเสร็จ (done) หรือยังไม่เสร็จ */
+  function firstStatus(ty, done) {
+    var list = (ty && ty.statuses) || [];
+    return list.filter(function (s) { return !!s.done === !!done; })[0] || (done ? null : list[0]) || null;
+  }
+
+  function normalizeType(ty) {
+    ty.name = String(ty.name || '').trim().slice(0, 60) || 'ชนิดงาน';
+    ty.icon = String(ty.icon || '').trim().slice(0, 4) || '◇';
+    ty.base = 'task';
+    var seen = {};
+    ty.statuses = (Array.isArray(ty.statuses) ? ty.statuses : []).filter(function (s) {
+      return s && String(s.name || '').trim();
+    }).slice(0, STATUS_MAX).map(function (s, i) {
+      var id = s.id && !seen[s.id] ? s.id : uid('cs');
+      seen[id] = true;
+      return { id: id, name: String(s.name).trim().slice(0, 40),
+        color: s.color || OPTION_COLORS[i % OPTION_COLORS.length], done: !!s.done };
+    });
+    if (!ty.statuses.length) {
+      ty.statuses = [
+        { id: uid('cs'), name: L('ยังไม่เริ่ม'), color: '#9ca0a8', done: false },
+        { id: uid('cs'), name: L('กำลังทำ'), color: '#14aaf5', done: false },
+        { id: uid('cs'), name: L('เสร็จแล้ว'), color: '#37c5ab', done: true }
+      ];
+    }
+    return ty;
+  }
+
+  function canEditTypes(pid) { return !!project(pid) && can('structure') && canInProject(pid, 'edit'); }
+
+  /** สร้าง/แก้ชนิดงาน (มี id = แก้) งานที่สถานะถูกลบไปย้ายไปสถานะแรกที่เหมาะ */
+  function saveTaskType(pid, input) {
+    var p = project(pid);
+    if (!p || !input || !canEditTypes(pid)) return null;
+    p.types = p.types || [];
+    var ty = normalizeType(clone(input));
+    var old = ty.id ? p.types.filter(function (x) { return x.id === ty.id; })[0] : null;
+    if (!old && p.types.length >= TYPE_MAX) return null;
+    snapshot(old ? 'แก้ชนิดงาน' : 'สร้างชนิดงาน');
+    if (old) {
+      var keep = {};
+      ty.statuses.forEach(function (s) { keep[s.id] = s; });
+      db.tasks.forEach(function (t) {
+        if (t.ctype !== ty.id || keep[t.cstatus]) return;
+        var ns = firstStatus(ty, t.completed);
+        t.cstatus = ns ? ns.id : null;
+      });
+      p.types[p.types.indexOf(old)] = ty;
+    } else {
+      ty.id = uid('ty');
+      p.types.push(ty);
+    }
+    audit('project.type', p.name, ty.name);
+    commit();
+    return ty;
+  }
+
+  function deleteTaskType(pid, id) {
+    var p = project(pid);
+    if (!p || !canEditTypes(pid) || !(p.types || []).some(function (x) { return x.id === id; })) return false;
+    snapshot('ลบชนิดงาน');
+    db.tasks.forEach(function (t) { if (t.ctype === id) { t.ctype = null; t.cstatus = null; } });
+    p.types = p.types.filter(function (x) { return x.id !== id; });
+    if (p.defaultType === id) p.defaultType = '';
+    commit();
+    return true;
+  }
+
+  function setDefaultType(pid, id) {
+    var p = project(pid);
+    if (!p || !canEditTypes(pid)) return false;
+    if (id && !isBuiltinType(id) && !projectTypes(pid).some(function (x) { return x.id === id; })) return false;
+    snapshot('ตั้งชนิดงานเริ่มต้น');
+    p.defaultType = id || '';
+    commit();
+    return true;
+  }
+
+  /** ชนิดเริ่มต้นของโปรเจกต์สำหรับงานใหม่ที่ไม่ได้ระบุชนิด ("+ เพิ่ม…" ทุกทาง ฟอร์ม เทมเพลต) */
+  function applyDefaultType(attrs, pid) {
+    if (!pid || attrs.parentId || attrs.type !== undefined || attrs.ctype) return attrs;
+    var p = project(pid), dt = p && p.defaultType;
+    if (!dt) return attrs;
+    var a = {};
+    Object.keys(attrs).forEach(function (k) { a[k] = attrs[k]; });
+    if (isBuiltinType(dt)) { a.type = dt; return a; }
+    var ty = (p.types || []).filter(function (x) { return x.id === dt; })[0];
+    if (!ty) return attrs;
+    a.type = ty.base || 'task';
+    a.ctype = ty.id;
+    a.cstatus = (firstStatus(ty, !!a.completed) || {}).id || null;
+    return a;
+  }
+
+  /** ตั้งชนิดงานโดยไม่ snapshot/commit (ใช้ใน batch) */
+  function setTypeRaw(t, typeId) {
+    if (!t || !typeId) return false;
+    if (isBuiltinType(typeId)) {
+      if (!t.ctype && t.type === typeId) return false;
+      if (t.type !== typeId) { updateTask(t.id, { type: typeId }, { quiet: true }); return true; }
+      t.ctype = null;
+      t.cstatus = null;
+      var bl = TASK_TYPES.filter(function (x) { return x.id === typeId; })[0];
+      log(t.id, 'เปลี่ยนชนิดงานเป็น {p}', { p: bl ? bl.label : typeId });
+      return true;
+    }
+    var ty = typeDef(typeId);
+    if (!ty || t.ctype === typeId) return false;
+    if (t.type !== ty.base) updateTask(t.id, { type: ty.base }, { quiet: true, keepCtype: true, noTypeLog: true });
+    t.ctype = ty.id;
+    var ns = firstStatus(ty, t.completed);
+    t.cstatus = ns ? ns.id : null;
+    log(t.id, 'เปลี่ยนชนิดงานเป็น {p}', { p: ty.name });
+    return true;
+  }
+
+  function setTaskType(taskId, typeId) {
+    var t = task(taskId);
+    if (!t) return false;
+    var ok = false;
+    batch('เปลี่ยนชนิดงาน', null, function () { ok = setTypeRaw(t, typeId); });
+    return ok;
+  }
+
+  /** ตั้งสถานะโดยไม่ snapshot/commit — ทางเดียวที่สถานะเปลี่ยน (แผงงาน รายการ ลากลงคอลัมน์ อัตโนมัติ)
+   *  สถานะของชนิดอื่น = เปลี่ยนชนิดให้ด้วย  สถานะ "นับว่าเสร็จ" ติ๊กเสร็จให้ ไม่นับ = เปิดใหม่ */
+  function setStatusRaw(t, sid) {
+    var sd = statusDef(sid);
+    if (!t || !sd) return false;
+    if (t.ctype !== sd.ty.id) setTypeRaw(t, sd.ty.id);
+    if (t.cstatus === sid) return false;
+    var old = t.cstatus;
+    t.cstatus = sid;
+    log(t.id, 'ตั้งสถานะเป็น “{s}”', { s: sd.st.name });
+    autoFire('cstatus', t.id, { type: sd.ty.id, v: sid, old: old || null });
+    if (!!sd.st.done !== !!t.completed) updateTask(t.id, { completed: !!sd.st.done }, { quiet: true, keepStatus: true });
+    return true;
+  }
+
+  function setTaskStatus(taskId, sid) {
+    var t = task(taskId);
+    if (!t || !statusDef(sid)) return false;
+    var ok = false;
+    batch('เปลี่ยนสถานะ', null, function () { ok = setStatusRaw(t, sid); });
+    return ok;
+  }
+
+  /* ---------- รหัสใหม่ของโครงโปรเจกต์ (คัดลอกโปรเจกต์ / ใช้เทมเพลต) ---------- */
+
+  /** แทนรหัสเก่าด้วยรหัสใหม่ทั้งก้อน (แบบเดียวกับ remapAuto) */
+  function remapJson(obj, idMap) {
+    var s = JSON.stringify(obj);
+    Object.keys(idMap).forEach(function (k) {
+      if (!k || k === idMap[k]) return;
+      s = s.replace(new RegExp(escRe(k) + '(?![A-Za-z0-9_])', 'g'), idMap[k]);
+    });
+    return JSON.parse(s);
+  }
+
+  /** ชนิดงาน สถานะ ฟอร์ม และเทมเพลตงานได้รหัสใหม่ — เก็บคู่เก่า→ใหม่ไว้ใน idMap */
+  function renewStructIds(p, idMap) {
+    (p.types || []).forEach(function (ty) {
+      var o = ty.id; ty.id = uid('ty'); idMap[o] = ty.id;
+      (ty.statuses || []).forEach(function (s) { var os = s.id; s.id = uid('cs'); idMap[os] = s.id; });
+    });
+    (p.forms || []).forEach(function (f) {
+      var o = f.id; f.id = uid('fm'); idMap[o] = f.id;
+      f.n = 0; f.last = null; f.by = db.currentUserId; f.at = new Date().toISOString();
+    });
+    (p.taskTemplates || []).forEach(function (x) { var o = x.id; x.id = uid('tt'); idMap[o] = x.id; });
+  }
+
+  /** ฟอร์ม เทมเพลตงาน และชนิดเริ่มต้นชี้ไปคอลัมน์/ฟิลด์/ชนิดชุดใหม่ */
+  function remapStruct(p, idMap) {
+    p.forms = remapJson(p.forms || [], idMap);
+    p.taskTemplates = remapJson(p.taskTemplates || [], idMap);
+    if (p.defaultType && idMap[p.defaultType]) p.defaultType = idMap[p.defaultType];
+  }
+
+  /* ---------- ฟอร์ม ----------
+   * คำถามเรียงเป็นแถวเดียว การแตกแขนงคือ cond = { q: คำถามตัวเลือกที่อยู่ก่อนหน้า, v: [ตัวเลือก] }
+   * คำถามโผล่เมื่อคำถามต้นทางโผล่และคำตอบตรง ซ้อนได้ไม่เกิน 5 ชั้น
+   * ส่งได้ทุกคนที่ล็อกอิน (หรือโหมดเครื่องเดียว) ฟอร์มสาธารณะสำหรับคนนอกรอเฟส 5 (ต้องมีเซิร์ฟเวอร์) */
+  var FORM_MAX = 20, FORM_ITEMS_MAX = 60, FORM_DEPTH = 5, FORM_FILES_MAX = 5, FORM_FILE_BYTES = 2 * 1024 * 1024;
+  var FORM_KINDS = [
+    { id: 'heading', label: 'หัวข้อ / คำอธิบาย', icon: 'text' },
+    { id: 'text',    label: 'ข้อความสั้น',      icon: 'text' },
+    { id: 'long',    label: 'ข้อความยาว',      icon: 'note' },
+    { id: 'select',  label: 'ตัวเลือกเดียว',    icon: 'chevronDown', opts: true },
+    { id: 'multi',   label: 'หลายตัวเลือก',    icon: 'subtask', opts: true },
+    { id: 'number',  label: 'ตัวเลข',          icon: 'hash' },
+    { id: 'date',    label: 'วันที่',           icon: 'calendar' },
+    { id: 'range',   label: 'ช่วงวันที่',        icon: 'calendar' },
+    { id: 'person',  label: 'บุคคล',           icon: 'users' },
+    { id: 'file',    label: 'ไฟล์แนบ',         icon: 'paperclip' }
+  ];
+  function formKind(id) { return FORM_KINDS.filter(function (x) { return x.id === id; })[0] || null; }
+
+  function normalizeForm(f) {
+    f.name = String(f.name || '').trim().slice(0, 120) || 'ฟอร์ม';
+    f.desc = String(f.desc || '').slice(0, 4000);
+    f.on = f.on !== false;
+    var ids = {};
+    f.items = (Array.isArray(f.items) ? f.items : []).filter(function (it) {
+      if (!it || !formKind(it.kind)) return false;
+      if (!it.id || ids[it.id]) it.id = uid('q');
+      ids[it.id] = true;
+      return true;
+    }).slice(0, FORM_ITEMS_MAX);
+    f.items.forEach(function (it) {
+      it.label = String(it.label || '').slice(0, 300);
+      it.help = String(it.help || '').slice(0, 1000);
+      it.req = !!it.req && it.kind !== 'heading';
+      var seen = {};
+      it.opts = formKind(it.kind).opts ? (Array.isArray(it.opts) ? it.opts : []).map(function (s) {
+        return String(s).trim().slice(0, 80);
+      }).filter(function (s) { if (!s || seen[s]) return false; seen[s] = true; return true; }).slice(0, 50) : [];
+      if (typeof it.map !== 'string' || it.kind === 'heading' || it.kind === 'file') it.map = '';
+      it.cond = it.cond && it.cond.q ? { q: String(it.cond.q), v: [].concat(it.cond.v || []).map(String) } : null;
+    });
+    var pos = {};
+    f.items.forEach(function (it, i) { pos[it.id] = i; });
+    f.items.forEach(function (it, i) {
+      if (!it.cond) return;
+      var src = f.items[pos[it.cond.q]];
+      if (!src || pos[it.cond.q] >= i || !formKind(src.kind).opts) it.cond = null;
+      else it.cond.v = it.cond.v.filter(function (v) { return src.opts.indexOf(v) >= 0; });
+    });
+    f.items.forEach(function (it) { if (it.cond && formDepth(f, it) > FORM_DEPTH) it.cond = null; });
+    ['sec', 'titleQ', 'assignee', 'confirm'].forEach(function (k) { f[k] = typeof f[k] === 'string' ? f[k] : ''; });
+    f.confirm = f.confirm.slice(0, 1000);
+    if (f.titleQ && !f.items.some(function (it) { return it.id === f.titleQ && (it.kind === 'text' || it.kind === 'long'); })) f.titleQ = '';
+    f.copy = f.copy !== false;
+    f.follow = f.follow !== false;
+    f.again = f.again !== false;
+    f.n = Math.max(0, parseInt(f.n, 10) || 0);
+    if (!('last' in f)) f.last = null;
+    if (!('by' in f)) f.by = null;
+    if (!('at' in f)) f.at = null;
+    return f;
+  }
+
+  /** ความลึกของการแตกแขนง (คำถามที่ไม่มีเงื่อนไข = 0) */
+  function formDepth(f, it) {
+    var d = 0, cur = it, guard = 0;
+    while (cur && cur.cond && guard++ < 50) {
+      d++;
+      var q = cur.cond.q;
+      cur = f.items.filter(function (x) { return x.id === q; })[0];
+    }
+    return d;
+  }
+
+  /** คำถามที่โผล่ตามคำตอบตอนนี้ { qid: true } */
+  function formVisible(f, ans) {
+    var vis = {};
+    (f.items || []).forEach(function (it) {
+      if (!it.cond) { vis[it.id] = true; return; }
+      var a = ans ? ans[it.cond.q] : null;
+      var pick = a === null || a === undefined || a === '' ? [] : [].concat(a);
+      vis[it.id] = !!vis[it.cond.q] && (it.cond.v.length
+        ? it.cond.v.some(function (v) { return pick.indexOf(v) >= 0; }) : pick.length > 0);
+    });
+    return vis;
+  }
+
+  function formById(id) {
+    for (var i = 0; i < db.projects.length; i++) {
+      var p = db.projects[i];
+      var f = (p.forms || []).filter(function (x) { return x.id === id; })[0];
+      if (f) return { p: p, f: f };
+    }
+    return null;
+  }
+
+  function canEditForms(pid) { return !!project(pid) && can('structure') && canInProject(pid, 'edit'); }
+
+  /** ช่องในงานที่คำถามชนิดนี้ผูกได้ [[ค่า, ป้าย]] — ป้ายเป็นคีย์คำแปล (ชื่อฟิลด์ผ่านไปตามเดิม) */
+  function formTargets(pid, kind) {
+    var p = project(pid), out = [['', 'ไม่ผูกกับช่องไหน']];
+    var fl = ((p && p.fields) || []);
+    function add(types) {
+      fl.forEach(function (f) { if (types.indexOf(f.type) >= 0) out.push(['field:' + f.id, f.name]); });
+    }
+    if (kind === 'text') { out.push(['name', 'ชื่องาน']); add(['text']); }
+    else if (kind === 'long') { out.push(['notes', 'รายละเอียดงาน']); add(['text']); }
+    else if (kind === 'select') add(['select']);
+    else if (kind === 'multi') { out.push(['tags', 'แท็ก']); add(['multi']); }
+    else if (kind === 'number') add(['number']);
+    else if (kind === 'date') { out.push(['due', 'กำหนดส่ง'], ['start', 'วันเริ่ม']); add(['date']); }
+    else if (kind === 'range') out.push(['dates', 'วันเริ่ม – กำหนดส่ง']);
+    else if (kind === 'person') { out.push(['assignee', 'ผู้รับผิดชอบ'], ['followers', 'ผู้ติดตาม']); add(['person']); }
+    else return [['', 'ไม่ผูกกับช่องไหน']];
+    return out;
+  }
+
+  function saveForm(pid, input) {
+    var p = project(pid);
+    if (!p || !input || !canEditForms(pid)) return null;
+    p.forms = p.forms || [];
+    var f = normalizeForm(clone(input));
+    var old = f.id ? p.forms.filter(function (x) { return x.id === f.id; })[0] : null;
+    if (!old && p.forms.length >= FORM_MAX) return null;
+    snapshot(old ? 'แก้ฟอร์ม' : 'สร้างฟอร์ม');
+    if (old) {
+      f.n = old.n; f.last = old.last; f.by = old.by; f.at = old.at;
+      p.forms[p.forms.indexOf(old)] = f;
+    } else {
+      f.id = uid('fm'); f.n = 0; f.last = null; f.by = db.currentUserId; f.at = new Date().toISOString();
+      p.forms.push(f);
+    }
+    audit('project.form', p.name, f.name);
+    commit();
+    return f;
+  }
+
+  function setFormOn(pid, id, on) {
+    var x = formById(id);
+    if (!x || x.p.id !== pid || !canEditForms(pid)) return false;
+    snapshot(on ? 'เปิดรับฟอร์ม' : 'ปิดรับฟอร์ม');
+    x.f.on = !!on;
+    commit();
+    return true;
+  }
+
+  function duplicateForm(pid, id) {
+    var x = formById(id);
+    if (!x || x.p.id !== pid || !canEditForms(pid) || x.p.forms.length >= FORM_MAX) return null;
+    snapshot('ทำสำเนาฟอร์ม');
+    var c = clone(x.f);
+    c.id = uid('fm'); c.name = (c.name + ' ' + L('(สำเนา)')).slice(0, 120); c.on = false;
+    c.n = 0; c.last = null; c.by = db.currentUserId; c.at = new Date().toISOString();
+    x.p.forms.splice(x.p.forms.indexOf(x.f) + 1, 0, c);
+    commit();
+    return c;
+  }
+
+  function deleteForm(pid, id) {
+    var x = formById(id);
+    if (!x || x.p.id !== pid || !canEditForms(pid)) return false;
+    snapshot('ลบฟอร์ม');
+    x.p.forms = x.p.forms.filter(function (f) { return f.id !== id; });
+    commit();
+    return true;
+  }
+
+  /** คำตอบที่ใช้ได้ของคำถามหนึ่ง หรือ null (= ไม่ได้ตอบ) */
+  function cleanAnswer(it, v) {
+    if (v === undefined || v === null) return null;
+    switch (it.kind) {
+      case 'text': case 'long': {
+        var s = String(v).replace(/\r\n/g, '\n').trim().slice(0, it.kind === 'text' ? 500 : 20000);
+        return s || null;
+      }
+      case 'select': return it.opts.indexOf(String(v)) >= 0 ? String(v) : null;
+      case 'multi': {
+        var arr = [].concat(v).map(String).filter(function (x, i, a) { return it.opts.indexOf(x) >= 0 && a.indexOf(x) === i; });
+        return arr.length ? arr : null;
+      }
+      case 'number': {
+        if (v === '' || isNaN(Number(v))) return null;
+        return Number(v);
+      }
+      case 'date': return /^\d{4}-\d\d-\d\d$/.test(String(v)) ? String(v) : null;
+      case 'range': {
+        var a = /^\d{4}-\d\d-\d\d$/.test(String((v || [])[0] || '')) ? v[0] : '';
+        var b = /^\d{4}-\d\d-\d\d$/.test(String((v || [])[1] || '')) ? v[1] : '';
+        if (!a && !b) return null;
+        if (a && b && a > b) { var tmp = a; a = b; b = tmp; }
+        return [a, b];
+      }
+      case 'person': { var u = user(v); return u && u.active !== false ? u.id : null; }
+      case 'file': {
+        var files = [].concat(v).filter(function (x) {
+          return x && x.name && typeof x.url === 'string' && /^(data:|https?:)/.test(x.url) &&
+            (!x.size || x.size <= FORM_FILE_BYTES);
+        }).slice(0, FORM_FILES_MAX);
+        return files.length ? files : null;
+      }
+    }
+    return null;
+  }
+
+  function answerText(it, v) {
+    if (it.kind === 'multi') return v.join(', ');
+    if (it.kind === 'range') return (v[0] || '…') + ' – ' + (v[1] || '…');
+    if (it.kind === 'person') { var u = user(v); return u ? u.name : ''; }
+    if (it.kind === 'file') return v.map(function (x) { return x.name; }).join(', ');
+    return String(v);
+  }
+
+  /** ค่าฟิลด์จากคำตอบ (ตัวเลือกต้องยังอยู่ในฟิลด์) หรือ null */
+  function answerFieldValue(fd, v) {
+    if (fd.type === 'select') return (fd.options || []).some(function (o) { return o.name === v; }) ? v : null;
+    if (fd.type === 'multi') {
+      var arr = [].concat(v).filter(function (x) { return (fd.options || []).some(function (o) { return o.name === x; }); });
+      return arr.length ? arr : null;
+    }
+    if (fd.type === 'number') return typeof v === 'number' ? v : (isNaN(Number(v)) ? null : Number(v));
+    if (fd.type === 'person') return user(v) ? v : null;
+    if (fd.type === 'date') return /^\d{4}-\d\d-\d\d$/.test(String(v)) ? v : null;
+    if (fd.type === 'text') return String(v).slice(0, 2000);
+    return null;
+  }
+
+  /**
+   * ส่งฟอร์ม — สร้างงานหนึ่งชิ้นในคอลัมน์ที่ตั้งไว้ ย้อนกลับได้ครั้งเดียว
+   * @param ans { qid: คำตอบ }  text/long สตริง  select สตริง  multi อาร์เรย์  number  date 'YYYY-MM-DD'
+   *            range [a, b]  person userId  file [{ name, url (data URI), size, mime }]
+   * @returns { task } หรือ { err, params, q }
+   */
+  function submitForm(formId, ans) {
+    var x = formById(formId);
+    if (!x || !isActive()) return { err: 'ไม่พบฟอร์มนี้' };
+    var p = x.p, f = x.f;
+    if (!f.on || p.archived) return { err: 'ฟอร์มนี้ปิดรับคำตอบแล้ว' };
+    ans = ans || {};
+    var vis = formVisible(f, ans), clean = {};
+    for (var i = 0; i < f.items.length; i++) {
+      var it = f.items[i];
+      if (it.kind === 'heading' || !vis[it.id]) continue;
+      var v = cleanAnswer(it, ans[it.id]);
+      if (v === null) {
+        if (it.req) return { err: 'กรอก “{q}” ก่อนส่ง', params: { q: it.label || '?' }, q: it.id };
+        continue;
+      }
+      clean[it.id] = v;
+    }
+    var who = me();
+    var attrs = { name: '', notes: '' }, fieldSets = [], tags = [], followers = [], files = [], lines = [];
+    f.items.forEach(function (it) {
+      if (!(it.id in clean)) return;
+      var v = clean[it.id], m = it.map || '';
+      if (m === 'name') { if (!attrs.name) attrs.name = String(v); }
+      else if (m === 'notes') attrs.notes = (attrs.notes ? attrs.notes + '\n\n' : '') + String(v);
+      else if (m === 'due') attrs.dueOn = v;
+      else if (m === 'start') attrs.startOn = v;
+      else if (m === 'dates') { attrs.startOn = v[0] || null; attrs.dueOn = v[1] || null; }
+      else if (m === 'assignee') attrs.assigneeId = v;
+      else if (m === 'followers') followers.push(v);
+      else if (m === 'tags') tags = tags.concat(v);
+      else if (m.indexOf('field:') === 0) fieldSets.push([m.slice(6), v]);
+      if (it.kind === 'file') files = files.concat(v);
+      if (f.copy && m !== 'name' && m !== 'notes') {
+        lines.push('**' + String(it.label || '?').replace(/[*_`~\[\]]/g, '') + '**\n' + answerText(it, v));
+      }
+    });
+    if (f.titleQ && typeof clean[f.titleQ] === 'string') attrs.name = clean[f.titleQ];
+    attrs.name = String(attrs.name || '').replace(/\s+/g, ' ').trim().slice(0, 300) ||
+      (f.name + ' — ' + (who ? who.name : ''));
+    if (lines.length) attrs.notes = (attrs.notes ? attrs.notes + '\n\n' : '') + lines.join('\n\n');
+    if (attrs.startOn && attrs.dueOn && attrs.startOn > attrs.dueOn) attrs.startOn = attrs.dueOn;
+    if (!attrs.assigneeId && f.assignee) {
+      var du = user(f.assignee);
+      if (du && du.active !== false) attrs.assigneeId = du.id;
+    }
+    var sec = section(p.id, f.sec) ? f.sec : p.sections[0].id;
+    var out = null;
+    batch('ส่งฟอร์ม “{f}”', { f: f.name }, function () {
+      var t = createTaskRaw(attrs, p.id, sec);
+      function follow(u) { if (u && user(u) && t.followers.indexOf(u) < 0) t.followers.push(u); }
+      follow(t.assigneeId);
+      followers.forEach(follow);
+      if (!f.follow && who && t.assigneeId !== who.id && followers.indexOf(who.id) < 0) {
+        t.followers = t.followers.filter(function (u) { return u !== who.id; });
+      }
+      tags.forEach(function (tg) {
+        var s = String(tg).trim().slice(0, 40);
+        if (s && t.tags.indexOf(s) < 0) t.tags.push(s);
+      });
+      fieldSets.forEach(function (fs) {
+        var fd = (p.fields || []).filter(function (y) { return y.id === fs[0]; })[0];
+        if (!fd || fd.type === 'id') return;
+        var fv = answerFieldValue(fd, fs[1]);
+        if (fv !== null) setFieldRaw(t.id, fd.id, fv);
+      });
+      files.forEach(function (a) { addAttachment(t.id, String(a.name).slice(0, 200), a.url, { size: a.size, mime: a.mime }); });
+      log(t.id, 'ส่งผ่านฟอร์ม “{f}”', { f: f.name });
+      if (t.assigneeId) notifyOnly(t.id, [t.assigneeId], 'มอบหมายงาน “{t}” ให้คุณ', 'assigned', { t: t.name });
+      f.n = (f.n || 0) + 1;
+      f.last = new Date().toISOString();
+      autoFire('form', t.id, { projectId: p.id, form: f.id });
+      out = t;
+    });
+    return { task: out };
+  }
+
+  /** ฟอร์มที่เปิดรับอยู่ในโปรเจกต์ที่เห็นได้ ใหม่สุดก่อน (วิดเจ็ตหน้าแรก) [{ p, f }] */
+  function formsForHome() {
+    var out = [];
+    visibleProjects().forEach(function (p) {
+      (p.forms || []).forEach(function (f) { if (f.on) out.push({ p: p, f: f }); });
+    });
+    return out.sort(function (a, b) {
+      var x = a.f.last || a.f.at || '', y = b.f.last || b.f.at || '';
+      return x < y ? 1 : x > y ? -1 : 0;
+    });
+  }
+
+  /* ---------- เทมเพลตงาน (รายโปรเจกต์ + ของทั้งองค์กร) ----------
+   * { id, name, by, at, t: { name, notes, type, ctype, prio, assignee: { mode: none|creator|user, user },
+   *   followers, tags, fields: { fieldId: ค่า }, due / start: { n, unit: days|workdays } นับจากวันที่สร้างงาน,
+   *   subs: [{ k, name, notes, assignee, due, deps: [k] }] } } */
+  function relSpec(x) {
+    if (!x || x.n === null || x.n === undefined || x.n === '') return null;
+    return { n: Math.max(0, Math.min(3650, parseInt(x.n, 10) || 0)), unit: x.unit === 'workdays' ? 'workdays' : 'days' };
+  }
+
+  function normTT(t) {
+    t = t || {};
+    var ks = {};
+    var subs = (Array.isArray(t.subs) ? t.subs : []).filter(function (s) { return s && String(s.name || '').trim(); })
+      .slice(0, 50).map(function (s, i) {
+        var k = s.k && !ks[s.k] ? String(s.k) : 'k' + i + '_' + Math.random().toString(36).slice(2, 5);
+        ks[k] = true;
+        return { k: k, name: String(s.name).trim().slice(0, 300), notes: String(s.notes || '').slice(0, 5000),
+          assignee: s.assignee || null, due: relSpec(s.due), deps: [] , _deps: s.deps };
+      });
+    subs.forEach(function (s) {
+      s.deps = [].concat(s._deps || []).filter(function (k) { return ks[k] && k !== s.k; });
+      delete s._deps;
+    });
+    var am = t.assignee && t.assignee.mode;
+    return {
+      name: String(t.name || '').slice(0, 300), notes: String(t.notes || '').slice(0, 20000),
+      type: isBuiltinType(t.type) ? t.type : 'task', ctype: t.ctype || null,
+      prio: PRIORITIES.some(function (x) { return x.id === t.prio; }) ? t.prio : 'none',
+      assignee: { mode: am === 'creator' || am === 'user' ? am : 'none', user: am === 'user' ? (t.assignee.user || null) : null },
+      followers: Array.isArray(t.followers) ? t.followers.slice(0, 50) : [],
+      tags: Array.isArray(t.tags) ? t.tags.map(String).slice(0, 30) : [],
+      fields: isObj(t.fields) ? t.fields : {},
+      due: relSpec(t.due), start: relSpec(t.start), subs: subs
+    };
+  }
+
+  /** แบบเดิม { payload: { name, notes, type, priority, assigneeId, tags, subtaskNames } } → แบบใหม่ */
+  function upgradeTaskTemplate(x) {
+    if (!x || !x.id) return null;
+    if (x.t) { x.t = normTT(x.t); x.name = String(x.name || x.t.name || 'เทมเพลต'); return x; }
+    var pl = x.payload || {};
+    return { id: x.id, name: String(x.name || pl.name || 'เทมเพลต'), by: x.by || null, at: x.at || null,
+      t: normTT({ name: pl.name, notes: pl.notes, type: pl.type, prio: pl.priority,
+        assignee: pl.assigneeId ? { mode: 'user', user: pl.assigneeId } : { mode: 'none' },
+        tags: pl.tags, subs: (pl.subtaskNames || []).map(function (n, i) { return { k: 'k' + i, name: n }; }) }) };
+  }
+
+  /** เทมเพลตที่ใช้ในโปรเจกต์นี้ได้ [{ tpl, scope: pid | '*' }] — ของโปรเจกต์ก่อน */
+  function taskTemplatesFor(pid) {
+    var p = pid ? project(pid) : null, out = [];
+    ((p && p.taskTemplates) || []).forEach(function (x) { out.push({ tpl: x, scope: p.id }); });
+    (db.taskTemplates || []).forEach(function (x) { out.push({ tpl: x, scope: '*' }); });
+    return out;
+  }
+
+  function findTaskTemplate(id) {
+    var g = (db.taskTemplates || []).filter(function (x) { return x.id === id; })[0];
+    if (g) return { tpl: g, list: db.taskTemplates, scope: '*' };
+    for (var i = 0; i < db.projects.length; i++) {
+      var p = db.projects[i];
+      var h = (p.taskTemplates || []).filter(function (x) { return x.id === id; })[0];
+      if (h) return { tpl: h, list: p.taskTemplates, scope: p.id };
+    }
+    return null;
+  }
+
+  /** ถอดแบบงานเป็นเทมเพลต วันนับจากวันนี้ ฟิลด์เฉพาะของโปรเจกต์ที่งานอยู่ */
+  function captureTaskTemplate(taskId) {
+    var t = task(taskId);
+    if (!t) return null;
+    var td = today();
+    var rel = function (d) { return d ? { n: Math.max(0, daysBetween(td, d)), unit: 'days' } : null; };
+    var fids = {};
+    projectsOfTask(rootOf(t).id).forEach(function (x) {
+      (x.project.fields || []).forEach(function (f) { if (f.type !== 'id') fids[f.id] = true; });
+    });
+    var fields = {};
+    Object.keys(index().fvByTask[t.id] || {}).forEach(function (fid) {
+      if (fids[fid]) fields[fid] = clone(index().fvByTask[t.id][fid].value);
+    });
+    var subs = subtasks(t.id), kOf = {};
+    subs.forEach(function (s, i) { kOf[s.id] = 'k' + i; });
+    return normTT({
+      name: t.name, notes: t.notes, type: t.type, ctype: t.ctype, prio: t.priority,
+      assignee: t.assigneeId ? { mode: 'user', user: t.assigneeId } : { mode: 'none' },
+      followers: (t.followers || []).filter(function (u) { return u !== db.currentUserId && u !== t.assigneeId; }),
+      tags: (t.tags || []).slice(), fields: fields,
+      due: rel(t.dueOn), start: t.type === 'milestone' ? null : rel(t.startOn),
+      subs: subs.map(function (s) {
+        return { k: kOf[s.id], name: s.name, notes: s.notes, assignee: s.assigneeId, due: rel(s.dueOn),
+          deps: (s.dependsOn || []).map(function (d) { return kOf[d.id]; }).filter(Boolean) };
+      })
+    });
+  }
+
+  /** บันทึกงานเป็นเทมเพลต  scope = รหัสโปรเจกต์ (เฉพาะโปรเจกต์นั้น) หรือ '*' (ทุกโปรเจกต์) */
+  function saveTaskTemplate(taskId, name, scope) {
+    var t = task(taskId);
+    var tt = captureTaskTemplate(taskId);
+    if (!t || !tt) return null;
+    var p = scope && scope !== '*' ? project(scope) : null;
+    var list = p ? (p.taskTemplates = p.taskTemplates || []) : (db.taskTemplates = db.taskTemplates || []);
+    snapshot('บันทึกเทมเพลตงาน');
+    var x = { id: uid('tt'), name: String(name || t.name).trim().slice(0, 120) || t.name, by: db.currentUserId,
+              at: new Date().toISOString(), t: tt };
+    list.push(x);
+    commit();
+    return x;
+  }
+
+  function updateTaskTemplate(id, input) {
+    var x = findTaskTemplate(id);
+    if (!x || !input) return null;
+    snapshot('แก้เทมเพลตงาน');
+    x.tpl.name = String(input.name || x.tpl.name).trim().slice(0, 120) || x.tpl.name;
+    x.tpl.t = normTT(input.t || x.tpl.t);
+    commit();
+    return x.tpl;
+  }
+
+  function deleteTaskTemplate(id) {
+    var x = findTaskTemplate(id);
+    if (!x) return false;
+    snapshot('ลบเทมเพลตงาน');
+    x.list.splice(x.list.indexOf(x.tpl), 1);
+    commit();
+    return true;
+  }
+
+  /** สร้างงานจากเทมเพลตในคอลัมน์ที่ระบุ — วันนับจากวันนี้ (วันทำงานตามโปรเจกต์) ย้อนกลับได้ครั้งเดียว */
+  function applyTaskTemplate(id, pid, secId) {
+    var x = findTaskTemplate(id), p = project(pid);
+    if (!x || !p) return null;
+    var tt = normTT(x.tpl.t), td = today();
+    var day = function (r) { return r ? shiftDate(td, r.n, r.unit, p.workDays) : null; };
+    var out = null;
+    batch('สร้างงานจากเทมเพลต “{t}”', { t: x.tpl.name }, function () {
+      var who = tt.assignee.mode === 'creator' ? db.currentUserId
+        : tt.assignee.mode === 'user' && user(tt.assignee.user) && user(tt.assignee.user).active !== false ? tt.assignee.user : null;
+      var attrs = { name: tt.name || x.tpl.name, notes: tt.notes, priority: tt.prio, tags: tt.tags.slice(),
+        assigneeId: who, dueOn: day(tt.due), startOn: tt.type === 'milestone' ? null : day(tt.start) };
+      if (attrs.startOn && attrs.dueOn && attrs.startOn > attrs.dueOn) attrs.startOn = attrs.dueOn;
+      var ty = tt.ctype ? typeDef(tt.ctype) : null;
+      if (ty) { attrs.type = ty.base; attrs.ctype = ty.id; attrs.cstatus = (firstStatus(ty, false) || {}).id || null; }
+      else attrs.type = tt.type;
+      var t = createTaskRaw(attrs, pid, section(pid, secId) ? secId : p.sections[0].id);
+      [who].concat(tt.followers).forEach(function (u) { if (u && user(u) && t.followers.indexOf(u) < 0) t.followers.push(u); });
+      Object.keys(tt.fields).forEach(function (fid) {
+        var fd = (p.fields || []).filter(function (f) { return f.id === fid; })[0];
+        if (fd && fd.type !== 'id') setFieldRaw(t.id, fid, clone(tt.fields[fid]));
+      });
+      var kMap = {};
+      tt.subs.forEach(function (s) {
+        var sa = s.assignee && user(s.assignee) ? s.assignee : null;
+        var c = createTaskRaw({ name: s.name, notes: s.notes, assigneeId: sa, dueOn: day(s.due), parentId: t.id }, null, null);
+        if (sa && c.followers.indexOf(sa) < 0) c.followers.push(sa);
+        kMap[s.k] = c;
+      });
+      tt.subs.forEach(function (s) {
+        s.deps.forEach(function (k) {
+          var a = kMap[s.k], b = kMap[k];
+          if (a && b && a !== b && !dependsOnDeep(b.id, a.id)) a.dependsOn.push({ id: b.id, type: 'FS' });
+        });
+      });
+      log(t.id, 'สร้างจากเทมเพลต “{t}”', { t: x.tpl.name });
+      if (who) notifyOnly(t.id, [who], 'มอบหมายงาน “{t}” ให้คุณ', 'assigned', { t: t.name });
+      out = t;
+    });
+    return out;
+  }
+
+  /* ---------- เทมเพลตโปรเจกต์ ----------
+   * data = { description, workDays, defaultView, views, depShift, sections: [{ id, name }],
+   *          fields (ฟิลด์จากคลังเก็บแค่ { id, lib: true }), automations, forms, types, defaultType,
+   *          taskTemplates, roles: [{ k, name, user }], anchor,
+   *          tasks: [{ k, name, notes, type, ctype, cstatus, prio, sec, role, s, d, st, dt, tags, fields, deps, subs }] }
+   * วันเก็บเป็นระยะห่างจากวันเริ่มโปรเจกต์ (s, d) — skipWeekends = นับเฉพาะ จ.–ศ.
+   * ผู้รับผิดชอบเก็บเป็นบทบาท (r0, r1 …) ตอนใช้เลือกคนให้แต่ละบทบาท
+   * สิทธิ์ editors = แก้/ลบ/แชร์ได้  org = ทุกคนใช้ได้  users = ใช้ได้เฉพาะคนที่ระบุ */
+  function workdaysBetween(a, b) {
+    if (!a || !b || a === b) return 0;
+    var step = b > a ? 1 : -1, d = a, n = 0, guard = 0;
+    while (d !== b && guard++ < 4000) {
+      d = addDays(d, step);
+      if (isWorkday(d, 'mon-fri')) n += step;
+    }
+    return n;
+  }
+
+  function ptCanEdit(x) {
+    if (!x || x.builtin || !isActive()) return false;
+    return isAdmin() || (x.editors || []).indexOf(db.currentUserId) >= 0;
+  }
+  function ptCanUse(x) {
+    if (!x || !isActive()) return false;
+    if (x.builtin) return true;
+    return ptCanEdit(x) || !!x.org || (x.users || []).indexOf(db.currentUserId) >= 0;
+  }
+
+  /* --- เทมเพลตตั้งต้นภาษาไทย (สร้างใหม่ทุกครั้งที่เรียก ชื่อจึงแปลตามภาษาที่เลือก) --- */
+  function btBuild(o) {
+    var id = o.id, data = {
+      description: o.desc, workDays: 'mon-fri', defaultView: o.view || 'list', views: null, depShift: null,
+      sections: o.secs.map(function (n, i) { return { id: 'bs_' + id + '_' + i, name: n }; }),
+      fields: (o.fields || []).map(function (f, i) {
+        return normalizeFieldDef({ id: 'bf_' + id + '_' + i, name: f[0], type: f[1],
+          options: f[2] || [], format: f[3] || null });
+      }),
+      roles: (o.roles || []).map(function (n, i) { return { k: 'r' + i, name: n, user: null, text: true }; }),
+      types: (o.types || []).map(function (ty, i) {
+        return { id: 'bty_' + id + '_' + i, name: ty[0], icon: ty[1], base: 'task',
+          statuses: ty[2].map(function (s, j) { return { id: 'bcs_' + id + '_' + i + '_' + j, name: s[0], color: s[1], done: !!s[2] }; }) };
+      }),
+      defaultType: o.defType != null ? 'bty_' + id + '_' + o.defType : '',
+      forms: (o.forms || []).map(function (fm, i) {
+        return normalizeForm({ id: 'bfm_' + id + '_' + i, name: fm.name, desc: fm.desc || '', on: true,
+          sec: 'bs_' + id + '_0', assignee: fm.role != null ? 'role:r' + fm.role : '', copy: true, follow: true,
+          confirm: fm.confirm || '', again: true, titleQ: '',
+          items: fm.items.map(function (q, j) {
+            return { id: 'bq' + j, kind: q[0], label: q[1], req: !!q[2], opts: q[3] || [],
+              map: q[4] ? String(q[4]).replace('#', 'bf_' + id + '_') : '',
+              cond: q[5] ? { q: 'bq' + q[5][0], v: q[5][1] } : null, help: q[6] || '' };
+          }) });
+      }),
+      automations: (o.autos || []).map(function (a, i) {
+        return normalizeAuto({ id: 'bau_' + id + '_' + i, name: '', on: true, chain: false, by: null, at: null,
+          trigger: a.trigger, paths: [{ conds: [], acts: a.acts }], els: null });
+      }),
+      taskTemplates: [], anchor: null, tasks: []
+    };
+    var n = 0;
+    function mk(x) {
+      var k = 'k' + (n++);
+      var out = { k: k, name: x[0], notes: '', type: x[5] || 'task', ctype: null, cstatus: null, prio: x[6] || 'none',
+        sec: 'bs_' + id + '_' + x[1], role: x[2] == null ? null : 'r' + x[2], s: x[3], d: x[4],
+        st: null, dt: null, tags: [], fields: {}, deps: [], subs: (x[7] || []).map(function (s) { return mk([s, x[1], x[2], null, x[4]]); }) };
+      return out;
+    }
+    data.tasks = (o.tasks || []).map(mk);
+    (o.deps || []).forEach(function (d) {
+      var a = data.tasks[d[0]], b = data.tasks[d[1]];
+      if (a && b) a.deps.push({ k: b.k, type: 'FS' });
+    });
+    return { id: 'bt_' + id, builtin: true, name: o.name, desc: o.desc, icon: o.icon, color: o.color,
+             skipWeekends: true, org: true, editors: [], users: [], data: data };
+  }
+
+  function builtinTemplates() {
+    var doneSec = function (i) { return { trigger: { type: 'moved', sec: null }, acts: [{ type: 'complete', v: true }], _sec: i }; };
+    var list = [
+      { id: 'launch', icon: '🚀', color: '#796eff', name: L('แผนเปิดตัวสินค้าใหม่'),
+        desc: L('เตรียมสินค้า การตลาด และช่องทางขาย ไล่ไปจนถึงวันเปิดตัว'),
+        secs: [L('เตรียมงาน'), L('การตลาด'), L('ช่องทางขาย'), L('วันเปิดตัว')],
+        fields: [[L('ช่องทาง'), 'select', [L('ออนไลน์'), L('หน้าร้าน'), L('โซเชียล')]],
+                 [L('งบประมาณ'), 'number', [], { kind: 'currency', currency: 'THB', unit: '', decimals: 0 }]],
+        roles: [L('ผู้จัดการผลิตภัณฑ์'), L('ทีมการตลาด'), L('ทีมขาย')],
+        tasks: [
+          [L('สรุปกลุ่มเป้าหมายและจุดขาย'), 0, 0, 0, 2, null, 'high'],
+          [L('ยืนยันราคาและโปรโมชันเปิดตัว'), 0, 0, 2, 5, null, 'high'],
+          [L('ทำอาร์ตเวิร์กและภาพสินค้า'), 1, 1, 3, 10, null, null, [L('ถ่ายภาพสินค้า'), L('ออกแบบโพสต์เปิดตัว')]],
+          [L('วางแผนคอนเทนต์ก่อนเปิดตัว'), 1, 1, 5, 12],
+          [L('เตรียมหน้าร้านออนไลน์'), 2, 2, 6, 14],
+          [L('อบรมทีมขาย'), 2, 2, 10, 15],
+          [L('วันเปิดตัว'), 3, 0, null, 20, 'milestone', 'urgent']
+        ], deps: [[6, 4], [6, 5], [4, 2]], autos: [doneSec(3)] },
+      { id: 'design', icon: '🎨', color: '#e362e3', name: L('คำขอฝ่ายออกแบบ'),
+        desc: L('รับคำของานออกแบบจากทุกฝ่ายผ่านฟอร์มเดียว แล้วติดตามจนส่งมอบ'),
+        secs: [L('คำขอใหม่'), L('กำลังออกแบบ'), L('รอตรวจ'), L('ส่งมอบแล้ว')], view: 'board',
+        fields: [[L('ประเภทงาน'), 'select', [L('โพสต์โซเชียล'), L('แบนเนอร์'), L('บรรจุภัณฑ์'), L('อื่น ๆ')]],
+                 [L('ขนาด / สเปก'), 'text']],
+        roles: [L('หัวหน้าทีมออกแบบ')],
+        forms: [{ name: L('ขอรับงานออกแบบ'), desc: L('กรอกให้ครบ ทีมออกแบบจะติดต่อกลับภายใน 1 วันทำงาน'), role: 0,
+          confirm: L('ได้รับคำขอแล้ว ทีมออกแบบจะติดต่อกลับ'),
+          items: [['text', L('ชื่องาน'), true, null, 'name'],
+                  ['select', L('ประเภทงาน'), true, [L('โพสต์โซเชียล'), L('แบนเนอร์'), L('บรรจุภัณฑ์'), L('อื่น ๆ')], 'field:#0'],
+                  ['text', L('ขนาด / สเปก'), false, null, 'field:#1', [1, [L('แบนเนอร์'), L('บรรจุภัณฑ์')]]],
+                  ['long', L('รายละเอียดและข้อความที่ต้องใส่'), true, null, 'notes'],
+                  ['date', L('ต้องการใช้งานวันที่'), true, null, 'due'],
+                  ['file', L('ไฟล์อ้างอิง'), false]] }],
+        tasks: [[L('ตัวอย่าง: แบนเนอร์โปรโมชันเดือนหน้า'), 0, null, null, 5]], autos: [doneSec(3)] },
+      { id: 'content', icon: '📅', color: '#14aaf5', name: L('ปฏิทินคอนเทนต์'),
+        desc: L('วางแผนและผลิตคอนเทนต์รายเดือนทุกช่องทาง'),
+        secs: [L('ไอเดีย'), L('เขียนบท'), L('ผลิต'), L('ลงแล้ว')], view: 'calendar',
+        fields: [[L('ช่องทาง'), 'select', ['Facebook', 'Instagram', 'TikTok', 'YouTube']],
+                 [L('รูปแบบ'), 'select', [L('วิดีโอสั้น'), L('ภาพนิ่ง'), L('บทความ')]]],
+        roles: [L('ผู้วางแผนคอนเทนต์'), L('ครีเอทีฟ')],
+        types: [[L('คอนเทนต์'), '📝', [[L('ไอเดีย'), '#9ca0a8'], [L('กำลังผลิต'), '#14aaf5'], [L('รอตรวจ'), '#f5a623'], [L('เผยแพร่แล้ว'), '#37c5ab', true]]]],
+        defType: 0,
+        tasks: [
+          [L('วางธีมคอนเทนต์ประจำเดือน'), 0, 0, 0, 1],
+          [L('คอนเทนต์สัปดาห์ที่ 1'), 1, 1, 1, 4],
+          [L('คอนเทนต์สัปดาห์ที่ 2'), 1, 1, 5, 9],
+          [L('คอนเทนต์สัปดาห์ที่ 3'), 1, 1, 10, 14],
+          [L('คอนเทนต์สัปดาห์ที่ 4'), 1, 1, 15, 19],
+          [L('สรุปผลประจำเดือน'), 0, 0, 20, 21]
+        ] },
+      { id: 'event', icon: '🎪', color: '#fd612c', name: L('แผนงานอีเวนต์'),
+        desc: L('วางแผน ประสานงาน วันงาน และสรุปผลหลังงาน'),
+        secs: [L('วางแผน'), L('ประสานงาน'), L('วันงาน'), L('หลังงาน')], view: 'timeline',
+        fields: [[L('งบประมาณ'), 'number', [], { kind: 'currency', currency: 'THB', unit: '', decimals: 0 }]],
+        roles: [L('ผู้จัดงาน'), L('ฝ่ายประสานงาน')],
+        tasks: [
+          [L('กำหนดวัตถุประสงค์และงบประมาณ'), 0, 0, 0, 2, null, 'high'],
+          [L('จองสถานที่'), 0, 1, 2, 5],
+          [L('เชิญแขกและผู้ร่วมงาน'), 1, 1, 5, 12],
+          [L('เตรียมป้ายและของที่ระลึก'), 1, 1, 6, 14],
+          [L('ซ้อมใหญ่'), 2, 0, 17, 17],
+          [L('วันงาน'), 2, 0, null, 18, 'milestone', 'urgent'],
+          [L('สรุปผลและค่าใช้จ่าย'), 3, 0, 19, 22]
+        ], deps: [[2, 1], [4, 3], [5, 4], [6, 5]] },
+      { id: 'it', icon: '🛠️', color: '#37c5ab', name: L('รับเรื่อง IT'),
+        desc: L('รับแจ้งปัญหาไอทีผ่านฟอร์ม ติดตามด้วยสถานะ ปิดเรื่องแล้วย้ายคอลัมน์เอง'),
+        secs: [L('เรื่องใหม่'), L('กำลังดำเนินการ'), L('รอผู้แจ้ง'), L('ปิดแล้ว')], view: 'board',
+        fields: [[L('หมวด'), 'select', [L('ฮาร์ดแวร์'), L('ซอฟต์แวร์'), L('บัญชีผู้ใช้'), L('เครือข่าย')]],
+                 [L('ความเร่งด่วน'), 'select', [L('ด่วน'), L('ปกติ'), L('ไม่ด่วน')]],
+                 [L('เลขครุภัณฑ์'), 'text']],
+        roles: [L('เจ้าหน้าที่ IT')],
+        types: [[L('คำขอ IT'), '🎫', [[L('ใหม่'), '#9ca0a8'], [L('กำลังดำเนินการ'), '#14aaf5'], [L('รอผู้แจ้ง'), '#f5a623'], [L('แก้ไขแล้ว'), '#37c5ab', true]]]],
+        defType: 0,
+        forms: [{ name: L('แจ้งปัญหา IT'), desc: L('บอกอาการให้ละเอียด แนบภาพหน้าจอได้'), role: 0,
+          confirm: L('ได้รับเรื่องแล้ว เจ้าหน้าที่ IT จะติดต่อกลับ'),
+          items: [['text', L('เรื่องที่แจ้ง'), true, null, 'name'],
+                  ['select', L('หมวด'), true, [L('ฮาร์ดแวร์'), L('ซอฟต์แวร์'), L('บัญชีผู้ใช้'), L('เครือข่าย')], 'field:#0'],
+                  ['text', L('เลขครุภัณฑ์'), false, null, 'field:#2', [1, [L('ฮาร์ดแวร์')]]],
+                  ['select', L('ความเร่งด่วน'), true, [L('ด่วน'), L('ปกติ'), L('ไม่ด่วน')], 'field:#1'],
+                  ['long', L('อาการที่พบ'), true, null, 'notes'],
+                  ['file', L('ภาพหน้าจอ'), false]] }],
+        autos: [{ trigger: { type: 'cstatus', ctype: 'bty_it_0', v: 'bcs_it_0_3' }, acts: [{ type: 'section', sec: 'bs_it_3' }] }],
+        tasks: [] },
+      { id: 'onboard', icon: '👋', color: '#f5a623', name: L('Onboarding พนักงานใหม่'),
+        desc: L('เตรียมความพร้อมก่อนวันเริ่มงาน จนถึงประเมินผลทดลองงาน'),
+        secs: [L('ก่อนวันเริ่มงาน'), L('สัปดาห์แรก'), L('เดือนแรก'), L('ครบทดลองงาน')],
+        roles: [L('หัวหน้างาน'), L('ฝ่ายบุคคล'), L('ฝ่าย IT'), L('พนักงานใหม่')],
+        tasks: [
+          [L('เตรียมสัญญาและเอกสารพนักงาน'), 0, 1, 0, 2],
+          [L('เตรียมคอมพิวเตอร์และบัญชีผู้ใช้'), 0, 2, 0, 3],
+          [L('แนะนำทีมและพาชมสำนักงาน'), 1, 0, 5, 5],
+          [L('อบรมระบบงานภายใน'), 1, 1, 5, 7, null, null, [L('นโยบายบริษัท'), L('ระบบลางานและสวัสดิการ')]],
+          [L('ตั้งเป้าหมาย 30 วันแรก'), 1, 3, 6, 9],
+          [L('ทบทวนงานเดือนแรก'), 2, 0, null, 25],
+          [L('ประเมินผลทดลองงาน'), 3, 0, null, 64, 'approval', 'high']
+        ], deps: [[2, 1], [6, 5]] }
+    ];
+    return list.map(function (o) {
+      (o.autos || []).forEach(function (a) { if (a._sec != null) { a.trigger.sec = 'bs_' + o.id + '_' + a._sec; delete a._sec; } });
+      return btBuild(o);
+    });
+  }
+
+  function projectTemplates() {
+    return builtinTemplates().concat((db.projectTemplates || []).filter(ptCanUse));
+  }
+  function projectTemplate(id) {
+    if (String(id || '').indexOf('bt_') === 0) return builtinTemplates().filter(function (x) { return x.id === id; })[0] || null;
+    return (db.projectTemplates || []).filter(function (x) { return x.id === id; })[0] || null;
+  }
+
+  /** ถอดแบบโครงโปรเจกต์ (และงานถ้า withTasks) เป็น data ของเทมเพลต */
+  function captureProject(pid, withTasks, skipWE) {
+    var p = project(pid);
+    var data = {
+      description: p.description || '', workDays: p.workDays, defaultView: p.defaultView,
+      views: p.views ? p.views.slice() : null, depShift: p.depShift ? clone(p.depShift) : null,
+      sections: p.sections.map(function (s) { return { id: s.id, name: s.name }; }),
+      fields: (p.fields || []).map(function (f) {
+        if (f.lib) return { id: f.id, lib: true, name: f.name, type: f.type };
+        var c = clone(f);
+        if (c.type === 'id') c.next = 1;
+        return c;
+      }),
+      types: clone(p.types || []), defaultType: p.defaultType || '',
+      forms: (p.forms || []).map(function (f) { var c = clone(f); c.n = 0; c.last = null; return c; }),
+      automations: (p.automations || []).map(function (a) {
+        var c = clone(a);
+        (c.paths || []).forEach(function (pt) { (pt.acts || []).forEach(function (x) { delete x.ptr; }); });
+        return c;
+      }),
+      taskTemplates: clone(p.taskTemplates || []), roles: [], anchor: null, tasks: []
+    };
+    var roleOf = {};
+    function role(u) {
+      if (!u || !user(u)) return null;
+      if (!roleOf[u]) {
+        roleOf[u] = 'r' + data.roles.length;
+        /* text = ชื่อบทบาทจริงของโปรเจกต์ (ไม่ใช่ชื่อคน) ตอนใช้จึงใส่เป็นบทบาทในโปรเจกต์ใหม่ */
+        var rt = p.roles && p.roles[u];
+        data.roles.push({ k: roleOf[u], name: rt || user(u).name, user: u, text: !!rt });
+      }
+      return roleOf[u];
+    }
+    data.forms.forEach(function (f) { if (f.assignee) { var r = role(f.assignee); f.assignee = r ? 'role:' + r : ''; } });
+    if (withTasks) {
+      var all = [], anchor = null;
+      var walk = function (t) { all.push(t); subtasks(t.id).forEach(walk); };
+      tasksInProject(pid).forEach(function (x) { walk(x.task); });
+      all.forEach(function (t) {
+        [t.startOn, t.dueOn].forEach(function (d) { if (d && (!anchor || d < anchor)) anchor = d; });
+      });
+      anchor = anchor || today();
+      data.anchor = anchor;
+      var kOf = {};
+      all.forEach(function (t, i) { kOf[t.id] = 'k' + i; });
+      var fids = {};
+      (p.fields || []).forEach(function (f) { if (f.type !== 'id') fids[f.id] = true; });
+      var off = function (d) { return !d ? null : skipWE ? workdaysBetween(anchor, d) : daysBetween(anchor, d); };
+      var snap = function (t, m) {
+        var fv = {}, have = index().fvByTask[t.id] || {};
+        Object.keys(have).forEach(function (fid) { if (fids[fid]) fv[fid] = clone(have[fid].value); });
+        var cst = statusDef(t.cstatus);
+        return { k: kOf[t.id], name: t.name, notes: t.notes || '', type: t.type, ctype: t.ctype || null,
+          cstatus: cst && !cst.st.done ? t.cstatus : null, prio: t.priority, sec: m ? m.sectionId : null,
+          role: role(t.assigneeId), s: off(t.startOn), d: off(t.dueOn), st: t.startTime, dt: t.dueTime,
+          tags: (t.tags || []).slice(), fields: fv,
+          deps: (t.dependsOn || []).filter(function (d) { return kOf[d.id]; }).map(function (d) { return { k: kOf[d.id], type: d.type || 'FS' }; }),
+          subs: subtasks(t.id).map(function (s) { return snap(s, null); }) };
+      };
+      data.tasks = tasksInProject(pid).map(function (x) { return snap(x.task, x.membership); });
+    }
+    return data;
+  }
+
+  function canSaveTemplate(pid) { return !!project(pid) && can('structure') && canInProject(pid, 'edit'); }
+
+  /** o = { name, desc, withTasks, skipWeekends, org } */
+  function saveProjectTemplate(pid, o) {
+    var p = project(pid);
+    if (!p || !canSaveTemplate(pid)) return null;
+    o = o || {};
+    snapshot('บันทึกเป็นเทมเพลตโปรเจกต์');
+    var x = {
+      id: uid('pt'), name: String(o.name || p.name).trim().slice(0, 120) || p.name,
+      desc: String(o.desc || '').slice(0, 1000), icon: p.icon, color: p.color,
+      by: db.currentUserId, at: new Date().toISOString(),
+      editors: [db.currentUserId], users: [], org: o.org !== false, skipWeekends: !!o.skipWeekends,
+      data: captureProject(pid, !!o.withTasks, !!o.skipWeekends)
+    };
+    db.projectTemplates = db.projectTemplates || [];
+    db.projectTemplates.push(x);
+    audit('template.save', x.name, 'จากโปรเจกต์ {p}', { p: p.name });
+    commit();
+    return x;
+  }
+
+  /** แก้ชื่อ คำอธิบาย การแชร์ — patch = { name, desc, org, skipWeekends } */
+  function updateProjectTemplate(id, patch) {
+    var x = projectTemplate(id);
+    if (!x || !ptCanEdit(x) || !patch) return false;
+    snapshot('แก้เทมเพลตโปรเจกต์');
+    if ('name' in patch) x.name = String(patch.name || '').trim().slice(0, 120) || x.name;
+    if ('desc' in patch) x.desc = String(patch.desc || '').slice(0, 1000);
+    if ('org' in patch) x.org = !!patch.org;
+    if ('skipWeekends' in patch) x.skipWeekends = !!patch.skipWeekends;
+    commit();
+    return true;
+  }
+
+  /** สิทธิ์ของคนหนึ่งในเทมเพลต — 'edit' แก้ได้  'use' ใช้ได้  null เอาออก (ผู้แก้ต้องเหลืออย่างน้อยหนึ่งคน) */
+  function setTemplateAccess(id, userId, level) {
+    var x = projectTemplate(id);
+    if (!x || !ptCanEdit(x) || !user(userId)) return false;
+    var ed = (x.editors || []).filter(function (u) { return u !== userId; });
+    var us = (x.users || []).filter(function (u) { return u !== userId; });
+    if (level === 'edit') ed.push(userId);
+    else if (level === 'use') us.push(userId);
+    if (!ed.length) return false;
+    snapshot('แชร์เทมเพลตโปรเจกต์');
+    x.editors = ed;
+    x.users = us;
+    commit();
+    return true;
+  }
+
+  function deleteProjectTemplate(id) {
+    var x = projectTemplate(id);
+    if (!x || !ptCanEdit(x)) return false;
+    snapshot('ลบเทมเพลตโปรเจกต์');
+    db.projectTemplates = db.projectTemplates.filter(function (y) { return y.id !== id; });
+    audit('template.delete', x.name);
+    commit();
+    return true;
+  }
+
+  /**
+   * สร้างโปรเจกต์จากเทมเพลต — o = { name, start: 'YYYY-MM-DD', roles: { r0: userId }, skipWeekends, icon, color }
+   * งานจากเทมเพลตไม่ปลุกอัตโนมัติ "งานถูกเพิ่ม" (แบบเดียวกับ Asana) ฟิลด์จากคลังใช้ตัวเดิม ฟิลด์อื่นได้รหัสใหม่
+   */
+  function useProjectTemplate(id, o) {
+    var tpl = projectTemplate(id);
+    if (!tpl || !ptCanUse(tpl) || !can('structure')) return null;
+    o = o || {};
+    var d = clone(tpl.data || {});
+    var start = /^\d{4}-\d\d-\d\d$/.test(o.start || '') ? o.start : today();
+    var skip = 'skipWeekends' in o ? !!o.skipWeekends : !!tpl.skipWeekends;
+    var roles = o.roles || {};
+    var who = function (k) { var u = user(roles[k]); return u && u.active !== false ? u.id : null; };
+    var day = function (n) {
+      if (n === null || n === undefined) return null;
+      return skip ? shiftDate(start, n, 'workdays', 'mon-fri') : addDays(start, n);
+    };
+    var out = null;
+    batch('สร้างโปรเจกต์จากเทมเพลต “{t}”', { t: tpl.name }, function () {
+      var secs = (d.sections && d.sections.length ? d.sections : [{ id: '_s', name: 'ค้างอยู่' }]);
+      var p = createProjectRaw({ name: String(o.name || tpl.name).trim().slice(0, 120) || tpl.name,
+        color: o.color || tpl.color, icon: o.icon || tpl.icon, description: d.description || tpl.desc || '',
+        defaultView: d.defaultView, sections: secs.map(function (s) { return s.name; }) });
+      var idMap = {};
+      secs.forEach(function (s, i) { idMap[s.id] = p.sections[i].id; });
+      (d.fields || []).forEach(function (f) {
+        if (f.lib) {
+          var lf = libField(f.id);
+          if (!lf) return;
+          var lc = clone(lf);
+          lc.lib = true;
+          p.fields.push(normalizeFieldDef(lc));
+          idMap[f.id] = f.id;
+          return;
+        }
+        var nf = clone(f), old = nf.id;
+        nf.id = uid('f');
+        delete nf.lib;
+        normalizeFieldDef(nf);
+        if (nf.type === 'id') nf.next = 1;
+        p.fields.push(nf);
+        idMap[old] = nf.id;
+      });
+      p.workDays = d.workDays || 'all';
+      p.views = d.views || null;
+      if (d.depShift) p.depShift = clone(d.depShift);
+      p.types = (d.types || []).map(function (ty) { return normalizeType(clone(ty)); });
+      p.forms = (d.forms || []).map(function (f) { return normalizeForm(clone(f)); });
+      p.taskTemplates = (d.taskTemplates || []).map(upgradeTaskTemplate).filter(Boolean);
+      p.defaultType = d.defaultType || '';
+      renewStructIds(p, idMap);
+      p.forms.forEach(function (f) {
+        if (String(f.assignee || '').indexOf('role:') === 0) f.assignee = who(f.assignee.slice(5)) || '';
+      });
+      remapStruct(p, idMap);
+      p.automations = (d.automations || []).map(function (a) {
+        var c = remapAuto(normalizeAuto(a), idMap);
+        c.by = db.currentUserId;
+        c.at = new Date().toISOString();
+        return c;
+      });
+      (d.roles || []).forEach(function (r) { var u = who(r.k); if (u && r.text && !p.roles[u]) p.roles[u] = String(r.name).slice(0, 80); });
+      dropIndex();
+      var kMap = {}, pending = [], pos = {};
+      var make = function (x, parentId) {
+        var ty = x.ctype && idMap[x.ctype] ? typeDef(idMap[x.ctype]) : null;
+        var a = x.role ? who(x.role) : null;
+        var t = blankTask({ name: String(x.name || '').slice(0, 500) || 'งานใหม่', notes: x.notes || '',
+          type: ty ? ty.base : (isBuiltinType(x.type) ? x.type : 'task'), priority: x.prio || 'none',
+          assigneeId: a, startOn: x.type === 'milestone' ? null : day(x.s), dueOn: day(x.d),
+          startTime: x.st || null, dueTime: x.dt || null, tags: (x.tags || []).slice(),
+          parentId: parentId, createdBy: db.currentUserId, followers: a ? [a] : [] });
+        if (!ty && !parentId && p.defaultType && !x.type) { /* ไม่มีชนิดในเทมเพลต ใช้ของเดิม */ }
+        if (ty) {
+          var cs = x.cstatus && idMap[x.cstatus];
+          t.ctype = ty.id;
+          t.cstatus = ty.statuses.some(function (s) { return s.id === cs; }) ? cs : ((firstStatus(ty, false) || {}).id || null);
+        }
+        if (t.followers.indexOf(db.currentUserId) < 0) t.followers.push(db.currentUserId);
+        if (t.startOn && t.dueOn && t.startOn > t.dueOn) t.startOn = t.dueOn;
+        db.tasks.push(t);
+        kMap[x.k] = t.id;
+        if (!parentId) {
+          var sid = idMap[x.sec] || p.sections[0].id;
+          pos[sid] = (pos[sid] || 0) + 1;
+          db.memberships.push({ id: uid('m'), taskId: t.id, projectId: p.id, sectionId: sid, position: pos[sid] });
+        }
+        Object.keys(x.fields || {}).forEach(function (fid) {
+          var nf = idMap[fid];
+          if (!nf || !p.fields.some(function (f) { return f.id === nf && f.type !== 'id'; })) return;
+          db.fieldValues.push({ taskId: t.id, fieldId: nf, value: clone(x.fields[fid]) });
+        });
+        log(t.id, 'สร้างจากเทมเพลต “{t}”', { t: tpl.name });
+        pending.push([t, x.deps || []]);
+        (x.subs || []).forEach(function (s) { make(s, t.id); });
+      };
+      (d.tasks || []).forEach(function (x) { make(x, null); });
+      pending.forEach(function (pr) {
+        pr[1].forEach(function (dp) {
+          var b = kMap[dp.k];
+          if (b && b !== pr[0].id && !pr[0].dependsOn.some(function (y) { return y.id === b; })) {
+            pr[0].dependsOn.push({ id: b, type: dp.type || 'FS' });
+          }
+        });
+      });
+      audit('project.create', p.name, 'จากเทมเพลต {t}', { t: tpl.name });
+      out = p;
+    });
+    return out;
+  }
+
+  /* ---------- รายงานสถานะแบบบล็อก ----------
+   * statusLog[] = { id, state, title, text (สรุป), blocks: [{ k, title, text }], hl: [{ k, … ภาพ ณ ตอนรายงาน }], period, by, at }
+   * ไฮไลต์เก็บเป็นภาพนิ่งตอนรายงาน (ตัวเลขไม่เปลี่ยนตามงานทีหลัง) project.statusLayout จำบล็อก/ไฮไลต์ล่าสุด */
+  var STATUS_BLOCKS = [
+    { k: 'summary', label: 'สรุป' },
+    { k: 'done',    label: 'สิ่งที่ทำได้' },
+    { k: 'blocked', label: 'สิ่งที่ติดขัด' },
+    { k: 'next',    label: 'ขั้นต่อไป' },
+    { k: 'custom',  label: 'หัวข้อกำหนดเอง' }
+  ];
+  var STATUS_HL = [
+    { k: 'milestones', label: 'หมุดหมายที่เสร็จแล้ว' },
+    { k: 'overdue',    label: 'งานที่เลยกำหนด' },
+    { k: 'completed',  label: 'งานที่เสร็จในช่วงนี้' },
+    { k: 'chart',      label: 'ภาพรวมความคืบหน้า' }
+  ];
+  var STATUS_PERIODS = [7, 14, 30];
+
+  function defaultStatusLayout() {
+    return { blocks: [{ k: 'summary', title: '' }, { k: 'done', title: '' }, { k: 'blocked', title: '' }, { k: 'next', title: '' }],
+             hl: ['completed', 'overdue'], period: 7 };
+  }
+  function statusLayoutOf(pid) {
+    var p = project(pid);
+    return p && p.statusLayout ? clone(p.statusLayout) : defaultStatusLayout();
+  }
+
+  /** ภาพนิ่งของไฮไลต์ที่เลือก (ใช้ทั้งตัวอย่างในตัวสร้างและตอนบันทึก) */
+  function statusHighlights(pid, keys, days) {
+    var td = today(), since = addDays(td, -(days || 7));
+    var items = tasksInProject(pid).map(function (x) { return x.task; });
+    var brief = function (t) { return { id: t.id, name: t.name, d: t.dueOn || null, a: t.assigneeId || null }; };
+    var done = function (t) { return t.completed && t.completedAt && String(t.completedAt).slice(0, 10) >= since; };
+    return (keys || []).filter(function (k) { return STATUS_HL.some(function (x) { return x.k === k; }); }).map(function (k) {
+      if (k === 'milestones') {
+        var ms = items.filter(function (t) { return t.type === 'milestone' && done(t); });
+        return { k: k, n: ms.length, items: ms.slice(0, 8).map(brief) };
+      }
+      if (k === 'overdue') {
+        var od = items.filter(function (t) { return !t.completed && t.dueOn && t.dueOn < td; })
+          .sort(function (a, b) { return a.dueOn < b.dueOn ? -1 : 1; });
+        return { k: k, n: od.length, items: od.slice(0, 8).map(brief) };
+      }
+      if (k === 'completed') {
+        var cd = items.filter(done);
+        return { k: k, n: cd.length, items: cd.slice(0, 8).map(brief) };
+      }
+      var st = projectStats(pid), p = project(pid);
+      return { k: 'chart', total: st.total, done: st.done, pct: st.percent, overdue: st.overdue,
+        secs: p.sections.map(function (s) {
+          var inS = tasksInSection(pid, s.id).map(function (x) { return x.task; });
+          return { name: s.name, total: inS.length, done: inS.filter(function (t) { return t.completed; }).length };
+        }) };
+    });
+  }
+
+  /**
+   * รายงานสถานะจากตัวสร้าง — o = { state, title, blocks: [{ k, title, text }], hl: [keys], period }
+   * จำบล็อกทั้งหมด (รวมที่ว่าง) เป็นเลย์เอาต์ครั้งหน้า เก็บเฉพาะบล็อกที่มีข้อความลงรายงาน
+   */
+  function postStatusUpdate(pid, o) {
+    var p = project(pid);
+    if (!p || !o || !PROJECT_STATES.some(function (x) { return x.id === o.state; })) return null;
+    var period = STATUS_PERIODS.indexOf(+o.period) >= 0 ? +o.period : 7;
+    var all = (o.blocks || []).filter(function (b) { return b && STATUS_BLOCKS.some(function (x) { return x.k === b.k; }); })
+      .slice(0, 10).map(function (b) {
+        return { k: b.k, title: b.k === 'custom' ? String(b.title || '').trim().slice(0, 80) : '',
+                 text: String(b.text || '').replace(/\r\n/g, '\n').trim().slice(0, 5000) };
+      });
+    var hl = (o.hl || []).filter(function (k, i, a) { return a.indexOf(k) === i && STATUS_HL.some(function (x) { return x.k === k; }); });
+    var blocks = all.filter(function (b) { return b.text; });
+    var summary = (blocks.filter(function (b) { return b.k === 'summary'; })[0] || blocks[0] || {}).text || '';
+    snapshot('อัปเดตสถานะโปรเจกต์');
+    var entry = { id: uid('ps'), state: o.state, title: String(o.title || '').trim().slice(0, 120), text: summary,
+      blocks: blocks, hl: statusHighlights(pid, hl, period), period: period,
+      by: db.currentUserId, at: new Date().toISOString() };
+    p.status = { state: o.state, text: summary, title: entry.title, by: db.currentUserId, at: today() };
+    p.statusLog = p.statusLog || [];
+    p.statusLog.push(entry);
+    if (p.statusLog.length > 30) p.statusLog = p.statusLog.slice(-30);
+    p.statusLayout = { blocks: all.map(function (b) { return { k: b.k, title: b.title }; }), hl: hl, period: period };
+    var watchers = projectWatchers(pid, 'status');
+    if (watchers.length) {
+      notifyOnly(null, watchers, 'อัปเดตสถานะของ {p}', 'status', { p: p.name }, false,
+        { projectId: pid, route: 'p-overview' });
+    }
+    closeRemindTask(p);
+    commit();
+    return entry;
+  }
+
+  function statusTemplates() { return (db.statusTemplates || []).slice(); }
+
+  function saveStatusTemplate(name, layout) {
+    var nm = String(name || '').trim().slice(0, 80);
+    if (!nm || !layout) return null;
+    snapshot('บันทึกเทมเพลตรายงานสถานะ');
+    var x = { id: uid('sx'), name: nm, by: db.currentUserId,
+      blocks: (layout.blocks || []).slice(0, 10).map(function (b) { return { k: b.k, title: String(b.title || '').slice(0, 80) }; }),
+      hl: (layout.hl || []).slice(), period: STATUS_PERIODS.indexOf(+layout.period) >= 0 ? +layout.period : 7 };
+    db.statusTemplates = db.statusTemplates || [];
+    db.statusTemplates.push(x);
+    commit();
+    return x;
+  }
+
+  function deleteStatusTemplate(id) {
+    var x = (db.statusTemplates || []).filter(function (y) { return y.id === id; })[0];
+    if (!x || !(x.by === db.currentUserId || isAdmin())) return false;
+    snapshot('ลบเทมเพลตรายงานสถานะ');
+    db.statusTemplates = db.statusTemplates.filter(function (y) { return y.id !== id; });
+    commit();
+    return true;
+  }
+
+  function setStatusRemind(pid, on) {
+    var p = project(pid);
+    if (!p) return false;
+    snapshot(on ? 'เปิดเตือนรายงานสถานะ' : 'ปิดเตือนรายงานสถานะ');
+    p.statusRemind = !!on;
+    commit();
+    return true;
+  }
+
+  /** รายงานแล้ว — งานเตือนของสัปดาห์นี้ติ๊กเสร็จเอง (ไม่ commit) */
+  function closeRemindTask(p) {
+    var t = p && p.remindTask ? task(p.remindTask) : null;
+    if (!t || t.completed) return;
+    t.completed = true;
+    t.completedAt = today();
+    log(t.id, 'ทำงานนี้เสร็จแล้ว');
+  }
+
+  /**
+   * เตือนรายงานสถานะทุกวันศุกร์ — งานส่วนตัวมอบให้เจ้าของโปรเจกต์ที่เปิด "เตือนทุกวันศุกร์" ไว้
+   * สร้างตอนมีคนเปิดแอปวันศุกร์ (ไม่มีเซิร์ฟเวอร์) ข้ามถ้ารายงานสัปดาห์นี้แล้ว กันซ้ำด้วย project.remindKey
+   * @param opts.today  ใช้แทนวันนี้ (ทดสอบวันศุกร์ในวันอื่น)
+   */
+  function checkStatusReminders(opts) {
+    if (!db || !isActive()) return 0;
+    var td = (opts && opts.today) || today();
+    if (new Date(td + 'T00:00:00').getDay() !== 5) return 0;
+    var list = db.projects.filter(function (p) {
+      var o = user(p.owner);
+      return !p.archived && p.statusRemind && p.remindKey !== td && o && o.active !== false;
+    });
+    if (!list.length) return 0;
+    var mon = addDays(td, -4), n = 0;
+    quietBatch(function () {
+      list.forEach(function (p) {
+        p.remindKey = td;
+        var last = (p.statusLog || [])[(p.statusLog || []).length - 1];
+        if (last && String(last.at).slice(0, 10) >= mon) return;
+        var t = blankTask({ name: L('อัปเดตสถานะโปรเจกต์ {p}', { p: p.name }),
+          notes: L('ถึงเวลารายงานสถานะประจำสัปดาห์ของ') + ' @[' + refLabel(p.name) + '](' + p.id + ')',
+          assigneeId: p.owner, dueOn: td, createdBy: p.owner, followers: [p.owner] });
+        db.tasks.push(t);
+        log(t.id, 'สร้างงานเตือนรายงานสถานะประจำสัปดาห์', null, [p.owner]);
+        notifyOnly(t.id, [p.owner], 'มอบหมายงาน “{t}” ให้คุณ', 'assigned', { t: t.name });
+        p.remindTask = t.id;
+        n++;
+      });
+    });
+    return n;
+  }
+
+  /* ---------- อัตโนมัติของ 3b ---------- */
+  autoRegister('trigger', { id: 'form', label: 'มีคนส่งฟอร์ม',
+    match: function (tr, ev) { return !tr.form || ev.info.form === tr.form; } });
+  autoRegister('trigger', { id: 'cstatus', label: 'สถานะของชนิดงานเปลี่ยน',
+    match: function (tr, ev) { return (!tr.ctype || ev.info.type === tr.ctype) && (!tr.v || ev.info.v === tr.v); } });
+  autoRegister('action', { id: 'setstatus', label: 'ตั้งสถานะของชนิดงาน', task: true, run: function (a, ctx) {
+    var t = needTask(ctx), sd = statusDef(a.v);
+    if (!sd) throw autoErr('สถานะนี้ถูกลบไปแล้ว');
+    setStatusRaw(t, sd.st.id);
+  } });
+
   /* ---------- backup ---------- */
 
   /* สำรองทั้งก้อนสำหรับผู้ดูแล — สมุดโน้ตส่วนตัวของคนอื่นไม่ออกไปกับไฟล์ (2c)
@@ -7813,6 +9244,30 @@
     manualAutomationsFor: manualAutomationsFor, runAutomation: runAutomation,
     autoRuns: autoRuns, autoForSection: autoForSection, autoTick: autoTick,
     autoFire: autoFire, autoRegister: autoRegister, shiftDate: shiftDate, quietBatch: quietBatch,
+
+    /* 3b — ชนิดงาน ฟอร์ม เทมเพลต รายงานสถานะ */
+    TYPE_MAX: TYPE_MAX, STATUS_MAX: STATUS_MAX, isBuiltinType: isBuiltinType, typeDef: typeDef, statusDef: statusDef,
+    typeOf: typeOf, projectTypes: projectTypes, typeChoices: typeChoices, typeChoicesFor: typeChoicesFor,
+    typeName: typeName, statusChoices: statusChoices, firstStatus: firstStatus, canEditTypes: canEditTypes,
+    saveTaskType: saveTaskType, deleteTaskType: deleteTaskType, setDefaultType: setDefaultType,
+    setTaskType: setTaskType, setTaskStatus: setTaskStatus,
+    FORM_MAX: FORM_MAX, FORM_KINDS: FORM_KINDS, FORM_DEPTH: FORM_DEPTH, FORM_FILES_MAX: FORM_FILES_MAX,
+    FORM_FILE_BYTES: FORM_FILE_BYTES, formKind: formKind, formById: formById, formVisible: formVisible,
+    formDepth: formDepth, formTargets: formTargets, canEditForms: canEditForms, saveForm: saveForm,
+    setFormOn: setFormOn, duplicateForm: duplicateForm, deleteForm: deleteForm, submitForm: submitForm,
+    formsForHome: formsForHome, normalizeForm: normalizeForm,
+    taskTemplatesFor: taskTemplatesFor, findTaskTemplate: findTaskTemplate, captureTaskTemplate: captureTaskTemplate,
+    updateTaskTemplate: updateTaskTemplate, normTT: normTT,
+    projectTemplates: projectTemplates, projectTemplate: projectTemplate, ptCanUse: ptCanUse, ptCanEdit: ptCanEdit,
+    canSaveTemplate: canSaveTemplate, saveProjectTemplate: saveProjectTemplate,
+    updateProjectTemplate: updateProjectTemplate, setTemplateAccess: setTemplateAccess,
+    deleteProjectTemplate: deleteProjectTemplate, useProjectTemplate: useProjectTemplate,
+    workdaysBetween: workdaysBetween,
+    STATUS_BLOCKS: STATUS_BLOCKS, STATUS_HL: STATUS_HL, STATUS_PERIODS: STATUS_PERIODS,
+    statusLayoutOf: statusLayoutOf, statusHighlights: statusHighlights, postStatusUpdate: postStatusUpdate,
+    statusTemplates: statusTemplates, saveStatusTemplate: saveStatusTemplate,
+    deleteStatusTemplate: deleteStatusTemplate, setStatusRemind: setStatusRemind,
+    checkStatusReminders: checkStatusReminders,
 
     exportJSON: exportJSON, importJSON: importJSON, reset: reset
   };

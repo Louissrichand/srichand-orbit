@@ -420,6 +420,9 @@
       h += '<div class="tb-title"><span class="chip tag tb-tagchip">#' + esc(route.name) + '</span></div>';
     } else if (route.type === 'noaccess') {
       h += '<div class="tb-title">' + I('lock', 18) + ' ' + L('โปรเจกต์ปิด') + '</div>';
+    } else if (route.type === 'form') {
+      var tfx = S.formById(route.id);
+      h += '<div class="tb-title">' + I('note', 18) + ' ' + (tfx ? esc(tfx.f.name) : L('ฟอร์ม')) + '</div>';
     }
 
     h += '<div class="tb-spacer"></div>';
@@ -626,9 +629,18 @@
       esc(L('การอนุมัติ') + ': ' + L(a.label)) + '">' + I(ic, 11) + '</span>';
   }
 
+  /** 3b — ป้ายสถานะของชนิดงานกำหนดเอง (ไม่มีชนิดกำหนดเอง = ว่าง) */
+  function statusPill(t) {
+    var sd = t && t.ctype ? S.statusDef(t.cstatus) : null;
+    if (!sd) return '';
+    var c = esc(sd.st.color || '#9ca0a8');
+    return '<span class="cst-pill' + (sd.st.done ? ' done' : '') + '" style="background:' + c + '22;color:' + c +
+      '" title="' + esc(sd.ty.name + ' · ' + sd.st.name) + '"><i style="background:' + c + '"></i>' + esc(sd.st.name) + '</span>';
+  }
+
   /** ป้ายสถานะย่อย ๆ ที่ใช้ทั้งในแถวและการ์ด */
   function badges(t, opts) {
-    var h = '';
+    var h = statusPill(t);
     if (t.type === 'milestone') h += '<span class="chip">' + I('diamond', 11) + ' ' + L('หมุดหมาย') + '</span>';
     if (t.type === 'approval') {
       var a = approvalState(t.approval);
@@ -720,7 +732,7 @@
     h += checkbox(t) + '<span class="nm" data-dbl="rename" data-id="' + id + '" title="' +
       L('ดับเบิลคลิกเพื่อเปลี่ยนชื่อ') + '">' + esc(t.name) + '</span>' + approvalIcon(t) + '</div>';
 
-    var foot = '';
+    var foot = statusPill(t);
     if (show('priority') && t.priority !== 'none' && size !== 's') {
       foot += '<span class="chip" style="background:' + pr.color + '22;color:' + pr.color +
         '"><span class="swatch" style="background:' + pr.color + '"></span>' + L(pr.label) + '</span>';
@@ -898,6 +910,10 @@
           ? '<span class="opt-pill" style="background:' + pr.color + '22;color:' + pr.color + '">' + L(pr.label) + '</span>'
           : '<span class="cell-empty">—</span>') + '</div>';
     }
+    if (c.id === 'cstatus') {       // 3b — สถานะของชนิดงานกำหนดเอง กดเพื่อเปลี่ยน
+      return '<div class="td td-edit" data-act="cell-status" data-id="' + id + '">' +
+        (S.statusDef(t.cstatus) ? statusPill(t) : '<span class="cell-empty">—</span>') + '</div>';
+    }
     var inner = '';
     if (c.id === 'tags') {
       inner = (t.tags || []).map(function (x) { return '<span class="chip tag">' + esc(x) + '</span>'; }).join('');
@@ -939,7 +955,9 @@
     if (t.priority !== 'none') {
       h += '<span class="prio-bar" style="background:' + pr.color + '" title="' + L(pr.label) + '"></span>';
     }
-    h += '<span class="nm">' + (t.type === 'milestone' ? I('diamond', 11) + ' ' : '') +
+    var lty = S.typeOf(t);
+    h += '<span class="nm">' + (lty ? '<span class="ty-ic" title="' + esc(lty.name) + '">' + esc(lty.icon) + '</span> ' : '') +
+      (t.type === 'milestone' ? I('diamond', 11) + ' ' : '') +
       esc(t.name) + '</span>' + approvalIcon(t);
     if (subs.length) {
       h += '<span class="cell-mini">' + I('subtask', 11) + ' ' +
@@ -1478,6 +1496,9 @@
     if (!logs.length) {
       h += '<div class="ovw-empty">' + L('ยังไม่เคยรายงานสถานะ') + '</div>';
     } else {
+      /* 3b — รายงานล่าสุดแสดงเต็ม (บล็อก + ไฮไลต์) ที่เหลือย่อเป็นบรรทัดเดียว */
+      h += statusEntryHtml(p, logs[0], true);
+      logs = logs.slice(1);
       h += '<div class="ovw-log">';
       logs.slice(0, 10).forEach(function (sl) {
         var st = projectState(sl.state);
@@ -1485,7 +1506,8 @@
         h += '<div class="ovw-logrow">' +
           '<span class="status-pill" style="background:' + st.color + '22;color:' + st.color +
           '"><i style="background:' + st.color + '"></i>' + esc(L(st.label)) + '</span>' +
-          '<div class="grow">' + (sl.text ? '<div class="t">' + esc(sl.text) + '</div>' : '') +
+          '<div class="grow">' + (sl.title ? '<div class="t"><b>' + esc(sl.title) + '</b></div>' : '') +
+          (sl.text ? '<div class="t">' + esc(S.plainText(sl.text).slice(0, 300)) + '</div>' : '') +
           '<em>' + esc(by ? by.name : '—') + ' · ' + esc(fmtWhen(sl.at)) + '</em></div></div>';
       });
       h += '</div>';
@@ -1605,14 +1627,22 @@
         esc(projectId) + '">' + L('ประกาศ') + '</button></div></div>';
     }
 
-    if (!rows.length) {
+    /* 3b — รายงานสถานะขึ้นในฟีดเดียวกับประกาศ เรียงตามเวลา */
+    var mp = S.project(projectId);
+    var feed = rows.map(function (m) { return { at: m.at, m: m }; });
+    ((mp && mp.statusLog) || []).forEach(function (e) { feed.push({ at: e.at, st: e }); });
+    feed.sort(function (a, b) { return String(a.at) < String(b.at) ? 1 : -1; });
+
+    if (!feed.length) {
       h += '<div class="ovw-empty" style="padding:24px 2px">' +
         L('ยังไม่มีประกาศ ใช้ที่นี่สำหรับเรื่องที่เป็นของทั้งโปรเจกต์ ไม่ใช่ของงานชิ้นใดชิ้นหนึ่ง') +
         '</div>';
       return h + '</div>';
     }
 
-    rows.forEach(function (m) {
+    feed.forEach(function (x) {
+      if (x.st) { h += statusEntryHtml(mp, x.st, true); return; }
+      var m = x.m;
       var by = S.user(m.by);
       var mine = S.me() && m.by === S.me().id;
       h += '<article class="msg-card">' +
@@ -1626,6 +1656,166 @@
         '</div><div class="msg-body">' + richText(m.body) + '</div></article>';
     });
     return h + '</div>';
+  }
+
+  /* ---------- 3b — รายงานสถานะแบบบล็อก ---------- */
+
+  function blockLabel(b) {
+    if (b.k === 'custom') return b.title || L('หัวข้อกำหนดเอง');
+    var d = S.STATUS_BLOCKS.filter(function (x) { return x.k === b.k; })[0];
+    return d ? L(d.label) : b.k;
+  }
+
+  /** ไฮไลต์ (ภาพนิ่ง ณ ตอนรายงาน) — รายการงานกดเปิดได้ ภาพรวมเป็นแท่งต่อคอลัมน์ */
+  function statusHlHtml(hl, period) {
+    if (!hl || !hl.length) return '';
+    var h = '<div class="sth-hls">';
+    hl.forEach(function (x) {
+      var def = S.STATUS_HL.filter(function (d) { return d.k === x.k; })[0];
+      var title = def ? L(def.label) : x.k;
+      if (x.k === 'chart') {
+        h += '<div class="sth-hl"><h5>' + I('chart', 13) + ' ' + esc(title) + ' <span>' + x.pct + '%</span></h5>' +
+          '<div class="sth-kpi"><span><b>' + x.total + '</b>' + L('งานทั้งหมด') + '</span><span><b>' + x.done + '</b>' +
+          L('เสร็จแล้ว') + '</span><span class="' + (x.overdue ? 'bad' : '') + '"><b>' + x.overdue + '</b>' + L('เลยกำหนด') + '</span></div>';
+        (x.secs || []).forEach(function (s) {
+          var pc = s.total ? Math.round(s.done * 100 / s.total) : 0;
+          h += '<div class="sth-bar"><span class="nm">' + esc(s.name) + '</span><span class="trk"><i style="width:' + pc +
+            '%"></i></span><span class="n">' + s.done + '/' + s.total + '</span></div>';
+        });
+        h += '</div>';
+        return;
+      }
+      h += '<div class="sth-hl"><h5>' + I(x.k === 'overdue' ? 'alert' : x.k === 'milestones' ? 'diamond' : 'checkCircle', 13) + ' ' +
+        esc(title) + ' <span>' + x.n + '</span>' +
+        (x.k !== 'overdue' && period ? '<em>' + esc(L('{n} วันที่ผ่านมา', { n: period })) + '</em>' : '') + '</h5>';
+      if (!x.items.length) h += '<div class="sth-none">' + L('ไม่มี') + '</div>';
+      x.items.forEach(function (it) {
+        var u = S.user(it.a);
+        h += '<button class="sth-task" data-act="open-task" data-id="' + esc(it.id) + '">' +
+          '<span class="grow">' + esc(it.name) + '</span>' +
+          (it.d ? '<span class="chip' + (x.k === 'overdue' ? ' overdue' : '') + '">' + fmtDate(it.d) + '</span>' : '') +
+          (u ? avatar(u, 'sm') : '') + '</button>';
+      });
+      if (x.n > x.items.length) h += '<div class="sth-none">' + esc(L('และอีก {n} งาน', { n: x.n - x.items.length })) + '</div>';
+      h += '</div>';
+    });
+    return h + '</div>';
+  }
+
+  /** รายงานสถานะหนึ่งครั้ง — full = บล็อกและไฮไลต์ครบ */
+  function statusEntryHtml(p, e, full) {
+    if (!e) return '';
+    var st = projectState(e.state), by = S.user(e.by);
+    var h = '<article class="sth"><div class="sth-head"><span class="status-pill" style="background:' + st.color +
+      '22;color:' + st.color + '"><i style="background:' + st.color + '"></i>' + esc(L(st.label)) + '</span>' +
+      '<div class="grow">' + (e.title ? '<b>' + esc(e.title) + '</b>' : '<b>' + L('รายงานสถานะ') + '</b>') +
+      '<em title="' + esc(fmtExact(e.at)) + '">' + esc(by ? by.name : '—') + ' · ' + esc(fmtWhen(e.at)) + '</em></div></div>';
+    if (full && e.blocks && e.blocks.length) {
+      e.blocks.forEach(function (b) {
+        h += '<div class="sth-blk"><h4>' + esc(blockLabel(b)) + '</h4><div class="sth-txt">' + richText(b.text) + '</div></div>';
+      });
+    } else if (e.text) {
+      h += '<div class="sth-txt">' + richText(e.text) + '</div>';
+    }
+    if (full) h += statusHlHtml(e.hl, e.period);
+    return h + '</article>';
+  }
+
+  /* ---------- 3b — หน้าส่งฟอร์ม #/form/<id> ----------
+   * ff = { ans: { qid: คำตอบ }, done: taskId, err, params, errQ } อยู่แค่ในหน้าจอจนกว่าจะกดส่ง */
+  function formQuestion(it, ff) {
+    var a = ff.ans[it.id];
+    var d = ' data-q="' + esc(it.id) + '"';
+    if (it.kind === 'heading') {
+      return '<div class="ffq-head"><b>' + esc(it.label) + '</b>' + (it.help ? '<div>' + esc(it.help) + '</div>' : '') + '</div>';
+    }
+    var h = '<div class="ffq' + (ff.errQ === it.id ? ' err' : '') + '"><label class="ffq-l">' + esc(it.label || L('(ไม่มีคำถาม)')) +
+      (it.req ? ' <span class="req">*</span>' : '') + '</label>' + (it.help ? '<div class="ffq-help">' + esc(it.help) + '</div>' : '');
+    switch (it.kind) {
+      case 'text':
+        h += '<input class="inp" data-act="ff-ans"' + d + ' maxlength="500" value="' + esc(a || '') + '">'; break;
+      case 'long':
+        h += '<textarea class="inp" rows="4" data-act="ff-ans"' + d + '>' + esc(a || '') + '</textarea>'; break;
+      case 'number':
+        h += '<input class="inp" type="number" step="any" data-act="ff-ans"' + d + ' value="' + esc(a == null ? '' : a) + '">'; break;
+      case 'date':
+        h += '<input class="inp" type="date" data-act="ff-ans"' + d + ' value="' + esc(a || '') + '">'; break;
+      case 'range': {
+        var r = a || ['', ''];
+        h += '<div class="ffq-range"><input class="inp" type="date" data-act="ff-range" data-part="0"' + d + ' value="' + esc(r[0] || '') + '">' +
+          '<span>–</span><input class="inp" type="date" data-act="ff-range" data-part="1"' + d + ' value="' + esc(r[1] || '') + '"></div>';
+        break;
+      }
+      case 'select':
+        it.opts.forEach(function (o) {
+          h += '<label class="ffq-opt"><input type="radio" name="ffq_' + esc(it.id) + '" data-act="ff-ans"' + d +
+            ' value="' + esc(o) + '"' + (a === o ? ' checked' : '') + '><span>' + esc(o) + '</span></label>';
+        });
+        break;
+      case 'multi': {
+        var cur = [].concat(a || []);
+        it.opts.forEach(function (o) {
+          h += '<label class="ffq-opt"><input type="checkbox" data-act="ff-multi"' + d + ' value="' + esc(o) + '"' +
+            (cur.indexOf(o) >= 0 ? ' checked' : '') + '><span>' + esc(o) + '</span></label>';
+        });
+        break;
+      }
+      case 'person':
+        h += '<select class="inp" data-act="ff-ans"' + d + '><option value="">' + L('เลือกคน') + '</option>' +
+          S.db.users.filter(function (u) { return u.active !== false; }).map(function (u) {
+            return '<option value="' + esc(u.id) + '"' + (a === u.id ? ' selected' : '') + '>' + esc(u.name) + '</option>';
+          }).join('') + '</select>';
+        break;
+      case 'file': {
+        var files = [].concat(a || []);
+        files.forEach(function (x, i) {
+          h += '<div class="ffq-file">' + I('paperclip', 13) + '<span class="grow">' + esc(x.name) + '</span><em>' +
+            esc(x.size ? (x.size / 1024).toFixed(0) + ' KB' : '') + '</em><button class="flt-del" data-act="ff-file-del"' + d +
+            ' data-i="' + i + '" title="' + L('เอาออก') + '">' + I('close', 12) + '</button></div>';
+        });
+        if (files.length < S.FORM_FILES_MAX) {
+          h += '<label class="btn btn-sm ffq-pick">' + I('paperclip', 13) + ' ' + L('เลือกไฟล์') +
+            '<input type="file" multiple hidden data-act="ff-file"' + d + '></label>' +
+            '<div class="ffq-help">' + L('ไม่เกิน {n} ไฟล์ ไฟล์ละไม่เกิน 2 MB', { n: S.FORM_FILES_MAX }) + '</div>';
+        }
+        break;
+      }
+    }
+    return h + '</div>';
+  }
+
+  function formPage(id, ff) {
+    var x = S.formById(id);
+    if (!x) {
+      return '<div class="empty"><div class="big">' + I('note', 32) + '</div>' + L('ไม่พบฟอร์มนี้ อาจถูกลบไปแล้ว') + '</div>';
+    }
+    var f = x.f, p = x.p, me = S.me();
+    ff = ff || { ans: {} };
+    var h = '<div class="ffp"><div class="ffp-card">';
+    h += '<div class="ffp-proj"><span class="hproj-ic" style="background:' + esc(p.color) + '22">' + esc(p.icon) + '</span>' +
+      esc(p.name) + (S.canEditForms(p.id) ? '<button class="as-link" data-act="fm-edit" data-project="' + esc(p.id) +
+        '" data-id="' + esc(f.id) + '">' + I('pencil', 12) + ' ' + L('แก้ฟอร์ม') + '</button>' : '') + '</div>';
+    h += '<h1 class="ffp-title">' + esc(f.name) + '</h1>';
+    if (f.desc) h += '<div class="ffp-desc">' + richText(f.desc) + '</div>';
+    if (!f.on || p.archived) {
+      h += '<div class="ffp-closed">' + I('lock', 14) + ' ' + L('ฟอร์มนี้ปิดรับคำตอบแล้ว') + '</div>';
+    } else if (ff.done) {
+      var dt = S.task(ff.done);
+      h += '<div class="ffp-done">' + I('checkCircle', 28) + '<b>' + esc(f.confirm || L('ส่งเรียบร้อยแล้ว ขอบคุณ')) + '</b>' +
+        '<div class="ffp-done-acts">' +
+        (dt && S.canSeeTask(dt.id) ? '<button class="btn" data-act="open-task" data-id="' + esc(dt.id) + '">' + L('ดูงานที่สร้าง') + '</button>' : '') +
+        (f.again ? '<button class="btn btn-primary" data-act="ff-again">' + L('ส่งอีกครั้ง') + '</button>' : '') + '</div></div>';
+    } else {
+      var vis = S.formVisible(f, ff.ans);
+      if (!f.items.length) h += '<div class="ovw-empty">' + L('ฟอร์มนี้ยังไม่มีคำถาม') + '</div>';
+      f.items.forEach(function (it) { if (vis[it.id]) h += formQuestion(it, ff); });
+      if (ff.err) h += '<div class="ffp-err">' + I('alert', 13) + ' ' + esc(L(ff.err, ff.params || undefined)) + '</div>';
+      h += '<div class="ffp-foot"><span>' + esc(L('ส่งในชื่อ {n}', { n: me ? me.name : '—' })) + '</span>' +
+        '<button class="btn btn-primary" data-act="ff-submit" data-id="' + esc(f.id) + '">' + L('ส่งฟอร์ม') + '</button></div>';
+    }
+    h += '</div><p class="ffp-note">' + I('lock', 12) + ' ' +
+      L('ส่งได้เฉพาะสมาชิกที่เข้าระบบ Orbit แล้ว ฟอร์มสาธารณะสำหรับคนนอกองค์กรต้องมีเซิร์ฟเวอร์ จะมาในเฟส 5') + '</p></div>';
+    return h;
   }
 
   /* ---------- หน้ารวมโปรเจกต์ทั้งหมด ----------
@@ -2247,6 +2437,19 @@
         action: '<button class="btn btn-sm btn-ghost" data-act="go" data-route="inbox">' + L('ดูทั้งหมด') + '</button>',
         body: ab
       };
+    } else if (w === 'forms') {
+      /* 3b — ฟอร์มที่เปิดรับอยู่ในโปรเจกต์ที่เห็นได้ กดเพื่อเปิดหน้าส่งฟอร์ม */
+      var fl = S.formsForHome();
+      var fb = '';
+      if (!fl.length) fb = '<div class="hempty">' + L('ยังไม่มีฟอร์มที่เปิดรับ สร้างได้จากเมนูโปรเจกต์ → ฟอร์ม') + '</div>';
+      fl.slice(0, HOME_ROWS).forEach(function (x) {
+        fb += '<button class="hform" data-act="go-form" data-id="' + esc(x.f.id) + '">' +
+          '<span class="hproj-ic" style="background:' + esc(x.p.color) + '22">' + esc(x.p.icon) + '</span>' +
+          '<span class="grow"><b>' + esc(x.f.name) + '</b><em>' + esc(x.p.name) + ' · ' +
+          esc(L('{n} คำตอบ', { n: x.f.n || 0 })) + (x.f.last ? ' · ' + esc(L('ล่าสุด')) + ' ' + esc(fmtWhen(x.f.last)) : '') +
+          '</em></span>' + I('arrowRight', 13) + '</button>';
+      });
+      o = { title: hTitle(I('note', 15), L('ฟอร์ม')), body: fb };
     }
     if (!o) return '';
     o.cls = (x.full ? 'full' : 'half') + (edit ? ' hw-edit' : '');
@@ -3271,11 +3474,23 @@
     // ชนิดงาน
     h += '<div class="fld"><label>' + L('ชนิดงาน') + '</label><div class="val"><select class="inp" ' +
       'data-act="edit-type">';
-    S.TASK_TYPES.forEach(function (x) {
-      h += '<option value="' + x.id + '"' + (t.type === x.id ? ' selected' : '') + '>' +
-        x.icon + ' ' + esc(L(x.label)) + '</option>';
+    /* 3b — ชนิดในตัว + ชนิดกำหนดเองของโปรเจกต์ที่งานอยู่ */
+    var curType = t.ctype || t.type;
+    S.typeChoicesFor(t.id).forEach(function (x) {
+      h += '<option value="' + esc(x.id) + '"' + (curType === x.id ? ' selected' : '') + '>' +
+        esc(x.icon) + ' ' + esc(x.custom ? x.label : L(x.label)) + '</option>';
     });
     h += '</select></div></div>';
+    var cty = S.typeOf(t);
+    if (cty) {
+      h += '<div class="fld"><label>' + L('สถานะ') + '</label><div class="val fld-inline">' + statusPill(t) +
+        '<select class="inp" data-act="edit-cstatus" style="flex:1 1 140px">';
+      cty.statuses.forEach(function (s) {
+        h += '<option value="' + esc(s.id) + '"' + (t.cstatus === s.id ? ' selected' : '') + '>' +
+          esc(s.name) + (s.done ? ' ✓' : '') + '</option>';
+      });
+      h += '</select></div></div>';
+    }
 
     // สถานะอนุมัติ
     /* ผู้อนุมัติคือผู้รับผิดชอบงาน — ปุ่มตัดสินใจกดได้เฉพาะเขา (หรือคนที่แก้โปรเจกต์ได้)
@@ -4088,7 +4303,7 @@
 
   var AUDIT_GROUP = {
     auth: 'การเข้าใช้งาน', user: 'จัดการสมาชิก', project: 'โปรเจกต์',
-    system: 'ระบบ', task: 'งาน', security: 'ความปลอดภัย', field: 'ฟิลด์', tag: 'แท็ก'
+    system: 'ระบบ', task: 'งาน', security: 'ความปลอดภัย', field: 'ฟิลด์', tag: 'แท็ก', template: 'เทมเพลต'
   };
   function auditGroupLabel(g) { return AUDIT_GROUP[g] || g; }
 
@@ -4133,6 +4348,10 @@
     'project.baseline': 'ได้ตั้งเส้นฐานของ',
     'project.baselineClear': 'ได้ลบเส้นฐานของ',
     'project.import': 'ได้นำเข้างานเข้าโปรเจกต์',
+    'project.type': 'ได้บันทึกชนิดงานในโปรเจกต์',
+    'project.form': 'ได้บันทึกฟอร์มในโปรเจกต์',
+    'template.save': 'ได้บันทึกเทมเพลตโปรเจกต์',
+    'template.delete': 'ได้ลบเทมเพลตโปรเจกต์',
     'project.export': 'ได้ส่งออกงานของโปรเจกต์',
     'portfolio.create': 'ได้สร้างพอร์ตโฟลิโอ',
     'portfolio.delete': 'ได้ลบพอร์ตโฟลิโอ',
@@ -4154,7 +4373,7 @@
 
   var AUDIT_ICON = {
     auth: 'signIn', user: 'users', project: 'archive',
-    system: 'settings', task: 'checkCircle', security: 'shield', field: 'hash', tag: 'flag'
+    system: 'settings', task: 'checkCircle', security: 'shield', field: 'hash', tag: 'flag', template: 'star'
   };
   function auditIcon(a) { return AUDIT_ICON[a.split('.')[0]] || 'more'; }
   /** บอกว่าคนนี้เข้าระบบด้วยวิธีไหน ผู้ดูแลจะได้รู้ว่าต้องตัดสิทธิ์ที่ไหนบ้าง */
@@ -4386,7 +4605,10 @@
     projectCalendar: projectCalendar, globalCalendar: globalCalendar, colorFor: colorFor,
     groupLabel: groupLabel, searchView: searchView, drawer: drawer,
     searchHelp: searchHelp, tagView: tagView, noAccessView: noAccessView, calColor: calColor,
-    taskRow: taskRow, taskCard: taskCard
+    taskRow: taskRow, taskCard: taskCard,
+    /* 3b */
+    statusPill: statusPill, statusEntryHtml: statusEntryHtml, statusHlHtml: statusHlHtml, blockLabel: blockLabel,
+    formPage: formPage
   };
 
 })(window);

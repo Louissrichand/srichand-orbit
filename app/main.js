@@ -51,7 +51,9 @@
     calx: {},                // วันที่ที่ปฏิทินแต่ละขอบเขตกำลังแสดง
     /* 2c — ค้นหาขั้นสูง เงื่อนไขอยู่แค่ในหน้าจอจนกว่าจะกดบันทึก (ของที่บันทึกแล้วอยู่ใน db.personal) */
     adv: { conds: [], mode: 'list', open: false, help: false },
-    csv: null                // ไฟล์ CSV ที่กำลังจับคู่คอลัมน์ { pid, file, text, enc, map }
+    csv: null,               // ไฟล์ CSV ที่กำลังจับคู่คอลัมน์ { pid, file, text, enc, map }
+    /* 3b — คำตอบที่กรอกค้างในหน้าส่งฟอร์ม ตัวแก้ฟอร์ม ตัวแก้ชนิดงาน ตัวแก้เทมเพลตงาน ตัวสร้างรายงานสถานะ */
+    ff: null, fe: null, te: null, tte: null, sb: null, npTab: 'blank', ttSec: null
   };
 
   /* มุมมองที่ทำงานอยู่ของโปรเจกต์
@@ -183,6 +185,7 @@
     else if (r.type === 'noaccess') parts = ['project', r.id];
     else if (r.type === 'trash' && r.pid) parts = ['trash', r.pid];
     else if (r.type === 'profile') parts = ['profile', r.id];
+    else if (r.type === 'form') parts = ['form', r.id];
     else parts = [r.type];
     if (state.openTaskId) parts.push(state.openTaskId);
     return '#/' + parts.join('/');
@@ -280,6 +283,8 @@
       if (!S.user(uid)) return null;
       return { route: { type: 'profile', id: uid }, taskId: taskId };
     }
+    /* 3b — หน้าส่งฟอร์ม #/form/<id> */
+    if (type === 'form' && seg[1]) return { route: { type: 'form', id: seg[1] }, taskId: taskId };
     if (['home', 'mytasks', 'inbox', 'calendar', 'admin', 'projects', 'trash'].indexOf(type) >= 0) {
       return { route: { type: type }, taskId: taskId };
     }
@@ -377,6 +382,9 @@
       body = R.noAccessView(r.id);
     } else if (r.type === 'trash') {
       body = R.trashView(r.pid);
+    } else if (r.type === 'form') {
+      if (!state.ff || state.ff.id !== r.id) state.ff = { id: r.id, ans: {} };
+      body = R.formPage(r.id, state.ff);
     }
 
     // ออกจาก Gantt แล้วแผงตัวเลือกไม่มีความหมายอีก ปล่อยค้างไว้จะบังหน้าจอเปล่า ๆ
@@ -847,10 +855,16 @@
   var EXTRA_SORTS = [['start', 'วันเริ่ม'], ['completedOn', 'วันที่ทำเสร็จ'], ['modified', 'แก้ไขล่าสุด'],
                      ['createdBy', 'สร้างโดย']];
 
+  /* 3b — ชนิดงานกับสถานะ เลือกได้เมื่อโปรเจกต์มีชนิดงานกำหนดเอง */
+  function typeGroupChoices(p) {
+    return (p.types || []).length ? [['cstatus', L('สถานะ (ชนิดงาน)')], ['type', L('ชนิดงาน')]] : [];
+  }
+
   function sortKeys(p) {
     return S.SORTS.filter(function (x) { return x.id !== 'manual'; })
       .map(function (x) { return [x.id, L(x.label)]; })
       .concat(EXTRA_SORTS.map(function (x) { return [x[0], L(x[1])]; }))
+      .concat(typeGroupChoices(p))
       .concat(p.fields.map(function (f) { return ['field:' + f.id, f.name]; }));
   }
 
@@ -862,6 +876,7 @@
   /** ตัวเลือกจัดกลุ่มของรายการ/ไทม์ไลน์/Gantt — ของในตัว + ฟิลด์ตัวเลือก คน และวันที่ */
   function listGroupChoices(p) {
     return S.GROUPS.map(function (x) { return [x.id, L(x.label)]; })
+      .concat(typeGroupChoices(p))
       .concat(p.fields.filter(function (f) { return f.type === 'select' || f.type === 'person' || f.type === 'date'; })
         .map(function (f) { return ['field:' + f.id, f.name]; }));
   }
@@ -870,6 +885,7 @@
   function boardGroupChoices(p, lanes) {
     var out = lanes ? [['none', L('ไม่แบ่งแถว')]] : [];
     out.push(['section', L('คอลัมน์ของโปรเจกต์')], ['assignee', L('ผู้รับผิดชอบ')], ['priority', L('ความสำคัญ')]);
+    out = out.concat(typeGroupChoices(p));
     p.fields.forEach(function (f) {
       if (f.type === 'select' || f.type === 'person') out.push(['field:' + f.id, f.name]);
     });
@@ -1617,6 +1633,13 @@
   function projectModal(existing) {
     var p = existing || { name: '', icon: '📁', color: S.PALETTE[0], description: '' };
     var h = '<h2>' + (existing ? L('แก้ไขโปรเจกต์') : L('สร้างโปรเจกต์ใหม่')) + '</h2>';
+    /* 3b — โปรเจกต์เปล่า หรือเลือกจากแกลเลอรีเทมเพลต */
+    if (!existing) {
+      h += '<div class="au-tabs"><button class="' + (state.npTab !== 'tpl' ? 'on' : '') + '" data-act="np-tab" data-v="blank">' +
+        L('โปรเจกต์เปล่า') + '</button><button class="' + (state.npTab === 'tpl' ? 'on' : '') + '" data-act="np-tab" data-v="tpl">' +
+        L('จากเทมเพลต') + ' <span>' + S.projectTemplates().length + '</span></button></div>';
+      if (state.npTab === 'tpl') return h + ptGalleryHtml();
+    }
     h += '<div class="field"><label>' + L('ชื่อโปรเจกต์') + '</label><input id="pName" value="' +
       R.esc(p.name) + '" placeholder="' + L('เช่น เปิดตัวสินค้าใหม่') + ' 2026">' + '</div>';
     h += '<div class="field"><label>' + L('คำอธิบาย') + '</label><input id="pDesc" value="' +
@@ -1760,9 +1783,13 @@
     h += item('proj-notify-menu', 'bell', L('การแจ้งเตือนของโปรเจกต์นี้'));
     h += item('copy-project-link', 'link', L('คัดลอกลิงก์โปรเจกต์'));
     h += item('dup-project', 'copy', L('คัดลอกโปรเจกต์'));
+    h += item('pt-save', 'star', L('บันทึกเป็นเทมเพลตโปรเจกต์…'));
     h += '<div class="pop-sep"></div>';
     h += item('manage-fields', 'filter', L('จัดการฟิลด์'));
     h += item('auto-open', 'bolt', L('ระบบอัตโนมัติ'));
+    h += item('forms-open', 'note', L('ฟอร์ม'));
+    h += item('types-open', 'diamond', L('ชนิดงานและสถานะ'));
+    h += item('manage-templates', 'star', L('เทมเพลตงาน'));
     h += item('reset-cols', 'arrowLeft', L('คืนความกว้างคอลัมน์เดิม'));
     h += '<div class="pop-sep"></div>';
     h += item('import-csv', 'archive', L('นำเข้างานจาก CSV'));
@@ -2677,9 +2704,11 @@
   function addMenu(projectId) {
     var h = '<button data-act="quick-add">' + I('plus', 15) +
       '<span class="grow">' + L('เพิ่มงานเปล่า') + '</span></button>';
-    if (S.can('structure')) {
-      h += '<button data-act="manage-templates">' + I('star', 15) +
+    if (S.taskTemplatesFor(projectId).length || S.can('structure')) {
+      h += '<button data-act="tt-pick">' + I('star', 15) +
         '<span class="grow">' + L('เพิ่มจากเทมเพลต') + '</span></button>';
+    }
+    if (S.can('structure')) {
       h += '<button data-act="add-section">' + I('grid', 15) +
         '<span class="grow">' + L('เพิ่มคอลัมน์') + '</span></button>';
       h += '<div class="pop-sep"></div>';
@@ -2761,42 +2790,650 @@
     return h;
   }
 
-  function statusModal(projectId) {
-    var p = S.project(projectId);
-    var cur = p.status || { state: 'on_track', text: '' };
-    var h = '<h2>' + L('รายงานสถานะ') + ' — ' + R.esc(p.name) + '</h2>';
+  /* ======================================================================
+   * 3b — รายงานสถานะแบบบล็อก ฟอร์ม ชนิดงาน เทมเพลตโปรเจกต์ และเทมเพลตงาน
+   * ทุกตัวแก้เป็นสำเนาในหน้าจอ (state.sb / fe / te / tte) จนกว่าจะกดบันทึก
+   * ช่องพิมพ์อัปเดตสำเนาตอนพิมพ์โดยไม่วาดใหม่ (syncDraft3b) ตัวเลือกวาดหน้าต่างใหม่ (refresh3b)
+   * ====================================================================== */
 
-    h += '<label class="opt-lbl">' + L('สถานะ') + '</label><div class="st-pick" id="stPick">';
+  function refresh3b(html, wide) {
+    if (!$mdBack.classList.contains('open')) { openModal(html, wide); return; }
+    var top = $modal.scrollTop;
+    $modal.className = 'modal' + (wide ? ' wide' : '');
+    $modal.innerHTML = html;
+    $modal.scrollTop = top;
+  }
+
+  /* ---------- ตัวสร้างรายงานสถานะ ---------- */
+
+  function openStatusBuilder(pid) {
+    var p = S.project(pid);
+    if (!p) return;
+    var lay = S.statusLayoutOf(pid);
+    state.sb = { pid: pid, state: (p.status && p.status.state) || 'on_track', title: '',
+      blocks: lay.blocks.map(function (b) { return { k: b.k, title: b.title || '', text: '' }; }),
+      hl: lay.hl.slice(), period: lay.period || 7 };
+    openModal(statusBuilderHtml(), true);
+  }
+
+  function statusBuilderHtml() {
+    var s = state.sb, p = S.project(s && s.pid);
+    if (!p) return '';
+    var canStruct = S.can('structure') && S.canInProject(p.id, 'edit');
+    var h = '<h2>' + L('รายงานสถานะ') + ' — ' + esc(p.name) + '</h2><div class="sb-grid"><div class="sb-main">';
+    h += '<div class="st-pick">';
     S.PROJECT_STATES.forEach(function (x) {
-      h += '<button type="button" class="' + (cur.state === x.id ? 'on' : '') +
-        '" data-v="' + x.id + '" style="--c:' + x.color + '">' +
-        '<i style="background:' + x.color + '"></i>' + R.esc(L(x.label)) + '</button>';
+      h += '<button type="button" class="' + (s.state === x.id ? 'on' : '') + '" data-act="sb-state" data-v="' + x.id +
+        '" style="--c:' + x.color + '"><i style="background:' + x.color + '"></i>' + esc(L(x.label)) + '</button>';
     });
     h += '</div>';
-
-    h += '<div class="field" style="margin-top:14px"><label>' + L('สรุปให้ทีมอ่าน') + '</label>' +
-      '<textarea id="stText" rows="4" placeholder="' + L('งานเดินถึงไหน ติดอะไร ต้องการอะไร') + '">' +
-      R.esc(cur.text) + '</textarea></div>';
-
-    var log = S.statusLog(projectId, 6);
+    h += '<input class="inp sb-title" data-act="sb-title" maxlength="120" value="' + esc(s.title) + '" placeholder="' +
+      esc(L('หัวเรื่อง เช่น สรุปสัปดาห์ที่ 3')) + '">';
+    s.blocks.forEach(function (b, i) {
+      var d = ' data-i="' + i + '"';
+      h += '<div class="sb-blk"><div class="sb-bh">' +
+        (b.k === 'custom'
+          ? '<input class="inp" data-act="sb-btitle"' + d + ' maxlength="80" value="' + esc(b.title) + '" placeholder="' + esc(L('ชื่อหัวข้อ')) + '">'
+          : '<b>' + esc(R.blockLabel(b)) + '</b>') +
+        (i > 0 ? '<button class="flt-del" data-act="sb-up"' + d + ' title="' + esc(L('ย้ายขึ้น')) + '">' + I('arrowUp', 13) + '</button>' : '') +
+        '<button class="flt-del" data-act="sb-del"' + d + ' title="' + esc(L('เอาบล็อกนี้ออก')) + '">' + I('close', 13) + '</button></div>' +
+        '<textarea class="inp" rows="3" data-act="sb-text"' + d + ' placeholder="' + esc(L('เขียนสั้น ๆ ขึ้นต้นด้วย - เพื่อทำหัวข้อย่อย')) + '">' +
+        esc(b.text) + '</textarea></div>';
+    });
+    if (s.blocks.length < 10) {
+      h += '<select class="opt-select sb-add" data-act="sb-add"><option value="">+ ' + L('เพิ่มบล็อก…') + '</option>' +
+        S.STATUS_BLOCKS.map(function (b) { return '<option value="' + b.k + '">' + esc(L(b.label)) + '</option>'; }).join('') + '</select>';
+    }
+    if (s.hl.length) {
+      h += '<label class="opt-lbl">' + L('ไฮไลต์ (ภาพ ณ ตอนนี้ จะเก็บไว้กับรายงาน)') + '</label>' +
+        R.statusHlHtml(S.statusHighlights(p.id, s.hl, s.period), s.period);
+    }
+    h += '</div><aside class="sb-side">';
+    h += '<h4>' + L('ไฮไลต์') + '</h4>';
+    S.STATUS_HL.forEach(function (x) {
+      h += '<label class="chk"><input type="checkbox" data-act="sb-hl" data-k="' + x.k + '"' +
+        (s.hl.indexOf(x.k) >= 0 ? ' checked' : '') + '> ' + esc(L(x.label)) + '</label>';
+    });
+    h += '<label class="opt-lbl">' + L('ช่วงเวลา') + '</label><select class="opt-select" data-act="sb-period">' +
+      S.STATUS_PERIODS.map(function (n) {
+        return '<option value="' + n + '"' + (+s.period === n ? ' selected' : '') + '>' + esc(L('{n} วันที่ผ่านมา', { n: n })) + '</option>';
+      }).join('') + '</select>';
+    var tpls = S.statusTemplates();
+    h += '<h4>' + L('เทมเพลตรายงาน') + '</h4>';
+    if (tpls.length) {
+      h += '<select class="opt-select" data-act="sb-tpl"><option value="">' + L('ใช้เทมเพลต…') + '</option>' +
+        tpls.map(function (t) { return '<option value="' + esc(t.id) + '">' + esc(t.name) + '</option>'; }).join('') + '</select>';
+      h += '<div class="sb-tpls">' + tpls.map(function (t) {
+        var mine = t.by === S.db.currentUserId || S.isAdmin();
+        return '<span class="chip">' + esc(t.name) + (mine ? '<button data-act="sb-tpl-del" data-id="' + esc(t.id) +
+          '" title="' + esc(L('ลบเทมเพลต')) + '">' + I('close', 11) + '</button>' : '') + '</span>';
+      }).join('') + '</div>';
+    }
+    h += '<button class="btn btn-sm" data-act="sb-tpl-save">' + I('star', 13) + ' ' + L('บันทึกเลย์เอาต์นี้เป็นเทมเพลต') + '</button>';
+    var owner = S.user(p.owner);
+    h += '<h4>' + L('เตือนทุกสัปดาห์') + '</h4><label class="chk"><input type="checkbox" data-act="sb-remind"' +
+      (p.statusRemind ? ' checked' : '') + (canStruct ? '' : ' disabled') + '> ' + L('สร้างงานเตือนเจ้าของโปรเจกต์ทุกวันศุกร์') + '</label>' +
+      '<p class="opt-note">' + esc(owner ? L('เจ้าของโปรเจกต์: {n} · ถ้ารายงานในสัปดาห์นั้นแล้วจะไม่สร้าง งานเตือนปิดเองเมื่อรายงาน', { n: owner.name })
+        : L('โปรเจกต์นี้ยังไม่มีเจ้าของ ตั้งได้ที่ตั้งค่าโปรเจกต์')) + '</p>';
+    var log = S.statusLog(p.id, 3);
     if (log.length) {
-      h += '<label class="opt-lbl">' + L('รายงานก่อนหน้า') + '</label><div class="st-log">';
+      h += '<h4>' + L('รายงานก่อนหน้า') + '</h4><div class="st-log">';
       log.forEach(function (e) {
-        var s = R.projectState(e.state);
-        var by = S.user(e.by);
-        h += '<div class="st-log-row"><i style="background:' + s.color + '"></i>' +
-          '<div><b style="color:' + s.color + '">' + R.esc(L(s.label)) + '</b>' +
-          (e.text ? '<em>' + R.esc(e.text) + '</em>' : '') +
-          '<span title="' + R.esc(R.fmtExact(e.at)) + '">' + R.esc(by ? by.name : '?') +
-          ' · ' + R.esc(R.fmtWhen(e.at)) + '</span></div></div>';
+        var st = R.projectState(e.state), by = S.user(e.by);
+        h += '<div class="st-log-row"><i style="background:' + st.color + '"></i><div><b style="color:' + st.color + '">' +
+          esc(L(st.label)) + '</b>' + (e.title || e.text ? '<em>' + esc(e.title || S.plainText(e.text).slice(0, 120)) + '</em>' : '') +
+          '<span>' + esc(by ? by.name : '?') + ' · ' + esc(R.fmtWhen(e.at)) + '</span></div></div>';
       });
       h += '</div>';
     }
-
+    h += '</aside></div>';
     h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
-      '<button class="btn btn-primary" data-act="save-status" data-id="' + R.esc(projectId) +
-      '">' + L('บันทึก') + '</button></div>';
+      '<button class="btn btn-primary" data-act="save-status" data-id="' + esc(p.id) + '">' + L('โพสต์รายงาน') + '</button></div>';
     return h;
+  }
+
+  /* ---------- ฟอร์ม ---------- */
+
+  function formUrl(id) { return appUrl() + '#/form/' + id; }
+
+  function openForms(pid) {
+    state.fe = null;
+    openModal(formsModal(pid), true);
+  }
+
+  function formsModal(pid) {
+    var p = S.project(pid);
+    if (!p) return '';
+    var canEdit = S.canEditForms(pid), list = p.forms || [];
+    var d = ' data-project="' + esc(pid) + '"';
+    var h = '<h2 class="au-h">' + I('note', 17) + ' ' + L('ฟอร์ม') + ' — ' + esc(p.name) + '</h2>';
+    h += '<p class="opt-note" style="margin-top:0">' + L('คำตอบแต่ละครั้งกลายเป็นงานหนึ่งชิ้นในโปรเจกต์นี้ คำถามผูกกับฟิลด์ได้ และแตกแขนงตามคำตอบได้') + '</p>';
+    if (!list.length) {
+      h += '<p class="au-empty">' + (canEdit ? L('ยังไม่มีฟอร์ม กด “สร้างฟอร์ม” เพื่อเริ่ม') : L('ยังไม่มีฟอร์มในโปรเจกต์นี้')) + '</p>';
+    }
+    h += '<div class="au-list">';
+    list.forEach(function (f) {
+      var nq = f.items.filter(function (it) { return it.kind !== 'heading'; }).length;
+      var fd = d + ' data-id="' + esc(f.id) + '"';
+      h += '<div class="au-row' + (f.on ? '' : ' off') + '">' +
+        '<button class="switch' + (f.on ? ' on' : '') + '" data-act="fm-toggle"' + fd + ' role="switch" aria-checked="' + (f.on ? 'true' : 'false') +
+        '" title="' + esc(f.on ? L('ปิดรับคำตอบ') : L('เปิดรับคำตอบ')) + '"' + (canEdit ? '' : ' disabled') + '><i></i></button>' +
+        '<div class="grow"><b>' + esc(f.name) + '</b><div class="sub">' +
+        esc(L('{q} คำถาม · {n} คำตอบ', { q: nq, n: f.n || 0 })) + (f.last ? ' · ' + esc(L('ล่าสุด')) + ' ' + esc(R.fmtWhen(f.last)) : '') +
+        '</div></div><span class="au-row-acts">' +
+        '<button class="btn btn-sm btn-ghost" data-act="fm-go"' + fd + ' title="' + esc(L('เปิดหน้าส่งฟอร์ม')) + '">' + I('arrowRight', 13) + '</button>' +
+        '<button class="btn btn-sm btn-ghost" data-act="fm-link"' + fd + ' title="' + esc(L('คัดลอกลิงก์ฟอร์ม')) + '">' + I('link', 13) + '</button>' +
+        (canEdit ? '<button class="btn btn-sm btn-ghost" data-act="fm-edit"' + fd + ' title="' + esc(L('แก้ไข')) + '">' + I('pencil', 13) + '</button>' +
+          '<button class="btn btn-sm btn-ghost" data-act="fm-dup"' + fd + ' title="' + esc(L('ทำสำเนา')) + '">' + I('copy', 13) + '</button>' +
+          '<button class="btn btn-sm btn-ghost btn-danger" data-act="fm-del"' + fd + ' title="' + esc(L('ลบ')) + '">' + I('trash', 13) + '</button>' : '') +
+        '</span></div>';
+    });
+    h += '</div>';
+    if (canEdit && list.length < S.FORM_MAX) {
+      h += '<div class="opt-acts"><button class="btn btn-sm btn-primary" data-act="fm-new"' + d + '>' + I('plus', 13) + ' ' + L('สร้างฟอร์ม') + '</button></div>';
+    }
+    h += '<p class="opt-note au-note">' + I('alert', 12) + ' ' + esc(L(FORM_PUBLIC_NOTE)) + '</p>';
+    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
+    return h;
+  }
+
+  var FORM_PUBLIC_NOTE = 'ลิงก์ฟอร์มเปิดได้เฉพาะสมาชิกที่เข้าระบบ Orbit (หรือในโหมดเครื่องเดียว) ฟอร์มสาธารณะสำหรับคนนอกองค์กรต้องมีเซิร์ฟเวอร์ จะมาในเฟส 5';
+
+  function feNewItem(kind) {
+    var opts = (kind === 'select' || kind === 'multi') ? [L('ตัวเลือก 1'), L('ตัวเลือก 2')] : [];
+    return { id: S.uid('q'), kind: kind, label: '', help: '', req: false, opts: opts, map: '', cond: null };
+  }
+
+  function formEditModal() {
+    var e = state.fe, f = e.f, pid = e.pid, p = S.project(pid);
+    if (!p) return '';
+    var h = '<h2 class="au-h">' + I('note', 17) + ' ' + (e.isNew ? L('สร้างฟอร์ม') : L('แก้ฟอร์ม')) + '</h2>';
+    h += '<div class="field"><label>' + L('ชื่อฟอร์ม') + '</label><input class="opt-select" data-act="fe-set" data-k="name" maxlength="120" value="' +
+      esc(f.name) + '"></div>';
+    h += '<div class="field"><label>' + L('คำอธิบาย (ไม่บังคับ)') + '</label><textarea class="opt-select au-text" rows="2" data-act="fe-set" data-k="desc">' +
+      esc(f.desc) + '</textarea></div>';
+    var pos = {};
+    f.items.forEach(function (it, i) { pos[it.id] = i; });
+    f.items.forEach(function (it, i) {
+      var d = ' data-i="' + i + '"';
+      var kd = S.formKind(it.kind) || {};
+      h += '<div class="au-block fe-q' + (it.cond ? ' fe-branch' : '') + '"' + (it.cond ? ' style="--depth:' + S.formDepth(f, it) + '"' : '') + '>' +
+        '<div class="flt-line"><span class="au-n">' + (i + 1) + '</span>' +
+        auSel('fe-q', S.FORM_KINDS.map(function (k) { return [k.id, L(k.label)]; }), it.kind, d + ' data-k="kind"') +
+        (i > 0 ? '<button class="flt-del" data-act="fe-q-up"' + d + ' title="' + esc(L('ย้ายขึ้น')) + '">' + I('arrowUp', 13) + '</button>' : '') +
+        (i < f.items.length - 1 ? '<button class="flt-del" data-act="fe-q-down"' + d + ' title="' + esc(L('ย้ายลง')) + '">' + I('arrowDown', 13) + '</button>' : '') +
+        '<button class="flt-del" data-act="fe-q-del"' + d + ' title="' + esc(L('ลบคำถามนี้')) + '">' + I('close', 13) + '</button></div>' +
+        '<div class="au-params">' +
+        '<input class="opt-select" data-act="fe-q"' + d + ' data-k="label" maxlength="300" value="' + esc(it.label) + '" placeholder="' +
+          esc(it.kind === 'heading' ? L('หัวข้อ') : L('คำถาม')) + '">' +
+        '<input class="opt-select" data-act="fe-q"' + d + ' data-k="help" maxlength="1000" value="' + esc(it.help) + '" placeholder="' +
+          esc(L('คำอธิบายใต้คำถาม (ไม่บังคับ)')) + '">';
+      if (kd.opts) {
+        h += '<label class="opt-lbl">' + L('ตัวเลือก (บรรทัดละหนึ่ง)') + '</label><textarea class="opt-select au-text" rows="3" data-act="fe-q"' + d +
+          ' data-k="opts">' + esc(it.opts.join('\n')) + '</textarea>';
+      }
+      if (it.kind !== 'heading') {
+        h += '<div class="flt-line"><label class="chk"><input type="checkbox" data-act="fe-q"' + d + ' data-k="req" data-t="check"' +
+          (it.req ? ' checked' : '') + '> ' + L('ต้องตอบ') + '</label>';
+        if (it.kind !== 'file') {
+          h += '<span class="au-pre-l">' + L('ใส่ลงใน') + '</span>' +
+            auSel('fe-q', S.formTargets(pid, it.kind).map(function (x) { return [x[0], x[0].indexOf('field:') === 0 ? x[1] : L(x[1])]; }), it.map, d + ' data-k="map"');
+        } else {
+          h += '<span class="au-pre-l">' + L('แนบเข้างานที่สร้าง (ไม่เกิน 2 MB ต่อไฟล์)') + '</span>';
+        }
+        h += '</div>';
+      }
+      /* แตกแขนง — แสดงคำถามนี้เมื่อคำถามตัวเลือกที่อยู่ก่อนหน้าตอบตรงค่าที่ติ๊ก */
+      var srcs = f.items.slice(0, i).filter(function (x) {
+        return (x.kind === 'select' || x.kind === 'multi') && S.formDepth(f, x) < S.FORM_DEPTH;
+      });
+      if (srcs.length) {
+        var cq = it.cond && pos[it.cond.q] < i ? it.cond.q : '';
+        h += '<div class="flt-line"><span class="au-pre-l">' + L('แสดง') + '</span>' +
+          auSel('fe-q', [['', L('เสมอ')]].concat(srcs.map(function (x) {
+            return [x.id, L('เมื่อ “{q}” ตอบ…', { q: x.label || ('#' + (pos[x.id] + 1)) })];
+          })), cq, d + ' data-k="condq"') + '</div>';
+        if (cq) {
+          var src = f.items[pos[cq]];
+          h += '<div class="flt-chips">' + src.opts.map(function (o) {
+            var on = it.cond.v.indexOf(o) >= 0;
+            return '<button class="flt-chip' + (on ? ' on' : '') + '" data-act="fe-cond-chip"' + d + ' data-v="' + esc(o) + '">' + esc(o) + '</button>';
+          }).join('') + '</div>';
+        }
+      }
+      h += '</div></div>';
+    });
+    h += '<div class="au-add">' + auSel('fe-q-add', [['', '+ ' + L('เพิ่มคำถาม…')]].concat(S.FORM_KINDS.map(function (k) { return [k.id, L(k.label)]; })), '', '') + '</div>';
+
+    /* ตั้งค่า */
+    var textQs = f.items.filter(function (it) { return it.kind === 'text' || it.kind === 'long'; });
+    h += '<div class="au-block"><div class="au-bh">' + L('ตั้งค่า') + '</div><div class="au-params">' +
+      '<label class="opt-lbl">' + L('งานใหม่ไปลงคอลัมน์') + '</label>' + auSel('fe-set', p.sections.map(function (s) { return [s.id, s.name]; }), f.sec || p.sections[0].id, ' data-k="sec"') +
+      '<label class="opt-lbl">' + L('ชื่องานมาจากคำถาม') + '</label>' +
+      auSel('fe-set', [['', L('คำถามที่ผูกกับ “ชื่องาน” (หรือชื่อฟอร์ม + คนส่ง)')]].concat(textQs.map(function (it) { return [it.id, it.label || '?']; })), f.titleQ, ' data-k="titleQ"') +
+      '<label class="opt-lbl">' + L('ผู้รับผิดชอบเริ่มต้น') + '</label>' +
+      auSel('fe-set', [['', L('ยังไม่มอบหมาย')]].concat(auUsers()), f.assignee, ' data-k="assignee"') +
+      '<label class="chk"><input type="checkbox" data-act="fe-set" data-k="copy" data-t="check"' + (f.copy ? ' checked' : '') + '> ' +
+        L('คัดลอกคำตอบลงรายละเอียดงาน') + '</label>' +
+      '<label class="chk"><input type="checkbox" data-act="fe-set" data-k="follow" data-t="check"' + (f.follow ? ' checked' : '') + '> ' +
+        L('ให้คนส่งเป็นผู้ติดตามงาน') + '</label>' +
+      '<label class="chk"><input type="checkbox" data-act="fe-set" data-k="again" data-t="check"' + (f.again ? ' checked' : '') + '> ' +
+        L('แสดงปุ่ม “ส่งอีกครั้ง” หลังส่ง') + '</label>' +
+      '<label class="chk"><input type="checkbox" data-act="fe-set" data-k="on" data-t="check"' + (f.on ? ' checked' : '') + '> ' +
+        L('เปิดรับคำตอบ') + '</label>' +
+      '<label class="opt-lbl">' + L('ข้อความหลังส่ง') + '</label><input class="opt-select" data-act="fe-set" data-k="confirm" maxlength="1000" value="' +
+        esc(f.confirm) + '" placeholder="' + esc(L('ส่งเรียบร้อยแล้ว ขอบคุณ')) + '">' +
+      '</div></div>';
+    if (!e.isNew) {
+      h += '<div class="au-block"><div class="au-bh">' + L('แชร์') + '</div><div class="flt-line"><input class="opt-select" readonly value="' +
+        esc(formUrl(f.id)) + '"><button class="btn btn-sm" data-act="fm-link" data-id="' + esc(f.id) + '">' + I('link', 13) + ' ' + L('คัดลอก') + '</button></div>' +
+        '<p class="opt-note">' + esc(L(FORM_PUBLIC_NOTE)) + '</p></div>';
+    }
+    h += '<p class="opt-note">' + L('แตกแขนงได้ลึกสุด {n} ชั้น คำถามที่ซ่อนอยู่ไม่ต้องตอบแม้ตั้งว่าต้องตอบ', { n: S.FORM_DEPTH }) + '</p>';
+    h += '<div class="modal-acts"><button class="btn" data-act="fe-back">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="fe-save">' + L('บันทึก') + '</button></div>';
+    return h;
+  }
+
+  /** อ่านไฟล์ที่เลือกในหน้าส่งฟอร์มเป็น data URI (ไม่เกิน 2 MB ต่อไฟล์) */
+  function takeFormFiles(inputEl) {
+    var qid = inputEl.dataset.q;
+    var files = Array.prototype.slice.call(inputEl.files || []);
+    inputEl.value = '';
+    if (!state.ff || !files.length) return;
+    var cur = [].concat(state.ff.ans[qid] || []);
+    var room = S.FORM_FILES_MAX - cur.length;
+    files.slice(0, Math.max(0, room)).forEach(function (f) {
+      if (f.size > S.FORM_FILE_BYTES) {
+        toast(L('ไฟล์นี้ {mb} MB เกิน {n} MB ที่แนบได้', { mb: (f.size / 1048576).toFixed(1), n: 2 }));
+        return;
+      }
+      var fr = new FileReader();
+      fr.onload = function () {
+        if (!state.ff) return;
+        var list = [].concat(state.ff.ans[qid] || []);
+        list.push({ name: f.name, url: fr.result, size: f.size, mime: f.type });
+        state.ff.ans[qid] = list;
+        renderViewBody();
+      };
+      fr.onerror = function () { toast(L('อ่านไฟล์ไม่สำเร็จ')); };
+      fr.readAsDataURL(f);
+    });
+  }
+
+  /* ---------- ชนิดงานและสถานะ ---------- */
+
+  function openTypes(pid) {
+    state.te = { pid: pid, ty: null, isNew: false };
+    openModal(typesModal(), true);
+  }
+
+  function typesModal() {
+    var e = state.te, p = e && S.project(e.pid);
+    if (!p) return '';
+    if (e.ty) return typeEditModal();
+    var canEdit = S.canEditTypes(p.id), list = p.types || [];
+    var h = '<h2 class="au-h">' + I('diamond', 17) + ' ' + L('ชนิดงานและสถานะ') + ' — ' + esc(p.name) + '</h2>';
+    h += '<p class="opt-note" style="margin-top:0">' + L('ชนิดงานกำหนดเองมีสถานะของตัวเอง (เช่น ใหม่ → กำลังทำ → เสร็จ) สถานะที่ “นับว่าเสร็จ” จะติ๊กงานเสร็จให้ จัดกลุ่ม กรอง และทำคอลัมน์บอร์ดตามสถานะได้') + '</p>';
+    if (!list.length) h += '<p class="au-empty">' + L('ยังไม่มีชนิดงานกำหนดเอง') + '</p>';
+    h += '<div class="au-list">';
+    list.forEach(function (ty) {
+      var d = ' data-id="' + esc(ty.id) + '"';
+      h += '<div class="au-row"><span class="ty-big">' + esc(ty.icon) + '</span><div class="grow"><b>' + esc(ty.name) + '</b><div class="ty-sts">' +
+        ty.statuses.map(function (s) {
+          return '<span class="cst-pill" style="background:' + esc(s.color) + '22;color:' + esc(s.color) + '"><i style="background:' + esc(s.color) + '"></i>' +
+            esc(s.name) + (s.done ? ' ✓' : '') + '</span>';
+        }).join('') + '</div></div><span class="au-row-acts">' +
+        (canEdit ? '<button class="btn btn-sm btn-ghost" data-act="ty-edit"' + d + ' title="' + esc(L('แก้ไข')) + '">' + I('pencil', 13) + '</button>' +
+          '<button class="btn btn-sm btn-ghost btn-danger" data-act="ty-del"' + d + ' title="' + esc(L('ลบ')) + '">' + I('trash', 13) + '</button>' : '') +
+        '</span></div>';
+    });
+    h += '</div>';
+    h += '<label class="opt-lbl">' + L('ชนิดเริ่มต้นของงานใหม่ (“+ เพิ่มงาน” ทุกทาง ฟอร์ม)') + '</label>' +
+      '<select class="opt-select" data-act="ty-default"' + (canEdit ? '' : ' disabled') + '>' +
+      '<option value="">' + L('ไม่ระบุ (งานทั่วไป)') + '</option>' +
+      S.typeChoices(p.id).map(function (c) {
+        return '<option value="' + esc(c.id) + '"' + (p.defaultType === c.id ? ' selected' : '') + '>' + esc(c.icon + ' ' + (c.custom ? c.label : L(c.label))) + '</option>';
+      }).join('') + '</select>';
+    if (canEdit && list.length < S.TYPE_MAX) {
+      h += '<div class="opt-acts"><button class="btn btn-sm btn-primary" data-act="ty-new">' + I('plus', 13) + ' ' + L('สร้างชนิดงาน') + '</button></div>';
+    }
+    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
+    return h;
+  }
+
+  function typeEditModal() {
+    var e = state.te, ty = e.ty;
+    var h = '<h2 class="au-h">' + I('diamond', 17) + ' ' + (e.isNew ? L('สร้างชนิดงาน') : L('แก้ชนิดงาน')) + '</h2>';
+    h += '<div class="flt-line te-head"><input class="opt-select te-icon" data-act="te-set" data-k="icon" maxlength="4" value="' + esc(ty.icon) +
+      '" title="' + esc(L('ไอคอน / อีโมจิ')) + '"><input class="opt-select" data-act="te-set" data-k="name" maxlength="60" value="' + esc(ty.name) +
+      '" placeholder="' + esc(L('ชื่อชนิดงาน เช่น คำขอ บั๊ก คอนเทนต์')) + '"></div>';
+    h += '<label class="opt-lbl">' + L('สถานะ (เรียงตามลำดับงาน)') + '</label><div class="te-sts">';
+    ty.statuses.forEach(function (s, i) {
+      var d = ' data-i="' + i + '"';
+      h += '<div class="flt-line te-st"><button class="te-color" data-act="te-st-color"' + d + ' style="background:' + esc(s.color) +
+        '" title="' + esc(L('เปลี่ยนสี')) + '"></button>' +
+        '<input class="opt-select" data-act="te-st"' + d + ' data-k="name" maxlength="40" value="' + esc(s.name) + '">' +
+        '<label class="chk"><input type="checkbox" data-act="te-st"' + d + ' data-k="done" data-t="check"' + (s.done ? ' checked' : '') + '> ' +
+        L('นับว่าเสร็จ') + '</label>' +
+        (i > 0 ? '<button class="flt-del" data-act="te-st-up"' + d + ' title="' + esc(L('ย้ายขึ้น')) + '">' + I('arrowUp', 13) + '</button>' : '') +
+        (ty.statuses.length > 1 ? '<button class="flt-del" data-act="te-st-del"' + d + ' title="' + esc(L('ลบสถานะนี้')) + '">' + I('close', 13) + '</button>' : '') +
+        '</div>';
+    });
+    h += '</div>';
+    if (ty.statuses.length < S.STATUS_MAX) {
+      h += '<div class="opt-acts"><button class="btn btn-sm btn-ghost" data-act="te-st-add">' + I('plus', 13) + ' ' + L('เพิ่มสถานะ') + '</button></div>';
+    }
+    h += '<p class="opt-note">' + L('งานที่อยู่ในสถานะที่ถูกลบจะย้ายไปสถานะแรก ติ๊กงานเสร็จ = ย้ายไปสถานะแรกที่ “นับว่าเสร็จ” เปิดงานใหม่ = กลับไปสถานะแรกที่ยังไม่เสร็จ') + '</p>';
+    h += '<div class="modal-acts"><button class="btn" data-act="te-back">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="te-save">' + L('บันทึก') + '</button></div>';
+    return h;
+  }
+
+  /** เมนูเลือกสถานะของงาน (ช่องสถานะในรายการ) — สถานะของชนิดในโปรเจกต์ที่เปิดอยู่ + ชนิดของงานเอง */
+  function statusPop(taskId) {
+    var t = S.task(taskId);
+    if (!t) return '';
+    var tys = [], seen = {};
+    function add(ty) { if (ty && !seen[ty.id]) { seen[ty.id] = true; tys.push(ty); } }
+    add(S.typeOf(t));
+    if (state.route.type === 'project') S.projectTypes(state.route.id).forEach(add);
+    if (!tys.length) return '<div class="pop-note">' + L('โปรเจกต์นี้ยังไม่มีชนิดงานกำหนดเอง') + '</div>';
+    var h = '';
+    tys.forEach(function (ty, i) {
+      if (i) h += '<div class="pop-sep"></div>';
+      h += '<div class="pop-note">' + esc(ty.icon + ' ' + ty.name) + '</div>';
+      ty.statuses.forEach(function (s) {
+        h += '<button data-act="set-cstatus" data-id="' + esc(t.id) + '" data-v="' + esc(s.id) + '">' + popCheck(t.cstatus === s.id) +
+          '<span class="grp-dot" style="background:' + esc(s.color) + '"></span><span class="grow">' + esc(s.name) + '</span>' +
+          (s.done ? I('check', 12) : '') + '</button>';
+      });
+    });
+    return h;
+  }
+
+  /* ---------- เทมเพลตโปรเจกต์ ---------- */
+
+  function ptCounts(x) {
+    var d = x.data || {}, n = 0;
+    var walk = function (list) { (list || []).forEach(function (t) { n++; walk(t.subs); }); };
+    walk(d.tasks);
+    var parts = [L('{n} คอลัมน์', { n: (d.sections || []).length }), L('{n} งาน', { n: n })];
+    if ((d.forms || []).length) parts.push(L('{n} ฟอร์ม', { n: d.forms.length }));
+    if ((d.types || []).length) parts.push(L('{n} ชนิดงาน', { n: d.types.length }));
+    if ((d.automations || []).length) parts.push(L('{n} อัตโนมัติ', { n: d.automations.length }));
+    return parts.join(' · ');
+  }
+
+  function ptGalleryHtml() {
+    var all = S.projectTemplates();
+    var h = '';
+    [[true, L('เทมเพลตตั้งต้น')], [false, L('เทมเพลตขององค์กร')]].forEach(function (g) {
+      var list = all.filter(function (x) { return !!x.builtin === g[0]; });
+      h += '<label class="opt-lbl">' + esc(g[1]) + '</label>';
+      if (!list.length) {
+        h += '<p class="au-empty">' + L('ยังไม่มี — เปิดโปรเจกต์ที่อยากใช้เป็นแบบ แล้วกดเมนู ⋯ → “บันทึกเป็นเทมเพลตโปรเจกต์…”') + '</p>';
+        return;
+      }
+      h += '<div class="pt-grid">';
+      list.forEach(function (x) {
+        var d = ' data-id="' + esc(x.id) + '"', by = S.user(x.by);
+        h += '<div class="pt-card"><button class="pt-main" data-act="pt-pick"' + d + '><span class="pt-ic" style="background:' + esc(x.color) + '22">' +
+          esc(x.icon) + '</span><span class="grow"><b>' + esc(x.name) + '</b><em>' + esc(x.desc || '') + '</em><span class="pt-meta">' +
+          esc(ptCounts(x)) + (!x.builtin && by ? ' · ' + esc(by.name) : '') + '</span></span></button>' +
+          (S.ptCanEdit(x) ? '<span class="pt-acts">' +
+            '<button class="btn btn-sm btn-ghost" data-act="pt-rename"' + d + ' title="' + esc(L('เปลี่ยนชื่อ')) + '">' + I('pencil', 12) + '</button>' +
+            '<button class="btn btn-sm btn-ghost" data-act="pt-share"' + d + ' title="' + esc(L('ใครใช้หรือแก้เทมเพลตนี้ได้')) + '">' + I('users', 12) + '</button>' +
+            '<button class="btn btn-sm btn-ghost btn-danger" data-act="pt-del"' + d + ' title="' + esc(L('ลบ')) + '">' + I('trash', 12) + '</button></span>' : '') +
+          '</div>';
+      });
+      h += '</div>';
+    });
+    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button></div>';
+    return h;
+  }
+
+  function ptUseModal(id) {
+    var x = S.projectTemplate(id);
+    if (!x) return '';
+    var d = x.data || {};
+    var h = '<h2>' + esc(x.icon) + ' ' + L('ใช้เทมเพลต “{t}”', { t: esc(x.name) }) + '</h2>';
+    if (x.desc) h += '<p class="opt-note" style="margin-top:0">' + esc(x.desc) + '</p>';
+    h += '<div class="field"><label>' + L('ชื่อโปรเจกต์') + '</label><input id="ptuName" value="' + esc(x.name) + '"></div>';
+    h += '<div class="field"><label>' + L('วันเริ่มโปรเจกต์ (วันของงานนับจากวันนี้)') + '</label><input id="ptuStart" type="date" value="' + S.today() + '"></div>';
+    h += '<label class="chk"><input type="checkbox" id="ptuSkip"' + (x.skipWeekends ? ' checked' : '') + '> ' +
+      L('ข้ามเสาร์-อาทิตย์ (นับเฉพาะวันทำงาน)') + '</label>';
+    if ((d.roles || []).length) {
+      h += '<label class="opt-lbl">' + L('มอบบทบาทให้คน') + '</label><div class="ptu-roles">';
+      d.roles.forEach(function (r) {
+        var def = r.user && S.user(r.user) && S.user(r.user).active !== false ? r.user : '';
+        h += '<div class="flt-line"><span class="ptu-role">' + esc(r.name) + '</span><select class="opt-select" id="ptuRole-' + esc(r.k) + '">' +
+          '<option value="">' + L('ยังไม่มอบหมาย') + '</option>' + auUsers().map(function (u) {
+            return '<option value="' + esc(u[0]) + '"' + (u[0] === def ? ' selected' : '') + '>' + esc(u[1]) + '</option>';
+          }).join('') + '</select></div>';
+      });
+      h += '</div>';
+    }
+    h += '<p class="opt-note">' + esc(L('จะได้: {c}', { c: ptCounts(x) })) +
+      ((d.fields || []).length ? ' · ' + esc(L('{n} ฟิลด์', { n: d.fields.length })) : '') + '</p>';
+    h += '<div class="modal-acts"><button class="btn" data-act="np-tab" data-v="tpl">' + L('กลับ') + '</button>' +
+      '<button class="btn btn-primary" data-act="pt-use" data-id="' + esc(x.id) + '">' + L('สร้างโปรเจกต์') + '</button></div>';
+    return h;
+  }
+
+  function ptSaveModal(pid) {
+    var p = S.project(pid);
+    if (!p) return '';
+    var h = '<h2>' + L('บันทึกเป็นเทมเพลตโปรเจกต์') + '</h2>';
+    h += '<p class="opt-note" style="margin-top:0">' + L('เก็บคอลัมน์ ฟิลด์ (ฟิลด์จากคลังเก็บเป็นตัวอ้างอิง) อัตโนมัติ ฟอร์ม ชนิดงาน เทมเพลตงาน และงานพร้อมวันแบบนับจากวันเริ่ม ผู้รับผิดชอบกลายเป็นบทบาทที่เลือกคนตอนใช้') + '</p>';
+    h += '<div class="field"><label>' + L('ชื่อเทมเพลต') + '</label><input id="ptsName" maxlength="120" value="' + esc(p.name) + '"></div>';
+    h += '<div class="field"><label>' + L('คำอธิบาย') + '</label><input id="ptsDesc" maxlength="1000" value="' + esc(S.plainText(p.description || '').slice(0, 200)) + '"></div>';
+    h += '<label class="chk"><input type="checkbox" id="ptsTasks" checked> ' + L('รวมงานและงานย่อย (วันนับจากวันแรกของโปรเจกต์)') + '</label>';
+    h += '<label class="chk"><input type="checkbox" id="ptsSkip" checked> ' + L('นับวันแบบข้ามเสาร์-อาทิตย์') + '</label>';
+    h += '<label class="chk"><input type="checkbox" id="ptsOrg" checked> ' + L('ทุกคนในองค์กรใช้ได้ (แก้ได้เฉพาะคุณ เพิ่มคนแก้ได้ทีหลัง)') + '</label>';
+    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="do-pt-save" data-project="' + esc(pid) + '">' + L('บันทึกเทมเพลต') + '</button></div>';
+    return h;
+  }
+
+  function ptShareModal(id) {
+    var x = S.projectTemplate(id);
+    if (!x) return '';
+    var d = ' data-id="' + esc(id) + '"';
+    var h = '<h2>' + L('ใครใช้หรือแก้เทมเพลตนี้ได้') + '</h2><div class="pa-name">' + esc(x.icon) + ' ' + esc(x.name) + '</div>';
+    h += '<label class="chk"><input type="checkbox" data-act="pt-org"' + d + (x.org ? ' checked' : '') + '> ' +
+      L('ทุกคนในองค์กรใช้ได้') + '</label>';
+    h += '<p class="opt-note">' + L('“แก้ได้” = เปลี่ยนชื่อ แชร์ และลบได้  “ใช้ได้” = สร้างโปรเจกต์จากเทมเพลตได้อย่างเดียว ผู้ดูแลระบบแก้ได้ทุกเทมเพลต') + '</p>';
+    h += '<div class="pa-list">';
+    var people = (x.editors || []).map(function (u) { return [u, 'edit']; }).concat((x.users || []).map(function (u) { return [u, 'use']; }));
+    people.forEach(function (pp) {
+      var u = S.user(pp[0]);
+      if (!u) return;
+      h += '<div class="pa-row">' + R.avatar(u) + '<div class="grow"><b>' + esc(u.name) + '</b><em>' + esc(u.email || '') + '</em></div>' +
+        '<select class="opt-select" data-act="pt-acc"' + d + ' data-user="' + esc(u.id) + '">' +
+        [['edit', L('แก้ได้')], ['use', L('ใช้ได้')], ['', L('เอาออก')]].map(function (o) {
+          return '<option value="' + o[0] + '"' + (o[0] === pp[1] ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
+        }).join('') + '</select></div>';
+    });
+    h += '</div>';
+    var have = {};
+    people.forEach(function (pp) { have[pp[0]] = true; });
+    var rest = S.db.users.filter(function (u) { return u.active !== false && !have[u.id]; });
+    if (rest.length) {
+      h += '<div class="flt-line" style="margin-top:12px"><select class="opt-select" id="ptsUser">' +
+        rest.map(function (u) { return '<option value="' + esc(u.id) + '">' + esc(u.name) + '</option>'; }).join('') + '</select>' +
+        '<select class="opt-select" id="ptsLevel"><option value="use">' + L('ใช้ได้') + '</option><option value="edit">' + L('แก้ได้') + '</option></select>' +
+        '<button class="btn btn-sm btn-primary" data-act="pt-acc-add"' + d + '>' + L('เพิ่ม') + '</button></div>';
+    }
+    h += '<div class="modal-acts"><button class="btn" data-act="np-tab" data-v="tpl">' + L('กลับไปแกลเลอรี') + '</button>' +
+      '<button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
+    return h;
+  }
+
+  /* ---------- เทมเพลตงาน ---------- */
+
+  function relText(r) {
+    if (!r) return '';
+    return L(r.unit === 'workdays' ? '{n} วันทำงานหลังสร้าง' : '{n} วันหลังสร้าง', { n: r.n });
+  }
+
+  function templatesModal(secId) {
+    state.ttSec = secId || null;
+    var pid = state.route.type === 'project' ? state.route.id : null;
+    var p = pid ? S.project(pid) : null;
+    var list = S.taskTemplatesFor(pid);
+    var canStruct = S.can('structure') && (!pid || S.canInProject(pid, 'edit'));
+    var h = '<h2>' + L('เทมเพลตงาน') + '</h2>';
+    if (secId && p && S.section(pid, secId)) h += '<p class="opt-note" style="margin-top:0">' + esc(L('เพิ่มลงคอลัมน์ “{s}”', { s: S.section(pid, secId).name })) + '</p>';
+    if (!list.length) {
+      h += '<div class="au-empty">' + L('ยังไม่มีเทมเพลต — เปิดงานที่ต้องการ กดปุ่ม ⋯ แล้วเลือก “บันทึกเป็นเทมเพลต”') + '</div>';
+    }
+    [[pid, L('เฉพาะโปรเจกต์นี้')], ['*', L('ใช้ได้ทุกโปรเจกต์')]].forEach(function (g) {
+      var rows = list.filter(function (x) { return x.scope === g[0]; });
+      if (!rows.length || !g[0]) return;
+      h += '<label class="opt-lbl">' + esc(g[1]) + '</label>';
+      rows.forEach(function (x) {
+        var tt = x.tpl.t || {}, d = ' data-id="' + esc(x.tpl.id) + '"';
+        var meta = [L('{n} งานย่อย', { n: (tt.subs || []).length })];
+        if (tt.due) meta.push(L('ครบกำหนด') + ' ' + relText(tt.due));
+        if (tt.assignee && tt.assignee.mode === 'creator') meta.push(L('มอบให้คนสร้าง'));
+        else if (tt.assignee && tt.assignee.mode === 'user' && S.user(tt.assignee.user)) meta.push(S.user(tt.assignee.user).name);
+        h += '<div class="mini-row"><div class="grow"><div>' + esc(x.tpl.name) + '</div><div class="sub">' + esc(meta.join(' · ')) + '</div></div>' +
+          (p ? '<button class="btn btn-sm btn-primary" data-act="use-template"' + d + (secId ? ' data-section="' + esc(secId) + '"' : '') + '>' + L('ใช้') + '</button>' : '') +
+          (canStruct ? '<button class="btn btn-sm" data-act="tt-edit"' + d + '>' + L('แก้') + '</button>' +
+            '<button class="btn btn-sm btn-danger" data-act="delete-template"' + d + '>' + L('ลบ') + '</button>' : '') + '</div>';
+      });
+    });
+    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
+    return h;
+  }
+
+  function ttSaveModal(taskId) {
+    var t = S.task(taskId);
+    if (!t) return '';
+    var home = S.projectsOfTask(S.rootOf(t).id)[0];
+    var h = '<h2>' + L('บันทึกเป็นเทมเพลตงาน') + '</h2>';
+    h += '<div class="field"><label>' + L('ชื่อเทมเพลต') + '</label><input id="ttName" maxlength="120" value="' + esc(t.name) + '"></div>';
+    h += '<label class="opt-lbl">' + L('ใช้ได้ที่') + '</label>';
+    if (home) {
+      h += '<label class="chk"><input type="radio" name="ttScope" value="' + esc(home.project.id) + '" checked> ' +
+        esc(L('เฉพาะโปรเจกต์ “{p}”', { p: home.project.name })) + '</label>';
+    }
+    h += '<label class="chk"><input type="radio" name="ttScope" value="*"' + (home ? '' : ' checked') + '> ' + L('ทุกโปรเจกต์') + '</label>';
+    h += '<p class="opt-note">' + L('เก็บชื่อ รายละเอียด ชนิด ผู้รับผิดชอบ ผู้ติดตาม แท็ก ค่าฟิลด์ งานย่อย และลำดับก่อนหลังระหว่างงานย่อย วันเก็บเป็น “N วันหลังสร้างงาน” แก้ได้ในหน้าถัดไป') + '</p>';
+    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="do-tt-save" data-id="' + esc(taskId) + '">' + L('บันทึกแล้วแก้ต่อ') + '</button></div>';
+    return h;
+  }
+
+  function relInputs(path, r) {
+    var on = !!r;
+    return '<div class="flt-line"><label class="chk"><input type="checkbox" data-act="tte-rel" data-k="' + path + '"' + (on ? ' checked' : '') + '></label>' +
+      (on ? '<input type="number" min="0" max="3650" class="opt-select flt-n" data-act="tte" data-k="' + path + '.n" data-t="num" value="' + esc(r.n) + '">' +
+        auSel('tte', [['days', L('วัน')], ['workdays', L('วันทำงาน')]], r.unit, ' data-k="' + path + '.unit"') +
+        '<span class="au-pre-l">' + L('หลังสร้างงาน') + '</span>' : '<span class="au-pre-l">' + L('ไม่ตั้ง') + '</span>') + '</div>';
+  }
+
+  function ttEditModal() {
+    var e = state.tte, t = e.t;
+    var pid = e.scope !== '*' ? e.scope : (state.route.type === 'project' ? state.route.id : null);
+    var p = pid ? S.project(pid) : null;
+    var h = '<h2>' + L('แก้เทมเพลตงาน') + '</h2>';
+    h += '<div class="field"><label>' + L('ชื่อเทมเพลต') + '</label><input class="opt-select" data-act="tte" data-k="name" maxlength="120" value="' + esc(e.name) + '"></div>';
+    h += '<div class="au-block"><div class="au-bh">' + L('งาน') + '</div><div class="au-params">' +
+      '<input class="opt-select" data-act="tte" data-k="t.name" maxlength="300" value="' + esc(t.name) + '" placeholder="' + esc(L('ชื่องาน')) + '">' +
+      '<textarea class="opt-select au-text" rows="3" data-act="tte" data-k="t.notes" placeholder="' + esc(L('รายละเอียด')) + '">' + esc(t.notes) + '</textarea>' +
+      '<label class="opt-lbl">' + L('ชนิดงาน') + '</label>' +
+      auSel('tte', S.typeChoices(pid).map(function (c) { return [c.id, c.icon + ' ' + (c.custom ? c.label : L(c.label))]; }), t.ctype || t.type, ' data-k="type"') +
+      '<label class="opt-lbl">' + L('ผู้รับผิดชอบ') + '</label><div class="flt-line">' +
+      auSel('tte', [['none', L('ยังไม่มอบหมาย')], ['creator', L('คนที่ใช้เทมเพลต')], ['user', L('คนที่เลือก')]], t.assignee.mode, ' data-k="t.assignee.mode"') +
+      (t.assignee.mode === 'user' ? auSel('tte', auUsers(), t.assignee.user, ' data-k="t.assignee.user"') : '') + '</div>' +
+      '<label class="opt-lbl">' + L('กำหนดส่ง') + '</label>' + relInputs('t.due', t.due) +
+      (t.type !== 'milestone' ? '<label class="opt-lbl">' + L('วันเริ่ม') + '</label>' + relInputs('t.start', t.start) : '') +
+      '<label class="opt-lbl">' + L('แท็ก (คั่นด้วยจุลภาค)') + '</label><input class="opt-select" data-act="tte" data-k="tags" value="' + esc(t.tags.join(', ')) + '">' +
+      '<label class="opt-lbl">' + L('ผู้ติดตาม') + '</label><div class="flt-chips">' +
+      S.db.users.filter(function (u) { return u.active !== false; }).map(function (u) {
+        return '<button class="flt-chip' + (t.followers.indexOf(u.id) >= 0 ? ' on' : '') + '" data-act="tte-fol" data-v="' + esc(u.id) + '">' + esc(u.name) + '</button>';
+      }).join('') + '</div>';
+    var fs = ((p && p.fields) || []).filter(function (f) { return ['select', 'text', 'number', 'person'].indexOf(f.type) >= 0; });
+    if (fs.length) {
+      h += '<label class="opt-lbl">' + L('ค่าฟิลด์') + '</label>';
+      fs.forEach(function (f) {
+        var v = t.fields[f.id], d = ' data-act="tte-field" data-f="' + esc(f.id) + '"';
+        h += '<div class="flt-line"><span class="ptu-role">' + esc(f.name) + '</span>';
+        if (f.type === 'select') {
+          h += '<select class="opt-select"' + d + '><option value="">—</option>' + f.options.map(function (o) {
+            return '<option value="' + esc(o.name) + '"' + (v === o.name ? ' selected' : '') + '>' + esc(o.name) + '</option>';
+          }).join('') + '</select>';
+        } else if (f.type === 'person') {
+          h += '<select class="opt-select"' + d + '><option value="">—</option>' + auUsers().map(function (u) {
+            return '<option value="' + esc(u[0]) + '"' + (v === u[0] ? ' selected' : '') + '>' + esc(u[1]) + '</option>';
+          }).join('') + '</select>';
+        } else {
+          h += '<input class="opt-select"' + d + (f.type === 'number' ? ' type="number" step="any"' : '') + ' value="' + esc(v == null ? '' : v) + '">';
+        }
+        h += '</div>';
+      });
+    }
+    h += '</div></div>';
+    h += '<div class="au-block"><div class="au-bh">' + L('งานย่อย') + '</div>';
+    t.subs.forEach(function (s, i) {
+      var d = ' data-i="' + i + '"';
+      h += '<div class="au-act"><div class="flt-line"><span class="au-n">' + (i + 1) + '</span>' +
+        '<input class="opt-select" data-act="tte-sub"' + d + ' data-k="name" maxlength="300" value="' + esc(s.name) + '">' +
+        '<button class="flt-del" data-act="tte-sub-del"' + d + ' title="' + esc(L('ลบ')) + '">' + I('close', 13) + '</button></div>' +
+        '<div class="flt-line">' + auSel('tte-sub', [['', L('ยังไม่มอบหมาย')]].concat(auUsers()), s.assignee || '', d + ' data-k="assignee"') +
+        '<input type="number" min="0" max="3650" class="opt-select flt-n" data-act="tte-sub"' + d + ' data-k="due" value="' + esc(s.due ? s.due.n : '') +
+          '" placeholder="—" title="' + esc(L('ครบกำหนด N วันหลังสร้าง (เว้นว่าง = ไม่ตั้ง)')) + '"><span class="au-pre-l">' + L('วัน') + '</span>' +
+        (i > 0 ? auSel('tte-sub', [['', L('ไม่ต้องรองานอื่น')]].concat(t.subs.slice(0, i).map(function (o, j) {
+          return [o.k, L('รอ “{t}”', { t: o.name || ('#' + (j + 1)) })];
+        })), s.deps[0] || '', d + ' data-k="dep"') : '') + '</div></div>';
+    });
+    h += '<div class="opt-acts"><button class="btn btn-sm btn-ghost" data-act="tte-sub-add">' + I('plus', 13) + ' ' + L('เพิ่มงานย่อย') + '</button></div></div>';
+    h += '<div class="modal-acts"><button class="btn" data-act="tte-back">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="tte-save">' + L('บันทึก') + '</button></div>';
+    return h;
+  }
+
+  /** ช่องพิมพ์ของตัวแก้ 3b — อัปเดตสำเนาในหน้าจอโดยไม่วาดใหม่ (คืน true ถ้ารับไว้แล้ว) */
+  function syncDraft3b(el) {
+    var act = el.dataset.act, i = +el.dataset.i;
+    if (act === 'ff-ans' && state.ff && (el.tagName === 'TEXTAREA' || el.type === 'text' || el.type === 'number' || !el.type)) {
+      state.ff.ans[el.dataset.q] = el.value;
+      return true;
+    }
+    if (state.sb) {
+      if (act === 'sb-title') { state.sb.title = el.value; return true; }
+      if (act === 'sb-text' && state.sb.blocks[i]) { state.sb.blocks[i].text = el.value; return true; }
+      if (act === 'sb-btitle' && state.sb.blocks[i]) { state.sb.blocks[i].title = el.value; return true; }
+    }
+    if (state.fe && (act === 'fe-set' || act === 'fe-q') && (el.tagName === 'TEXTAREA' || el.type === 'text' || el.type === '')) {
+      var k = el.dataset.k;
+      if (act === 'fe-set') { state.fe.f[k] = el.value; return true; }
+      var it = state.fe.f.items[i];
+      if (!it) return true;
+      if (k === 'opts') {
+        it.opts = el.value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+        if (it.opts.length) return true;
+      } else it[k] = el.value;
+      return true;
+    }
+    if (state.te && state.te.ty && (act === 'te-set' || act === 'te-st') && el.type === 'text') {
+      if (act === 'te-set') state.te.ty[el.dataset.k] = el.value;
+      else if (state.te.ty.statuses[i]) state.te.ty.statuses[i].name = el.value;
+      return true;
+    }
+    if (state.tte && (el.type === 'text' || el.tagName === 'TEXTAREA' || (el.type === 'number' && act !== 'tte-sub'))) {
+      if (act === 'tte') {
+        if (el.dataset.k === 'name') state.tte.name = el.value;
+        else if (el.dataset.k === 'tags') state.tte.t.tags = el.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+        else auSet(state.tte, el.dataset.k, auVal(el));
+        return true;
+      }
+      if (act === 'tte-sub' && state.tte.t.subs[i]) { state.tte.t.subs[i][el.dataset.k] = el.value; return true; }
+      if (act === 'tte-field') { state.tte.t.fields[el.dataset.f] = el.type === 'number' ? (el.value === '' ? null : Number(el.value)) : el.value; return true; }
+    }
+    return false;
   }
 
   /* ======================================================================
@@ -2845,6 +3482,15 @@
       case 'overdue':
         return +tr.n ? L('เลยกำหนด {n} {u}', { n: tr.n, u: tr.unit === 'hours' ? L('ชั่วโมง') : L('วัน') }) : L('เลยกำหนด');
       case 'manual': return L('กดรันเอง') + (tr.label ? ': ' + tr.label : '');
+      case 'form': {
+        var tfm = tr.form ? S.formById(tr.form) : null;
+        return tr.form ? L('ส่งฟอร์ม “{f}”', { f: tfm ? tfm.f.name : L('(ฟอร์มถูกลบ)') }) : L('มีคนส่งฟอร์ม');
+      }
+      case 'cstatus': {
+        var tsd = tr.v ? S.statusDef(tr.v) : null, tty = tr.ctype ? S.typeDef(tr.ctype) : null;
+        if (tr.v) return tsd ? L('สถานะเป็น “{s}”', { s: tsd.st.name }) : L('(สถานะถูกลบ)');
+        return tty ? L('สถานะของ {t} เปลี่ยน', { t: tty.name }) : L('สถานะของชนิดงานเปลี่ยน');
+      }
       case 'scheduled': {
         var fq = tr.freq || 'daily';
         if (fq === 'weekly') return L('ทุกวัน{d}', { d: global.I18N.dowFull()[+tr.day || 0] });
@@ -2890,6 +3536,7 @@
       case 'create':
         return a.kind === 'task' ? L('สร้างงาน') : a.kind === 'approval' ? L('สร้างงานย่อยขออนุมัติ') : L('สร้างงานย่อย');
       case 'addproj': { var q = S.project(a.pid); return L('เพิ่มเข้า {p}', { p: q ? q.name : '?' }); }
+      case 'setstatus': { var asd = S.statusDef(a.v); return asd ? L('ตั้งสถานะเป็น “{s}”', { s: asd.st.name }) : L('(สถานะถูกลบ)'); }
       case 'mtmove': { var ms = S.mtSection(a.sec); return L('ย้ายไป “{s}”', { s: ms ? (ms.id === S.MT_RECENT ? recentLabel() : L(ms.name)) : L('(เซกชันถูกลบ)') }); }
     }
     var d = actDefOf(a.type);
@@ -3033,7 +3680,8 @@
                due: { on: false, n: 1, unit: 'workdays', dir: 'after', from: 'trigger' } };
     },
     addproj:   function () { return { pid: '', sec: '' }; },
-    mtmove:    function () { return { sec: 'today' }; }
+    mtmove:    function () { return { sec: 'today' }; },
+    setstatus: function (pid) { var o = auStatusOpts(pid)[0]; return { v: o ? o[0] : '' }; }
   };
 
   function autoNewAct(pid, type) {
@@ -3050,6 +3698,8 @@
     if (type === 'approaching') tr.days = 1;
     if (type === 'overdue') { tr.n = 0; tr.unit = 'days'; }
     if (type === 'manual') tr.label = '';
+    if (type === 'form') tr.form = '';
+    if (type === 'cstatus') { tr.ctype = ''; tr.v = ''; }
     if (type === 'scheduled') { tr.freq = 'weekly'; tr.day = 1; tr.scope = 'once'; }
     if (type === 'due' || type === 'start') tr.mode = 'any';
     if (type === 'field') {
@@ -3073,6 +3723,15 @@
     var p = S.project(pid);
     var out = anyLabel ? [['', anyLabel]] : [];
     return out.concat(((p && p.sections) || []).map(function (s) { return [s.id, s.name]; }));
+  }
+  /** สถานะของชนิดงานในโปรเจกต์ [[id, "ชนิด · สถานะ"]] (ระบุ ctype = เฉพาะชนิดนั้น) */
+  function auStatusOpts(pid, ctype) {
+    var out = [];
+    S.projectTypes(pid).forEach(function (ty) {
+      if (ctype && ty.id !== ctype) return;
+      ty.statuses.forEach(function (s) { out.push([s.id, ty.name + ' · ' + s.name + (s.done ? ' ✓' : '')]); });
+    });
+    return out;
   }
   function auDateFields(pid) {
     var p = S.project(pid);
@@ -3114,6 +3773,15 @@
       case 'manual':
         return '<input class="opt-select" data-act="ae-tp"' + d('label') + ' maxlength="60" value="' + esc(tr.label || '') +
           '" placeholder="' + esc(L('ชื่อปุ่ม เช่น ส่งตรวจ')) + '">';
+      /* 3b — ฟอร์ม และสถานะของชนิดงานกำหนดเอง */
+      case 'form':
+        return auSel('ae-tp', [['', L('ฟอร์มใดก็ได้ของโปรเจกต์นี้')]].concat(((p && p.forms) || []).map(function (f) { return [f.id, f.name]; })), tr.form, d('form'));
+      case 'cstatus': {
+        var tys = S.projectTypes(pid);
+        if (!tys.length) return '<div class="flt-none">' + L('โปรเจกต์นี้ยังไม่มีชนิดงานกำหนดเอง') + '</div>';
+        return auSel('ae-tp', [['', L('ชนิดใดก็ได้')]].concat(tys.map(function (ty) { return [ty.id, ty.icon + ' ' + ty.name]; })), tr.ctype, d('ctype')) +
+          auSel('ae-tp', [['', L('เปลี่ยนเป็นสถานะใดก็ได้')]].concat(auStatusOpts(pid, tr.ctype)), tr.v, d('v'));
+      }
       case 'scheduled': {
         var h2 = auSel('ae-tp', AU_FREQ.map(function (x) { return [x[0], L(x[1])]; }), tr.freq || 'daily', d('freq'));
         if (tr.freq === 'weekly') {
@@ -3248,6 +3916,12 @@
         h3 += '<label class="chk au-gap"><input type="checkbox" data-act="ae-ap"' + k('due.on') + ' data-t="check"' + (du.on ? ' checked' : '') + '> ' + L('ตั้งกำหนดส่ง') + '</label>';
         if (du.on) h3 += auDateSpec(pid, du, d, 'due.');
         return h3;
+      }
+      case 'setstatus': {
+        var sopts = auStatusOpts(pid);
+        if (!sopts.length) return '<div class="flt-none">' + L('โปรเจกต์นี้ยังไม่มีชนิดงานกำหนดเอง') + '</div>';
+        return auSel('ae-ap', sopts, a.v, k('v')) +
+          '<div class="opt-note au-hint">' + L('งานที่เป็นชนิดอื่นจะถูกเปลี่ยนเป็นชนิดของสถานะนี้') + '</div>';
       }
       case 'addproj': {
         var projs = S.visibleProjects().filter(function (q) { return q.id !== pid && !q.archived && S.canInProject(q.id, 'edit'); });
@@ -3597,25 +4271,6 @@
     };
     fr.onerror = function () { toast(L('อ่านไฟล์ไม่สำเร็จ')); };
     fr.readAsDataURL(f);
-  }
-
-  function templatesModal() {
-    var h = '<h2>' + L('เทมเพลตงาน') + '</h2>';
-    if (!S.db.taskTemplates.length) {
-      h += '<div style="color:var(--fg-faint);margin-bottom:12px">' +
-        L('ยังไม่มีเทมเพลต — เปิดงานที่ต้องการ กดปุ่ม ⋯ แล้วเลือก “บันทึกเป็นเทมเพลต”') + '</div>';
-    }
-    S.db.taskTemplates.forEach(function (tpl) {
-      h += '<div class="mini-row"><div class="grow"><div>' + R.esc(tpl.name) + '</div>' +
-        '<div class="sub">' + (tpl.payload.subtaskNames || []).length + ' ' + L('งานย่อย') + '</div></div>' +
-        (state.route.type === 'project'
-          ? '<button class="btn btn-sm btn-primary" data-act="use-template" data-id="' +
-            R.esc(tpl.id) + '">' + L('ใช้') + '</button>' : '') +
-        '<button class="btn btn-sm btn-danger" data-act="delete-template" data-id="' +
-        R.esc(tpl.id) + '">' + L('ลบ') + '</button></div>';
-    });
-    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
-    return h;
   }
 
   function shortcutsModal() {
@@ -4979,6 +5634,16 @@
      * อัตโนมัติของงานของฉันเป็นของตัวเอง ย้ายคอลัมน์จากแผงงานต้องแก้งานได้ */
     put('self', ['auto-run', 'auto-run-pick', 'auto-bulk', 'mt-auto-add', 'mt-auto-toggle', 'mt-auto-del']);
     put('write:task', ['dw-sec-pick']);
+    /* 3b — ฟอร์ม ชนิดงาน เทมเพลต และรายงานสถานะ
+     * สร้าง/แก้ = แก้โครงสร้าง (store ตรวจซ้ำว่าแก้โปรเจกต์นั้นได้) ส่งฟอร์ม = ทุกคนที่บัญชียังใช้งานได้
+     * ใช้เทมเพลตโปรเจกต์/แชร์/ลบเทมเพลตตรวจที่ store (can('structure') / ptCanEdit) จึงไม่ผูกกับโปรเจกต์ที่เปิดอยู่
+     * ใช้เทมเพลตงาน = เพิ่มงาน (ตรวจสิทธิ์แก้โปรเจกต์ในตัวจัดการอีกชั้น) */
+    put('structure', ['fm-new', 'fm-edit', 'fm-toggle', 'fm-dup', 'fm-del', 'fe-save',
+      'ty-new', 'ty-edit', 'ty-del', 'te-save', 'ty-default', 'pt-save', 'do-pt-save',
+      'sb-remind', 'sb-tpl-save', 'tt-edit', 'tte-save', 'do-tt-save']);
+    put('write:task', ['cell-status', 'set-cstatus', 'edit-cstatus']);
+    put('create', ['use-template', 'tt-pick']);
+    put('self', ['ff-submit', 'pt-use', 'pt-share', 'pt-org', 'pt-acc', 'pt-acc-add', 'pt-rename', 'pt-del', 'sb-tpl-del']);
     return map;
   })();
 
@@ -5051,7 +5716,7 @@
          'add-tag', 'tag-search', 'sub-dates', 'sub-assign',
          'sub-start', 'sub-due', 'comment-menu', 'dw-field-multi',
          'mt-filter', 'mt-sort', 'mt-group', 'inbox-filter', 'inbox-sort', 'dnd-menu',
-         'sec-menu', 'foot-menu', 'tab-menu', 'col-menu', 'bulk-more', 'bulk-section'].indexOf(el.dataset.act) < 0) {
+         'sec-menu', 'foot-menu', 'tab-menu', 'col-menu', 'bulk-more', 'bulk-section', 'cell-status'].indexOf(el.dataset.act) < 0) {
       if (!e.target.closest || !e.target.closest('.pop')) closePops();
     }
 
@@ -5733,6 +6398,10 @@
             '<button data-act="dup-section" data-section="' + esc(smSec) + '">' + I('copy', 14) + ' ' + L('ทำสำเนาคอลัมน์…') + '</button>' +
             '<button data-act="delete-section" data-section="' + esc(smSec) + '">' + I('trash', 14) + ' ' + L('ลบคอลัมน์') + '</button>';
         }
+        if (smSec && S.can('write') && S.canInProject(state.route.id, 'edit')) {
+          smh += '<div class="pop-sep"></div><button data-act="tt-pick" data-section="' + esc(smSec) + '">' + I('star', 14) + ' ' +
+            L('เพิ่มงานจากเทมเพลต…') + '</button>';
+        }
         openPop(el, smh);
         break;
       }
@@ -6048,15 +6717,7 @@
         closeModal();
         break;
       }
-      case 'save-template': {
-        var tplId = id;
-        askText(L('ชื่อเทมเพลต'), S.task(id).name, function (v) {
-          if (!v) return;
-          S.saveTaskTemplate(tplId, v);
-          toast(L('บันทึกเป็นเทมเพลตแล้ว'));
-        });
-        break;
-      }
+      case 'save-template': openModal(ttSaveModal(id)); break;
       case 'delete-task': {
         var tk2 = S.task(id);
         if (!tk2) break;
@@ -7114,7 +7775,7 @@
         break;
 
       /* --- projects --- */
-      case 'new-project': openModal(projectModal(null)); break;
+      case 'new-project': state.npTab = 'blank'; openModal(projectModal(null)); break;
       case 'create-project': {
         var secInput = document.getElementById('pSections');
         var secs = secInput ? secInput.value.split(',').map(function (x) { return x.trim(); })
@@ -7416,17 +8077,58 @@
         break;
       case 'update-status':
         closePops();
-        openModal(statusModal(id || state.route.id));
+        openStatusBuilder(id || state.route.id);
         break;
       case 'save-status': {
-        var stSel = $modal.querySelector('#stPick .on');
-        S.setProjectStatus(id, (stSel && stSel.dataset.v) || 'on_track',
-          document.getElementById('stText').value.trim());
+        /* 3b — ตัวสร้างรายงานแบบบล็อก (สำเนาอยู่ใน state.sb) */
+        var sbx = state.sb;
+        if (!sbx) break;
+        if (!sbx.blocks.some(function (b) { return String(b.text || '').trim(); }) && !sbx.hl.length) {
+          toast(L('เขียนอย่างน้อยหนึ่งบล็อก หรือเลือกไฮไลต์'));
+          break;
+        }
+        var sbe = S.postStatusUpdate(sbx.pid, { state: sbx.state, title: sbx.title, blocks: sbx.blocks, hl: sbx.hl, period: sbx.period });
+        if (!sbe) { denyToast(); break; }
+        state.sb = null;
         closeModal();
         renderAll();
         toast(L('อัปเดตสถานะแล้ว'), L('ย้อนกลับ'), 'undo');
         break;
       }
+      case 'sb-state': state.sb.state = el.dataset.v; refresh3b(statusBuilderHtml(), true); break;
+      case 'sb-del': state.sb.blocks.splice(+el.dataset.i, 1); refresh3b(statusBuilderHtml(), true); break;
+      case 'sb-up': {
+        var sbl = state.sb.blocks, sbi = +el.dataset.i;
+        if (sbi > 0) { var sbt = sbl[sbi - 1]; sbl[sbi - 1] = sbl[sbi]; sbl[sbi] = sbt; }
+        refresh3b(statusBuilderHtml(), true);
+        break;
+      }
+      case 'sb-hl': {
+        var shl = state.sb.hl, shk = el.dataset.k;
+        if (el.checked && shl.indexOf(shk) < 0) shl.push(shk);
+        if (!el.checked) state.sb.hl = shl.filter(function (k) { return k !== shk; });
+        refresh3b(statusBuilderHtml(), true);
+        break;
+      }
+      case 'sb-remind': {
+        S.setStatusRemind(state.sb.pid, el.checked);
+        refresh3b(statusBuilderHtml(), true);
+        toast(el.checked ? L('จะเตือนเจ้าของโปรเจกต์ทุกวันศุกร์') : L('ปิดการเตือนแล้ว'));
+        break;
+      }
+      case 'sb-tpl-save': {
+        var sbs = state.sb;
+        askText(L('ชื่อเทมเพลตรายงาน'), '', function (v) {
+          if (v) S.saveStatusTemplate(v, { blocks: sbs.blocks, hl: sbs.hl, period: sbs.period });
+          state.sb = sbs;
+          openModal(statusBuilderHtml(), true);
+          if (v) toast(L('บันทึกเทมเพลตรายงานแล้ว'));
+        }, { ok: L('บันทึก') });
+        break;
+      }
+      case 'sb-tpl-del':
+        if (S.deleteStatusTemplate(id)) refresh3b(statusBuilderHtml(), true);
+        break;
       case 'toggle-archive': {
         var ap = S.project(id);
         S.archiveProject(id, !ap.archived);
@@ -7677,18 +8379,361 @@
         break;
 
       /* --- templates --- */
-      case 'manage-templates': openModal(templatesModal()); break;
+      case 'manage-templates': closePops(); openModal(templatesModal(null)); break;
+      case 'tt-pick': closePops(); openModal(templatesModal(sectionId)); break;
       case 'use-template': {
         var up = S.project(state.route.id);
-        var made = S.applyTaskTemplate(id, up.id, up.sections[0].id);
+        if (!up) break;
+        if (!S.canInProject(up.id, 'edit')) { denyToast(); break; }
+        var useSec = sectionId || state.ttSec;
+        var made = S.applyTaskTemplate(id, up.id, S.section(up.id, useSec) ? useSec : up.sections[0].id);
         closeModal();
-        if (made) openTask(made.id);
+        if (made) {
+          openTask(made.id);
+          toast(L('สร้างงานจากเทมเพลตแล้ว'), L('ย้อนกลับ'), 'undo');
+        }
         break;
       }
-      case 'delete-template':
-        S.deleteTaskTemplate(id);
-        openModal(templatesModal());
+      case 'delete-template': {
+        var dtt = id;
+        askConfirm(L('ลบเทมเพลตงานนี้?'), '', function () {
+          S.deleteTaskTemplate(dtt);
+          openModal(templatesModal(state.ttSec));
+          toast(L('ลบเทมเพลตแล้ว'), L('ย้อนกลับ'), 'undo');
+        }, { ok: L('ลบ') });
         break;
+      }
+      case 'do-tt-save': {
+        var ttScope = ($modal.querySelector('input[name="ttScope"]:checked') || {}).value || '*';
+        var ttNew = S.saveTaskTemplate(id, (document.getElementById('ttName') || {}).value, ttScope);
+        if (!ttNew) break;
+        state.tte = { id: ttNew.id, name: ttNew.name, t: S.clone(ttNew.t), scope: ttScope };
+        openModal(ttEditModal(), true);
+        toast(L('บันทึกเป็นเทมเพลตแล้ว'));
+        break;
+      }
+      case 'tt-edit': {
+        var tfx = S.findTaskTemplate(id);
+        if (!tfx) break;
+        state.tte = { id: id, name: tfx.tpl.name, t: S.clone(tfx.tpl.t), scope: tfx.scope };
+        openModal(ttEditModal(), true);
+        break;
+      }
+      case 'tte-back': state.tte = null; openModal(templatesModal(state.ttSec)); break;
+      case 'tte-save': {
+        var tts = state.tte;
+        if (!String(tts.t.name || '').trim()) { toast(L('ใส่ชื่องานก่อน')); break; }
+        S.updateTaskTemplate(tts.id, { name: tts.name, t: tts.t });
+        state.tte = null;
+        openModal(templatesModal(state.ttSec));
+        toast(L('บันทึกเทมเพลตแล้ว'), L('ย้อนกลับ'), 'undo');
+        break;
+      }
+      case 'tte-rel': {
+        var trk = el.dataset.k;
+        auSet(state.tte, trk, el.checked ? { n: 1, unit: 'days' } : null);
+        refresh3b(ttEditModal(), true);
+        break;
+      }
+      case 'tte-fol': {
+        var tfl = state.tte.t.followers, tfi = tfl.indexOf(el.dataset.v);
+        if (tfi >= 0) tfl.splice(tfi, 1); else tfl.push(el.dataset.v);
+        refresh3b(ttEditModal(), true);
+        break;
+      }
+      case 'tte-sub-add':
+        state.tte.t.subs.push({ k: 'k' + Date.now().toString(36), name: '', notes: '', assignee: null, due: null, deps: [] });
+        refresh3b(ttEditModal(), true);
+        break;
+      case 'tte-sub-del': {
+        var tsk = state.tte.t.subs[+el.dataset.i];
+        state.tte.t.subs.splice(+el.dataset.i, 1);
+        state.tte.t.subs.forEach(function (s) { s.deps = s.deps.filter(function (k) { return !tsk || k !== tsk.k; }); });
+        refresh3b(ttEditModal(), true);
+        break;
+      }
+
+      /* --- 3b ฟอร์ม --- */
+      case 'forms-open': closePops(); openForms(id || state.route.id); break;
+      case 'go-form':
+        closePops();
+        closeModal();
+        state.route = { type: 'form', id: id };
+        state.ff = { id: id, ans: {} };
+        state.openTaskId = null;
+        clearSel();
+        renderAll();
+        break;
+      case 'fm-go': {
+        var fgo = id;
+        closeModal();
+        state.route = { type: 'form', id: fgo };
+        state.ff = { id: fgo, ans: {} };
+        state.openTaskId = null;
+        clearSel();
+        renderAll();
+        break;
+      }
+      case 'fm-link': copyText(formUrl(id), L('คัดลอกลิงก์ฟอร์มแล้ว')); break;
+      case 'fm-new': {
+        var fnp = S.project(projectId);
+        if (!fnp) break;
+        var fq = feNewItem('text');
+        fq.label = L('เรื่อง'); fq.req = true; fq.map = 'name';
+        state.fe = { pid: projectId, isNew: true, f: { name: L('ฟอร์มใหม่'), desc: '', on: true, items: [fq, feNewItem('long')],
+          sec: fnp.sections[0].id, titleQ: '', assignee: '', copy: true, follow: true, confirm: '', again: true } };
+        state.fe.f.items[1].label = L('รายละเอียด');
+        state.fe.f.items[1].map = 'notes';
+        openModal(formEditModal(), true);
+        break;
+      }
+      case 'fm-edit': {
+        var fex = S.formById(id);
+        if (!fex) break;
+        state.fe = { pid: fex.p.id, isNew: false, f: S.clone(fex.f) };
+        openModal(formEditModal(), true);
+        break;
+      }
+      case 'fm-toggle': {
+        var ftx = S.formById(id);
+        if (ftx && S.setFormOn(ftx.p.id, id, !ftx.f.on)) {
+          refresh3b(formsModal(ftx.p.id), true);
+          toast(ftx.f.on ? L('เปิดรับคำตอบแล้ว') : L('ปิดรับคำตอบแล้ว'), L('ย้อนกลับ'), 'undo');
+        } else denyToast();
+        break;
+      }
+      case 'fm-dup': {
+        var fdx = S.formById(id);
+        if (fdx && S.duplicateForm(fdx.p.id, id)) {
+          refresh3b(formsModal(fdx.p.id), true);
+          toast(L('ทำสำเนาแล้ว (ปิดรับไว้ก่อน)'), L('ย้อนกลับ'), 'undo');
+        } else toast(L('ทำสำเนาไม่ได้ (สูงสุด {n} ฟอร์มต่อโปรเจกต์)', { n: S.FORM_MAX }));
+        break;
+      }
+      case 'fm-del': {
+        var fdl = S.formById(id), fdlId = id;
+        if (!fdl) break;
+        askConfirm(L('ลบฟอร์ม “{f}”?', { f: fdl.f.name }), L('ลิงก์ของฟอร์มนี้จะใช้ไม่ได้ งานที่สร้างจากฟอร์มแล้วยังอยู่ครบ'), function () {
+          S.deleteForm(fdl.p.id, fdlId);
+          openForms(fdl.p.id);
+          toast(L('ลบฟอร์มแล้ว'), L('ย้อนกลับ'), 'undo');
+        }, { ok: L('ลบ') });
+        break;
+      }
+      case 'fe-back': {
+        var fbp = state.fe && state.fe.pid;
+        state.fe = null;
+        if (fbp && state.route.type === 'project') openForms(fbp); else closeModal();
+        break;
+      }
+      case 'fe-save': {
+        var fes = state.fe;
+        if (!fes) break;
+        if (!String(fes.f.name || '').trim()) { toast(L('ตั้งชื่อฟอร์มก่อน')); break; }
+        if (!fes.f.items.some(function (it) { return it.kind !== 'heading'; })) { toast(L('เพิ่มคำถามอย่างน้อยหนึ่งข้อ')); break; }
+        var fbad = fes.f.items.filter(function (it) { return it.kind !== 'heading' && !String(it.label || '').trim(); })[0];
+        if (fbad) { toast(L('คำถามข้อ {n} ยังไม่มีข้อความ', { n: fes.f.items.indexOf(fbad) + 1 })); break; }
+        var fopt = fes.f.items.filter(function (it) { return (it.kind === 'select' || it.kind === 'multi') && !it.opts.length; })[0];
+        if (fopt) { toast(L('คำถามข้อ {n} ยังไม่มีตัวเลือก', { n: fes.f.items.indexOf(fopt) + 1 })); break; }
+        var fsv = S.saveForm(fes.pid, fes.f);
+        if (!fsv) { toast(L('บันทึกไม่ได้ (สิทธิ์ไม่พอ หรือครบ {n} ฟอร์มแล้ว)', { n: S.FORM_MAX })); break; }
+        state.fe = null;
+        if (state.route.type === 'form') { closeModal(); renderAll(); }
+        else openForms(fes.pid);
+        toast(fes.isNew ? L('สร้างฟอร์มแล้ว') : L('บันทึกฟอร์มแล้ว'), L('ย้อนกลับ'), 'undo');
+        break;
+      }
+      case 'fe-q-del': state.fe.f.items.splice(+el.dataset.i, 1); refresh3b(formEditModal(), true); break;
+      case 'fe-q-up': case 'fe-q-down': {
+        var fql = state.fe.f.items, fqi = +el.dataset.i, fqj = fqi + (act === 'fe-q-up' ? -1 : 1);
+        if (fqj >= 0 && fqj < fql.length) { var fqt = fql[fqi]; fql[fqi] = fql[fqj]; fql[fqj] = fqt; }
+        /* เงื่อนไขที่ชี้ไปคำถามที่ตอนนี้อยู่ข้างล่างใช้ไม่ได้แล้ว */
+        var fqpos = {};
+        fql.forEach(function (x, k) { fqpos[x.id] = k; });
+        fql.forEach(function (x, k) { if (x.cond && !(fqpos[x.cond.q] < k)) x.cond = null; });
+        refresh3b(formEditModal(), true);
+        break;
+      }
+      case 'fe-cond-chip': {
+        var fci = state.fe.f.items[+el.dataset.i];
+        if (!fci || !fci.cond) break;
+        var fcv = fci.cond.v, fcat = fcv.indexOf(el.dataset.v);
+        if (fcat >= 0) fcv.splice(fcat, 1); else fcv.push(el.dataset.v);
+        refresh3b(formEditModal(), true);
+        break;
+      }
+      case 'ff-submit': {
+        var ffs = state.ff;
+        if (!ffs) break;
+        var fres = S.submitForm(id, ffs.ans);
+        if (fres.err) {
+          ffs.err = fres.err; ffs.params = fres.params || null; ffs.errQ = fres.q || null;
+          renderViewBody();
+          var errEl = $view.querySelector('.ffq.err, .ffp-err');
+          if (errEl && errEl.scrollIntoView) errEl.scrollIntoView({ block: 'center' });
+          break;
+        }
+        state.ff = { id: id, ans: {}, done: fres.task.id };
+        renderAll();
+        toast(L('ส่งฟอร์มแล้ว'), L('ย้อนกลับ'), 'undo');
+        break;
+      }
+      case 'ff-again': state.ff = { id: state.route.id, ans: {} }; renderViewBody(); break;
+      case 'ff-file-del': {
+        var ffl = [].concat(state.ff.ans[el.dataset.q] || []);
+        ffl.splice(+el.dataset.i, 1);
+        state.ff.ans[el.dataset.q] = ffl;
+        renderViewBody();
+        break;
+      }
+
+      /* --- 3b ชนิดงานและสถานะ --- */
+      case 'types-open': closePops(); openTypes(id || state.route.id); break;
+      case 'ty-new':
+        state.te.isNew = true;
+        state.te.ty = { name: '', icon: '◇', statuses: [
+          { name: L('ยังไม่เริ่ม'), color: '#9ca0a8', done: false },
+          { name: L('กำลังทำ'), color: '#14aaf5', done: false },
+          { name: L('เสร็จแล้ว'), color: '#37c5ab', done: true }] };
+        refresh3b(typesModal(), true);
+        break;
+      case 'ty-edit': {
+        var tye = S.typeDef(id);
+        if (!tye) break;
+        state.te.isNew = false;
+        state.te.ty = S.clone(tye);
+        refresh3b(typesModal(), true);
+        break;
+      }
+      case 'ty-del': {
+        var tyd = S.typeDef(id), tydPid = state.te.pid;
+        if (!tyd) break;
+        askConfirm(L('ลบชนิดงาน “{t}”?', { t: tyd.name }), L('งานที่เป็นชนิดนี้จะกลับเป็นงานทั่วไป และสถานะหายไป ย้อนกลับได้'), function () {
+          S.deleteTaskType(tydPid, tyd.id);
+          openTypes(tydPid);
+          toast(L('ลบชนิดงานแล้ว'), L('ย้อนกลับ'), 'undo');
+        }, { ok: L('ลบ') });
+        break;
+      }
+      case 'te-back': state.te.ty = null; refresh3b(typesModal(), true); break;
+      case 'te-save': {
+        var tes = state.te;
+        if (!String(tes.ty.name || '').trim()) { toast(L('ตั้งชื่อชนิดงานก่อน')); break; }
+        if (!tes.ty.statuses.some(function (s) { return String(s.name || '').trim(); })) { toast(L('ต้องมีอย่างน้อยหนึ่งสถานะ')); break; }
+        if (!S.saveTaskType(tes.pid, tes.ty)) { toast(L('บันทึกไม่ได้ (สิทธิ์ไม่พอ หรือครบ {n} ชนิดแล้ว)', { n: S.TYPE_MAX })); break; }
+        tes.ty = null;
+        refresh3b(typesModal(), true);
+        renderAll();
+        toast(tes.isNew ? L('สร้างชนิดงานแล้ว') : L('บันทึกชนิดงานแล้ว'), L('ย้อนกลับ'), 'undo');
+        break;
+      }
+      case 'te-st-add':
+        state.te.ty.statuses.push({ name: '', color: S.OPTION_COLORS[state.te.ty.statuses.length % S.OPTION_COLORS.length], done: false });
+        refresh3b(typesModal(), true);
+        break;
+      case 'te-st-del': state.te.ty.statuses.splice(+el.dataset.i, 1); refresh3b(typesModal(), true); break;
+      case 'te-st-up': {
+        var tsl = state.te.ty.statuses, tsi = +el.dataset.i;
+        if (tsi > 0) { var tst = tsl[tsi - 1]; tsl[tsi - 1] = tsl[tsi]; tsl[tsi] = tst; }
+        refresh3b(typesModal(), true);
+        break;
+      }
+      case 'te-st-color': {
+        var tsc = state.te.ty.statuses[+el.dataset.i];
+        var cols = S.OPTION_COLORS, ci = cols.indexOf(tsc.color);
+        tsc.color = cols[(ci + 1) % cols.length];
+        refresh3b(typesModal(), true);
+        break;
+      }
+      case 'te-st': if (el.dataset.k === 'done') { state.te.ty.statuses[+el.dataset.i].done = el.checked; } break;
+      case 'cell-status':
+        if (popIsOpenFor(el)) { closePops(); break; }
+        openPop(el, statusPop(id));
+        break;
+      case 'set-cstatus': {
+        closePops();
+        var scd = S.statusDef(el.dataset.v);
+        if (S.setTaskStatus(id, el.dataset.v) && scd) {
+          toast(L('ตั้งสถานะเป็น “{s}” แล้ว', { s: scd.st.name }), L('ย้อนกลับ'), 'undo');
+        }
+        break;
+      }
+
+      /* --- 3b เทมเพลตโปรเจกต์ --- */
+      case 'np-tab':
+        state.npTab = el.dataset.v === 'tpl' ? 'tpl' : 'blank';
+        openModal(projectModal(null), state.npTab === 'tpl');
+        break;
+      case 'pt-save': closePops(); openModal(ptSaveModal(id || state.route.id)); break;
+      case 'do-pt-save': {
+        var pts = S.saveProjectTemplate(projectId, {
+          name: (document.getElementById('ptsName') || {}).value,
+          desc: (document.getElementById('ptsDesc') || {}).value,
+          withTasks: !!(document.getElementById('ptsTasks') || {}).checked,
+          skipWeekends: !!(document.getElementById('ptsSkip') || {}).checked,
+          org: !!(document.getElementById('ptsOrg') || {}).checked
+        });
+        closeModal();
+        if (pts) toast(L('บันทึกเทมเพลต “{t}” แล้ว ใช้ได้จาก “สร้างโปรเจกต์ใหม่ → จากเทมเพลต”', { t: pts.name }), L('ย้อนกลับ'), 'undo');
+        else denyToast();
+        break;
+      }
+      case 'pt-pick': openModal(ptUseModal(id)); break;
+      case 'pt-use': {
+        var ptx = S.projectTemplate(id);
+        if (!ptx) break;
+        if (!S.can('structure')) { denyToast(); break; }
+        var ptRoles = {};
+        ((ptx.data && ptx.data.roles) || []).forEach(function (r) {
+          var sel = document.getElementById('ptuRole-' + r.k);
+          if (sel && sel.value) ptRoles[r.k] = sel.value;
+        });
+        var ptp = S.useProjectTemplate(id, {
+          name: (document.getElementById('ptuName') || {}).value,
+          start: (document.getElementById('ptuStart') || {}).value,
+          skipWeekends: !!(document.getElementById('ptuSkip') || {}).checked,
+          roles: ptRoles
+        });
+        closeModal();
+        state.npTab = 'blank';
+        if (ptp) {
+          goProject(ptp.id);
+          toast(L('สร้างโปรเจกต์จากเทมเพลตแล้ว'), L('ย้อนกลับ'), 'undo');
+        }
+        break;
+      }
+      case 'pt-share': openModal(ptShareModal(id)); break;
+      case 'pt-org':
+        S.updateProjectTemplate(id, { org: el.checked });
+        openModal(ptShareModal(id));
+        break;
+      case 'pt-acc-add': {
+        var pau = document.getElementById('ptsUser'), pal = document.getElementById('ptsLevel');
+        if (pau && pau.value) S.setTemplateAccess(id, pau.value, pal ? pal.value : 'use');
+        openModal(ptShareModal(id));
+        break;
+      }
+      case 'pt-rename': {
+        var prn = S.projectTemplate(id), prnId = id;
+        if (!prn) break;
+        askText(L('ชื่อเทมเพลต'), prn.name, function (v) {
+          if (v) S.updateProjectTemplate(prnId, { name: v });
+          state.npTab = 'tpl';
+          openModal(projectModal(null), true);
+        });
+        break;
+      }
+      case 'pt-del': {
+        var pdl = S.projectTemplate(id), pdlId = id;
+        if (!pdl) break;
+        askConfirm(L('ลบเทมเพลต “{t}”?', { t: pdl.name }), L('โปรเจกต์ที่สร้างจากเทมเพลตนี้ไปแล้วยังอยู่ครบ'), function () {
+          S.deleteProjectTemplate(pdlId);
+          state.npTab = 'tpl';
+          openModal(projectModal(null), true);
+          toast(L('ลบเทมเพลตแล้ว'), L('ย้อนกลับ'), 'undo');
+        }, { ok: L('ลบ') });
+        break;
+      }
 
       /* --- members --- */
       case 'manage-members': openModal(addMemberModal()); break;
@@ -8109,6 +9154,7 @@
       } else if (act === 'ae-tp') {
         ea.trigger[el.dataset.k] = auVal(el);
         if (el.dataset.k === 'field') ea.trigger.val = '';
+        if (el.dataset.k === 'ctype') ea.trigger.v = '';
         if (el.dataset.k === 'freq') ea.trigger.day = el.value === 'monthly' ? 1 : 1;
       } else if (act === 'ae-act-add') {
         if (!el.value) return;
@@ -8155,6 +9201,108 @@
         }
       }
       refreshAuto();
+      return;
+    }
+
+    /* 3b — ตัวแก้ฟอร์ม ชนิดงาน เทมเพลตงาน รายงานสถานะ และหน้าส่งฟอร์ม (สำเนาในหน้าจอ) */
+    if (syncDraft3b(el)) return;
+    if (act === 'ff-file') { takeFormFiles(el); return; }
+    if ((act === 'ff-ans' || act === 'ff-multi' || act === 'ff-range') && state.ff) {
+      var ffq = el.dataset.q;
+      if (act === 'ff-multi') {
+        var ffm = [].concat(state.ff.ans[ffq] || []).filter(function (v) { return v !== el.value; });
+        if (el.checked) ffm.push(el.value);
+        state.ff.ans[ffq] = ffm;
+      } else if (act === 'ff-range') {
+        var ffr = (state.ff.ans[ffq] || ['', '']).slice();
+        ffr[+el.dataset.part] = el.value;
+        state.ff.ans[ffq] = ffr;
+      } else state.ff.ans[ffq] = el.value;
+      state.ff.err = null; state.ff.errQ = null;
+      renderViewBody();
+      return;
+    }
+    if (act === 'fe-q-add' && state.fe) {
+      if (el.value) state.fe.f.items.push(feNewItem(el.value));
+      refresh3b(formEditModal(), true);
+      return;
+    }
+    if ((act === 'fe-set' || act === 'fe-q') && state.fe) {
+      var fk = el.dataset.k, fv = el.dataset.t === 'check' ? el.checked : el.value;
+      if (act === 'fe-set') state.fe.f[fk] = fv;
+      else {
+        var fit = state.fe.f.items[+el.dataset.i];
+        if (!fit) return;
+        if (fk === 'kind') {
+          var nit = feNewItem(fv);
+          nit.id = fit.id; nit.label = fit.label; nit.help = fit.help; nit.req = fit.req && fv !== 'heading';
+          if (nit.opts.length && fit.opts.length) nit.opts = fit.opts;
+          state.fe.f.items[+el.dataset.i] = nit;
+          /* คำถามที่แตกแขนงจากข้อนี้ใช้ไม่ได้ถ้าไม่ใช่คำถามตัวเลือกแล้ว */
+          if (!nit.opts.length) state.fe.f.items.forEach(function (x) { if (x.cond && x.cond.q === fit.id) x.cond = null; });
+        } else if (fk === 'condq') {
+          fit.cond = fv ? { q: fv, v: [] } : null;
+        } else if (fk === 'map') {
+          fit.map = fv;
+          /* ผูกกับฟิลด์ตัวเลือก — ใช้ตัวเลือกของฟิลด์ คำตอบจะได้ลงฟิลด์ได้ทุกค่า */
+          var mf = fv.indexOf('field:') === 0 ? (S.project(state.fe.pid).fields || []).filter(function (x) { return x.id === fv.slice(6); })[0] : null;
+          if (mf && (mf.type === 'select' || mf.type === 'multi')) fit.opts = mf.options.map(function (o) { return o.name; });
+        } else fit[fk] = fv;
+      }
+      refresh3b(formEditModal(), true);
+      return;
+    }
+    if (act === 'ty-default' && state.te) {
+      S.setDefaultType(state.te.pid, el.value);
+      refresh3b(typesModal(), true);
+      toast(L('ตั้งชนิดเริ่มต้นแล้ว'), L('ย้อนกลับ'), 'undo');
+      return;
+    }
+    if (state.tte && /^tte/.test(act)) {
+      var tk = el.dataset.k, tv = el.value;
+      if (act === 'tte' && tk === 'type') {
+        if (S.isBuiltinType(tv)) { state.tte.t.type = tv; state.tte.t.ctype = null; }
+        else { state.tte.t.type = 'task'; state.tte.t.ctype = tv; }
+        if (state.tte.t.type === 'milestone') state.tte.t.start = null;
+      } else if (act === 'tte') auSet(state.tte, tk, auVal(el));
+      else if (act === 'tte-sub') {
+        var tsb = state.tte.t.subs[+el.dataset.i];
+        if (!tsb) return;
+        if (tk === 'assignee') tsb.assignee = tv || null;
+        else if (tk === 'due') tsb.due = tv === '' ? null : { n: Math.max(0, parseInt(tv, 10) || 0), unit: 'days' };
+        else if (tk === 'dep') tsb.deps = tv ? [tv] : [];
+      } else if (act === 'tte-field') {
+        state.tte.t.fields[el.dataset.f] = tv === '' ? null : tv;
+      }
+      refresh3b(ttEditModal(), true);
+      return;
+    }
+    if (state.sb && (act === 'sb-add' || act === 'sb-period' || act === 'sb-tpl')) {
+      if (act === 'sb-add' && el.value) state.sb.blocks.push({ k: el.value, title: '', text: '' });
+      if (act === 'sb-period') state.sb.period = +el.value || 7;
+      if (act === 'sb-tpl' && el.value) {
+        var stp = S.statusTemplates().filter(function (x) { return x.id === el.value; })[0];
+        if (stp) {
+          var old = state.sb.blocks;
+          state.sb.blocks = stp.blocks.map(function (b) {
+            var same = old.filter(function (o) { return o.k === b.k && o.k !== 'custom'; })[0];
+            return { k: b.k, title: b.title || '', text: same ? same.text : '' };
+          });
+          state.sb.hl = stp.hl.slice();
+          state.sb.period = stp.period || 7;
+        }
+      }
+      refresh3b(statusBuilderHtml(), true);
+      return;
+    }
+    if (act === 'pt-acc') {
+      if (!S.setTemplateAccess(el.dataset.id, el.dataset.user, el.value || null)) toast(L('ต้องมีคนแก้เทมเพลตได้อย่างน้อยหนึ่งคน'));
+      openModal(ptShareModal(el.dataset.id));
+      return;
+    }
+    if (act === 'te-st' && state.te && state.te.ty) {
+      var tst2 = state.te.ty.statuses[+el.dataset.i];
+      if (tst2 && el.dataset.k === 'done') tst2.done = el.checked;
       return;
     }
 
@@ -8314,7 +9462,8 @@
       case 'edit-start': S.updateTask(id, { startOn: el.value || null }); break;
       case 'edit-duetime': S.updateTask(id, { dueTime: el.value || null }); break;
       case 'edit-starttime': S.updateTask(id, { startTime: el.value || null }); break;
-      case 'edit-type': S.updateTask(id, { type: el.value }); break;
+      case 'edit-type': S.setTaskType(id, el.value); break;           // 3b — รวมชนิดกำหนดเอง
+      case 'edit-cstatus': S.setTaskStatus(id, el.value); break;
       case 'edit-recur': {
         /* ตั้งรายสัปดาห์ครั้งแรก ให้ติ๊กวันเดียวกับกำหนดส่งไว้ก่อน จะได้เห็นว่าเลือกวันได้ */
         var days0 = (t.recur && t.recur.days) || [];
@@ -8345,6 +9494,11 @@
     }
   });
 
+  /* 3b — ช่องพิมพ์ของตัวแก้ฟอร์ม ชนิดงาน เทมเพลตงาน รายงานสถานะ และหน้าส่งฟอร์ม เก็บลงสำเนาในหน้าจอทุกตัวอักษร */
+  document.addEventListener('input', function (e) {
+    var el = e.target;
+    if (el && el.dataset && el.dataset.act) syncDraft3b(el);
+  });
   /* สมุดโน้ตส่วนตัวบันทึกเองหลังหยุดพิมพ์ครู่หนึ่ง (และตอนออกจากช่องผ่าน change) */
   var noteTimer = null;
   global.addEventListener('beforeunload', function () {
@@ -9477,7 +10631,7 @@
     if ((global.location.hash || '').indexOf('#/task/') === 0) return true;
     if (!parsed) return false;
     if (parsed.taskId) return true;
-    return ['project', 'portfolio', 'search', 'profile', 'tag'].indexOf(parsed.route.type) >= 0;
+    return ['project', 'portfolio', 'search', 'profile', 'tag', 'form'].indexOf(parsed.route.type) >= 0;
   }
 
   var boot = readHash();
@@ -9500,6 +10654,8 @@
    * หน่วงไว้นิดหนึ่งให้โหมดทีมโหลดข้อมูลส่วนกลางก่อน จะได้ไม่สร้างจากข้อมูลเก่าในเครื่อง */
   function runReminders() {
     try { S.checkDueReminders(); } catch (err) { console.error('เตือนกำหนดส่งไม่สำเร็จ', err); }
+    /* 3b — งานเตือนรายงานสถานะวันศุกร์ (ทดสอบวันอื่นได้ด้วย Store.checkStatusReminders({ today: 'YYYY-MM-DD' })) */
+    try { S.checkStatusReminders(); } catch (err2) { console.error('เตือนรายงานสถานะไม่สำเร็จ', err2); }
   }
   setTimeout(runReminders, 2500);
   setInterval(runReminders, 3600 * 1000);
