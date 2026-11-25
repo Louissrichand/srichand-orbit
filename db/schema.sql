@@ -81,7 +81,8 @@ CREATE TABLE dbo.projects (
     default_view  VARCHAR(12)      NOT NULL DEFAULT 'list',
     owner_id      UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
     archived_at   DATETIME2(0)     NULL,
-    deleted_at    DATETIME2(0)     NULL,
+    deleted_at    DATETIME2(0)     NULL,     -- ถังขยะเหมือนงาน (deleted_by คู่กัน)
+    deleted_by    UNIQUEIDENTIFIER NULL,
     created_by    UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
     created_at    DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME(),
     due_on        DATE             NULL,
@@ -142,17 +143,19 @@ CREATE TABLE dbo.tasks (
     name          NVARCHAR(1000)   NOT NULL,
     notes         NVARCHAR(MAX)    NULL,
     task_type     VARCHAR(10)      NOT NULL DEFAULT 'task',   -- task | milestone | approval
-    approval      VARCHAR(10)      NULL,                      -- approved | changes | rejected
+    approval      VARCHAR(10)      NULL,                      -- pending | approved | changes | rejected (ผู้อนุมัติ = assignee)
     assignee_id   UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
     parent_id     UNIQUEIDENTIFIER NULL REFERENCES dbo.tasks(id),
     start_on      DATE             NULL,
+    start_at      DATETIME2(0)     NULL,     -- วันเริ่ม + เวลาเริ่ม (startTime) ถ้าตั้งไว้
     due_on        DATE             NULL,
     due_at        DATETIME2(0)     NULL,
     priority      VARCHAR(10)      NOT NULL DEFAULT 'none',
     completed_at  DATETIME2(0)     NULL,
     completed_by  UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
-    recur_json    NVARCHAR(500)    NULL,     -- กติกางานทำซ้ำ
-    deleted_at    DATETIME2(0)     NULL,
+    recur_json    NVARCHAR(500)    NULL,     -- {"freq":"daily|weekly|monthly|yearly|after","interval":N,"days":[0-6]}
+    deleted_at    DATETIME2(0)     NULL,     -- ถังขยะ: ตั้งตอนลบ กู้คืน = ล้างกลับเป็น NULL ภายใน 30 วัน
+    deleted_by    UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
     created_by    UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
     created_at    DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME(),
     updated_at    DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME(),
@@ -232,6 +235,9 @@ CREATE TABLE dbo.custom_fields (
     project_id  UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.projects(id) ON DELETE CASCADE,
     name        NVARCHAR(200)    NOT NULL,
     field_type  VARCHAR(10)      NOT NULL,
+    format_json NVARCHAR(200)    NULL,     -- ฟิลด์ตัวเลข: {"kind":"number|currency|percent|unit","currency":"THB","unit":"","decimals":0-4}
+    deleted_at  DATETIME2(0)     NULL,     -- ฟิลด์ในถังขยะ ค่าที่กรอกไว้ยังอยู่ กู้คืนแล้วกลับมาครบ
+    deleted_by  UNIQUEIDENTIFIER NULL,
     position    DECIMAL(18,9)    NOT NULL,
     CONSTRAINT ck_field_type CHECK (field_type IN ('text','number','select','multi','date','person'))
 );
@@ -315,6 +321,8 @@ CREATE TABLE dbo.notifications (
     id           BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
     user_id      UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.users(id) ON DELETE CASCADE,
     task_id      UNIQUEIDENTIFIER NULL REFERENCES dbo.tasks(id),
+    kind         VARCHAR(20)      NULL,     -- assigned | mention | comment | unblock | activity | message | approval | due | overdue
+    dedupe_key   VARCHAR(120)     NULL,     -- กันเตือนกำหนดส่งซ้ำ เช่น due1:<task>:<date>
     body         NVARCHAR(1000)   NOT NULL,
     read_at      DATETIME2(0)     NULL,
     archived_at  DATETIME2(0)     NULL,

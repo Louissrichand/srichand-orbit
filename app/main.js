@@ -38,7 +38,8 @@
     setTab: 'general',                  // แท็บที่เปิดอยู่ในหน้าตั้งค่าของฉัน
     openThreads: {},         // เธรดความเห็นที่กางอยู่ (รหัสความเห็นแม่ -> true)
     editStory: null,         // ความเห็นที่กำลังแก้อยู่
-    flashStory: null         // ความเห็นที่ต้องเลื่อนไปหาและไฮไลต์ครั้งถัดไปที่วาดแผงงาน
+    flashStory: null,        // ความเห็นที่ต้องเลื่อนไปหาและไฮไลต์ครั้งถัดไปที่วาดแผงงาน
+    subView: { sort: 'manual', hideDone: false, mine: false }   // เรียง/กรองงานย่อยในแผงงาน
   };
 
   function viewFor(projectId) {
@@ -214,7 +215,7 @@
       if (!S.user(uid)) return null;
       return { route: { type: 'profile', id: uid }, taskId: taskId };
     }
-    if (['home', 'mytasks', 'inbox', 'calendar', 'admin', 'projects'].indexOf(type) >= 0) {
+    if (['home', 'mytasks', 'inbox', 'calendar', 'admin', 'projects', 'trash'].indexOf(type) >= 0) {
       return { route: { type: type }, taskId: taskId };
     }
     return null;
@@ -289,6 +290,8 @@
       body = R.adminView(state.auditFilter);
     } else if (r.type === 'search') {
       body = R.searchView(r.q, state.sel);
+    } else if (r.type === 'trash') {
+      body = R.trashView();
     }
 
     // ออกจาก Gantt แล้วแผงตัวเลือกไม่มีความหมายอีก ปล่อยค้างไว้จะบังหน้าจอเปล่า ๆ
@@ -819,7 +822,7 @@
       $drawer.innerHTML = R.drawer(state.openTaskId,
         { actTab: state.actTab, actSort: state.actSort, actAll: state.actAll,
           wide: state.dwWide, moreFields: state.dwMore,
-          draft: getDraft, openThreads: state.openThreads,
+          draft: getDraft, openThreads: state.openThreads, subView: state.subView,
           editStory: state.editStory, flashStory: state.flashStory });
       drawerRendering = false;
       $drawer.dataset.task = state.openTaskId;
@@ -1021,9 +1024,12 @@
   var pendingAsk = null;
   var askChoiceFns = [];
 
+  var askPasteCtx = null;   // ช่องถามนี้เป็นช่องเพิ่มงานไหม (วางหลายบรรทัด = หลายงาน)
+
   function askText(title, value, onOk, opts) {
     opts = opts || {};
     pendingAsk = onOk;
+    askPasteCtx = opts.pasteCtx || null;
     openModal('<h2>' + R.esc(title) + '</h2>' +
       (opts.note ? '<p class="prj-note">' + R.esc(opts.note) + '</p>' : '') +
       '<div class="field"><input id="askInput" type="' + (opts.type || 'text') + '" value="' +
@@ -1162,8 +1168,10 @@
     var projectId = state.route.id;
     var input = document.createElement('input');
     input.type = 'text';
-    input.className = 'inp';
-    input.placeholder = L('ชื่องาน แล้วกด Enter');
+    input.className = 'inp inline-add-input';
+    input.dataset.project = projectId;
+    input.dataset.section = sectionId;
+    input.placeholder = L('ชื่องาน แล้วกด Enter (วางหลายบรรทัด = หลายงาน)');
     input.style.cssText = 'border:1px solid var(--accent);background:var(--bg);margin:4px 0';
     btn.style.display = 'none';
     btn.parentNode.insertBefore(input, btn);
@@ -1235,6 +1243,8 @@
       optionRow('', S.OPTION_COLORS[3]) + optionRow('', S.OPTION_COLORS[0]) + '</div>' +
       '<button type="button" class="btn btn-sm btn-ghost" data-act="add-option">' +
       I('plus', 13) + ' ' + L('เพิ่มตัวเลือก') + '</button></div>';
+
+    h += '<div id="nfNumWrap"' + (ft.id === 'number' ? '' : ' hidden') + '>' + numberFormatFields(null) + '</div>';
 
     h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') +
       '</button><button class="btn btn-primary" data-act="create-field">' +
@@ -1686,15 +1696,174 @@
 
   function taskMenuModal(taskId) {
     var t = S.task(taskId);
+    var q = R.esc(taskId);
+    function item(act, icon, label) {
+      return '<button class="btn" data-act="' + act + '" data-id="' + q + '">' + I(icon, 14) + ' ' + label + '</button>';
+    }
     var h = '<h2>' + R.esc(t.name) + '</h2>';
-    h += '<div style="display:flex;flex-direction:column;gap:8px">' +
-      '<button class="btn" data-act="dup-task" data-id="' + R.esc(taskId) + '">' + I('copy', 14) + ' ' + L('คัดลอกงาน') + '</button>' +
-      '<button class="btn" data-act="save-template" data-id="' + R.esc(taskId) + '">' + I('star', 14) + ' ' + L('บันทึกเป็นเทมเพลต') + '</button>' +
-      '<button class="btn" data-act="copy-link" data-id="' + R.esc(taskId) + '">' + I('link', 14) + ' ' + L('คัดลอกลิงก์ของงานนี้') + '</button>' +
-      '<button class="btn btn-danger" data-act="delete-task" data-id="' + R.esc(taskId) + '">' + I('trash', 14) + ' ' + L('ลบงาน') + '</button>' +
+    h += '<div class="task-menu">' +
+      item('followup', 'plus', L('สร้างงานติดตามผล') + ' <kbd>Shift+Tab+F</kbd>') +
+      item('dup-task', 'copy', L('คัดลอกงาน…')) +
+      item('merge-task', 'checkCircle', L('รวมเป็นงานซ้ำของ…')) +
+      (t.parentId
+        ? item('promote-task', 'arrowUp', L('ย้ายออกเป็นงานหลัก'))
+        : item('make-subtask', 'subtask', L('แปลงเป็นงานย่อยของ…'))) +
+      (t.recur ? item('stop-recur', 'repeat', L('หยุดทำซ้ำ')) : '') +
+      item('save-template', 'star', L('บันทึกเป็นเทมเพลต')) +
+      item('copy-link', 'link', L('คัดลอกลิงก์ของงานนี้')) +
+      '<button class="btn btn-danger" data-act="delete-task" data-id="' + q + '">' + I('trash', 14) + ' ' + L('ลบงาน') + '</button>' +
       '</div>';
     h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
     return h;
+  }
+
+  /* ---- คัดลอกงานแบบเลือกได้ว่าจะเอาอะไรไปบ้าง ----
+   * ค่าเริ่มต้นติ๊กไว้ทุกช่อง ยกเว้นลำดับก่อนหลัง เพราะสำเนาที่รองานเดิมอยู่มักไม่ใช่สิ่งที่ตั้งใจ */
+  var DUP_LABELS = {
+    assignee: 'ผู้รับผิดชอบ', notes: 'รายละเอียด', subtasks: 'งานย่อย', attachments: 'ไฟล์แนบ',
+    tags: 'แท็ก', followers: 'ผู้ติดตาม', projects: 'โปรเจกต์', deps: 'ลำดับก่อนหลัง',
+    dates: 'วันเริ่ม กำหนดส่ง และการทำซ้ำ', fields: 'ค่าในฟิลด์'
+  };
+  function dupModal(taskId) {
+    var t = S.task(taskId);
+    var h = '<h2>' + L('คัดลอกงาน') + '</h2>';
+    h += '<div class="field"><label>' + L('ชื่องาน') + '</label><input id="dupName" value="' +
+      R.esc(t.name + ' ' + L('(สำเนา)')) + '"></div>';
+    h += '<label class="opt-lbl">' + L('เอาอะไรไปด้วย') + '</label><div class="dup-grid">';
+    S.DUP_KEYS.forEach(function (k) {
+      var on = k !== 'deps';
+      h += '<label class="chk"><input type="checkbox" class="dup-opt" data-k="' + k + '"' +
+        (on ? ' checked' : '') + '> ' + R.esc(L(DUP_LABELS[k])) + '</label>';
+    });
+    h += '</div>';
+    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="do-dup" data-id="' + R.esc(taskId) + '">' +
+      L('สร้างสำเนา') + '</button></div>';
+    return h;
+  }
+
+  /* ---- งานติดตามผล ---- */
+  function followUpModal(taskId) {
+    var t = S.task(taskId);
+    return '<h2>' + L('สร้างงานติดตามผล') + '</h2>' +
+      '<p class="prj-note">' + L('มอบหมายให้คุณ อยู่โปรเจกต์และคอลัมน์เดียวกับงานเดิม และลิงก์กลับไปที่งานเดิมในรายละเอียด') + '</p>' +
+      '<div class="field"><label>' + L('ชื่องาน') + '</label><input id="fuName" value="' +
+      R.esc(L('ติดตาม:') + ' ' + t.name) + '"></div>' +
+      '<div class="field"><label>' + L('กำหนดส่ง') + '</label><input id="fuDue" type="date" value="' +
+      R.esc(S.addDays(S.today(), 7)) + '"></div>' +
+      '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="do-followup" data-id="' + R.esc(taskId) + '">' +
+      L('สร้างงาน') + '</button></div>';
+  }
+
+  /* ---- เลือกงานอีกชิ้น ใช้ทั้งรวมงานซ้ำและแปลงเป็นงานย่อย ---- */
+  var PICK_TEXT = {
+    merge:  ['รวม “{t}” เป็นงานซ้ำของงานไหน',
+             'งานนี้จะถูกติ๊กเสร็จและเติม [ซ้ำ] หน้าชื่อ แท็ก ผู้ติดตาม และคนที่ถูกใจย้ายไปที่งานที่เลือก', 'รวม'],
+    parent: ['ย้าย “{t}” ไปเป็นงานย่อยของงานไหน',
+             'งานนี้จะออกจากโปรเจกต์เดิมและไปอยู่ใต้งานที่เลือก', 'เลือก']
+  };
+  function taskPickModal(taskId, mode) {
+    var t = S.task(taskId), tx = PICK_TEXT[mode];
+    return '<h2>' + R.esc(L(tx[0], { t: t.name })) + '</h2>' +
+      '<p class="prj-note">' + L(tx[1]) + '</p>' +
+      '<div class="field"><input id="pickSearch" data-id="' + R.esc(taskId) + '" data-mode="' + mode +
+      '" placeholder="' + L('พิมพ์เพื่อค้นหางาน') + '"></div>' +
+      '<div id="pickResults">' + pickResults(taskId, mode, '') + '</div>' +
+      '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
+  }
+  function pickResults(taskId, mode, q) {
+    var t = S.task(taskId);
+    if (!t) return '';
+    q = (q || '').trim().toLowerCase();
+    /* เรียงงานในโปรเจกต์เดียวกันขึ้นก่อน งานซ้ำกับงานแม่มักอยู่ที่เดียวกัน */
+    var mine = {};
+    S.projectsOfTask(taskId).forEach(function (x) { mine[x.project.id] = true; });
+    var list = S.db.tasks.filter(function (x) {
+      if (x.id === taskId || x.id === t.parentId && mode === 'parent') return false;
+      if (mode === 'merge' && x.completed) return false;
+      if (q && x.name.toLowerCase().indexOf(q) < 0) return false;
+      return S.canSeeTask(x.id) && S.can('write', x.id);
+    });
+    list.sort(function (a, b) {
+      var sa = S.projectsOfTask(a.id).some(function (x) { return mine[x.project.id]; }) ? 0 : 1;
+      var sb = S.projectsOfTask(b.id).some(function (x) { return mine[x.project.id]; }) ? 0 : 1;
+      return sa - sb;
+    });
+    list = list.slice(0, 12);
+    if (!list.length) return '<div style="color:var(--fg-faint)">' + L('ไม่พบงาน') + '</div>';
+    return list.map(function (x) {
+      var home = S.projectsOfTask(x.id)[0];
+      var par = x.parentId ? S.task(x.parentId) : null;
+      return '<div class="mini-row"><div class="grow"><div>' + R.esc(x.name) + '</div>' +
+        '<div class="sub">' + R.esc(par ? L('งานย่อยของ') + ' ' + par.name : (home ? home.project.name : L('ไม่อยู่ในโปรเจกต์'))) +
+        '</div></div><button class="btn btn-sm btn-primary" data-act="' +
+        (mode === 'merge' ? 'do-merge' : 'do-make-subtask') + '" data-id="' + R.esc(taskId) +
+        '" data-target="' + R.esc(x.id) + '">' + L(PICK_TEXT[mode][2]) + '</button></div>';
+    }).join('');
+  }
+
+  /* ---- มอบสำเนาให้หลายคน ---- */
+  function assignCopiesModal(taskId) {
+    var t = S.task(taskId);
+    var h = '<h2>' + L('มอบสำเนาให้หลายคน') + '</h2>' +
+      '<p class="prj-note">' + (t.assigneeId
+        ? L('ทุกคนที่เลือกจะได้งาน “{t}” เป็นของตัวเองคนละชิ้น งานเดิมยังอยู่กับผู้รับผิดชอบคนเดิม', { t: t.name })
+        : L('คนแรกที่เลือกได้งานนี้ไป คนที่เหลือได้สำเนาคนละชิ้น')) + '</p><div class="dup-grid people">';
+    S.db.users.forEach(function (u) {
+      if (u.active === false || u.id === t.assigneeId) return;
+      h += '<label class="chk"><input type="checkbox" class="ac-user" value="' + R.esc(u.id) + '"> ' +
+        R.avatar(u, 'sm') + ' ' + R.esc(u.name) + '</label>';
+    });
+    h += '</div><div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="do-assign-copies" data-id="' + R.esc(taskId) + '">' +
+      L('มอบหมาย') + '</button></div>';
+    return h;
+  }
+
+  /* ---- รูปแบบฟิลด์ตัวเลข ---- */
+  function numberFormatFields(fm) {
+    fm = fm || {};
+    var kind = fm.kind || 'number';
+    var h = '<div class="prj-2col"><div class="field"><label>' + L('แสดงเป็น') + '</label>' +
+      '<select id="nfKind" data-act="nf-kind">';
+    S.NUMBER_FORMATS.forEach(function (x) {
+      h += '<option value="' + x.id + '"' + (x.id === kind ? ' selected' : '') + '>' + R.esc(L(x.label)) + '</option>';
+    });
+    h += '</select></div><div class="field"><label>' + L('ทศนิยม') + '</label><select id="nfDec">' +
+      '<option value="">' + L('อัตโนมัติ') + '</option>';
+    for (var d = 0; d <= 4; d++) {
+      h += '<option value="' + d + '"' + (fm.decimals === d ? ' selected' : '') + '>' + d + '</option>';
+    }
+    h += '</select></div></div>';
+    h += '<div class="field" id="nfCurWrap"' + (kind === 'currency' ? '' : ' hidden') + '><label>' +
+      L('สกุลเงิน') + '</label><select id="nfCur">';
+    S.CURRENCIES.forEach(function (c) {
+      h += '<option value="' + c + '"' + ((fm.currency || 'THB') === c ? ' selected' : '') + '>' + c + '</option>';
+    });
+    h += '</select></div>';
+    h += '<div class="field" id="nfUnitWrap"' + (kind === 'unit' ? '' : ' hidden') + '><label>' +
+      L('หน่วย') + '</label><input id="nfUnit" maxlength="12" value="' + R.esc(fm.unit || '') +
+      '" placeholder="' + L('เช่น ชิ้น, กก., ชม.') + '"></div>';
+    return h;
+  }
+  function readNumberFormat() {
+    var k = document.getElementById('nfKind');
+    if (!k) return null;
+    return {
+      kind: k.value,
+      decimals: document.getElementById('nfDec').value,
+      currency: document.getElementById('nfCur').value,
+      unit: document.getElementById('nfUnit').value
+    };
+  }
+  function fieldFormatModal(projectId, fieldId) {
+    var f = (S.project(projectId).fields || []).filter(function (x) { return x.id === fieldId; })[0];
+    if (!f) return '';
+    return '<h2>' + L('รูปแบบตัวเลขของ “{f}”', { f: f.name }) + '</h2>' + numberFormatFields(f.format) +
+      '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="do-field-format" data-project="' + R.esc(projectId) +
+      '" data-field="' + R.esc(fieldId) + '">' + L('บันทึก') + '</button></div>';
   }
 
   /** เมนูเพิ่มและลดมุมมองของโปรเจกต์
@@ -2105,6 +2274,9 @@
       ['Tab + M', L('มอบหมายงานที่เปิดอยู่ให้ตัวเอง')],
       ['Tab + C', L('ไปที่ช่องความเห็น')],
       ['Tab + X', L('ขยายงานที่เปิดอยู่เต็มจอ (ไม่ได้เปิดงาน = สลับสว่าง/มืด)')],
+      ['Shift + Tab + F', L('สร้างงานติดตามผลของงานที่เปิดอยู่')],
+      [L('วางหลายบรรทัด'), L('ในช่องเพิ่มงานหรืองานย่อย = สร้างหนึ่งงานต่อบรรทัด')],
+      [L('ลากแถวไปวางกลางแถวอื่น'), L('แปลงเป็นงานย่อยของงานนั้น (มุมมองรายการ)')],
       ['Ctrl + B / I / U', L('ตัวหนา / ตัวเอียง / ขีดเส้นใต้ (ในรายละเอียดและความเห็น)')],
       ['Ctrl + Shift + X / M', L('ขีดฆ่า / โค้ด')],
       ['Ctrl + Shift + 8 / 7', L('หัวข้อย่อย / ลำดับเลข')],
@@ -2307,7 +2479,9 @@
         /* เทมเพลตงานเป็นเครื่องมือทำงานปกติ ไม่ใช่งานผู้ดูแล
          * เดิมอยู่ในแท็บสำรองข้อมูล พอซ่อนแท็บนั้นจากคนทั่วไปจึงต้องย้ายออกมา */
         '<button class="btn btn-sm" data-act="manage-templates">' +
-        I('star', 14) + ' ' + L('เทมเพลตงาน') + '</button></div>';
+        I('star', 14) + ' ' + L('เทมเพลตงาน') + '</button>' +
+        '<button class="btn btn-sm" data-act="go-trash">' +
+        I('trash', 14) + ' ' + L('ถังขยะ') + '</button></div>';
     }
 
     if (tab === 'profile') {
@@ -2783,17 +2957,24 @@
       'save-view', 'delete-view', 'reset-cols',
       'g-set-baseline', 'g-clear-baseline',
       'save-project-details', 'set-depmode', 'set-depscope', 'set-workdays',
-      'project-look', 'save-project-look', 'import-csv'
+      'project-look', 'save-project-look', 'import-csv',
+      'field-format', 'do-field-format'
     ]);
     put('write', [
       'delete-task', 'dup-task', 'bulk-complete', 'bulk-reopen', 'bulk-due',
-      'bulk-delete', 'add-home', 'do-add-home', 'unhome', 'undo'
+      'bulk-delete', 'add-home', 'do-add-home', 'unhome', 'undo',
+      /* งานใหม่ที่เกิดจากงานเดิม — สำเนา งานติดตามผล และสำเนาที่มอบให้หลายคน */
+      'do-dup', 'followup', 'do-followup', 'assign-copies', 'do-assign-copies',
+      'merge-task', 'do-merge', 'make-subtask', 'do-make-subtask', 'promote-task',
+      /* ถังขยะ — store ตรวจซ้ำว่าเป็นของที่ตัวเองลบ (ผู้ดูแลกู้ได้ทุกอย่าง) */
+      'trash-restore', 'trash-purge'
     ]);
     put('create', ['quick-add', 'inline-add']);
     put('write:task', [
       'toggle', 'add-subtask',
-      'edit-title', 'edit-notes', 'edit-due', 'edit-start', 'edit-duetime',
-      'edit-type', 'edit-recur', 'edit-recur-n', 'edit-field', 'edit-dep-type',
+      'edit-title', 'edit-notes', 'edit-due', 'edit-start', 'edit-duetime', 'edit-starttime',
+      'edit-type', 'edit-recur', 'edit-recur-n', 'recur-day', 'stop-recur', 'fit-parent-dates',
+      'edit-field', 'edit-dep-type',
       'pick-assignee', 'set-assignee', 'pick-priority', 'set-priority', 'set-approval',
       'add-dependency', 'do-add-dependency', 'remove-dependency', 'g-del-dep',
       'add-attachment', 'remove-attachment',
@@ -3013,7 +3194,8 @@
           });
           if (!opts.length) { toast(L('ใส่ตัวเลือกอย่างน้อย 1 รายการ')); return; }
         }
-        S.addField(state.route.id, { name: nm, type: ty, options: opts });
+        S.addField(state.route.id, { name: nm, type: ty, options: opts,
+          format: ty === 'number' ? readNumberFormat() : null });
         closeModal();
         toast(L('เพิ่มฟิลด์แล้ว'));
         break;
@@ -3022,9 +3204,13 @@
         e.stopPropagation();
         if (popIsOpenFor(el)) { closePops(); break; }
         var fid = el.dataset.field;
+        var fmObj = findField(fid);
         openPop(el,
           '<button data-act="rename-field" data-field="' + R.esc(fid) + '">' +
           I('pencil', 14) + ' ' + L('เปลี่ยนชื่อ') + '</button>' +
+          (fmObj && fmObj.type === 'number'
+            ? '<button data-act="field-format" data-field="' + R.esc(fid) + '">' +
+              I('hash', 14) + ' ' + L('รูปแบบตัวเลข…') + '</button>' : '') +
           '<button data-act="drop-field" data-field="' + R.esc(fid) + '">' +
           I('trash', 14) + ' ' + L('ลบ') + '</button>');
         break;
@@ -3042,9 +3228,9 @@
       case 'drop-field': {
         closePops();
         var dfPid = state.route.id, dfFid = el.dataset.field;
-        askConfirm(L('ลบฟิลด์นี้?'), L('ค่าที่กรอกไว้ทั้งหมดจะหายไปด้วย'), function () {
+        askConfirm(L('ลบฟิลด์นี้?'), L('ฟิลด์และค่าที่กรอกไว้จะไปอยู่ในถังขยะ กู้คืนได้ภายใน {n} วัน', { n: S.TRASH_DAYS }), function () {
           S.deleteField(dfPid, dfFid);
-          toast(L('ลบฟิลด์แล้ว'));
+          toast(L('ย้ายฟิลด์ไปถังขยะแล้ว'), L('ย้อนกลับ'), 'undo');
         }, { ok: L('ลบฟิลด์') });
         break;
       }
@@ -3339,13 +3525,124 @@
         updateSelectionUI(id);
         break;
       case 'task-menu': openModal(taskMenuModal(id)); break;
-      case 'dup-task': {
-        var c = S.duplicateTask(id);
+      case 'go-trash':
         closeModal();
+        state.route = { type: 'trash' };
+        clearSel();
+        renderAll();
+        break;
+      case 'dup-task': openModal(dupModal(id)); break;
+      case 'do-dup': {
+        var dopt = { name: (document.getElementById('dupName') || {}).value };
+        if (!dopt.name || !dopt.name.trim()) { toast(L('ใส่ชื่องานก่อน')); break; }
+        dopt.name = dopt.name.trim();
+        Array.prototype.forEach.call(document.querySelectorAll('.dup-opt'), function (cb) {
+          dopt[cb.dataset.k] = cb.checked;
+        });
+        closeModal();
+        var c = S.duplicateTask(id, dopt);
         if (c) openTask(c.id);
-        toast(L('คัดลอกงานแล้ว'));
+        toast(L('คัดลอกงานแล้ว'), L('ย้อนกลับ'), 'undo');
         break;
       }
+      case 'followup': openModal(followUpModal(id)); break;
+      case 'do-followup': {
+        var fuName = ((document.getElementById('fuName') || {}).value || '').trim();
+        var fuDue = (document.getElementById('fuDue') || {}).value || null;
+        closeModal();
+        var fu = S.createFollowUp(id, fuName, fuDue);
+        if (fu) { openTask(fu.id); toast(L('สร้างงานติดตามผลแล้ว'), L('ย้อนกลับ'), 'undo'); }
+        break;
+      }
+      case 'merge-task': openModal(taskPickModal(id, 'merge')); break;
+      case 'make-subtask': openModal(taskPickModal(id, 'parent')); break;
+      case 'do-merge': {
+        var mt = el.dataset.target;
+        closeModal();
+        if (S.mergeDuplicate(id, mt)) {
+          openTask(mt);
+          toast(L('รวมงานซ้ำแล้ว'), L('ย้อนกลับ'), 'undo');
+        } else toast(L('รวมไม่ได้ — งานนี้เป็นงานย่อยของงานที่เลือก'));
+        break;
+      }
+      case 'do-make-subtask': {
+        var pt = el.dataset.target;
+        closeModal();
+        if (S.setParent(id, pt)) {
+          renderAll();
+          toast(L('ย้ายเป็นงานย่อยแล้ว'), L('ย้อนกลับ'), 'undo');
+        } else toast(L('ย้ายไม่ได้ — งานที่เลือกเป็นงานย่อยของงานนี้อยู่แล้ว'));
+        break;
+      }
+      case 'promote-task':
+        closeModal();
+        if (S.promoteSubtask(id)) {
+          renderAll();
+          toast(L('ย้ายออกเป็นงานหลักแล้ว'), L('ย้อนกลับ'), 'undo');
+        }
+        break;
+      case 'stop-recur':
+        closeModal();
+        S.updateTask(id, { recur: null });
+        toast(L('หยุดทำซ้ำแล้ว'), L('ย้อนกลับ'), 'undo');
+        break;
+      case 'recur-day': {
+        var rt0 = S.task(state.openTaskId);
+        if (!rt0 || !rt0.recur) break;
+        var rd = (rt0.recur.days || []).slice(), dnum = +el.dataset.d;
+        var at0 = rd.indexOf(dnum);
+        if (at0 >= 0) rd.splice(at0, 1); else rd.push(dnum);
+        rd.sort();
+        S.updateTask(rt0.id, { recur: { freq: 'weekly', interval: rt0.recur.interval || 1, days: rd } });
+        break;
+      }
+      case 'fit-parent-dates':
+        if (S.fitParentDates(id)) toast(L('ขยายวันของงานนี้ให้ครอบงานย่อยแล้ว'), L('ย้อนกลับ'), 'undo');
+        else toast(L('วันของงานนี้ครอบงานย่อยอยู่แล้ว'));
+        break;
+      case 'sub-mine':
+        state.subView.mine = !state.subView.mine;
+        renderDrawer();
+        break;
+      case 'sub-hide-done':
+        state.subView.hideDone = !state.subView.hideDone;
+        renderDrawer();
+        break;
+      case 'assign-copies':
+        closePops();
+        openModal(assignCopiesModal(id));
+        break;
+      case 'do-assign-copies': {
+        var who = Array.prototype.map.call(
+          document.querySelectorAll('.ac-user:checked'), function (cb) { return cb.value; });
+        if (!who.length) { toast(L('เลือกอย่างน้อยหนึ่งคน')); break; }
+        closeModal();
+        var made = S.assignCopies(id, who);
+        toast(L('มอบหมายแล้ว สร้างสำเนา {n} งาน', { n: made.length }), L('ย้อนกลับ'), 'undo');
+        break;
+      }
+      case 'trash-restore': {
+        var rs = S.restoreTrash(id);
+        if (!rs.ok) { toast(L(rs.reason)); break; }
+        toast(L('กู้คืนแล้ว'), L('ย้อนกลับ'), 'undo');
+        break;
+      }
+      case 'trash-purge': {
+        var tpId = id;
+        askConfirm(L('ลบถาวร?'), L('กู้คืนจากถังขยะไม่ได้อีก (ยังกด Ctrl+Z ได้ก่อนรีเฟรชหน้า)'), function () {
+          if (S.purgeTrash(tpId)) toast(L('ลบถาวรแล้ว'), L('ย้อนกลับ'), 'undo');
+        }, { ok: L('ลบถาวร') });
+        break;
+      }
+      case 'field-format':
+        closePops();
+        openModal(fieldFormatModal(state.route.id, el.dataset.field));
+        break;
+      case 'do-field-format':
+        S.setFieldFormat(projectId, el.dataset.field, readNumberFormat());
+        closeModal();
+        toast(L('ตั้งรูปแบบตัวเลขแล้ว'), L('ย้อนกลับ'), 'undo');
+        break;
       case 'copy-link': {
         var base = global.location.href.split('#')[0];
         copyText(base + '#/task/' + id, L('คัดลอกลิงก์แล้ว'));
@@ -3371,11 +3668,12 @@
           if (state.openTaskId === delId) state.openTaskId = null;
           closeModal();
           S.deleteTask(delId);
-          toast(L('ลบงานแล้ว'), L('ย้อนกลับ'), 'undo');
+          toast(L('ย้ายงานไปถังขยะแล้ว'), L('ย้อนกลับ'), 'undo');
         };
         if (S.pref('confirmDelete')) {
           askConfirm(L('ลบงาน “{t}” ?', { t: tk2.name }),
-            L('ลบแล้วกด “ย้อนกลับ” หรือ Ctrl+Z ได้ทันที'), doDelete, { ok: L('ลบ') });
+            L('งานจะไปอยู่ในถังขยะ {n} วัน กู้คืนได้จากถังขยะ หรือกด “ย้อนกลับ” / Ctrl+Z ทันที',
+            { n: S.TRASH_DAYS }), doDelete, { ok: L('ลบ') });
         } else doDelete();
         break;
       }
@@ -3402,7 +3700,8 @@
           if (!v) return;
           var nt = S.createTask({ name: v }, qp.id, qp.sections[0].id);
           openTask(nt.id);
-        }, { ok: L('เพิ่มงาน') });
+        }, { ok: L('เพิ่มงาน'), pasteCtx: { projectId: qp.id, sectionId: qp.sections[0].id },
+             note: L('วางข้อความหลายบรรทัดเพื่อสร้างหลายงานพร้อมกัน') });
         break;
       }
       case 'inline-add': inlineAdd(el, sectionId); break;
@@ -3425,6 +3724,9 @@
           ph += '<button data-act="set-assignee" data-id="' + R.esc(state.openTaskId) +
             '" data-user="' + R.esc(u.id) + '">' + R.avatar(u) + ' ' + R.esc(u.name) + '</button>';
         });
+        /* งานเดียวกันที่ทุกคนต้องทำคนละชิ้น เช่น "ส่งรายงานประจำเดือน" — Asana เรียกว่ามอบสำเนา */
+        ph += '<div class="pop-sep"></div><button data-act="assign-copies" data-id="' +
+          R.esc(state.openTaskId) + '">' + I('users', 15) + ' ' + L('มอบสำเนาให้หลายคน…') + '</button>';
         openPop(el, ph);
         break;
       }
@@ -3448,6 +3750,7 @@
         S.updateTask(id, { priority: el.dataset.p });
         break;
       case 'set-approval':
+        if (!S.canApprove(id)) { toast(L('ผู้อนุมัติคือผู้รับผิดชอบงานนี้ หรือคนที่แก้ไขโปรเจกต์ได้')); break; }
         S.updateTask(id, { approval: el.dataset.v });
         break;
       case 'pick-follower': {
@@ -3762,7 +4065,7 @@
           S.deleteTasks(ids);
           clearSel();
           renderAll();
-          toast(L('ลบแล้ว'), L('ย้อนกลับ'), 'undo');
+          toast(L('ย้ายไปถังขยะแล้ว'), L('ย้อนกลับ'), 'undo');
         }, { ok: L('ลบ') });
         break;
       }
@@ -3777,6 +4080,10 @@
         S.markRead(id);
         var tid = el.dataset.task;
         if (S.task(tid)) { openTask(tid); break; }
+        /* สรุปรายสัปดาห์ไม่ได้ชี้งานชิ้นเดียว พาไปหน้างานของฉัน */
+        if (el.dataset.route === 'mytasks') {
+          state.route = { type: 'mytasks' }; clearSel(); renderAll(); break;
+        }
         /* ประกาศของโปรเจกต์พาไปที่หน้าประกาศของโปรเจกต์นั้น */
         var npid = el.dataset.project;
         if (npid && S.project(npid)) goProject(npid, 'messages');
@@ -4154,11 +4461,11 @@
         var dp = S.project(id), dpId = id;
         if (!dp) break;
         askConfirm(L('ลบโปรเจกต์ “{name}”?', { name: dp.name }),
-          L('งานที่อยู่เฉพาะในโปรเจกต์นี้จะถูกลบด้วย'), function () {
+          L('โปรเจกต์และงานที่อยู่เฉพาะในโปรเจกต์นี้จะไปอยู่ในถังขยะ กู้คืนได้ภายใน {n} วัน', { n: S.TRASH_DAYS }), function () {
             S.deleteProject(dpId);
             state.route = { type: 'home' };
             renderAll();
-            toast(L('ลบโปรเจกต์แล้ว'), L('ย้อนกลับ'), 'undo');
+            toast(L('ย้ายโปรเจกต์ไปถังขยะแล้ว'), L('ย้อนกลับ'), 'undo');
           }, { ok: L('ลบโปรเจกต์') });
         break;
       }
@@ -4653,6 +4960,19 @@
       var ftx = S.FIELD_TYPES.filter(function (x) { return x.id === el.value; })[0];
       var wrapx = document.getElementById('nfOptWrap');
       if (wrapx) wrapx.style.display = (ftx && ftx.hasOptions) ? '' : 'none';
+      var numx = document.getElementById('nfNumWrap');
+      if (numx) numx.hidden = el.value !== 'number';
+      return;
+    }
+    if (act === 'nf-kind') {
+      var cw = document.getElementById('nfCurWrap'), uw = document.getElementById('nfUnitWrap');
+      if (cw) cw.hidden = el.value !== 'currency';
+      if (uw) uw.hidden = el.value !== 'unit';
+      return;
+    }
+    if (act === 'sub-sort') {
+      state.subView.sort = el.value;
+      renderDrawer();
       return;
     }
 
@@ -4681,16 +5001,24 @@
       case 'edit-due': S.updateTask(id, { dueOn: el.value || null }); break;
       case 'edit-start': S.updateTask(id, { startOn: el.value || null }); break;
       case 'edit-duetime': S.updateTask(id, { dueTime: el.value || null }); break;
+      case 'edit-starttime': S.updateTask(id, { startTime: el.value || null }); break;
       case 'edit-type': S.updateTask(id, { type: el.value }); break;
-      case 'edit-recur':
+      case 'edit-recur': {
+        /* ตั้งรายสัปดาห์ครั้งแรก ให้ติ๊กวันเดียวกับกำหนดส่งไว้ก่อน จะได้เห็นว่าเลือกวันได้ */
+        var days0 = (t.recur && t.recur.days) || [];
+        if (el.value === 'weekly' && !days0.length) {
+          days0 = [new Date((t.dueOn || S.today()) + 'T00:00:00').getDay()];
+        }
         S.updateTask(id, {
-          recur: el.value ? { freq: el.value, interval: (t.recur && t.recur.interval) || 1 } : null
+          recur: el.value ? { freq: el.value, interval: (t.recur && t.recur.interval) || 1,
+                              days: el.value === 'weekly' ? days0 : [] } : null
         });
         break;
+      }
       case 'edit-recur-n': {
         var n = parseInt(el.value, 10);
         if (!n || n < 1) n = 1;
-        if (t.recur) S.updateTask(id, { recur: { freq: t.recur.freq, interval: n } });
+        if (t.recur) S.updateTask(id, { recur: { freq: t.recur.freq, interval: n, days: t.recur.days || [] } });
         break;
       }
       case 'edit-dep-type':
@@ -4713,6 +5041,11 @@
       var tid = $modal.querySelector('[data-act="do-add-dependency"]');
       var owner = tid ? tid.dataset.id : state.openTaskId;
       if (box && owner) box.innerHTML = depResults(owner, e.target.value);
+      return;
+    }
+    if (e.target.id === 'pickSearch') {
+      var pbox = document.getElementById('pickResults');
+      if (pbox) pbox.innerHTML = pickResults(e.target.dataset.id, e.target.dataset.mode, e.target.value);
       return;
     }
 
@@ -4764,6 +5097,38 @@
 
   var searchTimer = null;
   var gSearchTimer = null;
+
+  /* ---------- วางหลายบรรทัดลงช่องเพิ่มงาน ----------
+   *
+   * คนมักมีรายการงานอยู่แล้วในอีเมล โน้ต หรือ Excel วางทีเดียวได้งานครบทุกบรรทัด
+   * ไม่ต้องพิมพ์ทีละงาน ถามยืนยันก่อนเสมอ เพราะวางผิดก้อนทีเดียวได้งานขยะเป็นสิบ
+   * ตัดเครื่องหมายหัวข้อ (- * • 1.) ที่ติดมาจากรายการออกให้ด้วย */
+  function pasteLines(text) {
+    return String(text || '').split(/\r?\n/).map(function (s) {
+      return s.replace(/^\s*(?:[-*•▪◦]|\d+[.)]|\[[ xX]?\])\s+/, '').trim();
+    }).filter(Boolean);
+  }
+
+  document.addEventListener('paste', function (e) {
+    var el = e.target;
+    if (!el || el.tagName !== 'INPUT') return;
+    var ctx = null;
+    if (el.id === 'subAdd') ctx = { parentId: el.dataset.id };
+    else if (el.classList.contains('inline-add-input')) {
+      ctx = { projectId: el.dataset.project, sectionId: el.dataset.section };
+    } else if (el.id === 'askInput' && askPasteCtx) ctx = askPasteCtx;
+    if (!ctx) return;
+    var cd = e.clipboardData || global.clipboardData;
+    var lines = pasteLines(cd ? cd.getData('text') : '');
+    if (lines.length < 2) return;
+    e.preventDefault();
+    if (!S.can('write', ctx.parentId || null)) { denyToast(); return; }
+    var preview = lines.slice(0, 5).join(' · ') + (lines.length > 5 ? ' · …' : '');
+    askConfirm(L('สร้าง {n} งานจากข้อความที่วาง?', { n: lines.length }), preview, function () {
+      var made = S.createTasks(lines, ctx.projectId || null, ctx.sectionId || null, ctx.parentId || null);
+      toast(L('สร้าง {n} งานแล้ว', { n: made.length }), L('ย้อนกลับ'), 'undo');
+    }, { ok: L('สร้าง {n} งาน', { n: lines.length }), safe: true });
+  });
 
   /* ---------- keyboard ---------- */
 
@@ -4894,11 +5259,15 @@
         if (!S.can('write')) { denyToast(); return; }
         askText(L('ชื่องานใหม่'), '', function (v) {
           if (v) openTask(S.createTask({ name: v }, qp2.id, qp2.sections[0].id).id);
-        }, { ok: L('เพิ่มงาน') });
+        }, { ok: L('เพิ่มงาน'), pasteCtx: { projectId: qp2.id, sectionId: qp2.sections[0].id } });
       } else if (k === 'm' && state.openTaskId) {
         if (!S.can('write', state.openTaskId)) { denyToast(); return; }
         S.updateTask(state.openTaskId, { assigneeId: S.db.currentUserId });
         toast(L('มอบหมายให้ตัวเองแล้ว'));
+      } else if (k === 'f' && e.shiftKey && state.openTaskId) {
+        /* Shift+Tab+F = สร้างงานติดตามผลของงานที่เปิดอยู่ แบบเดียวกับ Asana */
+        if (!S.can('write')) { denyToast(); return; }
+        openModal(followUpModal(state.openTaskId));
       } else if (k === 'c' && state.openTaskId) {
         global.RichText.focusEnd(document.getElementById('commentInput'));
       } else if (k === 'x' && state.openTaskId) {
@@ -4929,7 +5298,7 @@
         S.deleteTasks(ids2);
         clearSel();
         renderAll();
-        toast(L('ลบแล้ว'), L('ย้อนกลับ'), 'undo');
+        toast(L('ย้ายไปถังขยะแล้ว'), L('ย้อนกลับ'), 'undo');
       }, { ok: L('ลบ') });
     }
   });
@@ -5236,8 +5605,8 @@
 
   function clearDragMarks() {
     Array.prototype.forEach.call(
-      document.querySelectorAll('.dragging,.drop-before,.drag-over'),
-      function (x) { x.classList.remove('dragging', 'drop-before', 'drag-over'); }
+      document.querySelectorAll('.dragging,.drop-before,.drag-over,.drop-into'),
+      function (x) { x.classList.remove('dragging', 'drop-before', 'drag-over', 'drop-into'); }
     );
   }
 
@@ -5251,16 +5620,20 @@
     Array.prototype.forEach.call(document.querySelectorAll('.drop-before'), function (x) {
       x.classList.remove('drop-before');
     });
-    Array.prototype.forEach.call(document.querySelectorAll('.drag-over'), function (x) {
-      x.classList.remove('drag-over');
+    Array.prototype.forEach.call(document.querySelectorAll('.drag-over, .drop-into'), function (x) {
+      x.classList.remove('drag-over', 'drop-into');
     });
     var col = zone.closest('.col');
     if (col) col.classList.add('drag-over');
 
-    var over = e.target.closest('.card, .row');
+    /* แถวในมุมมองรายการแบ่งเป็นสามแถบ — ขอบบนกับขอบล่างคือสลับลำดับ
+     * ส่วนกลางแถวคือวางเป็นงานย่อยของแถวนั้น แบบเดียวกับลากไฟล์ลงโฟลเดอร์ */
+    var over = e.target.closest('.card, .row, .tr');
     if (over && over.dataset.id !== drag.id) {
       var r = over.getBoundingClientRect();
-      if (e.clientY < r.top + r.height / 2) over.classList.add('drop-before');
+      var rel = (e.clientY - r.top) / r.height;
+      if (over.classList.contains('tr') && rel > 0.28 && rel < 0.72) over.classList.add('drop-into');
+      else if (rel < 0.5) over.classList.add('drop-before');
       else if (over.nextElementSibling) over.nextElementSibling.classList.add('drop-before');
     }
   });
@@ -5274,11 +5647,19 @@
     var toSection = zone.dataset.section;
     var marker = document.querySelector('.drop-before');
     var beforeId = marker ? marker.dataset.id : null;
+    var into = document.querySelector('.drop-into');
+    var intoId = into ? into.dataset.id : null;
     var movingId = drag.id;
 
     clearDragMarks();
     drag.id = null;
 
+    if (intoId && intoId !== movingId) {
+      if (S.setParent(movingId, intoId)) {
+        toast(L('ย้ายเป็นงานย่อยของ “{t}” แล้ว', { t: S.task(intoId).name }), L('ย้อนกลับ'), 'undo');
+      } else toast(L('ย้ายไม่ได้ — งานที่เลือกเป็นงานย่อยของงานนี้อยู่แล้ว'));
+      return;
+    }
     if (state.route.type !== 'project') return;
     S.moveTask(movingId, state.route.id, toSection, beforeId);
   });
@@ -5334,6 +5715,7 @@
         hideGate();
         renderAll();
         toast(L('เชื่อมกับข้อมูลส่วนกลางของบริษัทแล้ว'));
+        runReminders();
       }, function (err) {
         // ล็อกอินผ่านแต่แตะที่เก็บข้อมูลไม่ได้ — ต้องบอกให้ชัด ไม่ปล่อยให้เข้าใจว่าซิงก์อยู่
         gate.error = (err && err.message) || L('เข้าถึงที่เก็บข้อมูลส่วนกลางไม่ได้');
@@ -5420,6 +5802,15 @@
   }
   renderAll();
   bootAccount();
+
+  /* เตือนกำหนดส่ง — ตอนเปิดแอปและทุกชั่วโมงที่เปิดค้างไว้ (ไม่มีเซิร์ฟเวอร์คอยปลุก)
+   * หน่วงไว้นิดหนึ่งให้โหมดทีมโหลดข้อมูลส่วนกลางก่อน จะได้ไม่สร้างจากข้อมูลเก่าในเครื่อง */
+  function runReminders() {
+    try { S.checkDueReminders(); } catch (err) { console.error('เตือนกำหนดส่งไม่สำเร็จ', err); }
+  }
+  setTimeout(runReminders, 2500);
+  setInterval(runReminders, 3600 * 1000);
+  global.Orbit.reminders = runReminders;
 
   if (S.storageKind === 'memory') {
     setTimeout(function () {

@@ -160,11 +160,18 @@
     if (!r) return '';
     var f = S.RECUR_FREQ.filter(function (x) { return x.id === r.freq; })[0];
     if (!f) return r.freq;
-    if (r.interval > 1) {
-      var unit = { daily: 'วัน', weekly: 'สัปดาห์', monthly: 'เดือน' }[r.freq] || '';
-      return L('ทุก {n} ' + unit, { n: r.interval });
+    var n = r.interval || 1;
+    if (r.freq === 'after') return L('{n} วันหลังทำเสร็จ', { n: n });
+    var out;
+    if (n > 1) {
+      var unit = { daily: 'วัน', weekly: 'สัปดาห์', monthly: 'เดือน', yearly: 'ปี' }[r.freq] || '';
+      out = L('ทุก {n} ' + unit, { n: n });
+    } else out = L(f.label);
+    if (r.freq === 'weekly' && r.days && r.days.length) {
+      var dn = DOW();
+      out += ' (' + r.days.slice().sort().map(function (d) { return dn[d]; }).join(', ') + ')';
     }
-    return L(f.label);
+    return out;
   }
 
   /** คำอธิบายชนิดความสัมพันธ์ระหว่างงาน ใช้ทั้งในแผงรายละเอียดและ Gantt */
@@ -286,6 +293,9 @@
      * ต่างกันแค่ผู้ดูแลมีแท็บข้อมูลและสำรองเพิ่มมาข้างใน
      * เดิมตั้งชื่อตามแท็บที่เปิด ผู้ดูแลจึงเห็นคำว่า "ข้อมูลและสำรอง"
      * ซึ่งอ่านแล้วนึกว่าเป็นคนละที่กับตั้งค่า ทั้งที่เป็นหน้าต่างเดียวกัน */
+    h += '<button class="sb-item' + (route.type === 'trash' ? ' active' : '') +
+         '" data-act="go" data-route="trash">' + I('trash') +
+         '<span class="grow">' + L('ถังขยะ') + '</span></button>';
     h += '<button class="sb-item" data-act="open-settings" data-tab="general">' +
          I('settings') + '' +
          '<span class="grow">' + L('ตั้งค่า') + '</span></button>';
@@ -385,6 +395,8 @@
                                              : esc(pu ? pu.name : L('โปรไฟล์'))) + '</div>';
     } else if (route.type === 'admin') {
       h += '<div class="tb-title">' + I('shield', 20) + ' ' + L('ผู้ดูแลระบบ') + '</div>';
+    } else if (route.type === 'trash') {
+      h += '<div class="tb-title">' + I('trash', 20) + ' ' + L('ถังขยะ') + '</div>';
     } else if (route.type === 'search') {
       h += '<div class="tb-title">' + L('ผลการค้นหา “') + esc(route.q) + '”</div>';
     }
@@ -541,6 +553,15 @@
       esc(t.id) + '" title="' + L('เลือก') + '">' + ICON.check + '</button>';
   }
 
+  /** ไอคอนสถานะอนุมัติ — วงกลมเล็กสีตามสถานะ ใช้ในตารางและการ์ดบอร์ดที่ไม่มีที่ให้ป้ายยาว */
+  function approvalIcon(t) {
+    if (t.type !== 'approval') return '';
+    var a = approvalState(t.approval);
+    var ic = { pending: 'checkCircle', approved: 'check', changes: 'pencil', rejected: 'close' }[a.id] || 'checkCircle';
+    return '<span class="appr-ic" style="color:' + a.color + ';background:' + a.color + '22" title="' +
+      esc(L('การอนุมัติ') + ': ' + L(a.label)) + '">' + I(ic, 11) + '</span>';
+  }
+
   /** ป้ายสถานะย่อย ๆ ที่ใช้ทั้งในแถวและการ์ด */
   function badges(t, opts) {
     var h = '';
@@ -608,7 +629,7 @@
       (blocked ? ' title="' + L('รองานอื่นให้เสร็จก่อน') + '"' : '') + '>';
     h += '<div class="top">';
     if (opts.selectable) h += selbox(t, opts.selected);
-    h += checkbox(t) + '<span class="nm">' + esc(t.name) + '</span></div>';
+    h += checkbox(t) + '<span class="nm">' + esc(t.name) + '</span>' + approvalIcon(t) + '</div>';
 
     var foot = '';
     if (t.priority !== 'none') {
@@ -678,7 +699,7 @@
     }
     if (f.type === 'date') return '<span class="cell-txt">' + fmtDate(v) + '</span>';
     if (f.type === 'number') {
-      return '<span class="cell-txt num">' + esc(Number(v).toLocaleString()) + '</span>';
+      return '<span class="cell-txt num">' + esc(S.formatNumber(f, v)) + '</span>';
     }
     return '<span class="cell-txt">' + esc(v) + '</span>';
   }
@@ -766,7 +787,7 @@
             L(pr.label) + '"></span>';
         }
         h += '<span class="nm">' + (t.type === 'milestone' ? I('diamond', 11) + ' ' : '') +
-          esc(t.name) + '</span>';
+          esc(t.name) + '</span>' + approvalIcon(t);
         if (subs.length) {
           h += '<span class="cell-mini">' + I('subtask', 11) + ' ' +
             subs.filter(function (s) { return s.completed; }).length + '/' + subs.length + '</span>';
@@ -1926,12 +1947,13 @@
       var np = (!t && n.projectId) ? S.project(n.projectId) : null;
       h += '<div class="nrow' + (n.read ? '' : ' unread') + '" data-act="open-notif" data-id="' +
         esc(n.id) + '" data-task="' + esc(n.taskId) + '"' +
-        (np ? ' data-project="' + esc(np.id) + '"' : '') + '>';
+        (np ? ' data-project="' + esc(np.id) + '"' : '') +
+        (n.route ? ' data-route="' + esc(n.route) + '"' : '') + '>';
       h += n.read ? '<span style="width:8px;flex:0 0 8px"></span>' : '<span class="unread-dot"></span>';
       var ntxt = n.key ? (n.actorName ? n.actorName + ' ' : '') + L(n.key, n.params || undefined) : n.text;
       h += '<div class="body"><div class="txt">' + esc(ntxt) + '</div>' +
         '<div class="sub" title="' + esc(fmtExact(n.createdAt)) + '">' +
-        esc(t ? t.name : (np ? np.name : L('(งานถูกลบแล้ว)'))) + ' · ' +
+        esc(t ? t.name : (np ? np.name : (n.route === 'mytasks' ? L('งานของฉัน') : L('(งานถูกลบแล้ว)')))) + ' · ' +
         esc(fmtWhen(n.createdAt)) + '</div></div>';
       h += '<span class="acts">' +
         (n.archived ? '' :
@@ -1942,6 +1964,50 @@
     });
     h += '</div>';
     return h;
+  }
+
+  /* ---------- ถังขยะ ----------
+   * คนทั่วไปเห็นเฉพาะของที่ตัวเองลบ ผู้ดูแลเห็นทั้งหมด (ตัดสินที่ S.trashItems) */
+  var TRASH_KIND = {
+    task:    ['งาน', 'checkCircle'],
+    project: ['โปรเจกต์', 'grid'],
+    field:   ['ฟิลด์', 'hash']
+  };
+
+  function trashView() {
+    var list = S.trashItems();
+    var h = '<div class="list-wrap trash-wrap">';
+    h += '<p class="trash-note">' + I('trash', 14) + '<span>' +
+      L('ของที่ลบจะพักอยู่ที่นี่ {n} วัน แล้วถูกลบถาวรเอง', { n: S.TRASH_DAYS }) + ' ' +
+      (S.isAdmin() ? L('ผู้ดูแลเห็นของที่ทุกคนลบ') : L('คุณเห็นเฉพาะของที่ตัวเองลบ')) + '</span></p>';
+    if (!list.length) {
+      return h + '<div class="empty"><div class="big">🗑️</div>' + L('ถังขยะว่าง') + '</div></div>';
+    }
+    list.forEach(function (x) {
+      var k = TRASH_KIND[x.kind] || TRASH_KIND.task;
+      var p = x.projectId && x.kind !== 'project' ? S.project(x.projectId) : null;
+      var who = S.user(x.deletedBy);
+      var extra = '';
+      if (x.kind === 'task' && x.data.tasks.length > 1) {
+        extra = L('พร้อมงานย่อย {n} งาน', { n: x.data.tasks.length - 1 });
+      } else if (x.kind === 'project') {
+        extra = L('พร้อม {n} งาน', { n: x.data.bundle.tasks.filter(function (t) { return !t.parentId; }).length });
+      } else if (x.kind === 'field' && x.data.values.length) {
+        extra = L('ค่าที่กรอกไว้ {n} ช่อง', { n: x.data.values.length });
+      }
+      h += '<div class="trash-row">' +
+        '<span class="trash-ic">' + I(k[1], 16) + '</span>' +
+        '<div class="grow"><div class="nm">' + esc(x.name) + '</div><div class="sub">' +
+        esc(L(k[0])) + (p ? ' · ' + esc(p.name) : '') + (extra ? ' · ' + esc(extra) : '') + '<br>' +
+        L('ลบโดย {who}', { who: esc(who ? who.name : '?') }) + ' · ' +
+        '<span title="' + esc(fmtExact(x.deletedAt)) + '">' + esc(fmtWhen(x.deletedAt)) + '</span> · ' +
+        L('ลบถาวร {d}', { d: esc(fmtDate(S.trashExpires(x))) }) + '</div></div>' +
+        '<div class="trash-acts"><button class="btn btn-sm" data-act="trash-restore" data-id="' + esc(x.id) + '">' +
+        L('กู้คืน') + '</button>' +
+        '<button class="btn btn-sm btn-ghost trash-purge" data-act="trash-purge" data-id="' + esc(x.id) + '">' +
+        L('ลบถาวร') + '</button></div></div>';
+    });
+    return h + '</div>';
   }
 
   /* ---------- calendar ---------- */
@@ -2128,6 +2194,13 @@
 
     h += '<div class="dw-body">';
 
+    /* งานย่อยบอกว่าเป็นของงานไหน กดกลับขึ้นไปที่งานแม่ได้ */
+    var par = t.parentId ? S.task(t.parentId) : null;
+    if (par) {
+      h += '<button class="dw-parent" data-act="open-task" data-id="' + esc(par.id) + '">' +
+        I('subtask', 12) + '<span>' + L('งานย่อยของ') + '</span><b>' + esc(par.name) + '</b></button>';
+    }
+
     h += '<textarea class="dw-title' + (t.completed ? ' done' : '') +
       '" data-act="edit-title" rows="1">' + esc(t.name) + '</textarea>';
 
@@ -2147,26 +2220,34 @@
     h += '</select></div></div>';
 
     // สถานะอนุมัติ
+    /* ผู้อนุมัติคือผู้รับผิดชอบงาน — ปุ่มตัดสินใจกดได้เฉพาะเขา (หรือคนที่แก้โปรเจกต์ได้)
+     * คนอื่นยังเห็นสถานะและปุ่ม แต่กดไม่ได้ พร้อมบอกเหตุผล จะได้ไม่งงว่าปุ่มหายไปไหน */
     if (t.type === 'approval') {
       var a = approvalState(t.approval);
+      var mayApprove = S.canApprove(t.id);
+      var ACTS = [['approved', 'อนุมัติ', 'check'], ['changes', 'ขอแก้ไข', 'pencil'],
+                  ['rejected', 'ปฏิเสธ', 'close']];
       h += '<div class="fld"><label>' + L('การอนุมัติ') + '</label><div class="val">' +
-        '<div class="fld-inline"><span class="approval-pill" style="background:' + a.color +
+        '<div class="fld-inline appr-row"><span class="approval-pill" style="background:' + a.color +
         '22;color:' + a.color + '">' + esc(L(a.label)) + '</span>';
-      S.APPROVAL_STATES.forEach(function (x) {
-        if (x.id === t.approval) return;
-        h += '<button class="btn btn-sm" data-act="set-approval" data-id="' + esc(t.id) +
-          '" data-v="' + x.id + '">' + esc(L(x.label)) + '</button>';
+      ACTS.forEach(function (x) {
+        if (x[0] === t.approval) return;
+        h += '<button class="btn btn-sm appr-btn appr-' + x[0] + '" data-act="set-approval" data-id="' +
+          esc(t.id) + '" data-v="' + x[0] + '"' + (mayApprove ? '' : ' disabled') + '>' +
+          I(x[2], 12) + ' ' + esc(L(x[1])) + '</button>';
       });
-      h += '</div></div></div>';
+      if (t.approval !== 'pending') {
+        h += '<button class="btn btn-sm btn-ghost" data-act="set-approval" data-id="' + esc(t.id) +
+          '" data-v="pending"' + (mayApprove ? '' : ' disabled') + '>' + esc(L('กลับไปรออนุมัติ')) + '</button>';
+      }
+      h += '</div>' + (mayApprove ? '' : '<div class="fld-hint">' +
+        L('ผู้อนุมัติคือผู้รับผิดชอบงานนี้ หรือคนที่แก้ไขโปรเจกต์ได้') + '</div>') + '</div></div>';
     }
 
-    h += '<div class="fld"><label>' + L('ผู้รับผิดชอบ') + '</label><div class="val picker">' +
+    h += '<div class="fld"><label>' + (t.type === 'approval' ? L('ผู้อนุมัติ') : L('ผู้รับผิดชอบ')) +
+      '</label><div class="val picker">' +
       '<button class="picker-btn" data-act="pick-assignee">' + avatar(u) +
       '<span>' + esc(u ? u.name : L('ยังไม่มอบหมาย')) + '</span></button></div></div>';
-
-    h += '<div class="fld"><label>' + L('วันเริ่ม') + '</label><div class="val">' +
-      '<input class="inp" type="date" data-act="edit-start" value="' + esc(t.startOn || '') +
-      '"></div></div>';
 
     /* ---- ฟิลด์ที่ซ่อนไว้เป็นค่ามาตรฐาน ----
      *
@@ -2179,8 +2260,17 @@
      * ไม่ได้ตัดทิ้ง เพราะยังต้องตั้งงานประจำและคุมคนที่จะได้รับแจ้งเตือนได้อยู่
      */
     var more = !!(opts && opts.moreFields);
-    var showTime  = more || !!t.dueTime;
+    /* เวลาเริ่มกับเวลาส่งโผล่คู่กัน — งานที่มีเวลาส่งมักมีเวลาเริ่ม (ประชุม ถ่ายทำ ไลฟ์) */
+    var showTime  = more || !!t.dueTime || !!t.startTime;
     var showRecur = more || !!t.recur;
+
+    h += '<div class="fld"><label>' + L('วันเริ่ม') + '</label><div class="val fld-inline">' +
+      '<input class="inp" type="date" data-act="edit-start" value="' + esc(t.startOn || '') +
+      '" style="flex:1">' +
+      (showTime
+        ? '<input class="inp" type="time" data-act="edit-starttime" value="' + esc(t.startTime || '') +
+          '" style="flex:0 0 110px" title="' + L('เวลาเริ่ม (ไม่บังคับ)') + '">'
+        : '') + '</div></div>';
 
     h += '<div class="fld"><label>' + L('กำหนดส่ง') + '</label><div class="val fld-inline">' +
       '<input class="inp" type="date" data-act="edit-due" value="' + esc(t.dueOn || '') +
@@ -2191,16 +2281,43 @@
         : '') + '</div></div>';
 
     if (showRecur) {
-      h += '<div class="fld"><label>' + L('ทำซ้ำ') + '</label><div class="val fld-inline">' +
-        '<select class="inp" data-act="edit-recur" style="flex:1"><option value="">' + L('ไม่ทำซ้ำ') + '</option>';
+      var rc = t.recur;
+      h += '<div class="fld"><label>' + L('ทำซ้ำ') + '</label><div class="val">' +
+        '<div class="fld-inline"><select class="inp" data-act="edit-recur" style="flex:1 1 150px"><option value="">' +
+        L('ไม่ทำซ้ำ') + '</option>';
       S.RECUR_FREQ.forEach(function (x) {
         h += '<option value="' + x.id + '"' +
-          (t.recur && t.recur.freq === x.id ? ' selected' : '') + '>' + esc(L(x.label)) + '</option>';
+          (rc && rc.freq === x.id ? ' selected' : '') + '>' + esc(L(x.label)) + '</option>';
       });
       h += '</select>';
-      if (t.recur) {
-        h += '<input class="inp" type="number" min="1" max="30" data-act="edit-recur-n" value="' +
-          (t.recur.interval || 1) + '" style="flex:0 0 70px" title="' + L('ทุกกี่รอบ') + '">';
+      if (rc) {
+        var unitL = { daily: 'วัน', weekly: 'สัปดาห์', monthly: 'เดือน', yearly: 'ปี', after: 'วัน' }[rc.freq];
+        h += '<span class="recur-every">' + (rc.freq === 'after' ? '' : L('ทุก')) + '</span>' +
+          '<input class="inp" type="number" min="1" max="365" data-act="edit-recur-n" value="' +
+          (rc.interval || 1) + '" style="flex:0 0 64px" title="' + L('ทุกกี่รอบ') + '">' +
+          '<span class="recur-every">' + L(unitL) + '</span>';
+      }
+      h += '</div>';
+      if (rc && rc.freq === 'weekly') {
+        /* เลือกได้หลายวัน ไม่เลือกเลย = วันเดียวกับกำหนดส่งเดิม */
+        var dn = DOW(), ws = weekStart();
+        h += '<div class="recur-days">';
+        for (var di = 0; di < 7; di++) {
+          var dd = (di + ws) % 7;
+          var onD = (rc.days || []).indexOf(dd) >= 0;
+          h += '<button class="recur-day' + (onD ? ' on' : '') + '" data-act="recur-day" data-d="' + dd +
+            '" aria-pressed="' + onD + '">' + esc(dn[dd]) + '</button>';
+        }
+        h += '</div>';
+      }
+      if (rc) {
+        var nx = S.nextOccurrence(t);
+        h += '<div class="fld-hint recur-hint">' +
+          (rc.freq === 'after'
+            ? L('ทำเสร็จแล้วจะสร้างรอบใหม่ ครบกำหนดอีก {n} วันนับจากวันที่ทำเสร็จ', { n: rc.interval || 1 })
+            : L('รอบถัดไปครบกำหนด {d}', { d: fmtDate(nx) })) +
+          '<button class="as-link" data-act="stop-recur" data-id="' + esc(t.id) + '">' +
+          L('หยุดทำซ้ำ') + '</button></div>';
       }
       h += '</div></div>';
     }
@@ -2278,8 +2395,16 @@
             '>' + esc(usr.name) + '</option>';
         });
         s += '</select>';
+      } else if (f.type === 'number') {
+        /* ช่องกรอกเป็นตัวเลขล้วน รูปแบบที่ตั้งไว้ (฿ % หน่วย) โชว์ไว้ข้าง ๆ */
+        var dec = f.format && f.format.decimals != null ? f.format.decimals : null;
+        s += '<div class="fld-inline"><input class="inp" type="number" step="' +
+          (dec == null ? 'any' : (dec ? (1 / Math.pow(10, dec)).toFixed(dec) : '1')) +
+          '" data-act="edit-field" data-field="' + esc(f.id) + '" value="' + esc(v == null ? '' : v) +
+          '" style="flex:1">' + (v !== null && v !== undefined && v !== '' && f.format
+            ? '<span class="num-fmt">' + esc(S.formatNumber(f, v)) + '</span>' : '') + '</div>';
       } else {
-        var typ = f.type === 'number' ? 'number' : (f.type === 'date' ? 'date' : 'text');
+        var typ = f.type === 'date' ? 'date' : 'text';
         s += '<input class="inp" type="' + typ + '" data-act="edit-field" data-field="' +
           esc(f.id) + '" value="' + esc(v == null ? '' : v) + '">';
       }
@@ -2312,7 +2437,7 @@
      * ถ้าไม่มีอะไรถูกซ่อนก็ไม่ต้องมีปุ่ม จะได้ไม่มีปุ่มที่กดแล้วไม่มีอะไรเปลี่ยน */
     var hiddenFields = 0;
     if (!more) {
-      if (!t.dueTime) hiddenFields++;
+      if (!t.dueTime && !t.startTime) hiddenFields++;
       if (!t.recur) hiddenFields++;
       if (t.followers.length <= 1) hiddenFields++;
       homes.forEach(function (x) {
@@ -2423,8 +2548,50 @@
     }
 
     // งานย่อย
+    /* เรียง กรอง และซ่อนที่เสร็จแล้ว — เป็นความชอบของคนดู เก็บในหน่วยความจำ (main.js) ไม่ลงข้อมูล
+     * งานแม่ที่มีงานย่อยหลายสิบชิ้น ถ้าเห็นทุกชิ้นปนกัน จะหาของที่ยังค้างอยู่ไม่เจอ */
+    var sv = (opts && opts.subView) || {};
+    var subAll = subs;
+    if (sv.hideDone) subs = subs.filter(function (s) { return !s.completed; });
+    if (sv.mine) subs = subs.filter(function (s) { return s.assigneeId === S.db.currentUserId; });
+    if (sv.sort && sv.sort !== 'manual') {
+      subs = S.sortItems(subs.map(function (s) { return { task: s }; }), sv.sort, 'asc')
+        .map(function (x) { return x.task; });
+    }
+    var outside = S.subtasksOutside(t.id);
+    var outsideIds = {};
+    outside.forEach(function (s) { outsideIds[s.id] = true; });
     h += '<div class="dw-sec-title">' + L('งานย่อย') + ' <span style="color:var(--fg-faint)">' +
-      subs.filter(function (s) { return s.completed; }).length + '/' + subs.length + '</span></div>';
+      subAll.filter(function (s) { return s.completed; }).length + '/' + subAll.length + '</span>';
+    if (subAll.length) {
+      h += '<span class="sub-tools">' +
+        '<select class="sub-sort" data-act="sub-sort" title="' + L('เรียงงานย่อย') + '">' +
+        [['manual', 'ลำดับเดิม'], ['due', 'กำหนดส่ง'], ['name', 'ชื่อ ก-ฮ'], ['assignee', 'ผู้รับผิดชอบ'],
+         ['priority', 'ความสำคัญ']].map(function (o) {
+          return '<option value="' + o[0] + '"' + ((sv.sort || 'manual') === o[0] ? ' selected' : '') + '>' +
+            esc(L(o[1])) + '</option>';
+        }).join('') + '</select>' +
+        '<button class="sub-tog' + (sv.mine ? ' on' : '') + '" data-act="sub-mine" aria-pressed="' + !!sv.mine +
+        '" title="' + L('เฉพาะงานย่อยของฉัน') + '">' + I('users', 13) + '</button>' +
+        '<button class="sub-tog' + (sv.hideDone ? ' on' : '') + '" data-act="sub-hide-done" aria-pressed="' +
+        !!sv.hideDone + '" title="' + (sv.hideDone ? L('แสดงงานย่อยที่เสร็จแล้ว') : L('ซ่อนงานย่อยที่เสร็จแล้ว')) +
+        '">' + I('checkCircle', 13) + '</button></span>';
+    }
+    h += '</div>';
+    if (outside.length) {
+      h += '<div class="sub-warn">' + I('alert', 14) + '<span class="grow">' +
+        L('งานย่อย {n} งานอยู่นอกช่วงวันของงานนี้', { n: outside.length }) + '</span>' +
+        (S.can('write', t.id) ? '<button class="as-link" data-act="fit-parent-dates" data-id="' + esc(t.id) + '">' +
+          L('จัดวันงานหลักให้ครอบงานย่อย') + '</button>' : '') + '</div>';
+    } else if (subAll.some(function (s) { return s.startOn || s.dueOn; }) && S.can('write', t.id) &&
+               !(t.startOn || t.dueOn)) {
+      h += '<div class="sub-warn soft"><span class="grow">' + L('งานนี้ยังไม่มีวัน แต่งานย่อยมีแล้ว') +
+        '</span><button class="as-link" data-act="fit-parent-dates" data-id="' + esc(t.id) + '">' +
+        L('จัดวันงานหลักให้ครอบงานย่อย') + '</button></div>';
+    }
+    if (subAll.length && !subs.length) {
+      h += '<div class="sub-none">' + L('ไม่มีงานย่อยที่ตรงกับตัวกรอง') + '</div>';
+    }
     /* งานย่อยเป็นงานเต็มรูปแบบ ไม่ใช่รายการติ๊กเฉย ๆ
      * กดที่ชื่อแล้วเปิดแผงรายละเอียดของมันเองซึ่งมีทุกอย่างเหมือนงานปกติ
      *
@@ -2435,7 +2602,9 @@
       var when = s.dueOn || s.startOn;
       h += '<div class="sub-row' + (s.completed ? ' done' : '') + '">' + checkbox(s) +
         '<span class="nm" data-act="open-task" data-id="' + esc(s.id) +
-        '" style="cursor:pointer">' + esc(s.name) + '</span>' +
+        '" style="cursor:pointer">' + esc(s.name) + '</span>' + approvalIcon(s) +
+        (outsideIds[s.id] ? '<span class="sub-out" title="' + L('อยู่นอกช่วงวันของงานหลัก') + '">' +
+          I('alert', 13) + '</span>' : '') +
         '<button class="sub-date' + (when ? ' on' : '') + dueClass(s.dueOn, s.completed) +
         '" data-act="sub-dates" data-id="' + esc(s.id) + '" title="' +
         L('ตั้งวันเริ่มและกำหนดส่ง') + '">' + I('calendar', 13) +
@@ -3113,7 +3282,7 @@
     overviewView: overviewView, filesView: filesView, messagesView: messagesView,
     projectsView: projectsView,
     portfolioView: portfolioView, PF_TABS: PF_TABS,
-    myTasksView: myTasksView, inboxView: inboxView,
+    myTasksView: myTasksView, inboxView: inboxView, trashView: trashView, approvalIcon: approvalIcon,
     calendarView: calendarView, searchView: searchView, drawer: drawer,
     taskRow: taskRow, taskCard: taskCard
   };

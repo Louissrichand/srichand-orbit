@@ -30,6 +30,9 @@ Write-Host "Orbit dev server: http://localhost:$Port/  (root: $root)"
 try {
   while ($listener.IsListening) {
     $ctx = $listener.GetContext()
+    # A request the browser aborts mid-response (reload, navigation) throws on Write/Close.
+    # Catch it per request so one dropped connection does not stop the whole server.
+    try {
     $path = [System.Uri]::UnescapeDataString($ctx.Request.Url.AbsolutePath)
     if ($path -eq '/') { $path = '/index.html' }
 
@@ -58,6 +61,10 @@ try {
       Write-Host ("404 " + $path)
     }
     $ctx.Response.OutputStream.Close()
+    } catch {
+      Write-Host ("aborted " + $ctx.Request.Url.AbsolutePath + " : " + $_.Exception.Message)
+      try { $ctx.Response.Abort() } catch { }
+    }
   }
 } finally {
   $listener.Stop()

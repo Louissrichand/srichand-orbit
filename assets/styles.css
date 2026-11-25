@@ -3201,3 +3201,109 @@ button.prof-away:hover { color: var(--accent); }
   .thread { padding-left: 8px; }
   .reply-box > .avatar { display: none; }
 }
+
+/* ---------- 1b: แกนงาน ---------- */
+
+/* ไอคอนสถานะอนุมัติในตาราง การ์ด และงานย่อย */
+.appr-ic {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 18px; height: 18px; border-radius: 50%; margin-left: 6px; vertical-align: middle;
+}
+.card .top .appr-ic { margin-left: auto; }
+.appr-row { gap: 6px; }
+.appr-btn svg { vertical-align: -2px; }
+.appr-btn.appr-approved:not(:disabled) { color: var(--ok); border-color: var(--ok); }
+.appr-btn.appr-changes:not(:disabled) { color: var(--warn-fg); border-color: var(--warn); }
+.appr-btn.appr-rejected:not(:disabled) { color: var(--danger); border-color: var(--danger); }
+.appr-btn:disabled, .appr-row .btn:disabled { opacity: .5; cursor: not-allowed; }
+.fld-hint { font-size: 12px; color: var(--fg-faint); margin-top: 5px; line-height: 1.5; }
+
+/* การทำซ้ำ */
+.recur-every { font-size: 13px; color: var(--fg-soft); }
+.recur-days { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
+.recur-day {
+  min-width: 34px; height: 30px; padding: 0 6px; border-radius: 15px; font-size: 12.5px;
+  border: 1px solid var(--line-strong); background: var(--bg); color: var(--fg-soft);
+}
+.recur-day:hover { border-color: var(--accent); }
+.recur-day.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.recur-hint { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.recur-hint .as-link { font-size: 12px; }
+
+/* ตัวเลขที่จัดรูปแบบแล้ว ข้างช่องกรอก */
+.num-fmt { font-size: 13px; color: var(--fg-soft); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* งานย่อยของ… */
+.dw-parent {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  font-size: 12.5px; color: var(--fg-soft); padding: 3px 8px; margin: -4px 0 8px -8px;
+  border-radius: 6px; background: none;
+}
+.dw-parent:hover { background: var(--bg-sunk); color: var(--fg); }
+.dw-parent b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+/* เครื่องมือของงานย่อย */
+.sub-tools { margin-left: auto; display: inline-flex; gap: 4px; align-items: center; text-transform: none; letter-spacing: 0; }
+.sub-sort {
+  font-size: 12px; height: 26px; padding: 0 6px; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--fg-soft);
+}
+.sub-tog {
+  width: 26px; height: 26px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center;
+  color: var(--fg-faint); background: none; border: 1px solid transparent;
+}
+.sub-tog:hover { background: var(--bg-sunk); color: var(--fg); }
+.sub-tog.on { color: var(--accent); background: var(--accent-bg); border-color: var(--accent); }
+.sub-warn {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12.5px;
+  padding: 7px 10px; margin: 0 0 8px; border-radius: var(--radius);
+  background: var(--warn-bg); color: var(--warn-fg);
+}
+.sub-warn.soft { background: var(--bg-sunk); color: var(--fg-soft); }
+.sub-warn .grow { flex: 1; min-width: 160px; }
+.sub-none { font-size: 13px; color: var(--fg-faint); padding: 4px 0 8px; }
+.sub-out { color: var(--warn); display: inline-flex; margin-right: 4px; }
+
+/* เมนูของงาน */
+.task-menu { display: flex; flex-direction: column; gap: 8px; }
+.task-menu .btn { justify-content: flex-start; }
+.task-menu kbd { margin-left: auto; font-size: 11px; }
+
+/* หน้าต่างติ๊กเลือก (คัดลอกงาน มอบสำเนา) */
+.dup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; margin: 4px 0 6px; }
+.dup-grid.people { max-height: 46vh; overflow-y: auto; }
+.chk { display: flex; align-items: center; gap: 8px; font-size: 13.5px; cursor: pointer; padding: 3px 0; }
+.chk input { width: 16px; height: 16px; accent-color: var(--accent); flex: none; }
+
+/* ลากแถวไปวางกลางแถวอื่น = แปลงเป็นงานย่อย */
+.tr.drop-into { box-shadow: inset 0 0 0 2px var(--accent); background: var(--accent-bg); }
+
+/* ถังขยะ */
+.trash-wrap { max-width: 860px; }
+.trash-note {
+  display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--fg-soft);
+  margin: 4px 0 14px; line-height: 1.6;
+}
+.trash-note svg { flex: none; margin-top: 3px; }
+.trash-row {
+  display: flex; align-items: center; gap: 12px; padding: 12px 4px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.trash-row .grow { flex: 1; min-width: 0; }
+.trash-row .nm { font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+.trash-row .sub { font-size: 12px; color: var(--fg-faint); line-height: 1.6; margin-top: 2px; }
+.trash-ic {
+  width: 32px; height: 32px; border-radius: 8px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--bg-sunk); color: var(--fg-soft);
+}
+.trash-acts { display: flex; gap: 6px; flex: none; }
+.trash-purge { color: var(--danger); }
+
+@media (max-width: 620px) {
+  .dup-grid { grid-template-columns: 1fr; }
+  .trash-row { flex-wrap: wrap; }
+  .trash-acts { width: 100%; justify-content: flex-end; }
+  .sub-tools { margin-left: 0; }
+  .dw-sec-title { flex-wrap: wrap; }
+}
