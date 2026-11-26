@@ -107,7 +107,10 @@
     { id: 'text',   label: 'ข้อความ',       icon: 'text' },
     { id: 'number', label: 'ตัวเลข',        icon: 'hash' },
     /* 2c — รหัสงานแบบ REQ-12 เลขรันต่อโปรเจกต์ แก้ด้วยมือไม่ได้ ค้นหาและ @อ้างถึงได้ */
-    { id: 'id',     label: 'รหัสงาน (ID)',  icon: 'hash', auto: true }
+    { id: 'id',     label: 'รหัสงาน (ID)',  icon: 'hash', auto: true },
+    /* 3c — สูตร (คำนวณเอง แก้ด้วยมือไม่ได้) และอ้างอิงงาน/โปรเจกต์/พอร์ตโฟลิโอ */
+    { id: 'formula', label: 'สูตร',        icon: 'bolt', auto: true },
+    { id: 'ref',    label: 'อ้างอิง',       icon: 'link' }
   ];
 
   /* สีของตัวเลือกในฟิลด์ — อ่อนพอที่ตัวอักษรเข้มยังอ่านออก */
@@ -175,6 +178,8 @@
       attachments: attrs.attachments || [],
       recur: attrs.recur || null,
       coverId: attrs.coverId || null,
+      estimate: attrs.estimate == null ? null : attrs.estimate,   // 3c — นาทีที่ประมาณ
+      time: [],                                                   // 3c — รายการเวลา (สำเนาไม่พาไปด้วย)
       /* 3b — ชนิดงานกำหนดเองของโปรเจกต์ (type ยังเป็นชนิดพื้นฐาน task) และสถานะของชนิดนั้น */
       ctype: attrs.ctype || null,
       cstatus: attrs.cstatus || null,
@@ -1123,6 +1128,8 @@
   }
 
   function fieldValue(taskId, fieldId) {
+    var fi3 = formulaDefs();          // 3c — ฟิลด์สูตรคำนวณตอนอ่าน
+    if (fi3.formulas[fieldId]) { var ft3 = task(taskId); return ft3 ? evalFormula(fi3.formulas[fieldId], ft3, 0) : null; }
     var row = index().fvByTask[taskId];
     var fv = row && row[fieldId];
     return fv ? fv.value : null;
@@ -2280,6 +2287,7 @@
     { id: 'calendar',  label: 'ปฏิทิน',   icon: 'calendar',   desc: 'ดูตามกำหนดส่งรายเดือน' },
     { id: 'dashboard', label: 'สรุปผล',   icon: 'chart',      desc: 'ตัวเลขรวมและความคืบหน้า' },
     { id: 'messages',  label: 'ประกาศ',    icon: 'send',       desc: 'เรื่องของทั้งโปรเจกต์ที่ไม่ได้ผูกกับงานชิ้นไหน' },
+    { id: 'pages',     label: 'หน้า',      icon: 'note',       desc: 'เอกสารของโปรเจกต์ บรีฟ สรุปประชุม คู่มือ' },
     { id: 'files',     label: 'ไฟล์',     icon: 'paperclip',  desc: 'ไฟล์แนบทุกชิ้นในโปรเจกต์รวมไว้ที่เดียว' }
   ];
 
@@ -2534,7 +2542,9 @@
     { id: 'modified',    label: 'แก้ไขล่าสุด',   kind: 'date' },
     { id: 'completed',   label: 'ทำเสร็จแล้ว',  kind: 'bool' },
     { id: 'blocked',     label: 'ถูกบล็อกอยู่',  kind: 'bool' },
-    { id: 'name',        label: 'ชื่องาน',      kind: 'text' }
+    { id: 'name',        label: 'ชื่องาน',      kind: 'text' },
+    { id: 'estimate',    label: 'เวลาประมาณ (ชม.)', kind: 'number' },
+    { id: 'actual',      label: 'เวลาจริง (ชม.)',   kind: 'number' }
   ];
 
   var FILTER_OPS = {
@@ -2584,7 +2594,7 @@
       var all = FILTER_BUILTIN.filter(function (x) { return x.id !== 'section'; }).concat(SEARCH_BUILTIN);
       visibleFieldDefs().forEach(function (x) {
         all.push({ id: 'field:' + x.f.id, label: x.f.name + (x.p ? ' · ' + x.p.name : ''),
-          kind: x.f.type === 'id' ? 'text' : x.f.type, field: x.f, custom: true });
+          kind: fieldKind(x.f), field: x.f, custom: true });
       });
       return all;
     }
@@ -2595,7 +2605,7 @@
     var p = project(projectId);
     var out = FILTER_BUILTIN.slice();
     ((p && p.fields) || []).forEach(function (f) {
-      out.push({ id: 'field:' + f.id, label: f.name, kind: f.type === 'id' ? 'text' : f.type, field: f, custom: true });
+      out.push({ id: 'field:' + f.id, label: f.name, kind: fieldKind(f), field: f, custom: true });
     });
     return out;
   }
@@ -2670,6 +2680,8 @@
       case 'attachment':  return !!(t.attachments && t.attachments.length);
       case 'blocking':    return blocking(t.id).some(function (x) { return !x.completed; });
       case 'subtask':     return !!t.parentId;
+      case 'estimate':    var re3 = timeRollup(t); return re3.hasEst ? Math.round(re3.est / 0.6) / 100 : null;   // 3c — ชั่วโมง
+      case 'actual':      var ra3 = timeRollup(t).act; return ra3 ? Math.round(ra3 / 0.6) / 100 : null;
       case 'project':
       case 'psection':
         return (index().memByTask[rootOf(t).id] || []).map(function (x) {
@@ -2681,6 +2693,7 @@
       if (v !== null && v !== undefined) {
         var fd = fieldDef(fid.slice(6));
         if (fd && fd.type === 'id') return fieldText(fd, v);   // กรองรหัสงานด้วยข้อความ REQ-12
+        if (fd && fd.type === 'ref') return refNames(v) || null;   // 3c — กรองฟิลด์อ้างอิงด้วยชื่อ
       }
       return v === undefined ? null : v;
     }
@@ -2696,7 +2709,7 @@
     if (b) return b.kind;
     if (fid && fid.indexOf('field:') === 0) {
       var f = fieldDef(fid.slice(6));
-      return f ? (f.type === 'id' ? 'text' : f.type) : null;
+      return f ? fieldKind(f) : null;
     }
     return null;
   }
@@ -2810,6 +2823,8 @@
 
   /** ค่าที่ใช้เทียบของฟิลด์ที่สร้างเอง แปลงให้เทียบกันได้ตามชนิด */
   function fieldSortKey(t, fieldId) {
+    var rd3 = fieldDef(fieldId);
+    if (rd3 && rd3.type === 'ref') return refNames(fieldValue(t.id, fieldId)) || null;
     var v = fieldValue(t.id, fieldId);
     if (v === null || v === undefined || v === '') return null;
     if (typeof v === 'number') return v;
@@ -3021,7 +3036,9 @@
     { id: 'modified',    label: 'แก้ไขล่าสุด',   w: 140, on: false, sort: 'modified' },
     { id: 'blockedBy',   label: 'ถูกบล็อกโดย',   w: 190, on: false },
     { id: 'blocking',    label: 'กำลังบล็อก',    w: 190, on: false },
-    { id: 'cstatus',     label: 'สถานะ',        w: 150, on: false, sort: 'cstatus' }
+    { id: 'cstatus',     label: 'สถานะ',        w: 150, on: false, sort: 'cstatus' },
+    { id: 'estimate',    label: 'เวลาประมาณ',   w: 120, on: false, sort: 'estimate' },
+    { id: 'actual',      label: 'เวลาจริง',     w: 120, on: false, sort: 'actual' }
   ];
 
   /** ทุกคอลัมน์ตามลำดับที่ผู้ใช้จัด พร้อมสถานะเปิด/ปิด */
@@ -3057,6 +3074,15 @@
 
   /** สรุปท้ายคอลัมน์ตัวเลขของงานชุดหนึ่ง คืนตัวเลข (หรือ null ถ้าไม่มีอะไรให้สรุป) */
   function footValue(tasks, fieldId, fn) {
+    if (fieldId === 'estimate' || fieldId === 'actual') {      // 3c — ชั่วโมง (รวมงานย่อย)
+      var hv = tasks.map(function (t) { return taskValue(t, fieldId); }).filter(function (v) { return v !== null; });
+      if (fn === 'count') return hv.length;
+      if (!hv.length) return null;
+      if (fn === 'avg') return hv.reduce(function (a, b) { return a + b; }, 0) / hv.length;
+      if (fn === 'min') return Math.min.apply(null, hv);
+      if (fn === 'max') return Math.max.apply(null, hv);
+      return hv.reduce(function (a, b) { return a + b; }, 0);
+    }
     var nums = [];
     tasks.forEach(function (t) {
       var v = fieldValue(t.id, fieldId);
@@ -3141,6 +3167,8 @@
    *  ลากลงกลุ่ม อัตโนมัติ) ลงประวัติเมื่อฟิลด์เปิด "แจ้งเมื่อค่าเปลี่ยน" หรือ opts.log แล้วปลุกอัตโนมัติ
    *  @returns true ถ้าค่าเปลี่ยนจริง */
   function setFieldRaw(taskId, fieldId, value, opts) {
+    var fd3 = fieldDef(fieldId);
+    if (fd3 && fd3.type === 'formula') return false;   // 3c — สูตรไม่เก็บค่าในงาน
     var empty = (value === null || value === undefined || value === '' ||
                  (value && value.length === 0 && typeof value !== 'number'));
     var fv = db.fieldValues.filter(function (v) {
@@ -3501,6 +3529,9 @@
       var urls = [];
       var out = line
         .replace(/^(\s*)#{1,3}\s+/, '$1')
+        /* 3c — บล็อกของหน้าเอกสาร: รูปเหลือคำอธิบาย รายการติ๊กเหลือหัวข้อย่อยธรรมดา */
+        .replace(/^!\[([^\]\n]*)\]\((?:img:[A-Za-z0-9_]+|https:[^)\s]+)\)$/, function (m, a) { return a || '[' + L('รูปภาพ') + ']'; })
+        .replace(/^(\s*[-*•]\s+)\[( |x|X)\]\s+/, '$1')
         .replace(REF_RE, function (m, label) { return '@' + label; })
         .replace(/\[([^\]\n]+)\]\(((?:https?:|mailto:)[^\s)]+)\)/g, function (m, t, u) {
           if (!forSearch) return t + ' (' + u + ')';
@@ -4584,7 +4615,7 @@
 
   function setFieldValue(taskId, fieldId, value) {
     var def = fieldDef(fieldId);
-    if (def && def.type === 'id') return;          // รหัสงานออกเลขเอง แก้ด้วยมือไม่ได้
+    if (def && (def.type === 'id' || def.type === 'formula')) return;   // รหัสงานออกเลขเอง สูตรคำนวณเอง แก้ด้วยมือไม่ได้
     var fv = db.fieldValues.filter(function (v) { return v.taskId === taskId && v.fieldId === fieldId; })[0];
     var empty = (value === null || value === '' ||
                  (value && value.length === 0 && typeof value !== 'number'));
@@ -5174,6 +5205,8 @@
       notify: !!field.notify, prefix: field.prefix
     });
     if (nf.type === 'number') nf.format = normalizeFormat(field.format);
+    if (nf.type === 'formula') { nf.expr = String(field.expr || ''); nf.out = field.out === 'date' ? 'date' : 'number'; nf.format = normalizeFormat(field.format); }
+    if (nf.type === 'ref') nf.kinds = (field.kinds || ['task', 'project', 'portfolio']).filter(function (k) { return ['task', 'project', 'portfolio'].indexOf(k) >= 0; });
     p.fields.push(nf);
     commit();
     return nf;
@@ -6008,6 +6041,8 @@
     if (v === null || v === undefined || v === '') return '';
     if (!f) return String(v);
     if (f.type === 'id') return (f.prefix || 'ID') + '-' + v;
+    if (f.type === 'formula') return f.out === 'date' ? String(v) : formatNumber(f, v);
+    if (f.type === 'ref') return refNames(v);
     if (f.type === 'number') return formatNumber(f, v);
     if (f.type === 'multi') return [].concat(v).join(' · ');
     if (f.type === 'person') { var pu = user(v); return pu ? pu.name : ''; }
@@ -6117,7 +6152,9 @@
     if (typeof patch.desc === 'string') f.desc = patch.desc.trim().slice(0, 300);
     if ('notify' in patch) f.notify = !!patch.notify && (f.type === 'select' || f.type === 'multi');
     if (f.type === 'id' && patch.prefix) f.prefix = cleanPrefix(patch.prefix);
-    if (f.type === 'number' && 'format' in patch) f.format = normalizeFormat(patch.format);
+    if ((f.type === 'number' || f.type === 'formula') && 'format' in patch) f.format = normalizeFormat(patch.format);
+    if (f.type === 'formula' && typeof patch.expr === 'string' && patch.expr) { f.expr = patch.expr; f.out = patch.out === 'date' ? 'date' : 'number'; }
+    if (f.type === 'ref' && Array.isArray(patch.kinds) && patch.kinds.length) f.kinds = patch.kinds.slice(0, 3);
     if (Array.isArray(patch.options) && (f.type === 'select' || f.type === 'multi')) {
       var ren = {};
       patch.options.forEach(function (o) {
@@ -9059,6 +9096,8 @@
     Object.keys(out.personal || {}).forEach(function (who) {
       if (who !== db.currentUserId && out.personal[who]) delete out.personal[who].notepad;
     });
+    /* 3c — หน้าส่วนตัว (รวมสมุดโน้ต) ของคนอื่นไม่ออกไปกับไฟล์สำรอง */
+    out.pages = (out.pages || []).filter(function (x) { return !x.private || x.owner === db.currentUserId; });
     return JSON.stringify(out, null, 2);
   }
 
@@ -9075,6 +9114,12 @@
       if (!inc || typeof inc !== 'object') parsed.personal[who] = inc = {};
       if (typeof inc.notepad !== 'string') inc.notepad = cur.notepad;
     });
+    /* 3c — หน้าส่วนตัวของคนอื่นไม่อยู่ในไฟล์สำรอง เก็บของที่มีอยู่ไว้ */
+    var incPages = Array.isArray(parsed.pages) ? parsed.pages : [];
+    (db.pages || []).forEach(function (x) {
+      if (x.private && x.owner !== db.currentUserId && !incPages.some(function (y) { return y.id === x.id; })) incPages.push(x);
+    });
+    parsed.pages = incPages;
     db = migrate(parsed);
     dropIndex();
     commit();
@@ -9677,6 +9722,693 @@
     return n;
   }
 
+  /* ====================== 3c ส่วนที่ 2 — หน้าเอกสาร เวลา สูตร อ้างอิง ตรวจรูป ======================
+   *   page = { id:'pg_…', title, icon, body (มาร์กดาวน์ย่อแบบบล็อก), imgs:[{ id:'im_…', name, url, bytes }],
+   *            comments:[{ id, quote, text, by, at, resolved, replies:[{ id, by, at, text }] }],
+   *            versions:[{ at, by, title, body }] (≤ 20 ล่าสุด), by, at, editedBy, editedAt, vAt }
+   *   project.pages[]  หน้าของโปรเจกต์ (≤ 50)     db.pages[]  หน้าเดี่ยว + { owner, private, notepad }
+   *   สมุดโน้ตส่วนตัว = หน้า private ของเจ้าของ notepad: true (ย้ายจาก personal.notepad ตอนโหลด)
+   *   task.estimate  นาทีที่ประมาณ | null   task.time[]  { id, userId, date, minutes, note, billable: null, category: null }
+   *   db.timers      { userId: { taskId, start } } นาฬิกาจับเวลาที่เดินอยู่ คนละหนึ่งตัว
+   *   field.type 'formula' { expr (รหัสฟิลด์ใน {…}), out: number|date, format }  คำนวณตอนอ่าน ไม่เก็บค่าในงาน
+   *   field.type 'ref'     { kinds: [task, project, portfolio] }  ค่า = [รหัส t_/p_/pf_ (g_ สำรองให้เป้าหมาย 4a)]
+   *   attachment.pins[]    { n, x, y (0..1), text, taskId (งานย่อย), by, at } */
+  var PAGE_MAX = 50, PAGE_VERSIONS = 20, PAGE_IMG_BYTES = 500 * 1024, PAGE_IMGS = 20, VERSION_GAP_MS = 10 * 60 * 1000;
+
+  function migrate3cPart2(d) {
+    d.pages = Array.isArray(d.pages) ? d.pages.filter(function (x) { return x && x.id; }) : [];
+    d.pages.forEach(normalizePage);
+    d.projects.forEach(function (p) {
+      p.pages = Array.isArray(p.pages) ? p.pages.filter(function (x) { return x && x.id; }) : [];
+      p.pages.forEach(normalizePage);
+    });
+    d.timers = isObj(d.timers) ? d.timers : {};
+    d.tasks.forEach(function (t) {
+      if (!('estimate' in t)) t.estimate = null;
+      t.time = Array.isArray(t.time) ? t.time.filter(function (e) { return e && e.id; }) : [];
+      (t.attachments || []).forEach(function (a) { if (a.pins && !Array.isArray(a.pins)) a.pins = []; });
+    });
+    /* สมุดโน้ตข้อความล้วนแบบเดิม (2a) กลายเป็นหน้าเอกสารส่วนตัวของเจ้าของ ทำครั้งเดียว แล้วล้างข้อความเดิม */
+    Object.keys(d.personal || {}).forEach(function (uid0) {
+      var per = d.personal[uid0];
+      if (!per || typeof per.notepad !== 'string' || !per.notepad.trim()) return;
+      var has = d.pages.filter(function (x) { return x.notepad && x.owner === uid0; })[0];
+      if (has) { if (!has.body) has.body = per.notepad; }
+      else d.pages.push(normalizePage({ id: 'pg_np_' + uid0, title: 'สมุดโน้ตส่วนตัว', body: per.notepad,
+        owner: uid0, private: true, notepad: true, by: uid0, at: new Date().toISOString() }));
+      per.notepad = '';
+    });
+  }
+
+  function normalizePage(x) {
+    x.title = String(x.title || '').slice(0, 200);
+    x.icon = String(x.icon || '📄').slice(0, 4);
+    x.body = String(x.body || '');
+    x.imgs = Array.isArray(x.imgs) ? x.imgs.filter(function (i) { return i && i.id && /^data:image\//.test(i.url || ''); }) : [];
+    x.comments = Array.isArray(x.comments) ? x.comments.filter(function (c) { return c && c.id; }) : [];
+    x.comments.forEach(function (c) { c.replies = Array.isArray(c.replies) ? c.replies : []; c.resolved = !!c.resolved; });
+    x.versions = Array.isArray(x.versions) ? x.versions.slice(-PAGE_VERSIONS) : [];
+    return x;
+  }
+
+  /* ---------- หน้าเอกสาร ---------- */
+  function pageLoc(id) {
+    var i = (db.pages || []).filter(function (x) { return x.id === id; })[0];
+    if (i) return { page: i, project: null };
+    for (var k = 0; k < db.projects.length; k++) {
+      var pg = (db.projects[k].pages || []).filter(function (x) { return x.id === id; })[0];
+      if (pg) return { page: pg, project: db.projects[k] };
+    }
+    return null;
+  }
+  function canSeePage(id) {
+    var l = pageLoc(id);
+    if (!l) return false;
+    if (l.project) return !!projectAccess(l.project.id);
+    return !l.page.private || l.page.owner === db.currentUserId;
+  }
+  function canEditPage(id) {
+    var l = pageLoc(id);
+    if (!l || !canSeePage(id) || !isActive()) return false;
+    if (l.project) return can('write') && canInProject(l.project.id, 'edit');
+    if (l.page.private) return l.page.owner === db.currentUserId;
+    return can('write');
+  }
+  function canCommentPage(id) {
+    var l = pageLoc(id);
+    if (!l || !canSeePage(id) || !isActive()) return false;
+    return l.project ? canInProject(l.project.id, 'comment') : (l.page.private ? l.page.owner === db.currentUserId : true);
+  }
+  function projectPages(pid) { var p = project(pid); return ((p && p.pages) || []).slice(); }
+  /** หน้าเดี่ยวที่คนนี้เห็น (ไม่รวมสมุดโน้ต) */
+  function myPages() {
+    return (db.pages || []).filter(function (x) { return !x.notepad && (!x.private || x.owner === db.currentUserId); });
+  }
+  function notepadPage(userId) {
+    userId = userId || db.currentUserId;
+    return (db.pages || []).filter(function (x) { return x.notepad && x.owner === userId; })[0] || null;
+  }
+  /** สร้างหน้าสมุดโน้ตของคนนี้ถ้ายังไม่มี (ไม่ลงจุดย้อนกลับ) */
+  function ensureNotepadPage() {
+    var me0 = db.currentUserId;
+    if (!me0 || !user(me0) || notepadPage(me0)) return notepadPage(me0);
+    db.pages = db.pages || [];
+    var x = normalizePage({ id: 'pg_np_' + me0, title: 'สมุดโน้ตส่วนตัว', owner: me0, private: true, notepad: true,
+      by: me0, at: new Date().toISOString() });
+    db.pages.push(x);
+    commit();
+    return x;
+  }
+
+  function createPage(pid, o) {
+    o = o || {};
+    var p = pid ? project(pid) : null;
+    if (pid && (!p || !can('write') || !canInProject(pid, 'edit'))) return null;
+    if (!pid && !isActive()) return null;
+    var list = p ? (p.pages = p.pages || []) : (db.pages = db.pages || []);
+    if (list.filter(function (x) { return !x.notepad; }).length >= PAGE_MAX * (p ? 1 : 4)) return null;
+    snapshot('สร้างหน้า');
+    var x = normalizePage({ id: uid('pg'), title: String(o.title || '').trim().slice(0, 200), icon: o.icon || '📄',
+      body: o.body || '', by: db.currentUserId, at: new Date().toISOString() });
+    if (!p) { x.owner = db.currentUserId; x.private = !!o.private; }
+    list.push(x);
+    commit();
+    return x;
+  }
+
+  /** บันทึกเนื้อหา — ไม่ลงจุดย้อนกลับทุกครั้งที่พิมพ์ ใช้ประวัติเวอร์ชันแทน
+   *  เก็บเวอร์ชันเดิมเมื่อห่างจากครั้งก่อนเกิน 10 นาทีหรือคนแก้เปลี่ยน */
+  function savePage(id, patch) {
+    var l = pageLoc(id);
+    if (!l || !canEditPage(id)) return false;
+    var x = l.page;
+    var title = 'title' in patch ? String(patch.title || '').slice(0, 200) : x.title;
+    var body = 'body' in patch ? String(patch.body || '').slice(0, 200000) : x.body;
+    if (title === x.title && body === x.body) return false;
+    var now = Date.now();
+    var by = x.editedBy || x.by;
+    if (x.body !== body && (x.body || x.title) && (!x.vAt || now - Date.parse(x.vAt) > VERSION_GAP_MS || by !== db.currentUserId)) {
+      x.versions.push({ at: x.editedAt || x.at, by: by, title: x.title, body: x.body });
+      if (x.versions.length > PAGE_VERSIONS) x.versions = x.versions.slice(-PAGE_VERSIONS);
+      x.vAt = new Date(now).toISOString();
+    }
+    var was = parseMentions(x.body);
+    var now2 = parseMentions(body).filter(function (u) { return was.indexOf(u) < 0; });
+    x.title = title; x.body = body;
+    x.editedBy = db.currentUserId; x.editedAt = new Date(now).toISOString();
+    if (now2.length && !x.private) notifyOnly(null, now2, 'พูดถึงคุณในหน้า “{t}”', 'mention', { t: title || L('ไม่มีชื่อ') }, false,
+      { projectId: l.project ? l.project.id : null, route: 'page:' + id });
+    commit();
+    return true;
+  }
+  function restorePageVersion(id, idx) {
+    var l = pageLoc(id);
+    if (!l || !canEditPage(id)) return false;
+    var x = l.page, v = x.versions[idx];
+    if (!v) return false;
+    snapshot('กู้คืนเวอร์ชันของหน้า');
+    x.versions.push({ at: x.editedAt || x.at, by: x.editedBy || x.by, title: x.title, body: x.body });
+    if (x.versions.length > PAGE_VERSIONS) x.versions = x.versions.slice(-PAGE_VERSIONS);
+    x.title = v.title; x.body = v.body;
+    x.editedBy = db.currentUserId; x.editedAt = new Date().toISOString(); x.vAt = x.editedAt;
+    commit();
+    return true;
+  }
+  function deletePage(id) {
+    var l = pageLoc(id);
+    if (!l || !canEditPage(id) || l.page.notepad) return false;
+    snapshot('ลบหน้า');
+    if (l.project) l.project.pages = l.project.pages.filter(function (x) { return x.id !== id; });
+    else db.pages = db.pages.filter(function (x) { return x.id !== id; });
+    commit();
+    return true;
+  }
+  function setPagePrivate(id, on) {
+    var l = pageLoc(id);
+    if (!l || l.project || l.page.notepad || l.page.owner !== db.currentUserId) return false;
+    snapshot(on ? 'ทำหน้าเป็นส่วนตัว' : 'แชร์หน้าให้ทั้งองค์กร');
+    l.page.private = !!on;
+    commit();
+    return true;
+  }
+  /** เก็บรูปลงหน้า ไม่ commit — ตัวแก้ไขแทรกรูปแล้วบันทึกพร้อมเนื้อหาเอง (ไม่งั้นหน้าวาดใหม่กลางการแทรก) */
+  function addPageImage(id, name, dataUri) {
+    var l = pageLoc(id);
+    if (!l || !canEditPage(id)) return null;
+    if (!/^data:image\/(png|jpe?g|gif|webp);base64,/i.test(dataUri || '')) return null;
+    var bytes = Math.round((dataUri.length - dataUri.indexOf(',') - 1) * 0.75);
+    if (bytes > PAGE_IMG_BYTES || l.page.imgs.length >= PAGE_IMGS) return null;
+    var im = { id: uid('im'), name: String(name || '').slice(0, 120), url: dataUri, bytes: bytes };
+    l.page.imgs.push(im);
+    return im;
+  }
+  function pageImgMap(id) {
+    var l = pageLoc(id), out = {};
+    if (l) l.page.imgs.forEach(function (i) { out[i.id] = i.url; });
+    return out;
+  }
+
+  /* ความเห็นบนข้อความในหน้า */
+  function pageComment(id, cid) {
+    var l = pageLoc(id);
+    return l ? l.page.comments.filter(function (c) { return c.id === cid; })[0] || null : null;
+  }
+  function pageNotify(l, c, key, extra) {
+    var who = [l.page.by].concat(c ? [c.by] : []).concat(c ? c.replies.map(function (r) { return r.by; }) : []).concat(extra || []);
+    var uniq = who.filter(function (u, i) { return u && who.indexOf(u) === i; });
+    notifyOnly(null, uniq, key, 'comment', { t: l.page.title || L('ไม่มีชื่อ') }, false,
+      { projectId: l.project ? l.project.id : null, route: 'page:' + l.page.id });
+  }
+  function addPageComment(id, quote, text) {
+    var l = pageLoc(id);
+    if (!l || !canCommentPage(id) || !String(text || '').trim()) return null;
+    snapshot('แสดงความเห็นในหน้า');
+    var c = { id: uid('pc'), quote: String(quote || '').replace(/\s+/g, ' ').trim().slice(0, 300), text: String(text).trim().slice(0, 5000),
+      by: db.currentUserId, at: new Date().toISOString(), resolved: false, replies: [] };
+    l.page.comments.push(c);
+    pageNotify(l, null, 'แสดงความเห็นในหน้า “{t}”', parseMentions(c.text));
+    commit();
+    return c;
+  }
+  function replyPageComment(id, cid, text) {
+    var l = pageLoc(id), c = pageComment(id, cid);
+    if (!c || !canCommentPage(id) || !String(text || '').trim()) return null;
+    snapshot('ตอบความเห็นในหน้า');
+    var r = { id: uid('pr'), by: db.currentUserId, at: new Date().toISOString(), text: String(text).trim().slice(0, 5000) };
+    c.replies.push(r);
+    pageNotify(l, c, 'ตอบความเห็นในหน้า “{t}”', parseMentions(r.text));
+    commit();
+    return r;
+  }
+  function resolvePageComment(id, cid, on) {
+    var c = pageComment(id, cid);
+    if (!c || !canCommentPage(id)) return false;
+    snapshot(on ? 'ปิดความเห็นในหน้า' : 'เปิดความเห็นในหน้าอีกครั้ง');
+    c.resolved = !!on;
+    c.resolvedBy = on ? db.currentUserId : null;
+    commit();
+    return true;
+  }
+  function deletePageComment(id, cid) {
+    var l = pageLoc(id), c = pageComment(id, cid);
+    if (!c || (c.by !== db.currentUserId && !canEditPage(id))) return false;
+    snapshot('ลบความเห็นในหน้า');
+    l.page.comments = l.page.comments.filter(function (x) { return x !== c; });
+    commit();
+    return true;
+  }
+  /** ข้อความที่เลือกในหน้า → งานใหม่ที่ลิงก์กลับมาหน้านี้ (หน้าของโปรเจกต์ = งานในคอลัมน์แรก หน้าเดี่ยว = งานส่วนตัว) */
+  function taskFromPage(id, text) {
+    var l = pageLoc(id);
+    var name = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+    if (!l || !name || !canSeePage(id)) return null;
+    var url = (global.location ? global.location.origin + global.location.pathname : '') + '#/page/' + id;
+    var notes = L('จากหน้า') + ' [' + (l.page.title || L('ไม่มีชื่อ')).replace(/[\[\]]/g, '') + '](' + url + ')';
+    if (l.project) {
+      if (!can('write') || !canInProject(l.project.id, 'edit')) return null;
+      return createTask({ name: name, notes: notes, assigneeId: db.currentUserId }, l.project.id, l.project.sections[0].id);
+    }
+    if (!can('write')) return null;
+    return createTask({ name: name, notes: notes, assigneeId: db.currentUserId }, null, null);
+  }
+
+  /* ---------- เวลา ----------
+   * รูปแบบรายการเวลา { id, userId, date, minutes, note, billable: null, category: null } — billable/category
+   * สำรองให้ไทม์ชีต (4b) นาฬิกาจับเวลาเก็บเวลาเริ่มใน db.timers จึงอยู่รอดหลังรีโหลดและเห็นจากเครื่องอื่น */
+  function parseDuration(s) {
+    s = String(s == null ? '' : s).trim().toLowerCase();
+    if (!s) return null;
+    var m = s.match(/^(\d+):(\d{1,2})$/);
+    if (m) return +m[1] * 60 + +m[2];
+    var h = s.match(/(\d+(?:\.\d+)?)\s*(h|ชม|ชั่วโมง)/), mi = s.match(/(\d+)\s*(m|น|นาที)/);
+    if (h || mi) return Math.round((h ? +h[1] * 60 : 0) + (mi ? +mi[1] : 0));
+    if (/^\d+(\.\d+)?$/.test(s)) return Math.round(+s * 60);      // ตัวเลขเปล่า = ชั่วโมง
+    return null;
+  }
+  function fmtMinutes(n) {
+    if (n === null || n === undefined || isNaN(n)) return '';
+    n = Math.round(n);
+    var h = Math.floor(n / 60), m = n % 60;
+    return h && m ? h + 'h ' + m + 'm' : h ? h + 'h' : m + 'm';
+  }
+  function taskActualMinutes(t) { return (t.time || []).reduce(function (a, e) { return a + (+e.minutes || 0); }, 0); }
+  /** ประมาณ/จริงรวมงานย่อยทุกชั้น { est, act, ownEst, ownAct } (นาที) */
+  function timeRollup(t) {
+    var out = { est: 0, act: 0, ownEst: t.estimate || 0, ownAct: taskActualMinutes(t), hasEst: t.estimate != null };
+    var walk = function (x, guard) {
+      out.est += x.estimate || 0;
+      out.act += taskActualMinutes(x);
+      if (x.estimate != null) out.hasEst = true;
+      if (guard < 6) subtasks(x.id).forEach(function (s) { walk(s, guard + 1); });
+    };
+    walk(t, 0);
+    return out;
+  }
+  function setEstimate(taskId, minutes) {
+    var t = task(taskId);
+    if (!t) return false;
+    var v = minutes === null || minutes === '' || isNaN(minutes) ? null : Math.max(0, Math.round(minutes));
+    if (v === (t.estimate == null ? null : t.estimate)) return false;
+    snapshot('ตั้งเวลาประมาณ');
+    t.estimate = v;
+    log(taskId, v == null ? 'ล้างเวลาประมาณ' : 'ตั้งเวลาประมาณเป็น {v}', { v: fmtMinutes(v) });
+    commit();
+    return true;
+  }
+  function addTimeEntry(taskId, e) {
+    var t = task(taskId);
+    var mins = Math.round(+(e && e.minutes) || 0);
+    if (!t || mins <= 0) return null;
+    snapshot('บันทึกเวลา');
+    var x = { id: uid('te'), userId: (e.userId && user(e.userId)) ? e.userId : db.currentUserId,
+      date: /^\d{4}-\d\d-\d\d$/.test(e.date || '') ? e.date : today(), minutes: Math.min(mins, 24 * 60 * 7),
+      note: String(e.note || '').slice(0, 500), billable: null, category: null };
+    t.time = t.time || [];
+    t.time.push(x);
+    log(taskId, 'บันทึกเวลา {v}', { v: fmtMinutes(x.minutes) });
+    autoFire('timelog', taskId, { minutes: x.minutes });
+    commit();
+    return x;
+  }
+  function deleteTimeEntry(taskId, entryId) {
+    var t = task(taskId);
+    var e = t && (t.time || []).filter(function (x) { return x.id === entryId; })[0];
+    if (!e || (e.userId !== db.currentUserId && !can('write', taskId))) return false;
+    snapshot('ลบรายการเวลา');
+    t.time = t.time.filter(function (x) { return x !== e; });
+    commit();
+    return true;
+  }
+  function runningTimer(userId) {
+    var x = (db.timers || {})[userId || db.currentUserId];
+    return x && task(x.taskId) ? x : null;
+  }
+  function startTimer(taskId) {
+    if (!task(taskId)) return false;
+    var cur = runningTimer();
+    if (cur && cur.taskId === taskId) return false;
+    batch('เริ่มจับเวลา', null, function () {
+      if (cur) stopTimerRaw();
+      db.timers = db.timers || {};
+      db.timers[db.currentUserId] = { taskId: taskId, start: new Date().toISOString() };
+    });
+    return true;
+  }
+  function stopTimerRaw() {
+    var cur = runningTimer();
+    delete db.timers[db.currentUserId];
+    if (!cur) return null;
+    var mins = Math.max(1, Math.round((Date.now() - Date.parse(cur.start)) / 60000));
+    return addTimeEntry(cur.taskId, { minutes: mins, date: String(cur.start).slice(0, 10) === today() ? today() : today(), note: '' });
+  }
+  function stopTimer() {
+    if (!runningTimer() && !(db.timers || {})[db.currentUserId]) return null;
+    var out = null;
+    batch('หยุดจับเวลา', null, function () { out = stopTimerRaw(); });
+    return out;
+  }
+  function discardTimer() {
+    if (!(db.timers || {})[db.currentUserId]) return false;
+    snapshot('ทิ้งเวลาที่จับ');
+    delete db.timers[db.currentUserId];
+    commit();
+    return true;
+  }
+  /** รายการเวลาทั้งโปรเจกต์ (รวมงานย่อย) เป็น CSV */
+  function projectTimeCsv(pid) {
+    var p = project(pid);
+    if (!p) return '';
+    var rows = [['date', 'user', 'task', 'task_id', 'minutes', 'hours', 'note', 'billable', 'category', 'project'].join(',')];
+    var walk = function (t) {
+      if (!canSeeTask(t.id)) return;
+      (t.time || []).forEach(function (e) {
+        var u = user(e.userId);
+        rows.push([e.date, u ? u.name : e.userId, t.name, t.id, e.minutes, (e.minutes / 60).toFixed(2), e.note || '',
+          e.billable == null ? '' : e.billable, e.category || '', p.name].map(csvCell).join(','));
+      });
+      subtasks(t.id).forEach(walk);
+    };
+    tasksInProject(pid).forEach(function (x) { walk(x.task); });
+    return '﻿' + rows.join('\r\n');
+  }
+
+  /* ---------- ฟิลด์สูตร ----------
+   * ไวยากรณ์: ตัวเลข  + − × ÷ ( )  {ฟิลด์}  ฟังก์ชัน DateAdd(วันที่, n) DateSubtract(วันที่, n) Today()
+   *          Rollup(sum|avg|min|max|count, {ฟิลด์}) (งานย่อยชั้นเดียว)  วันที่ − วันที่ = จำนวนวัน
+   * เก็บเป็นรหัส {f_…} หรือคีย์ในตัว {due} {start} {created} {completed} {estimate} {actual} แสดงเป็นชื่อตอนแก้
+   * คำนวณตอนอ่าน (fieldValue) ไม่เก็บค่าในงาน แคชผลไว้ในดัชนีจนกว่าข้อมูลจะเปลี่ยน */
+  var FORMULA_BUILTIN = [['due', 'กำหนดส่ง', 'date'], ['start', 'วันเริ่ม', 'date'], ['created', 'วันที่สร้าง', 'date'],
+    ['completed', 'วันที่ทำเสร็จ', 'date'], ['estimate', 'เวลาประมาณ', 'number'], ['actual', 'เวลาจริง', 'number']];
+  var FORMULA_FNS = ['DateAdd', 'DateSubtract', 'Today', 'Rollup'];
+
+  function fErr(key, x) { var e = new Error(key); e.p = { x: x }; return e; }
+  function fTokens(s) {
+    var out = [], i = 0;
+    while (i < s.length) {
+      var c = s.charAt(i);
+      if (/\s/.test(c)) { i++; continue; }
+      if (c === '{') {
+        var j = s.indexOf('}', i);
+        if (j < 0) throw new Error('ปีกกาไม่ครบ');
+        out.push({ t: 'ref', v: s.slice(i + 1, j).trim() }); i = j + 1; continue;
+      }
+      var n = s.slice(i).match(/^\d+(\.\d+)?/);
+      if (n) { out.push({ t: 'num', v: +n[0] }); i += n[0].length; continue; }
+      var w = s.slice(i).match(/^[A-Za-z]+/);
+      if (w) { out.push({ t: 'id', v: w[0] }); i += w[0].length; continue; }
+      if ('+-*/(),×÷−'.indexOf(c) >= 0) { out.push({ t: 'op', v: c === '×' ? '*' : c === '÷' ? '/' : c === '−' ? '-' : c }); i++; continue; }
+      throw fErr('อ่านไม่ออกตรง “{x}”', c);
+    }
+    return out;
+  }
+  function fParse(tokens) {
+    var k = 0;
+    function peek() { return tokens[k]; }
+    function eat(v) { var x = tokens[k]; if (!x || (v && x.v !== v)) throw new Error('ไวยากรณ์ไม่ถูกต้อง'); k++; return x; }
+    function expr() {
+      var a = term();
+      while (peek() && (peek().v === '+' || peek().v === '-')) { var op = eat().v; a = { op: op, a: a, b: term() }; }
+      return a;
+    }
+    function term() {
+      var a = factor();
+      while (peek() && (peek().v === '*' || peek().v === '/')) { var op = eat().v; a = { op: op, a: a, b: factor() }; }
+      return a;
+    }
+    function factor() {
+      var x = peek();
+      if (!x) throw new Error('สูตรไม่ครบ');
+      if (x.v === '-') { eat(); return { op: 'neg', a: factor() }; }
+      if (x.v === '(') { eat('('); var e = expr(); eat(')'); return e; }
+      if (x.t === 'num') { eat(); return { num: x.v }; }
+      if (x.t === 'ref') { eat(); return { ref: x.v }; }
+      if (x.t === 'id') {
+        eat();
+        var fn = FORMULA_FNS.filter(function (f) { return f.toLowerCase() === x.v.toLowerCase(); })[0];
+        if (!fn) throw fErr('ไม่รู้จักฟังก์ชัน {x}', x.v);
+        eat('(');
+        var args = [];
+        if (peek() && peek().v !== ')') {
+          if (fn === 'Rollup') { var agg = eat(); if (agg.t !== 'id') throw new Error('Rollup ต้องระบุ sum avg min max หรือ count'); args.push({ word: agg.v.toLowerCase() }); }
+          else args.push(expr());
+          while (peek() && peek().v === ',') { eat(','); args.push(expr()); }
+        }
+        eat(')');
+        return { fn: fn, args: args };
+      }
+      throw new Error('ไวยากรณ์ไม่ถูกต้อง');
+    }
+    var root = expr();
+    if (k < tokens.length) throw new Error('มีส่วนเกินท้ายสูตร');
+    return root;
+  }
+  /** ชนิดผลลัพธ์ number | date (ตรวจตอนบันทึก) */
+  function fType(n, refType) {
+    if ('num' in n) return 'number';
+    if (n.ref) return refType(n.ref);
+    if (n.op === 'neg') return 'number';
+    if (n.op) {
+      var a = fType(n.a, refType), b = fType(n.b, refType);
+      if (n.op === '-' && a === 'date' && b === 'date') return 'number';
+      if ((n.op === '+' || n.op === '-') && a === 'date' && b === 'number') return 'date';
+      if (n.op === '+' && a === 'number' && b === 'date') return 'date';
+      if (a === 'date' || b === 'date') throw new Error('ใช้วันที่กับ × ÷ ไม่ได้');
+      return 'number';
+    }
+    if (n.fn === 'Today' || n.fn === 'DateAdd' || n.fn === 'DateSubtract') {
+      if (n.fn !== 'Today' && (n.args.length !== 2 || fType(n.args[0], refType) !== 'date')) throw fErr('{x}(วันที่, จำนวนวัน)', n.fn);
+      return 'date';
+    }
+    if (n.fn === 'Rollup') {
+      if (n.args.length !== 2 || ['sum', 'avg', 'min', 'max', 'count'].indexOf(n.args[0].word) < 0) throw new Error('Rollup(sum|avg|min|max|count, {ฟิลด์})');
+      return 'number';
+    }
+    return 'number';
+  }
+
+  /** แปลงสูตรที่ผู้ใช้พิมพ์ (ชื่อฟิลด์) เป็นสูตรที่เก็บ (รหัส) และตรวจ — คืน { expr, out } หรือ { error } */
+  function compileFormula(pid, text, selfId) {
+    var p = project(pid);
+    var fields = ((p && p.fields) || []);
+    var byName = function (nm) {
+      var key = String(nm).trim().toLowerCase();
+      var b = FORMULA_BUILTIN.filter(function (x) { return x[0] === key || L(x[1]).toLowerCase() === key || x[1] === nm.trim(); })[0];
+      if (b) return { id: b[0], type: b[2] };
+      var f = fields.filter(function (x) { return x.id === nm.trim() || x.name.trim().toLowerCase() === key; })[0];
+      if (!f) return null;
+      return { id: f.id, type: f.type === 'date' ? 'date' : f.type === 'formula' ? (f.out || 'number') : 'number', f: f };
+    };
+    try {
+      var toks = fTokens(String(text || ''));
+      if (!toks.length) return { error: 'ยังไม่ได้พิมพ์สูตร' };
+      toks.forEach(function (tk) {
+        if (tk.t !== 'ref') return;
+        var r = byName(tk.v);
+        if (!r) throw fErr('ไม่พบฟิลด์ {x}', '{' + tk.v + '}');
+        if (r.id === selfId) throw new Error('สูตรอ้างถึงตัวเองไม่ได้');
+        if (r.f && r.f.type !== 'number' && r.f.type !== 'date' && r.f.type !== 'formula') throw fErr('{x} ไม่ใช่ตัวเลขหรือวันที่', '{' + tk.v + '}');
+        tk.v = r.id;
+      });
+      var tree = fParse(toks);
+      var out = fType(tree, function (id) {
+        var b = FORMULA_BUILTIN.filter(function (x) { return x[0] === id; })[0];
+        if (b) return b[2];
+        var f = fields.filter(function (x) { return x.id === id; })[0];
+        return f && (f.type === 'date' || (f.type === 'formula' && f.out === 'date')) ? 'date' : 'number';
+      });
+      var expr = toks.map(function (tk) { return tk.t === 'ref' ? '{' + tk.v + '}' : String(tk.v); }).join(' ')
+        .replace(/ \( /g, '(').replace(/ \)/g, ')').replace(/ ,/g, ',').replace(/([A-Za-z]) \(/g, '$1(');
+      return { expr: expr, out: out };
+    } catch (e) { return { error: e.message, p: e.p || null }; }
+  }
+  /** สูตรที่เก็บ → ข้อความที่แสดงในช่องแก้ (รหัส → ชื่อ) */
+  function formulaText(f) {
+    return String((f && f.expr) || '').replace(/\{([^}]+)\}/g, function (m, id) {
+      var b = FORMULA_BUILTIN.filter(function (x) { return x[0] === id; })[0];
+      if (b) return '{' + L(b[1]) + '}';
+      var d = fieldDef(id);
+      return '{' + (d ? d.name : id) + '}';
+    });
+  }
+
+  function formulaDefs() {
+    var i = index();
+    if (!i.formulas) {
+      i.formulas = {}; i.fcache = {}; i.refFields = {};
+      db.projects.forEach(function (p) {
+        (p.fields || []).forEach(function (f) {
+          if (f.type === 'formula') i.formulas[f.id] = f;
+          if (f.type === 'ref') i.refFields[f.id] = f;
+        });
+      });
+    }
+    return i;
+  }
+  function fRefValue(t, id, depth) {
+    switch (id) {
+      case 'due': return t.dueOn || null;
+      case 'start': return t.startOn || null;
+      case 'created': return t.createdAt ? String(t.createdAt).slice(0, 10) : null;
+      case 'completed': return t.completedAt ? String(t.completedAt).slice(0, 10) : null;
+      case 'estimate': var tr = timeRollup(t); return tr.hasEst ? Math.round(tr.est / 6) / 10 : null;
+      case 'actual': return Math.round(timeRollup(t).act / 6) / 10;
+    }
+    var fi = formulaDefs();
+    if (fi.formulas[id]) return depth > 4 ? null : evalFormula(fi.formulas[id], t, depth + 1);
+    var row = index().fvByTask[t.id], fv = row && row[id];
+    var v = fv ? fv.value : null;
+    return v === '' ? null : v;
+  }
+  function fEval(n, t, depth) {
+    if ('num' in n) return n.num;
+    if (n.ref) return fRefValue(t, n.ref, depth);
+    if (n.op === 'neg') { var x = fEval(n.a, t, depth); return x == null ? null : -x; }
+    if (n.op) {
+      var a = fEval(n.a, t, depth), b = fEval(n.b, t, depth);
+      if (a == null || b == null) return null;
+      var da = typeof a === 'string', dbb = typeof b === 'string';
+      if (n.op === '-' && da && dbb) return daysBetween(b, a);
+      if ((n.op === '+' || n.op === '-') && da && !dbb) return addDays(a, Math.round(n.op === '+' ? +b : -b));
+      if (n.op === '+' && !da && dbb) return addDays(b, Math.round(+a));
+      a = +a; b = +b;
+      if (n.op === '+') return a + b;
+      if (n.op === '-') return a - b;
+      if (n.op === '*') return a * b;
+      if (n.op === '/') return b === 0 ? null : a / b;
+    }
+    if (n.fn === 'Today') return today();
+    if (n.fn === 'DateAdd' || n.fn === 'DateSubtract') {
+      var d = fEval(n.args[0], t, depth), k = fEval(n.args[1], t, depth);
+      if (d == null || k == null) return null;
+      return addDays(d, Math.round(n.fn === 'DateAdd' ? +k : -k));
+    }
+    if (n.fn === 'Rollup') {
+      var vals = subtasks(t.id).map(function (s) { return fEval(n.args[1], s, depth); })
+        .filter(function (v) { return v !== null && v !== undefined && !isNaN(+v); }).map(Number);
+      var w = n.args[0].word;
+      if (w === 'count') return vals.length;
+      if (!vals.length) return null;
+      if (w === 'avg') return vals.reduce(function (p, q) { return p + q; }, 0) / vals.length;
+      if (w === 'min') return Math.min.apply(null, vals);
+      if (w === 'max') return Math.max.apply(null, vals);
+      return vals.reduce(function (p, q) { return p + q; }, 0);
+    }
+    return null;
+  }
+  function evalFormula(f, t, depth) {
+    var fi = formulaDefs();
+    var key = t.id + '|' + f.id;
+    if (key in fi.fcache) return fi.fcache[key];
+    fi.fcache[key] = null;          // กันวนระหว่างคำนวณ
+    var v = null;
+    try {
+      if (!f._tree || f._src !== f.expr) {
+        Object.defineProperty(f, '_tree', { value: fParse(fTokens(f.expr || '')), writable: true, enumerable: false, configurable: true });
+        Object.defineProperty(f, '_src', { value: f.expr, writable: true, enumerable: false, configurable: true });
+      }
+      v = fEval(f._tree, t, depth || 0);
+    } catch (e) { v = null; }
+    if (typeof v === 'number') v = isFinite(v) ? Math.round(v * 10000) / 10000 : null;
+    fi.fcache[key] = v;
+    return v;
+  }
+
+  /* ---------- ฟิลด์อ้างอิง ---------- */
+  var REF_KINDS = [['task', 'งาน'], ['project', 'โปรเจกต์'], ['portfolio', 'พอร์ตโฟลิโอ']];
+  function refItem(id) {
+    if (/^t_/.test(id)) { var t = task(id); return t && canSeeTask(id) ? { id: id, kind: 'task', name: t.name, done: t.completed } : null; }
+    if (/^p_/.test(id)) { var p = project(id); return p && projectAccess(id) ? { id: id, kind: 'project', name: p.name, color: p.color } : null; }
+    if (/^pf_/.test(id)) { var f = portfolio(id); return f ? { id: id, kind: 'portfolio', name: f.name, color: f.color } : null; }
+    return null;      // g_ (เป้าหมาย) รอชิ้นงาน 4a
+  }
+  function refNames(v) {
+    return [].concat(v || []).map(refItem).filter(Boolean).map(function (x) { return x.name; }).join(', ');
+  }
+  function refSearch(f, q) {
+    var ql = String(q || '').toLowerCase().trim(), kinds = (f && f.kinds && f.kinds.length) ? f.kinds : ['task', 'project', 'portfolio'];
+    var out = [];
+    if (kinds.indexOf('project') >= 0) visibleProjects().forEach(function (p) {
+      if (!ql || p.name.toLowerCase().indexOf(ql) >= 0) out.push({ id: p.id, kind: 'project', name: p.name, color: p.color });
+    });
+    if (kinds.indexOf('portfolio') >= 0) portfolios().forEach(function (pf) {
+      if (!ql || pf.name.toLowerCase().indexOf(ql) >= 0) out.push({ id: pf.id, kind: 'portfolio', name: pf.name, color: pf.color });
+    });
+    if (kinds.indexOf('task') >= 0 && ql) {
+      for (var i = 0; i < db.tasks.length && out.length < 40; i++) {
+        var t = db.tasks[i];
+        if (t.name.toLowerCase().indexOf(ql) >= 0 && canSeeTask(t.id)) out.push({ id: t.id, kind: 'task', name: t.name, done: t.completed });
+      }
+    }
+    return out.slice(0, 30);
+  }
+  function toggleRef(taskId, fieldId, refId) {
+    var cur = [].concat(fieldValue(taskId, fieldId) || []);
+    var at = cur.indexOf(refId);
+    if (at >= 0) cur.splice(at, 1); else cur.push(refId);
+    setFieldValue(taskId, fieldId, cur.length ? cur : null);
+  }
+
+  /* ---------- ตรวจรูป (หมุดบนรูป → งานย่อย) ---------- */
+  function attOf(taskId, attId) {
+    var t = task(taskId);
+    return t ? (t.attachments || []).filter(function (a) { return a.id === attId; })[0] || null : null;
+  }
+  function addProofPin(taskId, attId, x, y, text) {
+    var t = task(taskId), a = attOf(taskId, attId);
+    text = String(text || '').trim();
+    if (!a || !text || !isImageAtt(a)) return null;
+    var pin = null;
+    batch('ปักหมุดบนรูป', null, function () {
+      a.pins = a.pins || [];
+      var n = a.pins.reduce(function (m, p) { return Math.max(m, p.n); }, 0) + 1;
+      var sub = createTaskRaw({ name: '📍' + n + ' ' + text.slice(0, 200), parentId: taskId,
+        notes: L('หมุดที่ {n} บนรูป “{f}”', { n: n, f: a.name }), createdBy: db.currentUserId }, null, null);
+      pin = { n: n, x: Math.max(0, Math.min(1, +x || 0)), y: Math.max(0, Math.min(1, +y || 0)), text: text.slice(0, 1000),
+        taskId: sub.id, by: db.currentUserId, at: new Date().toISOString() };
+      a.pins.push(pin);
+      log(taskId, 'ปักหมุดที่ {n} บนรูป “{f}”', { n: n, f: a.name });
+    });
+    return pin;
+  }
+  function removeProofPin(taskId, attId, n) {
+    var a = attOf(taskId, attId);
+    if (!a || !a.pins) return false;
+    snapshot('เอาหมุดบนรูปออก');
+    a.pins = a.pins.filter(function (p) { return p.n !== n; });
+    commit();
+    return true;
+  }
+
+  /* ---------- เสียบเข้าส่วนที่ 1 (แดชบอร์ด ชนิดฟิลด์ สำเนา/เทมเพลต) ---------- */
+  var DASH_Y_EXTRA = [['est', 'เวลาประมาณ (ชม.)'], ['actual', 'เวลาจริง (ชม.)']];
+  fieldKindHook = function (f) {
+    if (f.type === 'formula') return f.out === 'date' ? 'date' : 'number';
+    if (f.type === 'ref') return 'text';
+    return null;
+  };
+  yHook = function (t, y) {
+    if (y === 'est') return timeRollup(t).est / 60;
+    if (y === 'actual') return timeRollup(t).act / 60;
+    return undefined;
+  };
+  renewHook = function (p) {
+    (p.pages || []).forEach(function (pg) {
+      pg.id = uid('pg'); pg.comments = []; pg.versions = []; pg.vAt = null;
+      pg.by = db.currentUserId; pg.at = new Date().toISOString(); pg.editedBy = null; pg.editedAt = null;
+    });
+  };
+  remapHook = function (p, idMap) {
+    (p.fields || []).forEach(function (f) { if (f.type === 'formula' && f.expr) f.expr = remapJson(f.expr, idMap); });
+  };
+  captureHook = {
+    capture: function (p, data) {
+      data.pages = (p.pages || []).map(function (pg) {
+        return { id: pg.id, title: pg.title, icon: pg.icon, body: pg.body, imgs: clone(pg.imgs || []) };
+      });
+    },
+    use: function (p, d) { p.pages = (d.pages || []).map(function (pg) { return normalizePage(clone(pg)); }); }
+  };
+
   db = hydrate();
 
   global.Store = {
@@ -9894,5 +10626,22 @@
     criticalPath: criticalPath, bulkChain: bulkChain, previewDates: previewDates, applyDates: applyDates
   };
   Object.keys(X3C).forEach(function (k) { global.Store[k] = X3C[k]; });
+  /* 3c ส่วนที่ 2 — หน้าเอกสาร เวลา สูตร อ้างอิง ตรวจรูป */
+  var X3C2 = {
+    PAGE_MAX: PAGE_MAX, PAGE_VERSIONS: PAGE_VERSIONS, PAGE_IMG_BYTES: PAGE_IMG_BYTES,
+    pageLoc: pageLoc, canSeePage: canSeePage, canEditPage: canEditPage, canCommentPage: canCommentPage,
+    projectPages: projectPages, myPages: myPages, notepadPage: notepadPage, ensureNotepadPage: ensureNotepadPage,
+    createPage: createPage, savePage: savePage, restorePageVersion: restorePageVersion, deletePage: deletePage,
+    setPagePrivate: setPagePrivate, addPageImage: addPageImage, pageImgMap: pageImgMap,
+    addPageComment: addPageComment, replyPageComment: replyPageComment, resolvePageComment: resolvePageComment,
+    deletePageComment: deletePageComment, taskFromPage: taskFromPage,
+    parseDuration: parseDuration, fmtMinutes: fmtMinutes, timeRollup: timeRollup, setEstimate: setEstimate,
+    addTimeEntry: addTimeEntry, deleteTimeEntry: deleteTimeEntry, runningTimer: runningTimer,
+    startTimer: startTimer, stopTimer: stopTimer, discardTimer: discardTimer, projectTimeCsv: projectTimeCsv,
+    FORMULA_BUILTIN: FORMULA_BUILTIN, compileFormula: compileFormula, formulaText: formulaText,
+    REF_KINDS: REF_KINDS, refItem: refItem, refNames: refNames, refSearch: refSearch, toggleRef: toggleRef,
+    addProofPin: addProofPin, removeProofPin: removeProofPin, DASH_Y_EXTRA: DASH_Y_EXTRA
+  };
+  Object.keys(X3C2).forEach(function (k) { global.Store[k] = X3C2[k]; });
 
 })(window);

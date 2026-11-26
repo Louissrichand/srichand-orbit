@@ -178,7 +178,8 @@
 
   function buildHash() {
     var r = state.route, parts;
-    if (r.type === 'project') parts = ['project', r.id, r.sv || r.view];
+    if (r.type === 'project') parts = ['project', r.id, r.sv || r.view].concat(r.view === 'pages' && r.page ? [r.page] : []);
+    else if (r.type === 'pages') parts = r.page ? ['pages', r.page] : ['pages'];
     else if (r.type === 'portfolio') parts = ['portfolio', r.id, r.view || 'list'];
     else if (r.type === 'search') parts = r.ss ? ['saved', r.ss] : (r.q ? ['search', encodeURIComponent(r.q)] : ['search']);
     else if (r.type === 'tag') parts = ['tag', encodeURIComponent(r.name)];
@@ -248,6 +249,7 @@
         : (!seg[2] && p.defaultTab ? p.defaultTab : null);
       var sv = svId ? S.savedView(seg[1], svId) : null;
       if (sv) return { route: { type: 'project', id: seg[1], view: sv.kind || 'list', sv: sv.id }, taskId: taskId };
+      if (seg[2] === 'pages' && okViews.indexOf('pages') >= 0) return { route: { type: 'project', id: seg[1], view: 'pages', page: seg[3] && S.pageLoc(seg[3]) ? seg[3] : null }, taskId: taskId };
       var v = seg[2] || p.defaultView || okViews[0];
       if (okViews.indexOf(v) < 0) v = okViews[0];
       return { route: { type: 'project', id: seg[1], view: v }, taskId: taskId };
@@ -285,6 +287,13 @@
     }
     /* 3b — หน้าส่งฟอร์ม #/form/<id> */
     if (type === 'form' && seg[1]) return { route: { type: 'form', id: seg[1] }, taskId: taskId };
+    /* 3c — หน้าเอกสาร #/pages[/<id>] และลิงก์ตรง #/page/<id> (หน้าของโปรเจกต์พาไปแท็บหน้าของโปรเจกต์) */
+    if (type === 'pages') return { route: { type: 'pages', page: seg[1] && S.pageLoc(seg[1]) ? seg[1] : null }, taskId: taskId };
+    if (type === 'page' && seg[1]) {
+      var pgl = S.pageLoc(seg[1]);
+      if (!pgl) return null;
+      return { route: pgl.project ? { type: 'project', id: pgl.project.id, view: 'pages', page: seg[1] } : { type: 'pages', page: seg[1] }, taskId: taskId };
+    }
     if (['home', 'mytasks', 'inbox', 'calendar', 'admin', 'projects', 'trash'].indexOf(type) >= 0) {
       return { route: { type: type }, taskId: taskId };
     }
@@ -350,6 +359,7 @@
       else if (r.view === 'overview') body = R.overviewView(r.id);
       else if (r.view === 'files') body = R.filesView(r.id);
       else if (r.view === 'messages') body = R.messagesView(r.id, { files: state.msgFiles });
+      else if (r.view === 'pages') body = R.pagesView(r.id, r.page, pageUi());
       else body = R.listView(r.id, v, state.sel, { subOpen: state.subOpen, cursor: state.cursor });
     } else if (r.type === 'portfolio') {
       if (!S.portfolio(r.id)) { state.route = { type: 'home' }; return renderAll(); }
@@ -358,6 +368,8 @@
       body = R.myTasksView(state.sel, state.mt);
     } else if (r.type === 'inbox') {
       body = R.inboxView(state.inbox);
+    } else if (r.type === 'pages') {
+      body = R.pagesView('', r.page, pageUi());
     } else if (r.type === 'calendar') {
       body = R.globalCalendar(S.calPrefs(), calxGet('all').anchor);
     } else if (r.type === 'projects') {
@@ -414,6 +426,7 @@
       }
     }
     restoreMsgDrafts();
+    markPageAnchors();
     if (keepEd) {
       var ne3 = $view.querySelector('.rte[data-key="' + keepEd.key + '"]');
       if (ne3) { ne3.innerHTML = keepEd.html; ne3.focus(); global.RichText.setOffsets(ne3, keepEd.off); }
@@ -1022,10 +1035,13 @@
       hideGate();
     }
     applyTheme();
+    /* 3c — สมุดโน้ตส่วนตัวเป็นหน้าเอกสาร สร้างให้ครั้งแรกที่เปิดแอป (commit แล้ววาดใหม่เอง) */
+    if (S.me() && !S.notepadPage() && S.ensureNotepadPage()) return;
     $sidebar.innerHTML = R.sidebar(state.route);
     renderTopbar();
     renderViewBody();
     renderDrawer();
+    renderPill();
     if (!skipHash) syncHash();
   }
 
@@ -1306,6 +1322,14 @@
     var f = p.fields.filter(function (x) { return x.id === fid; })[0];
     if (!f) return;
     var cur = S.fieldValue(tid, fid);
+    if (f.type === 'formula') return;          // 3c — สูตรแก้ไม่ได้
+    if (f.type === 'ref') {                      // 3c — เลือกงาน/โปรเจกต์/พอร์ตโฟลิโอ
+      if (popIsOpenFor(cell)) { closePops(); return; }
+      cell.style.position = 'relative';
+      openPop(cell, refPop(tid, fid, ''));
+      setTimeout(function () { var q = document.getElementById('refQ'); if (q) q.focus(); }, 20);
+      return;
+    }
 
     if (f.type === 'select' || f.type === 'multi') {
       if (popIsOpenFor(cell)) { closePops(); return; }
@@ -1603,7 +1627,7 @@
 
   /** @param forLib  true = สร้างในคลังฟิลด์ขององค์กร (ไม่มีชนิดรหัสงาน) */
   function addFieldModal(type, forLib) {
-    var types = S.FIELD_TYPES.filter(function (x) { return !forLib || x.id !== 'id'; });
+    var types = S.FIELD_TYPES.filter(function (x) { return !forLib || (x.id !== 'id' && x.id !== 'formula' && x.id !== 'ref'); });
     var ft = types.filter(function (x) { return x.id === type; })[0] || types[0];
     var h = '<h2>' + (forLib ? L('สร้างฟิลด์ในคลัง') : L('เพิ่มฟิลด์')) + '</h2>';
 
@@ -1631,7 +1655,11 @@
       '<input id="nfPrefix" maxlength="8" value="ID" placeholder="REQ"><div class="fld-hint">' +
       L('งานในโปรเจกต์ได้เลขรันเอง เช่น REQ-1, REQ-2 ค้นหาและพิมพ์ @REQ-2 ในความเห็นได้') + '</div></div>';
 
-    h += '<div id="nfNumWrap"' + (ft.id === 'number' ? '' : ' hidden') + '>' + numberFormatFields(null) + '</div>';
+    h += formulaFieldsHtml(state.route.id, '', ft.id !== 'formula');      // 3c — สูตรและอ้างอิง
+    h += '<div class="field" id="nfRefWrap"' + (ft.id === 'ref' ? '' : ' hidden') + '><label>' + L('อ้างอิงถึง') + '</label>' +
+      S.REF_KINDS.map(function (k) { return '<label class="chk"><input type="checkbox" class="nf-refkind" value="' + k[0] + '" checked> ' + L(k[1]) + '</label>'; }).join('') +
+      '<div class="fld-hint">' + L('เป้าหมายจะเพิ่มได้เมื่อมีหน้าเป้าหมาย (ชิ้นงาน 4a)') + '</div></div>';
+    h += '<div id="nfNumWrap"' + (ft.id === 'number' || ft.id === 'formula' ? '' : ' hidden') + '>' + numberFormatFields(null) + '</div>';
 
     if (!forLib) {
       h += '<label class="chk" id="nfLibWrap"' + (ft.id === 'id' ? ' hidden' : '') + '><input type="checkbox" id="nfLib"> ' +
@@ -1808,6 +1836,7 @@
     h += '<div class="pop-sep"></div>';
     h += item('import-csv', 'archive', L('นำเข้างานจาก CSV'));
     h += item('export-csv', 'send', L('ส่งออกเป็น CSV'));
+    h += item('time-csv', 'send', L('ส่งออกเวลาที่บันทึก (CSV)'));          // 3c
     h += item('export-json', 'send', L('ส่งออกเป็น JSON'));
     h += item('export-ics', 'calendar', L('ดาวน์โหลดปฏิทิน .ics'));
     h += item('print-list', 'note', L('พิมพ์รายการงาน'));
@@ -4644,7 +4673,8 @@
       h += '<label class="chk"><input type="checkbox" id="feNotify"' + (f.notify ? ' checked' : '') + '> ' +
         L('แจ้งผู้ติดตามงานเมื่อค่าในฟิลด์นี้เปลี่ยน') + '</label>';
     }
-    if (f.type === 'number') h += numberFormatFields(f.format);
+    if (f.type === 'formula') h += formulaFieldsHtml(projectId, S.formulaText(f), false, f.id);   // 3c
+    if (f.type === 'number' || f.type === 'formula') h += numberFormatFields(f.format);
     h += '<div class="modal-acts"><button class="btn" data-act="' + (projectId ? 'manage-fields' : 'field-lib') +
       '" data-id="' + R.esc(projectId || '') + '">' + L('ยกเลิก') + '</button>' +
       '<button class="btn btn-primary" data-act="do-field-edit" data-project="' + R.esc(projectId || '') +
@@ -5989,6 +6019,374 @@
     return false;
   }
 
+  /* ====================== 3c ส่วนที่ 2 — หน้าเอกสาร เวลา สูตร อ้างอิง ตรวจรูป ====================== */
+
+  state.pgShowResolved = false;
+  state.pageSel = null;            // ข้อความที่เลือกล่าสุดในตัวแก้หน้า { id, text, range }
+
+  /** ช่องพิมพ์สูตร + ตัวช่วยกดแทรกฟิลด์/ฟังก์ชัน */
+  function formulaFieldsHtml(pid, text, hidden, selfId) {
+    var p = S.project(pid);
+    var chips = S.FORMULA_BUILTIN.map(function (b) { return L(b[1]); });
+    ((p && p.fields) || []).forEach(function (f) {
+      if (f.id !== selfId && (f.type === 'number' || f.type === 'date' || f.type === 'formula')) chips.push(f.name);
+    });
+    return '<div class="field" id="nfFxWrap"' + (hidden ? ' hidden' : '') + '><label>' + L('สูตร') + ' *</label>' +
+      '<textarea id="nfExpr" rows="2" class="fx-in" placeholder="' + esc(L('เช่น {งบ} - {ใช้ไป}  หรือ  DateAdd({กำหนดส่ง}, 7)')) + '">' + esc(text || '') + '</textarea>' +
+      '<div class="fx-chips">' + chips.map(function (c) {
+        return '<button type="button" class="fx-chip" data-act="fx-ins" data-v="{' + esc(c) + '}">{' + esc(c) + '}</button>';
+      }).join('') + ['DateAdd(, )', 'DateSubtract(, )', 'Today()', 'Rollup(sum, )'].map(function (c) {
+        return '<button type="button" class="fx-chip fn" data-act="fx-ins" data-v="' + esc(c) + '">' + esc(c.replace(/\(.*$/, '')) + '</button>';
+      }).join('') + '</div><div class="fld-hint">' +
+      L('ใช้ + − × ÷ และวงเล็บกับฟิลด์ตัวเลข/วันที่ วันที่ − วันที่ = จำนวนวัน · Rollup รวมค่าจากงานย่อย · ค่าคำนวณเองทุกครั้งที่เปิดดู แก้ด้วยมือไม่ได้') +
+      '</div></div>';
+  }
+
+  /* ---------- หน้าเอกสาร ---------- */
+  function pageUi() { return { showResolved: state.pgShowResolved }; }
+
+  /** บันทึกตัวแก้หน้า (ออกจากช่อง หรือก่อนสร้างงาน/ความเห็น) */
+  function savePageEditor(ed, quiet) {
+    if (!ed || !ed.dataset || ed.dataset.save !== 'page') return false;
+    var id = ed.dataset.id, l = S.pageLoc(id);
+    if (!l) return false;
+    var md = global.RichText.fromNode(ed, { blocks: true });
+    if (md === l.page.body) return false;
+    return S.savePage(id, { body: md });
+  }
+  document.addEventListener('focusout', function (e) {
+    var ed = e.target;
+    if (!ed || !ed.classList || !ed.classList.contains('rte') || ed.dataset.save !== 'page') return;
+    afterClick(function () { savePageEditor(ed); });
+  });
+  /* ข้อความที่เลือกในหน้า — ปุ่ม "ความเห็น" / "สร้างงาน" ใช้ค่านี้ (กดปุ่มแล้วการเลือกอาจหายไป) */
+  document.addEventListener('selectionchange', function () {
+    var sel = global.getSelection();
+    if (!sel || !sel.rangeCount || sel.isCollapsed) return;
+    var r = sel.getRangeAt(0);
+    var host = r.commonAncestorContainer.nodeType === 1 ? r.commonAncestorContainer : r.commonAncestorContainer.parentNode;
+    var pg = host && host.closest ? host.closest('.pg[data-page]') : null;
+    if (!pg || !host.closest('.rte-page')) return;
+    var txt = sel.toString().replace(/\s+/g, ' ').trim();
+    if (txt) state.pageSel = { id: pg.dataset.page, text: txt.slice(0, 300), range: r.cloneRange() };
+  });
+
+  /** ไฮไลต์ข้อความที่มีความเห็นค้างอยู่ (ครั้งแรกที่เจอในหน้า) — <mark> ไม่ถูกเก็บลงเนื้อหา */
+  function markPageAnchors() {
+    Array.prototype.forEach.call($view.querySelectorAll('.pg[data-page]'), function (pgEl) {
+      var l = S.pageLoc(pgEl.dataset.page);
+      var body = pgEl.querySelector('.rte-page');
+      if (!l || !body) return;
+      l.page.comments.forEach(function (c) {
+        if (c.resolved || !c.quote) return;
+        var w = document.createTreeWalker(body, 4, null, false), n;
+        while ((n = w.nextNode())) {
+          var at = n.nodeValue.indexOf(c.quote);
+          if (at < 0) continue;
+          var r = document.createRange();
+          r.setStart(n, at); r.setEnd(n, at + c.quote.length);
+          var mk = document.createElement('mark');
+          mk.className = 'pg-anc'; mk.dataset.c = c.id;
+          try { r.surroundContents(mk); } catch (e) { /* ข้ามโหนด */ }
+          break;
+        }
+      });
+    });
+  }
+
+  function versionsModal(id) {
+    var l = S.pageLoc(id);
+    if (!l) return '';
+    var vs = l.page.versions.map(function (v, i) { return { v: v, i: i }; }).reverse();
+    var h = '<h2>' + L('ประวัติเวอร์ชัน') + '</h2><p class="modal-sub">' +
+      esc(L('เก็บ {n} เวอร์ชันล่าสุด บันทึกเวอร์ชันเมื่อแก้ห่างกันเกิน 10 นาทีหรือคนแก้เปลี่ยน', { n: S.PAGE_VERSIONS })) + '</p><div class="pgver">';
+    if (!vs.length) h += '<div class="ovw-empty">' + L('ยังไม่มีเวอร์ชันเก่า') + '</div>';
+    var canEdit = S.canEditPage(id);
+    vs.forEach(function (x) {
+      var u = S.user(x.v.by);
+      h += '<div class="pgver-row"><div class="grow"><b>' + esc(x.v.title || L('ไม่มีชื่อ')) + '</b><em>' + esc((u ? u.name : '—') + ' · ' + R.fmtExact(x.v.at)) +
+        '</em><div class="pgver-txt">' + esc(S.plainText(x.v.body).replace(/\s+/g, ' ').slice(0, 220)) + '</div></div>' +
+        (canEdit ? '<button class="btn btn-sm" data-act="pg-restore" data-id="' + esc(id) + '" data-i="' + x.i + '">' + L('กู้คืน') + '</button>' : '') + '</div>';
+    });
+    return h + '</div><div class="modal-actions"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
+  }
+
+  /* ตัวเลือกรูปของปุ่ม "แทรกรูป" — รูปเก็บที่หน้าเอกสาร (≤ 500 KB) ไม่ใช่ในเนื้อหา */
+  var imgInput = null;
+  global.RichText.pickImage = function (ed, cb) {
+    var id = ed && ed.dataset.id;
+    if (!id || !S.pageLoc(id)) { toast(L('แทรกรูปได้เฉพาะในหน้าเอกสาร')); return; }
+    if (!imgInput) {
+      imgInput = document.createElement('input');
+      imgInput.type = 'file'; imgInput.accept = 'image/png,image/jpeg,image/gif,image/webp'; imgInput.hidden = true;
+      document.body.appendChild(imgInput);
+    }
+    imgInput.onchange = function () {
+      readFiles(imgInput, S.PAGE_IMG_BYTES, function (list, skipped) {
+        skippedToast(skipped, '500 KB');
+        list.forEach(function (f) {
+          var im = S.addPageImage(id, f.name, f.url);
+          if (im) cb(im.id, im.url, '');
+          else toast(L('แทรกรูปไม่ได้ (ชนิดไฟล์ ขนาด หรือครบจำนวนแล้ว)'));
+        });
+      });
+    };
+    imgInput.click();
+  };
+  global.RichText.imgs = function (imgId) {
+    var all = (S.db.pages || []).slice();
+    S.db.projects.forEach(function (p) { all = all.concat(p.pages || []); });
+    for (var i = 0; i < all.length; i++) {
+      var hit = (all[i].imgs || []).filter(function (x) { return x.id === imgId; })[0];
+      if (hit) return hit.url;
+    }
+    return '';
+  };
+
+  /* ---------- นาฬิกาจับเวลาลอย ---------- */
+  var $pill = document.createElement('div');
+  $pill.id = 'timerPill';
+  document.body.appendChild($pill);
+  function renderPill() { $pill.innerHTML = S.isActive() ? R.timerPill() : ''; tickTimers(); }
+  function tickTimers() {
+    Array.prototype.forEach.call(document.querySelectorAll('.tt-live[data-start]'), function (x) {
+      var s = Math.max(0, Math.floor((Date.now() - Date.parse(x.dataset.start)) / 1000));
+      var hh = Math.floor(s / 3600), mm = Math.floor(s / 60) % 60, ss = s % 60;
+      x.textContent = (hh ? hh + ':' : '') + (mm < 10 && hh ? '0' : '') + mm + ':' + (ss < 10 ? '0' : '') + ss;
+    });
+  }
+  setInterval(tickTimers, 1000);
+
+  function timeAddModal(taskId) {
+    return '<h2>' + L('บันทึกเวลา') + '</h2>' +
+      '<div class="field"><label>' + L('วันที่') + '</label><input id="teDate" type="date" value="' + S.today() + '"></div>' +
+      '<div class="field"><label>' + L('ระยะเวลา') + ' *</label><input id="teDur" placeholder="' + esc(L('เช่น 1h 30m, 1:30 หรือ 45m')) + '"></div>' +
+      '<div class="field"><label>' + L('บันทึก') + '</label><input id="teNote" maxlength="500" placeholder="' + esc(L('ทำอะไรไป (ไม่บังคับ)')) + '"></div>' +
+      '<div class="modal-actions"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="tt-save" data-id="' + esc(taskId) + '">' + L('บันทึก') + '</button></div>';
+  }
+
+  /* ---------- ฟิลด์อ้างอิง ---------- */
+  function refPop(taskId, fid, q) {
+    var f = S.fieldDef(fid);
+    var cur = [].concat(S.fieldValue(taskId, fid) || []);
+    var h = '<div class="ref-pop"><input class="inp" id="refQ" data-id="' + esc(taskId) + '" data-field="' + esc(fid) + '" value="' + esc(q || '') +
+      '" placeholder="' + esc(L('ค้นหางาน โปรเจกต์ หรือพอร์ตโฟลิโอ')) + '"><div class="ref-res">';
+    var list = S.refSearch(f, q);
+    cur.forEach(function (id) { if (!list.some(function (x) { return x.id === id; })) { var it = S.refItem(id); if (it) list.unshift(it); } });
+    if (!list.length) h += '<div class="ovw-empty">' + L('พิมพ์เพื่อค้นหางาน') + '</div>';
+    list.forEach(function (x) {
+      var on = cur.indexOf(x.id) >= 0;
+      h += '<button data-act="ref-toggle" data-id="' + esc(taskId) + '" data-field="' + esc(fid) + '" data-ref="' + esc(x.id) + '">' +
+        popCheck(on) + '<span class="grow">' + esc(x.name) + '</span><em>' + esc(L(({ task: 'งาน', project: 'โปรเจกต์', portfolio: 'พอร์ตโฟลิโอ' })[x.kind])) + '</em></button>';
+    });
+    return h + '</div></div>';
+  }
+  document.addEventListener('input', function (e) {
+    if (!e.target || e.target.id !== 'refQ') return;
+    var q = e.target.value, res = e.target.parentNode.querySelector('.ref-res');
+    var tmp = document.createElement('div');
+    tmp.innerHTML = refPop(e.target.dataset.id, e.target.dataset.field, q);
+    if (res) res.innerHTML = tmp.querySelector('.ref-res').innerHTML;
+  });
+
+  function pageRoute(pid, pageId) {
+    if (pid) state.route = { type: 'project', id: pid, view: 'pages', page: pageId || null };
+    else state.route = { type: 'pages', page: pageId || null };
+    renderAll();
+  }
+
+  /** คำสั่งคลิกของ 3c ส่วนที่ 2 */
+  function act3c2(act, el, e) {
+    var id = el.dataset.id;
+    switch (act) {
+      /* --- หน้าเอกสาร --- */
+      case 'pg-new': {
+        var npid = el.dataset.project || '';
+        askText(L('ชื่อหน้า'), '', function (title) {
+          var x = S.createPage(npid || null, { title: title || '', private: false });
+          if (!x) { toast(L('สร้างหน้าไม่ได้ (สิทธิ์หรือครบจำนวนแล้ว)')); return; }
+          pageRoute(npid, x.id);
+          setTimeout(function () { var ed = $view.querySelector('.rte-page[contenteditable="true"]'); if (ed) ed.focus(); }, 50);
+        }, { ok: L('สร้าง'), note: npid ? '' : L('หน้าใหม่ทุกคนในองค์กรเห็นได้ เปลี่ยนเป็นส่วนตัวได้จากปุ่มรูปกุญแจ') });
+        return true;
+      }
+      case 'pg-open': pageRoute(el.dataset.project || '', id); return true;
+      case 'pg-del':
+        askConfirm(L('ลบหน้านี้?'), L('ความเห็นและประวัติเวอร์ชันของหน้านี้หายไปด้วย ย้อนกลับได้ทันทีหลังลบ'), function () {
+          var l = S.pageLoc(id);
+          var pid = l && l.project ? l.project.id : '';
+          if (S.deletePage(id)) { pageRoute(pid, null); toast(L('ลบหน้าแล้ว'), L('ย้อนกลับ'), 'undo'); }
+        }, { ok: L('ลบ'), danger: true });
+        return true;
+      case 'pg-private': {
+        var pl = S.pageLoc(id);
+        if (pl) S.setPagePrivate(id, !pl.page.private);
+        return true;
+      }
+      case 'pg-versions': {
+        var ed0 = $view.querySelector('.rte-page[data-id="' + id + '"]');
+        if (ed0) savePageEditor(ed0);
+        openModal(versionsModal(id), true);
+        return true;
+      }
+      case 'pg-restore':
+        if (S.restorePageVersion(id, +el.dataset.i)) { closeModal(); toast(L('กู้คืนเวอร์ชันแล้ว'), L('ย้อนกลับ'), 'undo'); }
+        return true;
+      case 'pg-show-resolved': state.pgShowResolved = !state.pgShowResolved; renderViewBody(); return true;
+      case 'pg-comment': {
+        var ps = state.pageSel;
+        if (!ps || ps.id !== id) { toast(L('เลือกข้อความในหน้าก่อน แล้วกดอีกครั้ง')); return true; }
+        var ed1 = $view.querySelector('.rte-page[data-id="' + id + '"]');
+        if (ed1) savePageEditor(ed1);
+        askText(L('ความเห็นต่อ “{q}”', { q: ps.text.length > 40 ? ps.text.slice(0, 39) + '…' : ps.text }), '', function (txt) {
+          if (txt && S.addPageComment(id, ps.text, txt)) { state.pageSel = null; toast(L('แสดงความเห็นแล้ว'), L('ย้อนกลับ'), 'undo'); }
+        }, { ok: L('ส่ง'), multiline: true });
+        return true;
+      }
+      case 'pg-task': {
+        var pt = state.pageSel;
+        if (!pt || pt.id !== id) { toast(L('เลือกข้อความในหน้าก่อน แล้วกดอีกครั้ง')); return true; }
+        var ed2 = $view.querySelector('.rte-page[contenteditable="true"][data-id="' + id + '"]');
+        if (ed2) savePageEditor(ed2);                  // เนื้อหาล่าสุดลงที่เก็บก่อน
+        var nt = S.taskFromPage(id, pt.text);
+        if (!nt) { toast(L('สร้างงานไม่ได้ในหน้านี้')); return true; }
+        /* แทนข้อความที่เลือกด้วยป้ายอ้างถึงงาน (ครั้งแรกที่เจอในเนื้อหา) แล้วบันทึกหน้า */
+        var pl2 = S.pageLoc(id);
+        if (pl2 && S.canEditPage(id)) {
+          var at2 = pl2.page.body.indexOf(pt.text);
+          if (at2 >= 0) {
+            S.savePage(id, { body: pl2.page.body.slice(0, at2) + '@[' + nt.name.replace(/[\[\]\n]/g, ' ') + '](' + nt.id + ')' +
+              pl2.page.body.slice(at2 + pt.text.length) });
+          }
+        }
+        state.pageSel = null;
+        toast(L('สร้างงาน “{t}” แล้ว', { t: nt.name }), L('เปิดงาน'), 'open-task" data-id="' + nt.id);
+        return true;
+      }
+      case 'pg-reply': {
+        var inp = $view.querySelector('.pgc-reply[data-c="' + el.dataset.c + '"]');
+        if (!inp || !inp.value.trim()) { toast(L('พิมพ์ข้อความก่อน')); return true; }
+        S.replyPageComment(id, el.dataset.c, inp.value);
+        return true;
+      }
+      case 'pg-resolve': S.resolvePageComment(id, el.dataset.c, el.dataset.v === '1'); return true;
+      case 'pg-cdel':
+        if (S.deletePageComment(id, el.dataset.c)) toast(L('ลบความเห็นแล้ว'), L('ย้อนกลับ'), 'undo');
+        return true;
+      case 'pg-quote': {
+        var mk = $view.querySelector('mark.pg-anc[data-c="' + el.dataset.c + '"]');
+        if (!mk) { toast(L('ไม่พบข้อความนี้ในหน้าแล้ว')); return true; }
+        mk.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        mk.classList.add('flash');
+        setTimeout(function () { mk.classList.remove('flash'); }, 1600);
+        return true;
+      }
+      case 'np-open':
+        state.route = { type: 'mytasks' };
+        S.mtSetView({ mode: 'notes' });
+        renderAll();
+        return true;
+
+      /* --- เวลา --- */
+      case 'timer-start':
+        S.startTimer(id);
+        toast(L('เริ่มจับเวลาแล้ว'));
+        return true;
+      case 'timer-stop': {
+        var te = S.stopTimer();
+        if (te) toast(L('บันทึกเวลา {v} แล้ว', { v: S.fmtMinutes(te.minutes) }), L('ย้อนกลับ'), 'undo');
+        return true;
+      }
+      case 'timer-discard':
+        askConfirm(L('ทิ้งเวลาที่จับอยู่?'), L('เวลาที่จับไว้จะไม่ถูกบันทึก'), function () { S.discardTimer(); }, { ok: L('ทิ้ง'), danger: true });
+        return true;
+      case 'tt-add': openModal(timeAddModal(id)); setTimeout(function () { var d = document.getElementById('teDur'); if (d) d.focus(); }, 30); return true;
+      case 'tt-save': {
+        var mins = S.parseDuration((document.getElementById('teDur') || {}).value);
+        if (!mins) { toast(L('ใส่ระยะเวลาให้ถูกต้อง เช่น 1h 30m')); return true; }
+        S.addTimeEntry(id, { minutes: mins, date: (document.getElementById('teDate') || {}).value, note: (document.getElementById('teNote') || {}).value });
+        closeModal();
+        toast(L('บันทึกเวลา {v} แล้ว', { v: S.fmtMinutes(mins) }), L('ย้อนกลับ'), 'undo');
+        return true;
+      }
+      case 'tt-del':
+        if (S.deleteTimeEntry(id, el.dataset.e)) toast(L('ลบรายการเวลาแล้ว'), L('ย้อนกลับ'), 'undo');
+        return true;
+      case 'time-csv': {
+        closePops();
+        var tp = S.project(id);
+        if (tp) downloadText(S.projectTimeCsv(id), safeFileName(tp.name) + '-time.csv', 'text/csv;charset=utf-8');
+        return true;
+      }
+
+      /* --- ฟิลด์สูตร / อ้างอิง --- */
+      case 'fx-ins': {
+        var ta = document.getElementById('nfExpr');
+        if (!ta) return true;
+        var a = ta.selectionStart || ta.value.length, b = ta.selectionEnd || a;
+        ta.value = ta.value.slice(0, a) + el.dataset.v + ta.value.slice(b);
+        ta.focus();
+        var caret = a + el.dataset.v.length - (/\(.*\)$/.test(el.dataset.v) && el.dataset.v.slice(-2) !== '()' ? el.dataset.v.length - el.dataset.v.indexOf('(') - 1 : 0);
+        try { ta.setSelectionRange(caret, caret); } catch (e3) {}
+        return true;
+      }
+      case 'ref-pick': {
+        if (popIsOpenFor(el)) { closePops(); return true; }
+        openPop(el, refPop(id, el.dataset.field, ''));
+        setTimeout(function () { var q = document.getElementById('refQ'); if (q) q.focus(); }, 20);
+        return true;
+      }
+      case 'ref-toggle': {
+        S.toggleRef(id, el.dataset.field, el.dataset.ref);
+        var rq = document.getElementById('refQ');
+        var pop = el.closest('.pop');
+        if (pop) {
+          var tmp = document.createElement('div');
+          tmp.innerHTML = refPop(id, el.dataset.field, rq ? rq.value : '');
+          pop.querySelector('.ref-res').innerHTML = tmp.querySelector('.ref-res').innerHTML;
+        }
+        return true;
+      }
+
+      /* --- ตรวจรูป --- */
+      case 'proof-open': openModal(R.proofHtml(id, el.dataset.att), true); return true;
+      case 'proof-pin': {
+        if (!S.can('write', id)) return true;
+        var img = el.querySelector('img');
+        if (!img || (e.target.classList && e.target.classList.contains('proof-pin'))) return true;
+        var rc = img.getBoundingClientRect(), ev = e;
+        var px = (ev.clientX - rc.left) / rc.width, py = (ev.clientY - rc.top) / rc.height;
+        if (px < 0 || px > 1 || py < 0 || py > 1) return true;
+        var att = el.dataset.att;
+        askText(L('ความเห็นของหมุดนี้'), '', function (txt) {
+          if (!txt) { openModal(R.proofHtml(id, att), true); return; }
+          var pin = S.addProofPin(id, att, px, py, txt);
+          openModal(R.proofHtml(id, att), true);
+          if (pin) toast(L('ปักหมุดที่ {n} แล้ว และสร้างงานย่อยให้', { n: pin.n }), L('ย้อนกลับ'), 'undo');
+        }, { ok: L('ปักหมุด') });
+        return true;
+      }
+      case 'proof-unpin':
+        S.removeProofPin(id, el.dataset.att, +el.dataset.n);
+        openModal(R.proofHtml(id, el.dataset.att), true);
+        return true;
+    }
+    return false;
+  }
+
+  function change3c2(act, el) {
+    if (act === 'pg-title') { S.savePage(el.dataset.id, { title: el.value }); return true; }
+    if (act === 'tt-est') {
+      var v = el.value.trim();
+      var mins = v ? S.parseDuration(v) : null;
+      if (v && mins == null) { toast(L('ใส่ระยะเวลาให้ถูกต้อง เช่น 1h 30m')); renderDrawer(); return true; }
+      S.setEstimate(el.dataset.id, mins);
+      return true;
+    }
+    return false;
+  }
+
   /* ---------- ด่านตรวจสิทธิ์ ----------
    *
    * ทุกคำสั่งในแอปวิ่งผ่านตัวจัดการคลิกตัวเดียว จึงกันได้ที่จุดเดียวจบ
@@ -6124,6 +6522,13 @@
     put('comment', ['msg-reply', 'msg-reply-del', 'msg-join', 'msg-file', 'msg-file-pick', 'msg-file-del', 'post-message']);
     put('self', ['crit-toggle']);
     put('write', ['bulk-chain', 'shift-apply', 'shift-only']);
+    /* 3c ส่วนที่ 2 — หน้าเอกสาร (store ตรวจสิทธิ์ของหน้า: หน้าของโปรเจกต์ = แก้โปรเจกต์ได้ หน้าเดี่ยว = เจ้าของ/ทุกคน)
+     * เวลา: ประมาณ = แก้งานได้ บันทึกเวลา/จับเวลา = แสดงความเห็นได้ ตรวจรูป/อ้างอิง = แก้งานได้ */
+    put('self', ['pg-new', 'pg-del', 'pg-private', 'pg-restore', 'pg-comment', 'pg-reply', 'pg-resolve', 'pg-cdel', 'pg-title',
+      'timer-stop', 'timer-discard']);
+    put('create', ['pg-task']);
+    put('write:task', ['tt-est', 'proof-pin', 'proof-unpin', 'ref-toggle']);
+    put('comment', ['tt-add', 'tt-save', 'tt-del', 'timer-start']);
     return map;
   })();
 
@@ -6212,6 +6617,7 @@
     var projectId = el.dataset.project;
     if (!allowed(act, el)) return;
     if (act3c(act, el, e)) return;                // 3c
+    if (act3c2(act, el, e)) return;
 
     switch (act) {
 
@@ -6349,17 +6755,23 @@
           if (!opts.length) { toast(L('ใส่ตัวเลือกอย่างน้อย 1 รายการ')); return; }
         }
         var fdef = { name: nm, type: ty, options: opts,
-          format: ty === 'number' ? readNumberFormat() : null,
+          format: ty === 'number' || ty === 'formula' ? readNumberFormat() : null,
           desc: ((document.getElementById('nfDesc') || {}).value || '').trim(),
           notify: !!(document.getElementById('nfNotify') || {}).checked,
           prefix: (document.getElementById('nfPrefix') || {}).value };
+        if (ty === 'formula') {          // 3c — ตรวจสูตรก่อนสร้าง (ชื่อฟิลด์ → รหัส)
+          var cfx = S.compileFormula(state.route.id, (document.getElementById('nfExpr') || {}).value || '');
+          if (cfx.error) { toast(L('สูตรไม่ถูกต้อง: {e}', { e: L(cfx.error, cfx.p) })); break; }
+          fdef.expr = cfx.expr; fdef.out = cfx.out;
+        }
+        if (ty === 'ref') fdef.kinds = Array.prototype.map.call(document.querySelectorAll('.nf-refkind:checked'), function (x) { return x.value; });
         if (el.dataset.lib) {
           S.createLibField(fdef);
           openModal(libModal());
           toast(L('สร้างฟิลด์ในคลังแล้ว'), L('ย้อนกลับ'), 'undo');
           break;
         }
-        var toLib = !!(document.getElementById('nfLib') || {}).checked && ty !== 'id';
+        var toLib = !!(document.getElementById('nfLib') || {}).checked && ty !== 'id' && ty !== 'formula' && ty !== 'ref';
         var cfPid = state.route.id;
         S.batch('เพิ่มฟิลด์', null, function () {
           var nfx = S.addField(cfPid, fdef);
@@ -6386,6 +6798,11 @@
         }
         if (document.getElementById('fePrefix')) fePatch.prefix = document.getElementById('fePrefix').value;
         if (document.getElementById('nfKind')) fePatch.format = readNumberFormat();
+        if (document.getElementById('nfExpr')) {          // 3c — สูตร
+          var fex = S.compileFormula(fePid, document.getElementById('nfExpr').value, el.dataset.field);
+          if (fex.error) { toast(L('สูตรไม่ถูกต้อง: {e}', { e: L(fex.error, fex.p) })); break; }
+          fePatch.expr = fex.expr; fePatch.out = fex.out;
+        }
         S.updateFieldDef(fePid, el.dataset.field, fePatch);
         openModal(fePid ? fieldsModal(fePid) : libModal());
         toast(L('บันทึกฟิลด์แล้ว'), L('ย้อนกลับ'), 'undo');
@@ -9589,6 +10006,7 @@
     var act = el.dataset.act;
     if (!allowed(act, el)) { renderAll(); return; }   // วาดใหม่เพื่อคืนค่าเดิมให้ช่องกรอก
     if (change3c(act, el)) return;                // 3c
+    if (change3c2(act, el)) return;
 
     if (act === 'photo-file') { takePhoto(el); return; }
     if (act === 'att-file') { takeAttachment(el); return; }
@@ -9890,11 +10308,14 @@
       var wrapx = document.getElementById('nfOptWrap');
       if (wrapx) wrapx.style.display = (ftx && ftx.hasOptions) ? '' : 'none';
       var numx = document.getElementById('nfNumWrap');
-      if (numx) numx.hidden = el.value !== 'number';
+      if (numx) numx.hidden = el.value !== 'number' && el.value !== 'formula';
+      var fxw = document.getElementById('nfFxWrap'), rfw = document.getElementById('nfRefWrap');
+      if (fxw) fxw.hidden = el.value !== 'formula';
+      if (rfw) rfw.hidden = el.value !== 'ref';
       var idx2 = document.getElementById('nfIdWrap');
       if (idx2) idx2.hidden = el.value !== 'id';
       var libx = document.getElementById('nfLibWrap');
-      if (libx) libx.hidden = el.value === 'id';
+      if (libx) libx.hidden = el.value === 'id' || el.value === 'formula' || el.value === 'ref';
       return;
     }
     if (act === 'nf-kind') {

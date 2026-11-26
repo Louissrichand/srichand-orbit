@@ -95,7 +95,7 @@ CREATE TABLE dbo.projects (
     CONSTRAINT ck_proj_vis  CHECK (visibility IN ('org','private')),
     /* ต้องตรงกับ PROJECT_VIEWS ใน app/store.js */
     CONSTRAINT ck_proj_view CHECK (default_view IN ('overview','list','board','timeline','gantt',
-                                                    'calendar','dashboard','messages','files'))
+                                                    'calendar','dashboard','messages','pages','files'))
 );
 CREATE INDEX ix_projects_live ON dbo.projects(deleted_at, archived_at) INCLUDE (name, visibility);
 GO
@@ -902,5 +902,89 @@ CREATE TABLE dbo.message_attachments (
     url         NVARCHAR(MAX)    NOT NULL,
     size_bytes  INT              NULL,
     mime        VARCHAR(100)     NULL
+);
+GO
+
+/* ---------- 3c ส่วนที่ 2 — หน้าเอกสาร เวลา สูตร อ้างอิง ตรวจรูป (SCHEMA 14) ---------- */
+ALTER TABLE dbo.custom_fields DROP CONSTRAINT ck_field_type;
+ALTER TABLE dbo.custom_fields ADD CONSTRAINT ck_field_type
+    CHECK (field_type IN ('text','number','select','multi','date','person','id','formula','ref'));
+ALTER TABLE dbo.custom_fields ADD
+    formula_expr NVARCHAR(1000)  NULL,           -- สูตรที่เก็บเป็นรหัสฟิลด์ {f_…} / {due} … คำนวณตอนอ่าน ไม่เก็บค่าในงาน
+    formula_out  VARCHAR(8)      NULL,           -- number | date
+    ref_kinds    VARCHAR(60)     NULL;           -- task,project,portfolio (goal ตอนมีชิ้นงาน 4a)
+ALTER TABLE dbo.tasks ADD
+    estimate_minutes INT NULL;                   -- เวลาประมาณ (นาที)
+GO
+/* หน้าเอกสาร — project_id NULL = หน้าเดี่ยว (owner_id + is_private) สมุดโน้ตส่วนตัว = is_notepad */
+CREATE TABLE dbo.pages (
+    id          UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    project_id  UNIQUEIDENTIFIER NULL REFERENCES dbo.projects(id) ON DELETE CASCADE,
+    owner_id    UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    is_private  BIT              NOT NULL DEFAULT 0,
+    is_notepad  BIT              NOT NULL DEFAULT 0,
+    title       NVARCHAR(200)    NOT NULL DEFAULT N'',
+    icon        NVARCHAR(4)      NULL,
+    body_md     NVARCHAR(MAX)    NOT NULL DEFAULT N'',   -- มาร์กดาวน์ย่อแบบบล็อก รูปอ้าง ![…](img:<id>)
+    created_by  UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    created_at  DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME(),
+    edited_by   UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    edited_at   DATETIME2(0)     NULL
+);
+CREATE TABLE dbo.page_images (
+    id          UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    page_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.pages(id) ON DELETE CASCADE,
+    name        NVARCHAR(120)    NULL,
+    url         NVARCHAR(MAX)    NOT NULL,       -- data URI ≤ 500 KB (4b: driveItem)
+    size_bytes  INT              NULL
+);
+/* เก็บ 20 เวอร์ชันล่าสุดต่อหน้า */
+CREATE TABLE dbo.page_versions (
+    id          UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    page_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.pages(id) ON DELETE CASCADE,
+    title       NVARCHAR(200)    NULL,
+    body_md     NVARCHAR(MAX)    NOT NULL,
+    saved_by    UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    saved_at    DATETIME2(0)     NOT NULL
+);
+/* ความเห็นบนข้อความในหน้า (reply_to NULL = ความเห็นหลักพร้อมข้อความที่ยกมา) */
+CREATE TABLE dbo.page_comments (
+    id          UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    page_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.pages(id) ON DELETE CASCADE,
+    reply_to    UNIQUEIDENTIFIER NULL REFERENCES dbo.page_comments(id),
+    quote       NVARCHAR(300)    NULL,
+    body        NVARCHAR(MAX)    NOT NULL,
+    resolved    BIT              NOT NULL DEFAULT 0,
+    created_by  UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.users(id),
+    created_at  DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME()
+);
+/* รายการเวลา — billable / category สำรองให้ไทม์ชีต (4b) */
+CREATE TABLE dbo.time_entries (
+    id          UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    task_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.tasks(id) ON DELETE CASCADE,
+    user_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.users(id),
+    entry_date  DATE             NOT NULL,
+    minutes     INT              NOT NULL CHECK (minutes > 0),
+    note        NVARCHAR(500)    NULL,
+    billable    BIT              NULL,
+    category    NVARCHAR(60)     NULL
+);
+/* นาฬิกาจับเวลาที่เดินอยู่ คนละหนึ่งตัว */
+CREATE TABLE dbo.running_timers (
+    user_id     UNIQUEIDENTIFIER NOT NULL PRIMARY KEY REFERENCES dbo.users(id),
+    task_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.tasks(id) ON DELETE CASCADE,
+    started_at  DATETIME2(0)     NOT NULL
+);
+/* หมุดบนรูป (ตรวจรูป) — แต่ละหมุดคืองานย่อยหนึ่งชิ้น */
+CREATE TABLE dbo.attachment_pins (
+    attachment_id UNIQUEIDENTIFIER NOT NULL,
+    pin_no      INT              NOT NULL,
+    x_ratio     DECIMAL(6,5)     NOT NULL,
+    y_ratio     DECIMAL(6,5)     NOT NULL,
+    body        NVARCHAR(1000)   NOT NULL,
+    subtask_id  UNIQUEIDENTIFIER NULL REFERENCES dbo.tasks(id),
+    created_by  UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    created_at  DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT pk_attachment_pins PRIMARY KEY (attachment_id, pin_no)
 );
 GO

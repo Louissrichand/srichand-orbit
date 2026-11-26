@@ -206,6 +206,16 @@
 | POST | `/api/tasks/chain` | E ทุกงาน | `{ ids[] }` ต่อลำดับก่อนหลัง FS เป็นสายเดียวเรียงตามวันเริ่ม ข้ามคู่ที่ทำให้รอวน ธุรกรรมเดียว (3c) |
 | POST | `/api/tasks/{id}/dates/preview` · `/api/tasks/{id}/dates` | E | ดูงานที่จะขยับตามโหมด `dep_shift` ของโปรเจกต์ก่อน แล้ว `{ start, due, shift: bool }` ทำในธุรกรรมเดียว (3c) |
 | GET | `/api/projects/{id}/critical-path` | R | สายลำดับก่อนหลังที่กินเวลาตามปฏิทินยาวที่สุด `{ ids[], edges[], days }` (3c) |
+| GET · POST · PUT · DELETE | `/api/projects/{id}/pages[/{pgid}]` · `/api/pages[/{pgid}]` | หน้าของโปรเจกต์: E (อ่าน R, ความเห็น C) · หน้าเดี่ยว: เจ้าของ (ส่วนตัว) หรือ W | หน้าเอกสาร (`pages`) เนื้อหาเป็นมาร์กดาวน์ย่อแบบบล็อก · `PUT` สร้างเวอร์ชันเมื่อห่าง > 10 นาทีหรือคนแก้เปลี่ยน (เก็บ 20) · หน้าส่วนตัวของคนอื่นไม่เคยออกจากเซิร์ฟเวอร์ (3c) |
+| GET · POST | `/api/pages/{pgid}/versions[/{vid}/restore]` | อ่าน: เห็นหน้า · กู้: แก้หน้าได้ | ประวัติเวอร์ชัน + กู้คืน (เวอร์ชันปัจจุบันถูกเก็บก่อน) (3c) |
+| POST · DELETE | `/api/pages/{pgid}/images[/{iid}]` | แก้หน้าได้ | รูป ≤ 500 KB ต่อรูป ≤ 20 รูปต่อหน้า อ้างในเนื้อหาด้วย `img:<id>` (3c) |
+| POST · PUT · DELETE | `/api/pages/{pgid}/comments[/{cid}]` | C ของหน้า (ลบ: เจ้าของความเห็นหรือแก้หน้าได้) | `{ quote, body }` · `{ reply_to }` · `PUT { resolved }` แจ้งเจ้าของหน้า คนในเธรด คนที่ถูก @อ้างถึง (3c) |
+| POST | `/api/pages/{pgid}/tasks` | W (หน้าของโปรเจกต์: E) | `{ text }` ข้อความที่เลือก → งานใหม่ลิงก์กลับหน้า (หน้าเดี่ยว = งานส่วนตัว) (3c) |
+| GET · POST · DELETE | `/api/tasks/{id}/time[/{eid}]` | อ่าน: เห็นงาน · บันทึก: C · ลบ: เจ้าของรายการหรือ E | รายการเวลา `{ date, minutes, note, billable, category }` (`time_entries`) · `PUT /api/tasks/{id}` `estimate_minutes` (E) (3c) |
+| PUT · DELETE | `/api/me/timer` | ตัวเอง | `{ taskId }` เริ่ม (หยุดตัวเดิมแล้วบันทึกให้) · `DELETE ?log=1` หยุดแล้วบันทึก / ทิ้ง (`running_timers`) (3c) |
+| GET | `/api/projects/{id}/time.csv` | R | รายการเวลาทั้งโปรเจกต์รวมงานย่อย (date, user, task, minutes, hours, note, billable, category) (3c) |
+| POST · DELETE | `/api/tasks/{id}/attachments/{aid}/pins[/{n}]` | E | `{ x, y, text }` หมุดบนรูป → งานย่อยในธุรกรรมเดียว (`attachment_pins`) (3c) |
+| — | (ฟิลด์สูตร) | — | `custom_fields.formula_expr/out` คำนวณตอนอ่านเสมอ (ไม่มีค่าใน `field_values`) เซิร์ฟเวอร์ต้องใช้ตัวประเมินชุดเดียวกับ `store.js` (`compileFormula` / `evalFormula`) ตอนกรอง/เรียง (3c) |
 | GET · POST · PUT · DELETE | `/api/field-library` | ST (อ่าน: ทุกคน) | คลังฟิลด์ขององค์กร · แก้แล้ว `custom_fields` ที่อ้าง `library_field_id` เปลี่ยนตาม · ลง audit `field.lib-*` |
 | GET | `/api/tasks/by-code/{code}` | ทุกคน | หางานจากรหัส `REQ-12` (ใช้กับ @อ้างถึง) — **ต้องกรองด้วย `fn_VisibleTasks`** |
 | POST | `/api/projects/{id}/import` | E + ST | CSV + `map[]` ต่อคอลัมน์ (`name notes section assignee assigneeEmail collaborators start due priority type tags blockedBy dependents parent completed field:<id> new:<type> ignore`) · ลง audit |

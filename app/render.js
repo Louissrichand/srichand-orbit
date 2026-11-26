@@ -216,6 +216,8 @@
     h += '<button class="sb-item' + (route.type === 'calendar' ? ' active' : '') +
          '" data-act="go" data-route="calendar">' + I('calendar') + '' +
          '<span class="grow">' + L('ปฏิทินรวม') + '</span></button>';
+    h += '<button class="sb-item' + (route.type === 'pages' ? ' active' : '') +
+         '" data-act="go" data-route="pages">' + I('note') + '<span class="grow">' + L('หน้าเอกสาร') + '</span></button>';
     h += '</div>';
 
     function projectItem(p) {
@@ -401,6 +403,8 @@
       h += '<div class="tb-title">' + I('bell', 20) + ' ' + L('กล่องข้อความ') + '</div>';
     } else if (route.type === 'calendar') {
       h += '<div class="tb-title">' + I('calendar', 20) + ' ' + L('ปฏิทินรวม') + '</div>';
+    } else if (route.type === 'pages') {
+      h += '<div class="tb-title">' + I('note', 20) + ' ' + L('หน้าเอกสาร') + '</div>';
     } else if (route.type === 'projects') {
       h += '<div class="tb-title">' + I('grid', 20) + ' ' + L('โปรเจกต์ทั้งหมด') + '</div>';
     } else if (route.type === 'profile') {
@@ -851,6 +855,8 @@
     var v = S.fieldValue(t.id, f.id);
     if (v === null || v === undefined || v === '') return '<span class="cell-empty">—</span>';
 
+    if (f.type === 'formula') return '<span class="cell-txt num" title="' + esc(S.formulaText(f)) + '">' + esc(f.out === 'date' ? fmtDate(v) : S.formatNumber(f, v)) + '</span>';
+    if (f.type === 'ref') return '<span class="cell-refs">' + refChips(v) + '</span>';
     if (f.type === 'select') return optionPill(f, v);
     if (f.type === 'multi') {
       var arr = [].concat(v);
@@ -920,6 +926,9 @@
     } else if (c.id === 'created' || c.id === 'completedOn' || c.id === 'modified') {
       var d = S.taskValue(t, c.id);
       inner = d ? '<span class="cell-txt">' + fmtDate(d) + '</span>' : '';
+    } else if (c.id === 'estimate' || c.id === 'actual') {          // 3c — รวมงานย่อย
+      var tr3 = S.timeRollup(t), mv3 = c.id === 'estimate' ? (tr3.hasEst ? tr3.est : null) : (tr3.act || null);
+      inner = mv3 == null ? '' : '<span class="cell-txt num">' + esc(S.fmtMinutes(mv3)) + '</span>';
     } else if (c.id === 'createdBy') {
       var cu = S.user(t.createdBy);
       inner = cu ? avatar(cu, 'sm') + '<span class="cell-txt">' + esc(cu.name) + '</span>' : '';
@@ -971,7 +980,7 @@
     h += '</div>';
 
     cols.forEach(function (c) {
-      if (c.field && c.field.type === 'id') {
+      if (c.field && (c.field.type === 'id' || c.field.type === 'formula')) {
         h += '<div class="td td-ro">' + fieldCell(t, c.field) + '</div>';   // รหัสงานออกเลขเอง แก้ไม่ได้
       } else if (c.field) {
         h += '<div class="td td-edit" data-act="edit-cell" data-cell="field" data-id="' + esc(t.id) +
@@ -1081,18 +1090,21 @@
     });
 
     /* ---- สรุปท้ายคอลัมน์ ---- ตัวเลขรวมของงานที่เห็นอยู่ทั้งหมด (หลังกรองแล้ว) */
-    var hasNum = cols.some(function (c) { return c.field && c.field.type === 'number'; });
+    /* 3c — สูตรที่ได้ตัวเลข และเวลาประมาณ/จริง (ชั่วโมง) ก็สรุปท้ายคอลัมน์ได้ */
+    var isNumCol = function (c) { return (c.field && (c.field.type === 'number' || (c.field.type === 'formula' && c.field.out !== 'date'))) || c.id === 'estimate' || c.id === 'actual'; };
+    var hasNum = cols.some(isNumCol);
     if (total && hasNum) {
       h += '<div class="tr tbl-foot"><div class="td td-name"><span class="foot-n">' +
         L('{n} งาน', { n: total }) + '</span></div>';
       cols.forEach(function (c) {
-        if (!(c.field && c.field.type === 'number')) { h += '<div class="td td-ro"></div>'; return; }
+        if (!isNumCol(c)) { h += '<div class="td td-ro"></div>'; return; }
+        var tcol = !c.field;
         var fn = view.foot[c.id] || 'sum';
-        var val = fn === 'none' ? null : S.footValue(allTasks, c.field.id, fn);
+        var val = fn === 'none' ? null : S.footValue(allTasks, tcol ? c.id : c.field.id, fn);
         h += '<div class="td td-foot" data-act="foot-menu" data-col="' + esc(c.id) + '" title="' +
           L('เลือกการสรุป') + '">' + (fn === 'none' ? '<span class="cell-empty">∑</span>'
             : '<em>' + esc(footLabel(fn)) + '</em><b>' +
-              (val === null ? '—' : esc(fn === 'count' ? String(val) : S.formatNumber(c.field, Math.round(val * 100) / 100))) +
+              (val === null ? '—' : esc(fn === 'count' ? String(val) : tcol ? S.fmtMinutes(val * 60) : S.formatNumber(c.field, Math.round(val * 100) / 100))) +
               '</b>') + '</div>';
       });
       h += '<div class="td td-add"></div></div>';
@@ -2378,12 +2390,13 @@
       });
       o = { title: hTitle(I('flag', 15), L('อัปเดตสถานะ')), body: sb };
     } else if (w === 'notepad') {
-      var np = S.personalOf().notepad || '';
+      /* 3c — สมุดโน้ตเป็นหน้าเอกสารส่วนตัว (หัวข้อ รายการติ๊ก ตาราง รูป) แก้ได้ตรงนี้หรือในงานของฉัน → โน้ต */
+      var npg = S.notepadPage();
       o = {
         title: hTitle(I('note', 15), L('สมุดโน้ตส่วนตัว')),
-        action: '<span class="hnote-hint">' + I('lock', 12) + L('เห็นเฉพาะคุณ') + '</span>',
-        body: '<textarea class="hnote" data-act="notepad" maxlength="' + S.NOTEPAD_MAX + '" placeholder="' +
-          L('จดอะไรก็ได้ บันทึกเองอัตโนมัติ') + '">' + esc(np) + '</textarea>'
+        action: '<span class="hnote-hint">' + I('lock', 12) + L('เห็นเฉพาะคุณ') + '</span>' +
+          '<button class="btn btn-sm btn-ghost" data-act="np-open">' + L('เปิดเต็มหน้า') + '</button>',
+        body: npg ? pageEditor(npg.id, { compact: true }) : '<div class="ovw-empty">' + L('กำลังเตรียมสมุดโน้ต…') + '</div>'
       };
     } else if (w === 'drafts') {
       var ds = extra.drafts || [];
@@ -2619,7 +2632,7 @@
    * มุมมอง ตัวกรอง เรียง จัดกลุ่ม บันทึกต่อคนใน db.personal (S.mtSetView)
    * ui = { collapsed: {sectionId: true}, calAnchor } สถานะหน้าจอที่ไม่ต้องจำข้ามเครื่อง
    */
-  var MT_TABS = [['list', 'รายการ'], ['board', 'บอร์ด'], ['calendar', 'ปฏิทิน'], ['files', 'ไฟล์']];
+  var MT_TABS = [['list', 'รายการ'], ['board', 'บอร์ด'], ['calendar', 'ปฏิทิน'], ['files', 'ไฟล์'], ['notes', 'โน้ต']];   // 3c — สมุดโน้ตส่วนตัว
 
   function mtLabel(g) {
     if (g.special) return g.label ? L(g.label) : L('เพิ่งได้รับมอบหมาย');
@@ -2688,6 +2701,10 @@
     var v = S.personalOf().mt.view;
     var h = mtToolbar(v);
     if (v.mode === 'calendar') return h + mtCalendar(v, ui);
+    if (v.mode === 'notes') {             // 3c — สมุดโน้ตเป็นหน้าเอกสารส่วนตัว
+      var npg = S.notepadPage();
+      return '<div class="mt-notes">' + (npg ? pageEditor(npg.id, ui && ui.page) : '<div class="ovw-empty">' + L('กำลังเตรียมสมุดโน้ต…') + '</div>') + '</div>';
+    }
     if (v.mode === 'files') return h + filesList(S.filesOfTasks(S.mtTasks()),
       L('ไฟล์ในงานของฉัน'), L('ยังไม่มีไฟล์แนบในงานที่มอบหมายให้คุณ'));
 
@@ -3655,6 +3672,12 @@
           (v == null ? '' : '<button class="as-link" data-act="copy-code" data-v="' + esc(S.fieldText(f, v)) +
             '">' + L('คัดลอก') + '</button>');
       }
+      if (f.type === 'formula') {       // 3c — คำนวณเอง แก้ไม่ได้
+        return '<span class="fld-code fld-formula" title="' + esc(S.formulaText(f)) + '">ƒ ' + (v == null ? '—' : esc(f.out === 'date' ? fmtDate(v) : S.formatNumber(f, v))) + '</span>';
+      }
+      if (f.type === 'ref') {
+        return '<div class="fld-ref">' + refChips(v) + (S.can('write', t.id) ? '<button class="btn btn-sm btn-ghost" data-act="ref-pick" data-id="' + esc(t.id) + '" data-field="' + esc(f.id) + '">+ ' + L('อ้างอิง') + '</button>' : '') + '</div>';
+      }
       if (f.type === 'select') {
         s += '<select class="inp" data-act="edit-field" data-field="' + esc(f.id) +
           '"><option value="">—</option>';
@@ -3820,10 +3843,15 @@
             (t.coverId === a.id ? 'clear-cover' : 'set-cover') + '" data-id="' + esc(t.id) + '" data-att="' + esc(a.id) +
             '" title="' + (t.coverId === a.id ? L('เอารูปปกออก') : L('ตั้งเป็นรูปปก')) + '">' + I('image', 13) +
             '<span class="hide-sm">' + (t.coverId === a.id ? L('รูปปก') : L('ตั้งเป็นรูปปก')) + '</span></button>' : '') +
+        (S.isImageAtt(a) && a.url ? '<button class="btn btn-sm btn-ghost" data-act="proof-open" data-id="' + esc(t.id) + '" data-att="' + esc(a.id) +
+          '" title="' + esc(L('ตรวจรูป ปักหมุดความเห็นบนรูป')) + '">📍<span class="hide-sm"> ' + L('ตรวจรูป') + '</span>' +
+          ((a.pins || []).length ? ' ' + a.pins.length : '') + '</button>' : '') +
         '<button class="btn btn-sm btn-ghost" data-act="remove-attachment" data-id="' + esc(t.id) +
         '" data-att="' + esc(a.id) + '" title="' + L('เอาไฟล์แนบนี้ออก') + '">' +
         I('close', 13) + '</button></div>';
     });
+
+    h += timeSection(t);              // 3c — เวลาประมาณ จับเวลา รายการเวลา
 
     /* ผู้ติดตาม — ทุกงานมีคนสร้างเป็นผู้ติดตามอัตโนมัติอยู่แล้ว
      * ถ้ามีแค่คนเดียวก็ยังไม่มีอะไรให้ดู โผล่เมื่อมีคนอื่นเข้ามาแล้วเท่านั้น */
@@ -4774,6 +4802,192 @@
     return h + '</article>';
   }
 
+  /* ====================== 3c ส่วนที่ 2 — หน้าเอกสาร เวลา สูตร อ้างอิง ตรวจรูป ====================== */
+
+  /** ตัวแก้ไขหน้าเอกสาร (ใช้ทั้งแท็บหน้าของโปรเจกต์ หน้าเดี่ยว สมุดโน้ตบนหน้าแรก และงานของฉัน)
+   *  opts = { compact: true (วิดเจ็ตหน้าแรก ไม่มีหัว/แผงความเห็น), showResolved } */
+  function pageEditor(id, opts) {
+    opts = opts || {};
+    var l = S.pageLoc(id);
+    if (!l || !S.canSeePage(id)) return '<div class="ovw-empty">' + L('ไม่พบหน้านี้ หรือคุณไม่มีสิทธิ์เห็น') + '</div>';
+    var x = l.page, canEdit = S.canEditPage(id), canC = S.canCommentPage(id);
+    var imgs = S.pageImgMap(id);
+    var ed = canEdit
+      ? '<div class="rte-wrap rte-page-wrap">' + RT().toolbar('page') +
+        '<div class="rte rte-page rte-doc" contenteditable="true" spellcheck="true" data-blocks="1" data-save="page" data-key="pg:' +
+        esc(id) + '" data-id="' + esc(id) + '" data-placeholder="' + esc(L('เริ่มเขียน… พิมพ์ @ เพื่ออ้างถึง ใช้แถบด้านบนใส่หัวข้อ ตาราง รายการติ๊ก โค้ด หรือรูป')) + '">' +
+        RT().toHtml(x.body, { editable: true, blocks: true, imgs: imgs }) + '</div></div>'
+      : '<div class="rte-page ro" data-id="' + esc(id) + '">' + (x.body ? RT().toHtml(x.body, { blocks: true, imgs: imgs })
+        : '<div class="ovw-empty">' + L('หน้านี้ยังว่าง') + '</div>') + '</div>';
+    if (opts.compact) return '<div class="pg pg-compact" data-page="' + esc(id) + '">' + ed + '</div>';
+
+    var by = S.user(x.editedBy || x.by);
+    var open = x.comments.filter(function (c) { return !c.resolved; });
+    var done = x.comments.filter(function (c) { return c.resolved; });
+    var h = '<div class="pg" data-page="' + esc(id) + '"><div class="pg-main">';
+    h += '<div class="pg-head"><span class="pg-icon">' + esc(x.icon || '📄') + '</span>' +
+      (canEdit && !x.notepad ? '<input class="pg-title" data-act="pg-title" data-id="' + esc(id) + '" value="' + esc(x.title) +
+        '" placeholder="' + esc(L('ไม่มีชื่อ')) + '" maxlength="200">'
+        : '<h2 class="pg-title">' + esc(x.notepad ? L('สมุดโน้ตส่วนตัว') : (x.title || L('ไม่มีชื่อ'))) + '</h2>') + '</div>';
+    h += '<div class="pg-meta">' + (x.private ? '<span class="chip">' + I('lock', 11) + ' ' + L('เห็นเฉพาะคุณ') + '</span>' : '') +
+      (l.project ? '<span class="chip"><span class="swatch" style="background:' + esc(l.project.color) + '"></span>' + esc(l.project.name) + '</span>' : '') +
+      '<em>' + esc(L('แก้ล่าสุดโดย {u} · {w}', { u: by ? by.name : '—', w: fmtWhen(x.editedAt || x.at) })) + '</em>' +
+      '<span class="grow"></span>';
+    if (canC) {
+      h += '<button class="btn btn-sm btn-ghost" data-act="pg-comment" data-id="' + esc(id) + '" title="' +
+        esc(L('เลือกข้อความในหน้าแล้วกดเพื่อแสดงความเห็น')) + '">' + I('send', 13) + '<span class="hide-sm"> ' + L('ความเห็น') + '</span></button>';
+    }
+    h += '<button class="btn btn-sm btn-ghost" data-act="pg-task" data-id="' + esc(id) + '" title="' +
+      esc(L('เลือกข้อความในหน้าแล้วกดเพื่อสร้างงาน')) + '">' + I('checkCircle', 13) + '<span class="hide-sm"> ' + L('สร้างงาน') + '</span></button>';
+    h += '<button class="btn btn-sm btn-ghost" data-act="pg-versions" data-id="' + esc(id) + '" title="' + esc(L('ประวัติเวอร์ชัน')) + '">' +
+      I('repeat', 13) + '<span class="hide-sm"> ' + esc(L('{n} เวอร์ชัน', { n: x.versions.length })) + '</span></button>';
+    if (canEdit && !l.project && !x.notepad) {
+      h += '<button class="btn btn-sm btn-ghost" data-act="pg-private" data-id="' + esc(id) + '" title="' +
+        esc(x.private ? L('แชร์ให้ทุกคนในองค์กร') : L('ทำเป็นส่วนตัว')) + '">' + I(x.private ? 'lock' : 'users', 13) + '</button>';
+    }
+    if (canEdit && !x.notepad) {
+      h += '<button class="btn btn-sm btn-ghost danger" data-act="pg-del" data-id="' + esc(id) + '" title="' + esc(L('ลบหน้านี้')) + '">' +
+        I('trash', 13) + '</button>';
+    }
+    h += '</div>' + ed + '</div>';
+
+    /* ความเห็นบนข้อความ — ยังเปิดอยู่ก่อน แล้วค่อยที่ปิดแล้ว */
+    h += '<aside class="pg-side"><div class="pg-side-head"><b>' + L('ความเห็น') + '</b><span class="n">' + open.length + '</span>' +
+      (done.length ? '<button class="as-link" data-act="pg-show-resolved">' +
+        esc(opts.showResolved ? L('ซ่อนที่ปิดแล้ว') : L('ที่ปิดแล้ว {n}', { n: done.length })) + '</button>' : '') + '</div>';
+    if (!x.comments.length) h += '<div class="ovw-empty">' + L('เลือกข้อความในหน้าแล้วกด “ความเห็น” เพื่อคุยกันตรงจุดนั้น') + '</div>';
+    open.concat(opts.showResolved ? done : []).forEach(function (c) {
+      var cu = S.user(c.by);
+      h += '<div class="pgc' + (c.resolved ? ' resolved' : '') + '" data-c="' + esc(c.id) + '">' +
+        (c.quote ? '<button class="pgc-quote" data-act="pg-quote" data-c="' + esc(c.id) + '">“' + esc(c.quote) + '”</button>' : '') +
+        '<div class="pgc-msg">' + avatar(cu, 'sm') + '<div class="grow"><em>' + esc(cu ? cu.name : '—') + ' · ' + esc(fmtWhen(c.at)) + '</em>' +
+        richText(c.text) + '</div></div>';
+      c.replies.forEach(function (r) {
+        var ru = S.user(r.by);
+        h += '<div class="pgc-msg reply">' + avatar(ru, 'sm') + '<div class="grow"><em>' + esc(ru ? ru.name : '—') + ' · ' +
+          esc(fmtWhen(r.at)) + '</em>' + richText(r.text) + '</div></div>';
+      });
+      if (canC) {
+        h += '<div class="pgc-acts">' + (c.resolved ? '' : '<input class="inp pgc-reply" data-c="' + esc(c.id) + '" placeholder="' +
+          esc(L('ตอบ…')) + '"><button class="btn btn-sm" data-act="pg-reply" data-id="' + esc(id) + '" data-c="' + esc(c.id) + '">' + L('ตอบ') + '</button>') +
+          '<button class="btn btn-sm btn-ghost" data-act="pg-resolve" data-id="' + esc(id) + '" data-c="' + esc(c.id) + '" data-v="' + (c.resolved ? '0' : '1') + '">' +
+          I(c.resolved ? 'repeat' : 'check', 12) + ' ' + (c.resolved ? L('เปิดอีกครั้ง') : L('ปิดเรื่อง')) + '</button>' +
+          ((S.me() && c.by === S.me().id) || canEdit ? '<button class="btn btn-sm btn-ghost" data-act="pg-cdel" data-id="' + esc(id) + '" data-c="' +
+            esc(c.id) + '" title="' + esc(L('ลบความเห็น')) + '">' + I('close', 12) + '</button>' : '') + '</div>';
+      }
+      h += '</div>';
+    });
+    h += '</aside></div>';
+    return h;
+  }
+
+  /** รายการหน้า + หน้าที่เลือก (scope = รหัสโปรเจกต์ หรือ '' = หน้าเดี่ยว) */
+  function pagesView(scope, pageId, ui) {
+    var list = scope ? S.projectPages(scope) : S.myPages();
+    var canNew = scope ? (S.can('write') && S.canInProject(scope, 'edit')) : S.isActive();
+    if (!pageId && list.length) pageId = list[0].id;
+    var h = '<div class="pgv"><nav class="pgv-list"><div class="pgv-head"><b>' + (scope ? L('หน้าของโปรเจกต์') : L('หน้าเอกสาร')) + '</b>' +
+      (canNew ? '<button class="btn btn-sm btn-primary" data-act="pg-new" data-project="' + esc(scope || '') + '">' + I('plus', 13) + ' ' +
+        L('หน้าใหม่') + '</button>' : '') + '</div>';
+    if (!list.length) h += '<div class="ovw-empty">' + (scope ? L('ยังไม่มีหน้า เก็บบรีฟ สรุปประชุม หรือคู่มือของโปรเจกต์ไว้ที่นี่')
+      : L('ยังไม่มีหน้า สร้างหน้าส่วนตัวหรือหน้าที่แชร์ให้ทั้งองค์กรได้')) + '</div>';
+    list.forEach(function (x) {
+      h += '<button class="pgv-item' + (x.id === pageId ? ' on' : '') + '" data-act="pg-open" data-id="' + esc(x.id) + '"' +
+        (scope ? ' data-project="' + esc(scope) + '"' : '') + '><span class="em">' + esc(x.icon || '📄') + '</span><span class="grow">' +
+        esc(x.title || L('ไม่มีชื่อ')) + '</span>' + (x.private ? I('lock', 11) : '') +
+        (x.comments.filter(function (c) { return !c.resolved; }).length ? '<span class="count">' +
+          x.comments.filter(function (c) { return !c.resolved; }).length + '</span>' : '') + '</button>';
+    });
+    h += '</nav><section class="pgv-body">' + (pageId && S.pageLoc(pageId) ? pageEditor(pageId, ui) :
+      '<div class="ovw-empty" style="padding:40px 8px">' + L('เลือกหน้าทางซ้าย หรือสร้างหน้าใหม่') + '</div>') + '</section></div>';
+    return h;
+  }
+
+  /* ---------- เวลา ---------- */
+  function timeSection(t) {
+    var r = S.timeRollup(t), run = S.runningTimer(), mine = run && run.taskId === t.id;
+    var canW = S.can('write', t.id), canC = S.isActive();
+    var subs = r.est !== r.ownEst || r.act !== r.ownAct;
+    var h = '<div class="dw-sec-title">' + L('เวลา') + '</div><div class="tt">';
+    h += '<div class="tt-row"><label>' + L('ประมาณ') + '</label>' +
+      (canW ? '<input class="inp tt-est" data-act="tt-est" data-id="' + esc(t.id) + '" value="' + esc(S.fmtMinutes(t.estimate)) +
+        '" placeholder="' + esc(L('เช่น 2h 30m')) + '">' : '<b>' + esc(S.fmtMinutes(t.estimate) || '—') + '</b>') +
+      '<label>' + L('ใช้ไป') + '</label><b class="tt-act">' + esc(S.fmtMinutes(r.ownAct) || '0m') + '</b>' +
+      (t.estimate ? '<span class="tt-bar"><i style="width:' + Math.min(100, Math.round(r.ownAct * 100 / t.estimate)) + '%"' +
+        (r.ownAct > t.estimate ? ' class="over"' : '') + '></i></span>' : '') + '</div>';
+    if (subs) h += '<div class="tt-roll">' + esc(L('รวมงานย่อย: ประมาณ {e} · ใช้ไป {a}', { e: S.fmtMinutes(r.est) || '—', a: S.fmtMinutes(r.act) || '0m' })) + '</div>';
+    if (canC) {
+      h += '<div class="tt-row">' + (mine
+        ? '<button class="btn btn-sm btn-primary" data-act="timer-stop">' + I('close', 12) + ' ' + L('หยุดจับเวลา') + ' <span class="tt-live" data-start="' +
+          esc(run.start) + '"></span></button>'
+        : '<button class="btn btn-sm" data-act="timer-start" data-id="' + esc(t.id) + '">▶ ' + L('เริ่มจับเวลา') + '</button>') +
+        '<button class="btn btn-sm btn-ghost" data-act="tt-add" data-id="' + esc(t.id) + '">+ ' + L('บันทึกเวลาเอง') + '</button></div>';
+    }
+    if (t.time && t.time.length) {
+      h += '<div class="tt-list">';
+      t.time.slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; }).forEach(function (e) {
+        var u = S.user(e.userId);
+        h += '<div class="tt-entry">' + avatar(u, 'sm') + '<span class="tt-d">' + esc(fmtDate(e.date)) + '</span><b>' + esc(S.fmtMinutes(e.minutes)) +
+          '</b><span class="grow">' + esc(e.note || '') + '</span>' +
+          ((S.me() && e.userId === S.me().id) || canW ? '<button class="x" data-act="tt-del" data-id="' + esc(t.id) + '" data-e="' + esc(e.id) +
+            '" title="' + esc(L('ลบรายการนี้')) + '">' + I('close', 11) + '</button>' : '') + '</div>';
+      });
+      h += '</div>';
+    }
+    return h + '</div>';
+  }
+
+  /** ป้ายนาฬิกาที่เดินอยู่ ลอยมุมจอ ทุกหน้า */
+  function timerPill() {
+    var run = S.runningTimer();
+    if (!run) return '';
+    var t = S.task(run.taskId);
+    return '<div class="tpill"><button class="tpill-nm" data-act="open-task" data-id="' + esc(t.id) + '">⏱ <span>' + esc(t.name) +
+      '</span></button><b class="tt-live" data-start="' + esc(run.start) + '"></b><button class="tpill-stop" data-act="timer-stop" title="' +
+      esc(L('หยุดและบันทึกเวลา')) + '">■</button><button class="tpill-x" data-act="timer-discard" title="' + esc(L('ทิ้งเวลาที่จับ')) + '">' +
+      I('close', 11) + '</button></div>';
+  }
+
+  /* ---------- ฟิลด์อ้างอิง / ตรวจรูป ---------- */
+  function refChips(v) {
+    return [].concat(v || []).map(S.refItem).filter(Boolean).map(function (x) {
+      var act = x.kind === 'task' ? ' data-act="open-task" data-id="' + esc(x.id) + '"'
+        : ' data-act="go" data-route="' + x.kind + '" data-id="' + esc(x.id) + '"';
+      return '<span class="mchip ' + (x.kind === 'task' ? 'mchip-task' : 'mchip-proj') + (x.done ? ' done' : '') + '"' + act + '>' +
+        (x.kind === 'task' ? '<span class="mi">' + (x.done ? '✓' : '○') + '</span>'
+          : '<span class="mi sw" style="background:' + esc(x.color || 'var(--accent)') + '"></span>') + esc(x.name) + '</span>';
+    }).join('');
+  }
+
+  function proofHtml(taskId, attId) {
+    var t = S.task(taskId);
+    var a = t && (t.attachments || []).filter(function (x) { return x.id === attId; })[0];
+    if (!a) return '';
+    var canW = S.can('write', taskId);
+    var pins = a.pins || [];
+    var h = '<h2>' + esc(a.name) + '</h2><p class="modal-sub">' +
+      esc(canW ? L('คลิกบนรูปเพื่อปักหมุด หมุดแต่ละอันกลายเป็นงานย่อย') : L('หมุดบนรูปนี้')) + '</p>' +
+      '<div class="proof"><div class="proof-img' + (canW ? ' can' : '') + '" data-act="proof-pin" data-id="' + esc(taskId) + '" data-att="' + esc(attId) + '">' +
+      '<img src="' + esc(a.url) + '" alt="">';
+    pins.forEach(function (p) {
+      var st = S.task(p.taskId);
+      h += '<span class="proof-pin' + (st && st.completed ? ' done' : '') + '" style="left:' + (p.x * 100).toFixed(2) + '%;top:' +
+        (p.y * 100).toFixed(2) + '%" title="' + esc(p.text) + '">' + p.n + '</span>';
+    });
+    h += '</div><div class="proof-list">';
+    if (!pins.length) h += '<div class="ovw-empty">' + L('ยังไม่มีหมุด') + '</div>';
+    pins.forEach(function (p) {
+      var st = S.task(p.taskId), pu = S.user(p.by);
+      h += '<div class="proof-row' + (st && st.completed ? ' done' : '') + '"><span class="proof-n">' + p.n + '</span><div class="grow">' +
+        '<div>' + esc(p.text) + '</div><em>' + esc(pu ? pu.name : '—') + ' · ' + esc(fmtWhen(p.at)) + '</em></div>' +
+        (st ? '<button class="btn btn-sm btn-ghost" data-act="open-task" data-id="' + esc(st.id) + '">' + L('งานย่อย') + '</button>' : '') +
+        (canW ? '<button class="x" data-act="proof-unpin" data-id="' + esc(taskId) + '" data-att="' + esc(attId) + '" data-n="' + p.n +
+          '" title="' + esc(L('เอาหมุดออก')) + '">' + I('close', 11) + '</button>' : '') + '</div>';
+    });
+    h += '</div></div><div class="modal-actions"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
+    return h;
+  }
+
   global.Render = {
     adminView: adminView, roleLabel: roleLabel, authTag: authTag,
     teamReady: teamReady, syncChip: syncChip, syncMenu: syncMenu, disabledScreen: disabledScreen,
@@ -4790,6 +5004,7 @@
     VIEWS_WITH_TOOLBAR: VIEWS_WITH_TOOLBAR,
     listView: listView, boardView: boardView, timelineView: timelineView,
     homeView: homeView, dashboardView: dashBuilderView, profileView: profileView,
+    pageEditor: pageEditor, pagesView: pagesView, timeSection: timeSection, timerPill: timerPill, refChips: refChips, proofHtml: proofHtml,
     widgetSpec: widgetSpec, messageCard: messageCard, msgComposer: msgComposer, pendingFiles: pendingFiles, attChips: attChips, fileLink: fileLink,
     overviewView: overviewView, filesView: filesView, messagesView: messagesView,
     projectsView: projectsView,
