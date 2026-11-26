@@ -841,3 +841,66 @@ CREATE TABLE dbo.saved_searches (
     position    INT              NOT NULL DEFAULT 0
 );
 GO
+
+/* ---------- 3c ส่วนที่ 1 — ภาพรวม แดชบอร์ด ประกาศ (SCHEMA 14) ---------- */
+ALTER TABLE dbo.projects ADD
+    brief_md     NVARCHAR(MAX)    NULL,           -- บรีฟโปรเจกต์ มาร์กดาวน์ย่อแบบบล็อก (project.brief)
+    brief_by     UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    brief_at     DATETIME2(0)     NULL,
+    ms_show      VARCHAR(8)       NOT NULL DEFAULT 'open';   -- open | all แผงหมุดหมายบนภาพรวม
+GO
+/* ทรัพยากรสำคัญ — ลิงก์หรือไฟล์ (ไฟล์ ≤ 2 MB จนกว่าชิ้นงาน 4b ย้ายไป SharePoint) */
+CREATE TABLE dbo.project_resources (
+    id          UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    project_id  UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.projects(id) ON DELETE CASCADE,
+    kind        VARCHAR(8)       NOT NULL,        -- link | file
+    name        NVARCHAR(200)    NOT NULL,
+    url         NVARCHAR(MAX)    NOT NULL,        -- https://… หรือ data URI / driveItem webUrl (4b)
+    size_bytes  INT              NULL,
+    mime        VARCHAR(100)     NULL,
+    position    INT              NOT NULL DEFAULT 0,
+    created_by  UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    created_at  DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT ck_resource_kind CHECK (kind IN ('link','file'))
+);
+/* วิดเจ็ตแดชบอร์ดของโปรเจกต์ (ไม่มีแถว = แดชบอร์ดตั้งต้น) สูงสุด 20 ต่อโปรเจกต์ */
+CREATE TABLE dbo.dashboard_widgets (
+    id          UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    project_id  UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.projects(id) ON DELETE CASCADE,
+    kind        VARCHAR(12)      NOT NULL,        -- bar stack group line burnup burndown donut number lollipop text
+    title       NVARCHAR(120)    NULL,
+    x_axis      VARCHAR(80)      NULL,            -- assignee section priority type cstatus completed period field:<id>
+    y_axis      VARCHAR(80)      NULL,            -- count sum:<fieldId> avg:<fieldId> est actual
+    split_by    VARCHAR(80)      NULL,
+    filters_json NVARCHAR(MAX)   NULL,            -- [{f,op,v}] ชุดเดียวกับตัวกรองของมุมมอง
+    full_width  BIT              NOT NULL DEFAULT 0,
+    text_md     NVARCHAR(MAX)    NULL,
+    bench       FLOAT            NULL,
+    period_unit VARCHAR(8)       NULL,            -- day | week | month
+    period_n    INT              NULL,
+    date_field  VARCHAR(16)      NULL,            -- created | completedOn | due
+    position    INT              NOT NULL DEFAULT 0
+);
+/* ประกาศ: คำตอบ ผู้เข้าร่วม ไฟล์แนบ */
+CREATE TABLE dbo.message_replies (
+    id          UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    message_id  UNIQUEIDENTIFIER NOT NULL,        -- อ้าง project_messages.id
+    body_md     NVARCHAR(MAX)    NOT NULL,
+    created_by  UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.users(id),
+    created_at  DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME()
+);
+CREATE TABLE dbo.message_followers (
+    message_id  UNIQUEIDENTIFIER NOT NULL,
+    user_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.users(id),
+    CONSTRAINT pk_message_followers PRIMARY KEY (message_id, user_id)
+);
+CREATE TABLE dbo.message_attachments (
+    id          UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    message_id  UNIQUEIDENTIFIER NOT NULL,
+    reply_id    UNIQUEIDENTIFIER NULL REFERENCES dbo.message_replies(id),
+    name        NVARCHAR(200)    NOT NULL,
+    url         NVARCHAR(MAX)    NOT NULL,
+    size_bytes  INT              NULL,
+    mime        VARCHAR(100)     NULL
+);
+GO

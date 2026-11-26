@@ -106,41 +106,140 @@
   /**
    * @param opts.editable  ใช้ใส่ในตัวแก้ไข — ทุกบรรทัดเป็น div และป้ายแก้ทีละตัวอักษรไม่ได้
    */
+  /* ---------- 3c — บล็อกของหน้าเอกสาร (เปิดด้วย opts.blocks) ----------
+   * ต่อยอดมาร์กดาวน์ย่อชุดเดิม ไม่เปลี่ยนวิธีเก็บ ข้อความเก่าที่ไม่ได้เปิดโหมดบล็อกแสดงเหมือนเดิมทุกตัวอักษร
+   *   - [ ] งาน / - [x] เสร็จ     รายการติ๊ก
+   *   | ก | ข |  +  | --- | --- |  ตาราง (บรรทัดแรกเป็นหัวตาราง)
+   *   ``` … ```                  โค้ดหลายบรรทัด
+   *   > ข้อความ                   คำพูดยกมา
+   *   ---                        เส้นคั่น
+   *   ![คำอธิบาย](img:<รหัส>)     รูปภาพ (ตัวรูปเก็บแยกที่หน้าเอกสาร opts.imgs = { รหัส: dataUri })
+   *   # / ## / ###               หัวข้อสามระดับ */
+  function isRow(s) { return /^\s*\|.*\|\s*$/.test(s || ''); }
+  function isSep(s) { return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/.test(s || ''); }
+  function splitRow(s) {
+    s = String(s).trim().replace(/^\|/, '').replace(/\|$/, '');
+    var out = [], cur = '';
+    for (var i = 0; i < s.length; i++) {
+      var ch = s.charAt(i);
+      if (ch === '\\' && s.charAt(i + 1) === '|') { cur += '|'; i++; continue; }
+      if (ch === '|') { out.push(cur.trim()); cur = ''; continue; }
+      cur += ch;
+    }
+    out.push(cur.trim());
+    return out;
+  }
+  function imgUrl(ref, imgs) {
+    if (/^img:/.test(ref)) {
+      var id = ref.slice(4);
+      var u = typeof imgs === 'function' ? imgs(id) : (imgs && imgs[id]);
+      return /^data:image\/(png|jpe?g|gif|webp);/i.test(u || '') ? u : '';
+    }
+    return /^https:\/\//i.test(ref) ? ref : '';
+  }
+
   function toHtml(md, opts) {
     var editable = !!(opts && opts.editable);
+    var blocks = !!(opts && opts.blocks);
+    var imgs = opts && opts.imgs;
     var lines = String(md == null ? '' : md).replace(/\r\n?/g, '\n').split('\n');
     var h = '', stack = [];
+    var ce = editable ? ' contenteditable="false"' : '';
 
-    function closeLevel() { var lv = stack.pop(); h += '</li></' + lv.type + '>'; }
+    function closeLevel() { var lv = stack.pop(); h += '</li></' + (lv.type === 'cl' ? 'ul' : lv.type) + '>'; }
     function closeAll() { while (stack.length) closeLevel(); }
 
-    lines.forEach(function (raw) {
-      var line = raw.replace(/\s+$/, '');
+    for (var li = 0; li < lines.length; li++) {
+      var line = lines[li].replace(/\s+$/, '');
+      if (blocks) {
+        if (/^\s*```/.test(line)) {
+          closeAll();
+          var code = [];
+          while (++li < lines.length && !/^\s*```\s*$/.test(lines[li])) code.push(lines[li]);
+          h += '<pre class="rt-code">' + esc(code.join('\n')) + (editable && !code.length ? '<br>' : '') + '</pre>';
+          continue;
+        }
+        if (isRow(line) && (isSep(lines[li + 1]) || isRow(lines[li + 1]))) {
+          closeAll();
+          var rows = [splitRow(line)];
+          if (isSep(lines[li + 1])) li++;
+          while (li + 1 < lines.length && isRow(lines[li + 1])) rows.push(splitRow(lines[++li]));
+          var nc = rows.reduce(function (a, r) { return Math.max(a, r.length); }, 0);
+          var tb = '<table class="rt-table"><tbody>';
+          rows.forEach(function (r, ri) {
+            tb += '<tr>';
+            for (var ci = 0; ci < nc; ci++) {
+              var tag = ri === 0 ? 'th' : 'td';
+              tb += '<' + tag + '>' + (inline(r[ci] || '', editable) || (editable ? '<br>' : '')) + '</' + tag + '>';
+            }
+            tb += '</tr>';
+          });
+          tb += '</tbody></table>';
+          h += editable ? tb : '<div class="rt-tablewrap">' + tb + '</div>';
+          continue;
+        }
+        if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) { closeAll(); h += '<hr class="rt-hr"' + ce + '>'; continue; }
+        if (/^>\s?/.test(line)) {
+          closeAll();
+          var q = [];
+          li--;
+          while (li + 1 < lines.length && /^>\s?/.test(lines[li + 1])) q.push(lines[++li].replace(/^>\s?/, ''));
+          h += '<blockquote class="rt-quote">' + q.map(function (x) {
+            return '<div>' + (inline(x, editable) || (editable ? '<br>' : '')) + '</div>';
+          }).join('') + '</blockquote>';
+          continue;
+        }
+        var im = line.match(/^!\[([^\]\n]*)\]\(([^)\s]+)\)$/);
+        if (im) {
+          closeAll();
+          var src = imgUrl(im[2], imgs);
+          var iid = /^img:/.test(im[2]) ? im[2].slice(4) : '';
+          h += '<figure class="rt-img"' + ce + ' data-img="' + esc(iid || im[2]) + '" data-alt="' + esc(im[1]) + '">' +
+            (src ? '<img src="' + esc(src) + '" alt="' + esc(im[1]) + '">' : '<span class="rt-img-gone">' + esc(L('รูปภาพ')) + '</span>') +
+            (im[1] ? '<figcaption>' + esc(im[1]) + '</figcaption>' : '') + '</figure>';
+          continue;
+        }
+      }
       var m = line.match(/^([ \t]*)([-*•]|\d{1,3}[.)])\s+(.*)$/);
       if (m) {
         var depth = Math.min(Math.floor(m[1].replace(/\t/g, '  ').length / 2), 3);
         var type = /\d/.test(m[2]) ? 'ol' : 'ul';
+        var body = m[3], ck = null;
+        if (blocks && type === 'ul') {
+          ck = body.match(/^\[( |x|X)\](?:\s+|$)(.*)$/);
+          if (ck) { type = 'cl'; body = ck[2]; }
+        }
         while (stack.length && stack[stack.length - 1].depth > depth) closeLevel();
         var top = stack[stack.length - 1];
         if (top && top.depth === depth && top.type !== type) { closeLevel(); top = stack[stack.length - 1]; }
         if (top && top.depth === depth) h += '</li>';
-        else { h += '<' + type + '>'; stack.push({ type: type, depth: depth }); }
-        h += '<li>' + (inline(m[3], editable) || (editable ? '<br>' : ''));
-        return;
+        else {
+          h += type === 'cl' ? '<ul class="rt-cl" data-check="1">' : '<' + type + '>';
+          stack.push({ type: type, depth: depth });
+        }
+        h += (ck ? '<li data-on="' + (ck[1] === ' ' ? '0' : '1') + '">' : '<li>') +
+          (inline(body, editable) || (editable ? '<br>' : ''));
+        continue;
       }
       closeAll();
-      if (!line.trim()) { h += editable ? '<div><br></div>' : '<div class="rt-gap"></div>'; return; }
+      if (!line.trim()) { h += editable ? '<div><br></div>' : '<div class="rt-gap"></div>'; continue; }
       /* หัวข้อแบบ # ใช้บ่อยเวลาวางสรุปประชุมมาจากที่อื่น */
-      var hd = line.match(/^#{1,3}\s+(.*)$/);
+      var hd = line.match(/^(#{1,3})\s+(.*)$/);
       if (hd) {
-        h += editable ? '<h3>' + inline(hd[1], true) + '</h3>'
-                      : '<div class="rt-h">' + inline(hd[1]) + '</div>';
-        return;
+        if (blocks) {
+          var lv = hd[1].length;
+          h += editable ? '<h' + lv + '>' + inline(hd[2], true) + '</h' + lv + '>'
+                        : '<div class="rt-h rt-h' + lv + '">' + inline(hd[2]) + '</div>';
+          continue;
+        }
+        h += editable ? '<h3>' + inline(hd[2], true) + '</h3>'
+                      : '<div class="rt-h">' + inline(hd[2]) + '</div>';
+        continue;
       }
       h += '<div>' + inline(line, editable) + '</div>';
-    });
+    }
     closeAll();
-    return editable ? h : '<div class="rt">' + h + '</div>';
+    return editable ? h : '<div class="rt' + (blocks ? ' rt-doc' : '') + '">' + h + '</div>';
   }
 
   /* ---------- หน้าจอ → ข้อความ ---------- */
@@ -163,7 +262,28 @@
     return '';
   }
 
-  function fromNode(root) {
+  /** ข้อความในกล่องโค้ด — <br> และ <div> ที่เบราว์เซอร์ใส่ตอนกด Enter นับเป็นขึ้นบรรทัดใหม่ */
+  function preText(n) {
+    var s = '';
+    (function walkPre(x) {
+      for (var c = x.firstChild; c; c = c.nextSibling) {
+        if (c.nodeType === 3) s += c.nodeValue.replace(/[​﻿]/g, '');
+        else if (c.nodeName === 'BR') s += '\n';
+        else if (c.nodeType === 1) {
+          if (/^(DIV|P)$/.test(c.nodeName) && s && s.slice(-1) !== '\n') s += '\n';
+          walkPre(c);
+        }
+      }
+    })(n);
+    return s.replace(/\n$/, '');
+  }
+
+  /**
+   * @param opts.blocks  อ่านบล็อกของหน้าเอกสาร (รายการติ๊ก ตาราง โค้ด คำพูด เส้นคั่น รูป หัวข้อหลายระดับ)
+   *                     ไม่เปิด = แบบเดิม (รายละเอียดงาน ความเห็น) ตารางกลายเป็นข้อความเรียงต่อกัน
+   */
+  function fromNode(root, opts) {
+    var blocks = !!(opts && opts.blocks);
     var out = [], buf = '', prefix = '', open = false, marks = [];
 
     function endLine() {
@@ -194,11 +314,13 @@
     function list(n, depth) {
       startBlock();
       var d = depth + 1, num = 1, ordered = n.nodeName === 'OL';
+      var check = blocks && !ordered && n.getAttribute && n.getAttribute('data-check') === '1';
       for (var c = n.firstChild; c; c = c.nextSibling) {
         if (c.nodeType === 3 && !c.nodeValue.trim()) continue;
         if (c.nodeName === 'UL' || c.nodeName === 'OL') { list(c, d); continue; }
         endLine();
-        prefix = indent(d) + (ordered ? (num++) + '. ' : '- ');
+        prefix = indent(d) + (ordered ? (num++) + '. ' : '- ') +
+          (check ? '[' + (c.getAttribute && c.getAttribute('data-on') === '1' ? 'x' : ' ') + '] ' : '');
         open = true;
         if (c.nodeType === 1) walk(c, d); else visit(c, d);
         endLine();
@@ -214,6 +336,53 @@
       }
       if (n.nodeType !== 1) return;
       var tag = n.nodeName;
+      if (blocks) {
+        var di = n.getAttribute('data-img');
+        if (di && (tag === 'FIGURE' || tag === 'IMG')) {
+          startBlock();
+          var alt = (n.getAttribute('data-alt') || '').replace(/[\[\]\n]/g, ' ').trim();
+          out.push('![' + alt + '](' + (/^https:\/\//.test(di) ? di : 'img:' + di) + ')');
+          return;
+        }
+        if (tag === 'HR') { startBlock(); out.push('---'); return; }
+        if (tag === 'PRE') {
+          startBlock();
+          out.push('```');
+          preText(n).split('\n').forEach(function (x) { out.push(x.replace(/^```/, '` ``')); });
+          out.push('```');
+          return;
+        }
+        if (tag === 'BLOCKQUOTE') {
+          startBlock();
+          var qmd = fromNode(n, { blocks: false });
+          (qmd || '').split('\n').forEach(function (x) { out.push(x.trim() ? '> ' + x : '>'); });
+          return;
+        }
+        if (tag === 'TABLE') {
+          startBlock();
+          var trs = n.querySelectorAll('tr'), ncol = 0, rowsMd = [];
+          Array.prototype.forEach.call(trs, function (tr) {
+            var cells = [];
+            Array.prototype.forEach.call(tr.children, function (cell) {
+              if (!/^(TD|TH)$/.test(cell.nodeName)) return;
+              cells.push(fromNode(cell, { blocks: false }).replace(/\n+/g, ' ').replace(/\|/g, '\\|').trim());
+            });
+            if (cells.length) { ncol = Math.max(ncol, cells.length); rowsMd.push(cells); }
+          });
+          rowsMd.forEach(function (cells, i) {
+            while (cells.length < ncol) cells.push('');
+            out.push('| ' + cells.map(function (x) { return x || ' '; }).join(' | ') + ' |');
+            if (i === 0) out.push('|' + new Array(ncol + 1).join(' --- |'));
+          });
+          return;
+        }
+        if (/^H[1-6]$/.test(tag)) {
+          var lvl = Math.min(3, +tag.charAt(1));
+          startBlock(); prefix = new Array(lvl + 1).join('#') + ' '; open = true;
+          walk(n, depth); endLine();
+          return;
+        }
+      }
       if (SKIP.test(tag)) return;
 
       if (n.classList && n.classList.contains('mchip')) {
@@ -286,7 +455,11 @@
 
   /* ---------- แถบเครื่องมือ ---------- */
 
-  function toolbar(mini) {
+  /** @param mini  true = ช่องความเห็น   'page' = หน้าเอกสาร/บรีฟ (มีปุ่มบล็อกเพิ่ม)
+   *  @param opts  { image: false } ซ่อนปุ่มรูป (บรีฟโปรเจกต์ไม่มีที่เก็บรูป) */
+  function toolbar(mini, opts) {
+    var page = mini === 'page';
+    if (page) mini = false;
     var B = [
       ['bold', '<b>B</b>', L('ตัวหนา'), 'Ctrl+B'],
       ['italic', '<i>I</i>', L('ตัวเอียง'), 'Ctrl+I'],
@@ -299,7 +472,16 @@
       ['link', icon('link', 13), L('ลิงก์'), 'Ctrl+K'],
       ['mention', '@', L('อ้างถึงคน งาน หรือโปรเจกต์'), '@']
     ];
-    var h = '<div class="rte-bar' + (mini ? ' mini' : '') + '">';
+    if (page) {
+      B.splice(7, 1,
+        ['h1', 'H1', L('หัวข้อใหญ่'), ''], ['h2', 'H2', L('หัวข้อรอง'), ''], ['h', 'H3', L('หัวข้อย่อย'), ''],
+        ['check', '☑', L('รายการติ๊ก'), '[ ] '], ['quote', '❝', L('คำพูดยกมา'), '> '],
+        ['pre', '{ }', L('กล่องโค้ด'), '```'], ['table', '▦', L('ตาราง'), ''],
+        ['trow', '+≡', L('เพิ่มแถวตาราง'), ''], ['tcol', '+⫼', L('เพิ่มคอลัมน์ตาราง'), ''],
+        ['hr', '―', L('เส้นคั่น'), '---']);
+      if (!opts || opts.image !== false) B.push(['image', icon('image', 13), L('แทรกรูป (ไม่เกิน 500 KB)'), '']);
+    }
+    var h = '<div class="rte-bar' + (mini ? ' mini' : '') + (page ? ' page' : '') + '">';
     B.forEach(function (b) {
       if (mini && (b[0] === 'underline' || b[0] === 'h')) return;
       h += '<button type="button" tabindex="-1" class="rte-b" data-rte="' + b[0] + '" title="' +
@@ -434,9 +616,86 @@
     });
   }
 
+  /* ---------- 3c — คำสั่งบล็อกของหน้าเอกสาร ---------- */
+
+  function toggleBlock(ed, tag) {
+    var cur = closestIn(ed, selNode(), tag);
+    exec('formatBlock', cur ? 'div' : tag);
+  }
+
+  function toggleCheck(ed) {
+    var ul = closestIn(ed, selNode(), 'ul');
+    if (ul) {
+      if (ul.getAttribute('data-check') === '1') { ul.removeAttribute('data-check'); ul.classList.remove('rt-cl'); }
+      else {
+        ul.setAttribute('data-check', '1'); ul.classList.add('rt-cl');
+        Array.prototype.forEach.call(ul.children, function (li) { if (!li.hasAttribute('data-on')) li.setAttribute('data-on', '0'); });
+      }
+      fire(ed);
+      return;
+    }
+    exec('insertUnorderedList');
+    var nu = closestIn(ed, selNode(), 'ul');
+    if (nu) {
+      nu.setAttribute('data-check', '1'); nu.classList.add('rt-cl');
+      Array.prototype.forEach.call(nu.children, function (li) { li.setAttribute('data-on', '0'); });
+    }
+    fire(ed);
+  }
+
+  function insertTable(ed) {
+    if (closestIn(ed, selNode(), 'table')) return;
+    var row = function (tag) { return '<tr><' + tag + '><br></' + tag + '><' + tag + '><br></' + tag + '><' + tag + '><br></' + tag + '></tr>'; };
+    exec('insertHTML', '<table class="rt-table"><tbody>' + row('th') + row('td') + row('td') + '</tbody></table><div><br></div>');
+    fire(ed);
+  }
+
+  function tableAdd(ed, what) {
+    var cell = closestIn(ed, selNode(), 'td,th');
+    if (!cell) return;
+    var tr = cell.parentNode, table = closestIn(ed, cell, 'table');
+    if (what === 'row') {
+      var nr = document.createElement('tr');
+      for (var i = 0; i < tr.children.length; i++) { var td = document.createElement('td'); td.innerHTML = '<br>'; nr.appendChild(td); }
+      tr.parentNode.insertBefore(nr, tr.nextSibling);
+    } else if (table) {
+      var col = Array.prototype.indexOf.call(tr.children, cell);
+      Array.prototype.forEach.call(table.querySelectorAll('tr'), function (r, ri) {
+        var c = document.createElement(ri === 0 ? 'th' : 'td');
+        c.innerHTML = '<br>';
+        r.insertBefore(c, r.children[col + 1] || null);
+      });
+    }
+    fire(ed);
+  }
+
+  /** แทรกรูปที่ main.js เก็บลงหน้าเอกสารแล้ว (รหัส + data URI) ตรงตำแหน่งเคอร์เซอร์ที่จำไว้ */
+  function insertImage(ed, off, id, url, alt) {
+    if (!ed || !document.body.contains(ed)) return;
+    ed.focus();
+    setOffsets(ed, off);
+    exec('insertHTML', '<figure class="rt-img" contenteditable="false" data-img="' + esc(id) + '" data-alt="' + esc(alt || '') +
+      '"><img src="' + esc(url) + '" alt=""></figure><div><br></div>');
+    fire(ed);
+  }
+
   function run(ed, cmd) {
     ed.focus();
     switch (cmd) {
+      case 'h1': toggleBlock(ed, 'h1'); break;
+      case 'h2': toggleBlock(ed, 'h2'); break;
+      case 'quote': toggleBlock(ed, 'blockquote'); break;
+      case 'pre': toggleBlock(ed, 'pre'); break;
+      case 'check': toggleCheck(ed); break;
+      case 'table': insertTable(ed); break;
+      case 'trow': tableAdd(ed, 'row'); break;
+      case 'tcol': tableAdd(ed, 'col'); break;
+      case 'hr': exec('insertHTML', '<hr class="rt-hr" contenteditable="false"><div><br></div>'); fire(ed); break;
+      case 'image': {
+        var off = caretOffsets(ed);
+        if (RT.pickImage) RT.pickImage(ed, function (id, url, alt) { insertImage(ed, off, id, url, alt); });
+        return;
+      }
       case 'bold': exec('bold'); break;
       case 'italic': exec('italic'); break;
       case 'underline': exec('underline'); break;
@@ -488,10 +747,15 @@
     var head = lineHead(ed);
     if (!head) return false;
     var cmd = null;
+    var blocks = ed.getAttribute('data-blocks') === '1';
     if (head.text === '*' || head.text === '-') cmd = 'insertUnorderedList';
     else if (/^1[.)]$/.test(head.text)) cmd = 'insertOrderedList';
     else if (head.text === '#') cmd = 'h';
+    else if (blocks && head.text === '##') cmd = 'h2';
+    else if (blocks && (head.text === '[]' || head.text === '[ ]')) cmd = 'check';
+    else if (blocks && head.text === '>') cmd = 'quote';
     if (!cmd) return false;
+    if (blocks && cmd === 'h') cmd = 'h1';
     e.preventDefault();
     var r = document.createRange();
     r.setStart(head.node, 0);
@@ -500,7 +764,11 @@
     sel.removeAllRanges();
     sel.addRange(r);
     exec('delete');
-    if (cmd === 'h') exec('formatBlock', 'h3'); else exec(cmd);
+    if (cmd === 'h') exec('formatBlock', 'h3');
+    else if (cmd === 'h1' || cmd === 'h2') exec('formatBlock', cmd);
+    else if (cmd === 'check') toggleCheck(ed);
+    else if (cmd === 'quote') exec('formatBlock', 'blockquote');
+    else exec(cmd);
     return true;
   }
 
@@ -655,6 +923,17 @@
   });
 
   document.addEventListener('click', function (e) {
+    /* 3c — ติ๊กรายการในตัวแก้ไข: คลิกที่ช่องสี่เหลี่ยมหน้าบรรทัด (ซ้าย 24px ของ li) */
+    var cli = e.target && e.target.nodeName === 'LI' ? e.target : null;
+    if (cli && cli.parentNode && cli.parentNode.getAttribute && cli.parentNode.getAttribute('data-check') === '1') {
+      var ced = editorOf(cli);
+      var rect = cli.getBoundingClientRect();
+      if (ced && e.clientX - rect.left < 24) {
+        cli.setAttribute('data-on', cli.getAttribute('data-on') === '1' ? '0' : '1');
+        fire(ced);
+        return;
+      }
+    }
     var b = e.target.closest && e.target.closest('[data-rte]');
     if (!b) return;
     var wrap = b.closest('.rte-wrap');
@@ -690,6 +969,17 @@
       if (cmd) { e.preventDefault(); run(ed, cmd); return; }
     }
 
+    var tcell = e.key === 'Tab' && !mod ? closestIn(ed, selNode(), 'td,th') : null;
+    if (tcell) {
+      e.preventDefault();
+      var cells = Array.prototype.slice.call(closestIn(ed, tcell, 'table').querySelectorAll('td,th'));
+      var ci = cells.indexOf(tcell) + (e.shiftKey ? -1 : 1);
+      if (ci >= cells.length) { tableAdd(ed, 'row'); cells = Array.prototype.slice.call(closestIn(ed, tcell, 'table').querySelectorAll('td,th')); }
+      var nx = cells[Math.max(0, ci)];
+      if (nx) { var rr = document.createRange(); rr.selectNodeContents(nx); rr.collapse(true);
+        var ss = global.getSelection(); ss.removeAllRanges(); ss.addRange(rr); }
+      return;
+    }
     if (e.key === 'Tab' && !mod && closestIn(ed, selNode(), 'li')) {
       e.preventDefault();
       exec(e.shiftKey ? 'outdent' : 'indent');
@@ -718,16 +1008,24 @@
     if (!cd) return;
     var html = cd.getData('text/html'), txt = cd.getData('text/plain');
     var md = null;
+    var blocks = ed.getAttribute('data-blocks') === '1';
+    /* กล่องโค้ด — วางเป็นข้อความล้วนเสมอ */
+    if (blocks && closestIn(ed, selNode(), 'pre')) {
+      e.preventDefault();
+      exec('insertText', (txt || '').replace(/\r\n?/g, '\n'));
+      return;
+    }
     if (html) {
-      try { md = fromNode(new DOMParser().parseFromString(html, 'text/html').body); } catch (er) { md = null; }
+      try { md = fromNode(new DOMParser().parseFromString(html, 'text/html').body, { blocks: blocks }); } catch (er) { md = null; }
     }
     if (md == null || (!md.trim() && txt)) md = txt;
     if (md == null) return;
     e.preventDefault();
     md = md.replace(/\r\n?/g, '\n');
     if (!md.trim()) return;
-    var oneLine = md.indexOf('\n') < 0 && !/^\s*([-*•]|\d{1,3}[.)])\s|^#{1,3}\s/.test(md);
-    exec('insertHTML', oneLine ? inline(md, true) : toHtml(md, { editable: true }));
+    var oneLine = md.indexOf('\n') < 0 && !/^\s*([-*•]|\d{1,3}[.)])\s|^#{1,3}\s/.test(md) &&
+      !(blocks && /^(>\s|-{3,}\s*$|!\[)/.test(md));
+    exec('insertHTML', oneLine ? inline(md, true) : toHtml(md, { editable: true, blocks: blocks, imgs: RT.imgs }));
     closeMention();
   });
 
@@ -749,6 +1047,8 @@
     caretOffsets: caretOffsets, setOffsets: setOffsets, focusEnd: focusEnd,
     closeMention: closeMention,
     plain: function (md) { return S.plainText(md); },
+    /** 3c — main.js ใส่ตัวเลือกรูปให้ปุ่ม "แทรกรูป" (ed, cb(id, dataUri, alt)) และที่มาของรูปตอนวาง */
+    pickImage: null, imgs: null,
     /** main.js ใส่ตัวถามข้อความของแอปมาให้ (askText) ไม่ใช้ prompt() ของเบราว์เซอร์ */
     ask: null
   };

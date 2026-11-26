@@ -349,7 +349,7 @@
       else if (r.view === 'dashboard') body = R.dashboardView(r.id);
       else if (r.view === 'overview') body = R.overviewView(r.id);
       else if (r.view === 'files') body = R.filesView(r.id);
-      else if (r.view === 'messages') body = R.messagesView(r.id);
+      else if (r.view === 'messages') body = R.messagesView(r.id, { files: state.msgFiles });
       else body = R.listView(r.id, v, state.sel, { subOpen: state.subOpen, cursor: state.cursor });
     } else if (r.type === 'portfolio') {
       if (!S.portfolio(r.id)) { state.route = { type: 'home' }; return renderAll(); }
@@ -396,6 +396,12 @@
     var prevG = $view.querySelector('.gantt-scroll');
     if (prevG) state.ganttScroll = { x: prevG.scrollLeft, y: prevG.scrollTop };
 
+    /* 3c — ตัวแก้ไขในหน้า (บรีฟ ประกาศ) ที่กำลังพิมพ์อยู่ ไม่ให้หายเมื่อหน้าวาดใหม่ระหว่างพิมพ์ */
+    var keepEd = (function () {
+      var ae = document.activeElement;
+      if (!ae || !ae.classList || !ae.classList.contains('rte') || !$view.contains(ae) || !ae.dataset.key) return null;
+      return { key: ae.dataset.key, html: ae.innerHTML, off: global.RichText.caretOffsets(ae) };
+    })();
     persistView();
     $view.innerHTML = body + R.bulkbar(state.sel);
     if (keepNote) {
@@ -406,6 +412,11 @@
         try { nn.setSelectionRange(keepNote.a, keepNote.b); } catch (e) { /* ช่องเปลี่ยนชนิด */ }
         nn.scrollTop = keepNote.top;
       }
+    }
+    restoreMsgDrafts();
+    if (keepEd) {
+      var ne3 = $view.querySelector('.rte[data-key="' + keepEd.key + '"]');
+      if (ne3) { ne3.innerHTML = keepEd.html; ne3.focus(); global.RichText.setOffsets(ne3, keepEd.off); }
     }
     resumeInlineAdd();
     restoreTimelineScroll();
@@ -745,6 +756,9 @@
       h += '<div class="opt-row"><span class="ic-wrap">' + I('palette', 15) + '</span>' +
         '<span class="grow">' + L('ระบายสีตาม') + '</span>' +
         optSelect('tl-colorby', S.colorChoices(id).map(function (c) { return [c[0], L(c[1])]; }), v.tColorBy) + '</div>';
+    }
+    if (isG || vw === 'timeline') {
+      h += optToggle('crit-toggle', L('ไฮไลต์เส้นทางวิกฤต'), !!v.critical, L('สายงานที่ต่อกันด้วยลำดับก่อนหลังแล้วกินเวลายาวที่สุด งานในสายนี้ช้า = ทั้งโปรเจกต์ช้า'));
     }
     h += optRow('g-opt-page', 'filter', L('ตัวกรอง'),
       S.filterCount(v) ? L('ใช้อยู่ {n}', { n: S.filterCount(v) }) : L('ไม่มี'), true, ' data-page="filters"');
@@ -1270,10 +1284,10 @@
     }
 
     if (kind === 'due') { inlineInput(cell, 'date', t.dueOn || '', function (v) {
-      S.updateTask(tid, { dueOn: v || null });
+      setDates(tid, { dueOn: v || null });       // 3c — ดูงานที่ขยับตามก่อน
     }); return; }
     if (kind === 'start') { inlineInput(cell, 'date', t.startOn || '', function (v) {
-      S.updateTask(tid, { startOn: v || null });
+      setDates(tid, { startOn: v || null });
     }); return; }
     if (kind === 'priority') {
       if (popIsOpenFor(cell)) { closePops(); return; }
@@ -4752,6 +4766,7 @@
     h += item('bulk-type', 'check', L('ทำเป็นงานธรรมดา'), ' data-v="task"');
     h += '<div class="pop-sep"></div>';
     h += item('bulk-dep', 'blocked', L('ให้รองานอื่น…'));
+    h += item('bulk-chain', 'subtask', L('ต่อลำดับก่อนหลังเป็นสายเดียว'));
     h += item('bulk-merge', 'copy', L('รวมเป็นงานซ้ำ…'));
     h += item('bulk-links', 'link', L('คัดลอกลิงก์'));
     if (r.type === 'project' && S.automations(r.id).some(function (a) { return a.on && a.trigger.type === 'manual'; })) {
@@ -5518,6 +5533,462 @@
   /* ---------- click delegation ---------- */
 
   // เวลาที่ลากแท่งไทม์ไลน์เสร็จล่าสุด
+  /* ====================== 3c — ภาพรวม แดชบอร์ด ประกาศ เส้นทางวิกฤต ====================== */
+
+  state.msgFiles = {};        // ไฟล์ที่รอส่งพร้อมประกาศ/คำตอบ { 'new' | 'r:<msgId>': [file] } อยู่แค่ในหน้าจอ
+  state.msgFileKey = null;
+  state.dashEdit = null;      // { pid, w, isNew } วิดเจ็ตที่กำลังแก้ (สำเนา บันทึกตอนกด "บันทึก")
+
+  /** อ่านไฟล์ที่เลือกเป็น data URI — ไฟล์ที่เกินขนาดข้ามไป แล้วบอกจำนวนที่ข้าม */
+  function readFiles(inputEl, max, cb) {
+    var files = Array.prototype.slice.call(inputEl.files || []);
+    inputEl.value = '';
+    if (!files.length) return;
+    var out = [], left = files.length, skipped = 0;
+    var done = function () { if (--left === 0) cb(out, skipped); };
+    files.forEach(function (f) {
+      if (f.size > max) { skipped++; done(); return; }
+      var rd = new FileReader();
+      rd.onload = function () {
+        out.push({ id: S.uid('fa'), name: f.name, url: String(rd.result), size: f.size, mime: f.type || null });
+        done();
+      };
+      rd.onerror = function () { skipped++; done(); };
+      rd.readAsDataURL(f);
+    });
+  }
+  function skippedToast(n, limit) {
+    if (n) toast(L('ข้าม {n} ไฟล์ที่ใหญ่เกิน {m}', { n: n, m: limit }));
+  }
+
+  /* ---------- เปลี่ยนวันนอก Gantt/ไทม์ไลน์: ดูงานที่จะขยับตามก่อนแล้วค่อยใช้ ---------- */
+  var pendingShift = null;
+  function spanText(a) {
+    var s = a[0], d = a[1];
+    if (!s && !d) return '—';
+    if (!s || !d || s === d) return R.fmtDate(d || s);
+    return R.fmtDate(s) + ' – ' + R.fmtDate(d);
+  }
+  function setDates(taskId, patch, done) {
+    var list = S.task(taskId) ? S.previewDates(taskId, patch) : [];
+    if (!list.length) {
+      S.updateTask(taskId, patch);
+      if (done) done(0);
+      return;
+    }
+    pendingShift = { id: taskId, patch: patch, done: done };
+    var t = S.task(taskId);
+    var h = '<h2>' + L('งานที่รออยู่จะขยับตาม') + '</h2>' +
+      '<p class="modal-sub">' + esc(L('เปลี่ยนวันของ “{t}” แล้ว งานที่พึ่งพากันจะเลื่อนตามโหมดของโปรเจกต์ ตรวจดูก่อนใช้', { t: t.name })) + '</p>' +
+      '<div class="shift-list"><div class="shift-row head"><span class="grow">' + L('งาน') + '</span><span>' + L('เดิม') + '</span><span></span><span>' +
+      L('ใหม่') + '</span></div>' +
+      '<div class="shift-row self"><span class="grow">' + esc(t.name) + '</span><span>' + esc(spanText([t.startOn, t.dueOn])) +
+      '</span><span>→</span><span>' + esc(spanText(['startOn' in patch ? patch.startOn : t.startOn, 'dueOn' in patch ? patch.dueOn : t.dueOn])) + '</span></div>';
+    list.slice(0, 60).forEach(function (x) {
+      h += '<div class="shift-row"><span class="grow">' + esc(x.name) + '</span><span>' + esc(spanText(x.from)) + '</span><span>→</span><span><b>' +
+        esc(spanText(x.to)) + '</b></span></div>';
+    });
+    if (list.length > 60) h += '<div class="shift-row"><span class="grow">' + esc(L('และอีก {n} งาน', { n: list.length - 60 })) + '</span></div>';
+    h += '</div><div class="modal-actions"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn" data-act="shift-only">' + L('เปลี่ยนเฉพาะงานนี้') + '</button>' +
+      '<button class="btn btn-primary" data-act="shift-apply">' + esc(L('เลื่อนงานที่รออยู่ด้วย ({n})', { n: list.length })) +
+      '</button></div>';
+    openModal(h, true);
+  }
+
+  /* ---------- แดชบอร์ด ---------- */
+  function widgetOf(pid, wid) {
+    return S.dashWidgets(pid).filter(function (w) { return w.id === wid; })[0] || null;
+  }
+  function dashMenuHtml(pid, wid) {
+    var w = widgetOf(pid, wid);
+    if (!w) return '';
+    var can = S.canEditDash(pid);
+    var list = S.dashWidgets(pid), i = list.indexOf(w);
+    var item = function (act, icon, label, extra) {
+      return '<button data-act="' + act + '" data-w="' + esc(wid) + '"' + (extra || '') + '>' + I(icon, 14) + '<span class="grow">' + label + '</span></button>';
+    };
+    var h = '';
+    if (can) {
+      h += item('dash-edit', 'pencil', L('แก้ไขวิดเจ็ต…'));
+      h += item('dash-dup', 'copy', L('ทำสำเนา'));
+      h += item('dash-size', w.full ? 'shrink' : 'expand', w.full ? L('ครึ่งความกว้าง') : L('เต็มความกว้าง'));
+      if (i > 0) h += item('dash-move', 'arrowLeft', L('ย้ายไปก่อนหน้า'), ' data-delta="-1"');
+      if (i < list.length - 1) h += item('dash-move', 'arrowRight', L('ย้ายไปถัดไป'), ' data-delta="1"');
+    }
+    if (w.kind !== 'text') h += item('dash-png', 'image', L('ส่งออกเป็น PNG'));
+    if (can) h += '<div class="pop-sep"></div>' + item('dash-del', 'trash', L('ลบวิดเจ็ต'));
+    return h;
+  }
+
+  function dashSel(k, options, cur) {
+    return '<select class="inp" data-act="dwe" data-k="' + k + '">' + options.map(function (o) {
+      return '<option value="' + esc(o[0]) + '"' + (String(o[0]) === String(cur) ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
+    }).join('') + '</select>';
+  }
+
+  function dashEditHtml() {
+    var de = state.dashEdit, w = de.w, pid = de.pid;
+    var xs = S.DASH_X.map(function (x) { return [x[0], L(x[1])]; });
+    S.dashFieldChoices(pid, false).forEach(function (f) { xs.push(['field:' + f.id, f.name]); });
+    var ys = [['count', L('จำนวนงาน')]];
+    S.dashFieldChoices(pid, true).forEach(function (f) {
+      ys.push(['sum:' + f.id, L('ผลรวมของ {f}', { f: f.name })]);
+      ys.push(['avg:' + f.id, L('ค่าเฉลี่ยของ {f}', { f: f.name })]);
+    });
+    (S.DASH_Y_EXTRA || []).forEach(function (y) { ys.push([y[0], L(y[1])]); });
+    var k = w.kind;
+    var axis = ['bar', 'stack', 'group', 'line', 'donut', 'lollipop'].indexOf(k) >= 0;
+    var burn = k === 'burnup' || k === 'burndown';
+    var h = '<h2>' + (de.isNew ? L('เพิ่มวิดเจ็ต') : L('แก้ไขวิดเจ็ต')) + '</h2><div class="dwe">';
+    h += '<div class="dwe-kinds">' + S.DASH_KINDS.map(function (x) {
+      return '<button class="dwe-kind' + (x[0] === k ? ' on' : '') + '" data-act="dwe-kind" data-v="' + x[0] + '">' + esc(L(x[1])) + '</button>';
+    }).join('') + '</div>';
+    h += '<div class="field"><label>' + L('ชื่อวิดเจ็ต') + '</label><input class="inp" data-act="dwe" data-k="title" value="' + esc(w.title ? L(w.title) : '') +
+      '" placeholder="' + esc(L('ไม่ใส่ก็ได้')) + '"></div>';
+    if (k === 'text') {
+      h += '<div class="field"><label>' + L('ข้อความ') + '</label><div class="rte-wrap">' + global.RichText.toolbar('page', { image: false }) +
+        '<div class="rte rte-doc dwe-text" contenteditable="true" data-blocks="1" data-key="dwt" data-placeholder="' +
+        esc(L('เขียนบันทึก ลิงก์ หรือคำอธิบายของแดชบอร์ด')) + '">' + global.RichText.toHtml(w.text, { editable: true, blocks: true }) + '</div></div></div>';
+    } else {
+      h += '<div class="dwe-row">';
+      if (axis) h += '<div class="field"><label>' + (k === 'donut' ? L('แบ่งชิ้นตาม') : L('แกน X')) + '</label>' + dashSel('x', xs, w.x) + '</div>';
+      h += '<div class="field"><label>' + (k === 'number' ? L('ค่า') : L('แกน Y')) + '</label>' + dashSel('y', ys, w.y) + '</div>';
+      if (k === 'stack' || k === 'group') {
+        h += '<div class="field"><label>' + L('แยกชุดข้อมูลตาม') + '</label>' +
+          dashSel('split', [['', L('ไม่แยก')]].concat(xs.filter(function (x) { return x[0] !== 'period'; })), w.split) + '</div>';
+      }
+      h += '</div>';
+      if (burn || w.x === 'period') {
+        h += '<div class="dwe-row"><div class="field"><label>' + L('ช่วงละ') + '</label>' +
+          dashSel('unit', S.DASH_UNITS.map(function (x) { return [x[0], L(x[1])]; }), w.unit) + '</div>' +
+          '<div class="field"><label>' + L('ย้อนหลัง (ช่วง)') + '</label><input class="inp" type="number" min="2" max="36" data-act="dwe" data-k="n" value="' + w.n + '"></div>' +
+          (w.x === 'period' && !burn ? '<div class="field"><label>' + L('นับตามวันที่') + '</label>' +
+            dashSel('date', S.DASH_DATES.map(function (x) { return [x[0], L(x[1])]; }), w.date) + '</div>' : '') + '</div>';
+      }
+      if (k === 'line' || k === 'bar') {
+        h += '<div class="field"><label>' + L('เส้นเป้าหมาย (ไม่ใส่ก็ได้)') + '</label><input class="inp" type="number" step="any" data-act="dwe" data-k="bench" value="' +
+          esc(w.bench == null ? '' : w.bench) + '"></div>';
+      }
+      /* ตัวกรอง — ชุดเดียวกับตัวกรองของมุมมอง */
+      h += '<label class="opt-lbl">' + L('ตัวกรอง') + '</label>';
+      var ffs = S.filterFields(pid);
+      w.filters.forEach(function (c, i) {
+        var def = S.filterField(pid, c.f);
+        var ops = def ? S.FILTER_OPS[def.kind] || [] : [];
+        h += '<div class="flt-row">' + (i ? '<span class="flt-and">' + L('และ') + '</span>' : '') + '<div class="flt-line">' +
+          optSelect('dwf-field', ffs.map(function (x) { return [x.id, x.custom ? x.label : L(x.label)]; }), c.f, ' data-i="' + i + '"') +
+          optSelect('dwf-op', ops.map(function (o) { return [o[0], L(o[1])]; }), c.op, ' data-i="' + i + '"') +
+          '<button class="flt-del" data-act="dwf-del" data-i="' + i + '" title="' + L('เอาเงื่อนไขนี้ออก') + '">' + I('close', 13) + '</button></div>' +
+          fltValueHtml(pid, c, i, 'dwf') + '</div>';
+      });
+      h += '<button class="btn btn-sm" data-act="dwf-add">' + I('plus', 13) + ' ' + L('เพิ่มตัวกรอง') + '</button>';
+      h += '<div class="dwe-prev">' + global.Charts.svg(R.widgetSpec(pid, w)) + '</div>';
+    }
+    h += '</div><div class="modal-actions"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="dash-save">' + L('บันทึก') + '</button></div>';
+    return h;
+  }
+  function refreshDashEdit() {
+    var txt = $modal.querySelector('.dwe-text');
+    if (txt && state.dashEdit) state.dashEdit.w.text = global.RichText.fromNode(txt, { blocks: true });
+    openModal(dashEditHtml(), true);
+  }
+
+  function dashClickModal(pid, wid, cat, ser) {
+    var w = widgetOf(pid, wid);
+    if (!w) return;
+    var list = S.dashClickTasks(pid, wid, cat, ser);
+    var lab = '';
+    if (cat) {
+      var d = S.chartData(S.dashItems(pid, w), w, pid);
+      var c = d.cats.filter(function (x) { return x.key === cat; })[0];
+      var s = d.series.filter(function (x) { return x.key === ser && x.label; })[0];
+      lab = (c ? c.label : cat) + (s ? ' · ' + s.label : '');
+    }
+    var h = '<h2>' + esc(w.title ? L(w.title) : L('วิดเจ็ต')) + (lab ? ' · ' + esc(lab) : '') + '</h2>' +
+      '<p class="modal-sub">' + esc(L('{n} งาน', { n: list.length })) + '</p><div class="dash-tasks">';
+    if (!list.length) h += '<div class="ovw-empty">' + L('ไม่มีงาน') + '</div>';
+    list.slice(0, 200).forEach(function (t) { h += R.taskRow(t, {}); });
+    h += '</div><div class="modal-actions"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
+    openModal(h, true);
+  }
+
+  /** ช่องเขียนประกาศ/คำตอบ ร่างไม่หายตอนหน้าวาดใหม่ (เก็บแบบเดียวกับร่างความเห็น) */
+  document.addEventListener('input', function (e) {
+    var ed = e.target;
+    if (ed && ed.classList && ed.classList.contains('rte-msg')) setDraft(ed.dataset.key, global.RichText.fromNode(ed));
+    if (ed && ed.id === 'msgTitle') state.msgTitle = ed.value;
+  });
+  function restoreMsgDrafts() {
+    var mti = document.getElementById('msgTitle');
+    if (mti && state.msgTitle && !mti.value) mti.value = state.msgTitle;
+    Array.prototype.forEach.call($view.querySelectorAll('.rte-msg'), function (ed) {
+      var d = getDraft(ed.dataset.key);
+      if (d && !ed.textContent) ed.innerHTML = global.RichText.toHtml(d, { editable: true });
+    });
+  }
+
+  /* บรีฟโปรเจกต์ บันทึกตอนออกจากช่อง (หลังปล่อยเมาส์ ให้ปุ่มที่กดทำงานก่อน) */
+  document.addEventListener('focusout', function (e) {
+    var ed = e.target;
+    if (!ed || !ed.classList || !ed.classList.contains('rte') || ed.dataset.save !== 'brief') return;
+    var pid = ed.dataset.id, p = S.project(pid);
+    if (!p) return;
+    var md = global.RichText.fromNode(ed, { blocks: true });
+    if (md === (p.brief || '')) return;
+    if (!allowed('brief-save', ed)) return;
+    afterClick(function () { if (S.setBrief(pid, md)) toast(L('บันทึกบรีฟแล้ว'), L('ย้อนกลับ'), 'undo'); });
+  });
+
+  /** คำสั่งคลิกของชิ้นงาน 3c — คืน true เมื่อจัดการแล้ว (ตรวจสิทธิ์ผ่าน allowed() มาก่อนแล้ว) */
+  function act3c(act, el, e) {
+    var id = el.dataset.id;
+    var pid = state.route.type === 'project' ? state.route.id : null;
+    switch (act) {
+      /* --- เส้นทางวิกฤต / ต่อสาย / ดูงานที่ขยับตาม --- */
+      case 'crit-toggle': {
+        if (!pid) return true;
+        var vc = viewFor(pid);
+        vc.critical = !vc.critical;
+        refreshView();
+        refreshOpts();
+        return true;
+      }
+      case 'bulk-chain': {
+        var ids = selectedIds();
+        if (ids.length < 2) { toast(L('เลือกอย่างน้อย 2 งาน')); return true; }
+        closePops();
+        var nc = S.bulkChain(ids);
+        clearSel();
+        renderAll();
+        toast(nc ? L('ต่อลำดับก่อนหลังแล้ว {n} ช่วง', { n: nc })
+                 : L('ไม่มีลำดับใหม่ (มีอยู่แล้ว หรือจะทำให้รอวนกัน)'), nc ? L('ย้อนกลับ') : null, nc ? 'undo' : null);
+        return true;
+      }
+      case 'shift-apply':
+      case 'shift-only': {
+        var ps = pendingShift;
+        pendingShift = null;
+        closeModal();
+        if (!ps || !S.task(ps.id)) return true;
+        var ns = S.applyDates(ps.id, ps.patch, act === 'shift-apply');
+        if (ps.done) ps.done(ns);
+        toast(ns ? L('เปลี่ยนวันแล้ว และเลื่อนงานที่รออยู่ {n} งาน', { n: ns })
+                 : L('เปลี่ยนวันแล้ว'), L('ย้อนกลับ'), 'undo');
+        return true;
+      }
+
+      /* --- ภาพรวม --- */
+      case 'kr-link':
+        askText(L('ลิงก์ (URL)'), 'https://', function (url) {
+          if (!url || url === 'https://') return;
+          askText(L('ชื่อที่แสดง'), '', function (name) {
+            if (!S.addResource(id, { kind: 'link', url: url, name: name || '' })) toast(L('เพิ่มไม่ได้ — ตรวจลิงก์ หรือครบ {n} รายการแล้ว', { n: S.RES_MAX }));
+          }, { note: L('เว้นว่างได้ จะใช้ลิงก์เป็นชื่อ') });
+        }, { type: 'url', ok: L('ถัดไป') });
+        return true;
+      case 'kr-file': {
+        var kf = document.getElementById('krFile');
+        if (kf) kf.click();
+        return true;
+      }
+      case 'kr-move': S.moveResource(id, el.dataset.r, +el.dataset.delta || 0); return true;
+      case 'kr-del':
+        if (S.removeResource(id, el.dataset.r)) toast(L('เอาออกแล้ว'), L('ย้อนกลับ'), 'undo');
+        return true;
+      case 'ms-show': S.setMsShow(id, el.dataset.v); return true;
+      case 'ms-add':
+        askText(L('ชื่อหมุดหมาย'), '', function (name) {
+          if (!name) return;
+          var t = S.addMilestone(id, name, null);
+          if (t) toast(L('เพิ่มหมุดหมายแล้ว ตั้งวันได้จากแผงหมุดหมาย'), L('ย้อนกลับ'), 'undo');
+        }, { ok: L('เพิ่ม') });
+        return true;
+
+      /* --- แดชบอร์ด --- */
+      case 'dash-add':
+        state.dashEdit = { pid: pid, isNew: true, w: S.normalizeWidget({ id: '', kind: 'bar', x: 'assignee' }) };
+        openModal(dashEditHtml(), true);
+        return true;
+      case 'dash-menu':
+        if (popIsOpenFor(el)) { closePops(); return true; }
+        openPop(el, dashMenuHtml(pid, el.dataset.w));
+        return true;
+      case 'dash-edit': {
+        closePops();
+        var we = widgetOf(pid, el.dataset.w);
+        if (!we) return true;
+        state.dashEdit = { pid: pid, isNew: false, w: S.normalizeWidget(S.clone(we)) };
+        openModal(dashEditHtml(), true);
+        return true;
+      }
+      case 'dwe-kind':
+        state.dashEdit.w.kind = el.dataset.v;
+        refreshDashEdit();
+        return true;
+      case 'dwf-add': {
+        var fw = state.dashEdit.w, ff = S.filterFields(state.dashEdit.pid)[0];
+        var fop = (S.FILTER_OPS[ff.kind] || [['is']])[0][0];
+        fw.filters.push({ f: ff.id, op: fop, v: fltDefaultV(ff.kind, fop) });
+        refreshDashEdit();
+        return true;
+      }
+      case 'dwf-del':
+        state.dashEdit.w.filters.splice(+el.dataset.i, 1);
+        refreshDashEdit();
+        return true;
+      case 'dwf-opt': {
+        var oc = state.dashEdit.w.filters[+el.dataset.i];
+        if (!oc) return true;
+        var ov = [].concat(oc.v || []), vv = el.dataset.v, at = ov.indexOf(vv);
+        if (at >= 0) ov.splice(at, 1); else ov.push(vv);
+        oc.v = ov;
+        refreshDashEdit();
+        return true;
+      }
+      case 'dash-save': {
+        var de = state.dashEdit;
+        if (!de) return true;
+        var tx = $modal.querySelector('.dwe-text');
+        if (tx) de.w.text = global.RichText.fromNode(tx, { blocks: true });
+        if (!S.saveWidget(de.pid, de.w)) { toast(L('บันทึกไม่ได้ — วิดเจ็ตครบ {n} แล้ว', { n: S.DASH_MAX })); return true; }
+        state.dashEdit = null;
+        closeModal();
+        toast(L('บันทึกวิดเจ็ตแล้ว'), L('ย้อนกลับ'), 'undo');
+        return true;
+      }
+      case 'dash-dup': closePops(); S.duplicateWidget(pid, el.dataset.w); return true;
+      case 'dash-size': {
+        closePops();
+        var ws = widgetOf(pid, el.dataset.w);
+        if (ws) S.setWidgetFull(pid, ws.id, !ws.full);
+        return true;
+      }
+      case 'dash-move': closePops(); S.moveWidget(pid, el.dataset.w, +el.dataset.delta || 0); return true;
+      case 'dash-del':
+        closePops();
+        if (S.deleteWidget(pid, el.dataset.w)) toast(L('ลบวิดเจ็ตแล้ว'), L('ย้อนกลับ'), 'undo');
+        return true;
+      case 'dash-png': {
+        closePops();
+        var wp = widgetOf(pid, el.dataset.w);
+        var svgEl = $view.querySelector('.dw[data-w="' + el.dataset.w + '"] svg.chart');
+        if (!wp || !svgEl) return true;
+        var tt = wp.title ? L(wp.title) : L('แผนภูมิ');
+        global.Charts.toPng(svgEl, safeFileName((S.project(pid) || {}).name + ' - ' + tt), { title: tt,
+          onError: function () { toast(L('ส่งออกรูปไม่สำเร็จ')); } });
+        return true;
+      }
+      case 'dash-click':
+        if (!pid) return true;
+        dashClickModal(pid, el.dataset.w, el.dataset.cat || '', el.dataset.ser || '');
+        return true;
+
+      /* --- ประกาศ --- */
+      case 'post-message': {
+        var mb = $view.querySelector('.rte-msg[data-key="mn:' + id + '"]');
+        var mt = document.getElementById('msgTitle');
+        var md = mb ? global.RichText.fromNode(mb) : '';
+        if (!md.trim()) { toast(L('เขียนเนื้อหาก่อน')); return true; }
+        if (S.addProjectMessage(id, mt ? mt.value : '', md, state.msgFiles['new'] || [])) {
+          setDraft('mn:' + id, '');
+          state.msgFiles['new'] = [];
+          state.msgTitle = '';
+          renderAll();
+          toast(L('ประกาศแล้ว'), L('ย้อนกลับ'), 'undo');
+        }
+        return true;
+      }
+      case 'msg-reply': {
+        var msg = el.dataset.msg;
+        var rb = $view.querySelector('.rte-msg[data-key="mr:' + msg + '"]');
+        var rmd = rb ? global.RichText.fromNode(rb) : '';
+        if (!rmd.trim()) { toast(L('พิมพ์ข้อความก่อน')); return true; }
+        if (S.addMessageReply(id, msg, rmd, state.msgFiles['r:' + msg] || [])) {
+          setDraft('mr:' + msg, '');
+          state.msgFiles['r:' + msg] = [];
+          if (rb) rb.innerHTML = '';
+          renderAll();
+        }
+        return true;
+      }
+      case 'msg-reply-del':
+        if (S.deleteMessageReply(id, el.dataset.msg, el.dataset.r)) toast(L('ลบคำตอบแล้ว'), L('ย้อนกลับ'), 'undo');
+        return true;
+      case 'msg-join': {
+        var on = S.toggleMessageFollow(id, el.dataset.msg);
+        if (on !== null) toast(on ? L('เข้าร่วมแล้ว จะได้รับแจ้งเตือนเมื่อมีคนตอบ') : L('ออกจากการสนทนาแล้ว'));
+        return true;
+      }
+      case 'msg-file': {
+        state.msgFileKey = el.dataset.k;
+        var mf = document.getElementById('msgFile');
+        if (mf) mf.click();
+        return true;
+      }
+      case 'msg-file-del': {
+        var k = el.dataset.k;
+        state.msgFiles[k] = (state.msgFiles[k] || []).filter(function (f) { return f.id !== el.dataset.f; });
+        renderViewBody();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** change ของชิ้นงาน 3c — คืน true เมื่อจัดการแล้ว */
+  function change3c(act, el) {
+    if (act === 'kr-file-pick') {
+      var kpid = el.dataset.id;
+      readFiles(el, S.FILE_BYTES, function (list, skipped) {
+        list.forEach(function (f) { S.addResource(kpid, { kind: 'file', name: f.name, url: f.url, size: f.size, mime: f.mime }); });
+        skippedToast(skipped, '2 MB');
+      });
+      return true;
+    }
+    if (act === 'msg-file-pick') {
+      var key = state.msgFileKey || 'new';
+      readFiles(el, S.FILE_BYTES, function (list, skipped) {
+        var cur = state.msgFiles[key] || [];
+        state.msgFiles[key] = cur.concat(list).slice(0, S.MSG_ATT_MAX);
+        skippedToast(skipped, '2 MB');
+        renderViewBody();
+      });
+      return true;
+    }
+    if (act === 'ms-due') { setDates(el.dataset.id, { dueOn: el.value || null }); return true; }
+    if (act === 'dwe' && state.dashEdit) {
+      var w = state.dashEdit.w, k = el.dataset.k;
+      w[k] = k === 'n' ? (parseInt(el.value, 10) || 8) : k === 'bench' ? (el.value === '' ? null : +el.value) : el.value;
+      if (k === 'title') return true;            // ชื่อไม่เปลี่ยนตัวอย่าง ไม่ต้องวาดใหม่
+      refreshDashEdit();
+      return true;
+    }
+    if (/^dwf-/.test(act) && state.dashEdit) {
+      var c = state.dashEdit.w.filters[+el.dataset.i];
+      if (!c) return true;
+      if (act === 'dwf-field') {
+        var def = S.filterField(state.dashEdit.pid, el.value);
+        c.f = el.value;
+        c.op = def ? (S.FILTER_OPS[def.kind] || [['is']])[0][0] : 'is';
+        c.v = def ? fltDefaultV(def.kind, c.op) : null;
+      } else if (act === 'dwf-op') {
+        var d2 = S.filterField(state.dashEdit.pid, c.f);
+        c.op = el.value;
+        c.v = d2 ? fltDefaultV(d2.kind, c.op) : null;
+      } else if (act === 'dwf-val') {
+        if (c.op === 'between') c.v = [el.value || '', (c.v && c.v[1]) || ''];
+        else if (c.op === 'next' || c.op === 'last') c.v = Math.max(0, parseInt(el.value, 10) || 0);
+        else if (el.type === 'number') c.v = el.value === '' ? '' : Number(el.value);
+        else c.v = el.value;
+      } else if (act === 'dwf-val2') c.v = [(c.v && c.v[0]) || '', el.value || ''];
+      refreshDashEdit();
+      return true;
+    }
+    return false;
+  }
+
   /* ---------- ด่านตรวจสิทธิ์ ----------
    *
    * ทุกคำสั่งในแอปวิ่งผ่านตัวจัดการคลิกตัวเดียว จึงกันได้ที่จุดเดียวจบ
@@ -5644,6 +6115,15 @@
     put('write:task', ['cell-status', 'set-cstatus', 'edit-cstatus']);
     put('create', ['use-template', 'tt-pick']);
     put('self', ['ff-submit', 'pt-use', 'pt-share', 'pt-org', 'pt-acc', 'pt-acc-add', 'pt-rename', 'pt-del', 'sb-tpl-del']);
+    /* 3c — ภาพรวม (ทรัพยากร บรีฟ = แก้โครงสร้าง store ตรวจสิทธิ์แก้โปรเจกต์ซ้ำ) หมุดหมาย แดชบอร์ด ประกาศ เส้นทางวิกฤต
+     * ms-show (แผงหมุดหมายแสดงอะไร) เก็บที่โปรเจกต์แต่ไม่ใช่ข้อมูลงาน จึงให้ทุกคนที่แก้โปรเจกต์ได้ */
+    put('structure', ['kr-link', 'kr-file', 'kr-file-pick', 'kr-move', 'kr-del', 'brief-save', 'ms-show',
+      'dash-add', 'dash-edit', 'dash-save', 'dash-del', 'dash-dup', 'dash-move', 'dash-size', 'dash-reset']);
+    put('create', ['ms-add']);
+    put('write:task', ['ms-due']);
+    put('comment', ['msg-reply', 'msg-reply-del', 'msg-join', 'msg-file', 'msg-file-pick', 'msg-file-del', 'post-message']);
+    put('self', ['crit-toggle']);
+    put('write', ['bulk-chain', 'shift-apply', 'shift-only']);
     return map;
   })();
 
@@ -5731,6 +6211,7 @@
     var sectionId = el.dataset.section;
     var projectId = el.dataset.project;
     if (!allowed(act, el)) return;
+    if (act3c(act, el, e)) return;                // 3c
 
     switch (act) {
 
@@ -6963,15 +7444,6 @@
         break;
       }
 
-      case 'post-message': {
-        var mb = document.getElementById('msgBody');
-        var mt = document.getElementById('msgTitle');
-        if (!mb || !mb.value.trim()) { toast(L('เขียนเนื้อหาก่อน')); break; }
-        S.addProjectMessage(id, mt ? mt.value : '', mb.value);
-        renderAll();
-        toast(L('ประกาศแล้ว'));
-        break;
-      }
       case 'delete-message':
         if (S.deleteProjectMessage(id, el.dataset.msg)) {
           renderAll();
@@ -9116,6 +9588,7 @@
     if (!el) return;
     var act = el.dataset.act;
     if (!allowed(act, el)) { renderAll(); return; }   // วาดใหม่เพื่อคืนค่าเดิมให้ช่องกรอก
+    if (change3c(act, el)) return;                // 3c
 
     if (act === 'photo-file') { takePhoto(el); return; }
     if (act === 'att-file') { takeAttachment(el); return; }
@@ -9140,7 +9613,7 @@
     if (act === 'sub-start' || act === 'sub-due') {
       var patch = {};
       patch[act === 'sub-start' ? 'startOn' : 'dueOn'] = el.value || null;
-      S.updateTask(el.dataset.id, patch);
+      setDates(el.dataset.id, patch);
       renderDrawer();
       return;
     }
@@ -9458,8 +9931,8 @@
         if (el.value.trim()) S.updateTask(id, { name: el.value.trim() });
         break;
       case 'edit-notes': S.updateTask(id, { notes: el.value }); break;
-      case 'edit-due': S.updateTask(id, { dueOn: el.value || null }); break;
-      case 'edit-start': S.updateTask(id, { startOn: el.value || null }); break;
+      case 'edit-due': setDates(id, { dueOn: el.value || null }); break;
+      case 'edit-start': setDates(id, { startOn: el.value || null }); break;
       case 'edit-duetime': S.updateTask(id, { dueTime: el.value || null }); break;
       case 'edit-starttime': S.updateTask(id, { startTime: el.value || null }); break;
       case 'edit-type': S.setTaskType(id, el.value); break;           // 3b — รวมชนิดกำหนดเอง
@@ -10383,14 +10856,20 @@
     var end = t.dueOn || t.startOn;
     var nd = end && cdg.grab ? S.addDays(end, S.daysBetween(cdg.grab, dropAt)) : dropAt;
     var prevEnd = t.dueOn || t.startOn;
+    var scopeD = calxScope(row);
+    if (scopeD !== 'mt' && prevEnd && t.dueOn !== nd) {
+      /* 3c — ลากในปฏิทินโปรเจกต์หรือปฏิทินรวม = เลื่อนวัน ถ้ามีงานที่รออยู่ต้องขยับตาม
+       * เปิดหน้าต่างให้ดูรายการก่อน (setDates) ใช้แล้วย้อนกลับได้ในครั้งเดียว */
+      var cpatch = { dueOn: nd };
+      if (t.startOn) cpatch.startOn = S.addDays(t.startOn, S.daysBetween(prevEnd, nd));
+      setDates(t.id, cpatch, function (n) {
+        if (!n) toast(L('ครบกำหนด {d} แล้ว', { d: R.fmtDate(nd) }), L('ย้อนกลับ'), 'undo');
+      });
+      return;
+    }
     if (S.moveTaskDates(t.id, nd)) {
-      /* ลากในปฏิทินโปรเจกต์หรือปฏิทินรวม = เลื่อนวัน งานที่รออยู่ต่อจากงานนี้ขยับตามโหมดของโปรเจกต์
-       * (งานของฉันไม่ขยับงานของคนอื่น) ทั้งหมดย้อนกลับได้ในครั้งเดียว */
-      var scopeD = calxScope(row);
-      var nShift = scopeD !== 'mt' && prevEnd ? shiftDependents(t.id, S.daysBetween(prevEnd, nd)) : 0;
-      if (nShift) renderViewBody();
-      toast(nShift ? L('ครบกำหนด {d} แล้ว และดันงานที่รออยู่ต่ออีก {n} งาน', { d: R.fmtDate(nd), n: nShift })
-                   : L('ครบกำหนด {d} แล้ว', { d: R.fmtDate(nd) }), L('ย้อนกลับ'), 'undo');
+      /* งานของฉันไม่ขยับงานของคนอื่น */
+      toast(L('ครบกำหนด {d} แล้ว', { d: R.fmtDate(nd) }), L('ย้อนกลับ'), 'undo');
     }
   });
 

@@ -198,6 +198,14 @@
 | — | (งานเบื้องหลัง) | ระบบ | เตือนรายงานสถานะวันศุกร์ (`projects.status_remind`) ตอนนี้สร้างตอนมีคนเปิดแอปวันศุกร์ กันซ้ำด้วย `remind_key` · ตอนมีเซิร์ฟเวอร์ให้ย้ายไปตัวตั้งเวลา |
 | GET | `/api/tags/{name}/tasks` | ทุกคน | งานที่มีแท็กนี้และผู้เรียกมองเห็น |
 | PUT · DELETE | `/api/tags/{name}` | ST | เปลี่ยนชื่อ (ชื่อซ้ำ = รวมแท็ก) / เอาออกจากทุกงาน · ลง audit `tag.rename` `tag.delete` |
+| GET · POST · PUT · DELETE | `/api/projects/{id}/resources[/{rid}]` | E + ST (อ่าน: R) | ทรัพยากรสำคัญบนภาพรวม (`project_resources`) ลิงก์หรือไฟล์ ≤ 2 MB สูงสุด 30 · `PUT …/{rid}/position` (3c) |
+| PUT | `/api/projects/{id}/brief` | E + ST | `{ md }` บรีฟโปรเจกต์ (มาร์กดาวน์ย่อแบบบล็อก) แจ้งคนที่ถูก @อ้างถึงใหม่ (3c) |
+| GET · POST · PUT · DELETE | `/api/projects/{id}/dashboard[/{wid}]` | E + ST (อ่าน: R) | วิดเจ็ตแดชบอร์ด (`dashboard_widgets`) ≤ 20 · ข้อมูลกราฟคำนวณจากงานที่ผู้เรียกมองเห็น (`chartData`) · `DELETE /dashboard` = คืนค่าตั้งต้น (3c) |
+| POST · DELETE | `/api/projects/{id}/messages/{mid}/replies[/{rid}]` | C (ลบ: เจ้าของหรือ manage) | `{ body, attachments[] }` คำตอบใต้ประกาศ แจ้งผู้เข้าร่วม + คนที่ถูก @อ้างถึง (3c) |
+| PUT · DELETE | `/api/projects/{id}/messages/{mid}/follow` | C | เข้าร่วม/ออกจากประกาศ (`message_followers`) (3c) |
+| POST | `/api/tasks/chain` | E ทุกงาน | `{ ids[] }` ต่อลำดับก่อนหลัง FS เป็นสายเดียวเรียงตามวันเริ่ม ข้ามคู่ที่ทำให้รอวน ธุรกรรมเดียว (3c) |
+| POST | `/api/tasks/{id}/dates/preview` · `/api/tasks/{id}/dates` | E | ดูงานที่จะขยับตามโหมด `dep_shift` ของโปรเจกต์ก่อน แล้ว `{ start, due, shift: bool }` ทำในธุรกรรมเดียว (3c) |
+| GET | `/api/projects/{id}/critical-path` | R | สายลำดับก่อนหลังที่กินเวลาตามปฏิทินยาวที่สุด `{ ids[], edges[], days }` (3c) |
 | GET · POST · PUT · DELETE | `/api/field-library` | ST (อ่าน: ทุกคน) | คลังฟิลด์ขององค์กร · แก้แล้ว `custom_fields` ที่อ้าง `library_field_id` เปลี่ยนตาม · ลง audit `field.lib-*` |
 | GET | `/api/tasks/by-code/{code}` | ทุกคน | หางานจากรหัส `REQ-12` (ใช้กับ @อ้างถึง) — **ต้องกรองด้วย `fn_VisibleTasks`** |
 | POST | `/api/projects/{id}/import` | E + ST | CSV + `map[]` ต่อคอลัมน์ (`name notes section assignee assigneeEmail collaborators start due priority type tags blockedBy dependents parent completed field:<id> new:<type> ignore`) · ลง audit |

@@ -1312,6 +1312,7 @@
     var days = S.daysBetween(from, to) + 1;
     var width = days * DAY_W;
     var by = view.tColorBy || 'priority';
+    var crit = view.critical ? S.criticalPath(projectId) : null;   // 3c — เส้นทางวิกฤต
 
     var h = '<div class="tl">';
     h += '<div class="tl-head"><strong style="font-size:14px">' + L('ไทม์ไลน์') + '</strong>' +
@@ -1323,6 +1324,7 @@
       }).join('') + '</div>' +
       '<button class="btn btn-sm btn-ghost" data-act="tl-today">' + L('ไปวันนี้') + '</button>' +
       colorSelect('tl-colorby', S.colorChoices(projectId), by) +
+      '<button class="btn btn-sm' + (crit ? ' btn-on' : ' btn-ghost') + '" data-act="crit-toggle" title="' + esc(L('ไฮไลต์สายงานที่ต่อกันยาวที่สุด เลื่อนงานในสายนี้ = โปรเจกต์เลื่อน')) + '">' + I('bolt', 13) + ' ' + L('เส้นทางวิกฤต') + (crit && crit.days ? ' · ' + esc(L('{n} วัน', { n: crit.days })) : '') + '</button>' +
       '<span class="tl-hint">' +
       L('ลากแท่งเพื่อเลื่อนวัน · ลากขอบเพื่อยืด/หด · ◆ = หมุดหมาย · เส้นประ = ลำดับก่อนหลัง · เส้นแดง = วันชนกัน') +
       '</span></div>';
@@ -1370,7 +1372,7 @@
 
       h += '<div class="tl-row" data-row="' + idx + '">';
       if (t.type === 'milestone') {
-        h += '<div class="tl-milestone" data-act="open-task" data-id="' + esc(t.id) +
+        h += '<div class="tl-milestone' + (crit && crit.ids[t.id] ? ' crit' : '') + '" data-act="open-task" data-id="' + esc(t.id) +
           '" data-tid="' + esc(t.id) + '" data-role="move" title="' + esc(t.name) +
           ' ' + L('— ลากเพื่อเลื่อนวัน') + '" style="left:' + (x0 + DAY_W / 2 - 9) + 'px;background:' +
           color + '"></div>';
@@ -1378,7 +1380,7 @@
           esc(t.name) + '</div>';
       } else {
         var blocked = !t.completed && S.isBlocked(t.id);
-        h += '<div class="tl-bar' + (t.completed ? ' done' : '') + (blocked ? ' blocked' : '') +
+        h += '<div class="tl-bar' + (t.completed ? ' done' : '') + (blocked ? ' blocked' : '') + (crit && crit.ids[t.id] ? ' crit' : '') +
           '" style="left:' + x0 + 'px;width:' + Math.max(w, 8) + 'px;background:' + color +
           '" data-act="open-task" data-id="' + esc(t.id) + '" data-tid="' + esc(t.id) +
           '" data-role="move" title="' + esc(t.name) + ' ' + L('— ลากเพื่อเลื่อน ลากขอบเพื่อยืด/หด') + '">' +
@@ -1417,9 +1419,10 @@
         var yb = rowOf[bid] * ROW_H + ROW_H / 2;
         var midX = Math.max(xb + 8, xa - 8);
         var bad = depConflict(b, t, dep.type || 'FS');
-        lines += '<path class="' + (bad ? 'conflict' : '') + '" d="M' + xb + ' ' + yb + ' H' + midX + ' V' + ya + ' H' + xa +
-          '" fill="none" stroke="' + (bad ? 'var(--danger)' : 'var(--fg-faint)') + '" stroke-width="' +
-          (bad ? '2' : '1.4') + '"' + (bad ? '' : ' stroke-dasharray="4 3"') +
+        var ce = !!(crit && crit.edges[bid + '>' + t.id]);
+        lines += '<path class="' + (bad ? 'conflict' : '') + (ce ? ' crit' : '') + '" d="M' + xb + ' ' + yb + ' H' + midX + ' V' + ya + ' H' + xa +
+          '" fill="none" stroke="' + (bad ? 'var(--danger)' : ce ? 'var(--crit)' : 'var(--fg-faint)') + '" stroke-width="' +
+          (bad || ce ? '2.2' : '1.4') + '"' + (bad || ce ? '' : ' stroke-dasharray="4 3"') +
           ' marker-end="url(#' + (bad ? 'orbArrowBad' : 'orbArrow') + ')">' +
           (bad ? '<title>' + esc(L('วันชนกัน: “{a}” ต้องเสร็จก่อน “{b}” เริ่ม', { a: b.name, b: t.name })) + '</title>' : '') +
           '</path>';
@@ -1489,6 +1492,7 @@
           esc(p.id) + '">' + L('เพิ่มคำอธิบาย') + '</button>' : '') + '</div>';
     h += '</section>';
 
+    h += ovwExtraMain(p);
     /* ประวัติการรายงานสถานะ คือสิ่งที่ตอบว่าโปรเจกต์นี้เดินมายังไง
      * มีเก็บไว้อยู่แล้วแต่เดิมอ่านได้แค่อันล่าสุดจากป้ายบนหัว */
     h += '<section class="ovw-card"><h3>' + L('ประวัติการรายงานสถานะ') + '</h3>';
@@ -1572,6 +1576,7 @@
       h += '</div>';
     }
     h += '</section>';
+    h += ovwExtraSide(p);
     h += '</div></div>';
     return h;
   }
@@ -1611,18 +1616,20 @@
    * เช่นสรุปประชุมประจำสัปดาห์ หรือประกาศเลื่อนกำหนดทั้งโปรเจกต์
    * เดิมต้องไปแปะไว้ในงานสักชิ้นแบบฝืน ๆ แล้วก็หาไม่เจอในภายหลัง
    */
-  function messagesView(projectId) {
+  function messagesView(projectId, ui) {
     var rows = S.projectMessages(projectId);
     var h = '<div class="msgv">';
 
     if (S.canInProject(projectId, 'comment')) {
+      /* 3c — ช่องเขียนแบบมีรูปแบบ @อ้างถึงคนได้ และแนบไฟล์ (≤ 2 MB ต่อไฟล์) */
       h += '<div class="msg-new">' +
         '<input id="msgTitle" class="inp" placeholder="' + L('หัวเรื่อง (ไม่ใส่ก็ได้)') + '">' +
-        '<textarea id="msgBody" class="inp" rows="3" placeholder="' +
-        L('เขียนประกาศถึงทุกคนในโปรเจกต์นี้…') + '"></textarea>' +
+        msgComposer('mn:' + projectId, projectId, '', L('เขียนประกาศถึงทุกคนในโปรเจกต์นี้… พิมพ์ @ เพื่ออ้างถึง')) +
+        pendingFiles(ui, 'new') +
         '<div class="msg-actions">' +
-        '<span class="rt-hint">' +
-        L('ขึ้นต้นด้วย - เพื่อทำหัวข้อย่อย เว้นสองช่องเพื่อย่อยลงอีกชั้น · **ตัวหนา**') + '</span>' +
+        '<button class="btn btn-sm btn-ghost" data-act="msg-file" data-k="new">' + I('paperclip', 13) + ' ' + L('แนบไฟล์') + '</button>' +
+        '<input type="file" id="msgFile" data-act="msg-file-pick" hidden multiple>' +
+        '<span class="grow"></span>' +
         '<button class="btn btn-primary btn-sm" data-act="post-message" data-id="' +
         esc(projectId) + '">' + L('ประกาศ') + '</button></div></div>';
     }
@@ -1642,18 +1649,7 @@
 
     feed.forEach(function (x) {
       if (x.st) { h += statusEntryHtml(mp, x.st, true); return; }
-      var m = x.m;
-      var by = S.user(m.by);
-      var mine = S.me() && m.by === S.me().id;
-      h += '<article class="msg-card">' +
-        '<div class="msg-head">' + avatar(by, 'md') +
-        '<div class="grow">' + (m.title ? '<b>' + esc(m.title) + '</b>' : '') +
-        '<em>' + esc(by ? by.name : '—') + ' · ' + esc(fmtWhen(m.at)) + '</em></div>' +
-        (mine || S.can('manage')
-          ? '<button class="x" data-act="delete-message" data-id="' + esc(projectId) +
-            '" data-msg="' + esc(m.id) + '" title="' + L('ลบประกาศนี้') + '">' +
-            I('close', 13) + '</button>' : '') +
-        '</div><div class="msg-body">' + richText(m.body) + '</div></article>';
+      h += messageCard(projectId, x.m, ui);       // 3c — คำตอบ เข้าร่วม ไฟล์แนบ
     });
     return h + '</div>';
   }
@@ -4580,6 +4576,204 @@
     return (bytes / 1024 / 1024).toFixed(1) + ' MB';
   }
 
+  /* ====================== 3c — ภาพรวม แดชบอร์ด ประกาศ ====================== */
+
+  function RT() { return global.RichText; }
+
+  function fileLink(a) {
+    var inl = /^data:/.test(a.url || '');
+    return '<a href="' + esc(a.url) + '"' + (inl ? ' download="' + esc(a.name) + '"' : ' target="_blank" rel="noopener noreferrer"') +
+      '>' + esc(a.name) + '</a>';
+  }
+
+  function attChips(list, del) {
+    if (!list || !list.length) return '';
+    return '<div class="msg-atts">' + list.map(function (a) {
+      return '<span class="msg-att">' + I(S.isImageAtt(a) ? 'image' : 'paperclip', 12) + fileLink(a) +
+        (a.size ? '<em>' + esc(fmtBytes(a.size)) + '</em>' : '') + (del ? del(a) : '') + '</span>';
+    }).join('') + '</div>';
+  }
+
+  function ovwExtraMain(p) {
+    var can = S.canEditOverview(p.id);
+    var h = '';
+    /* บรีฟ — เอกสารสั้นของโปรเจกต์ (หัวข้อ ตาราง @อ้างถึง) แก้ในที่ บันทึกตอนออกจากช่อง */
+    var by = S.user(p.briefBy);
+    h += '<section class="ovw-card ovw-brief"><h3>' + L('บรีฟโปรเจกต์') +
+      (p.briefAt ? '<em class="ovw-meta">' + esc(L('แก้ล่าสุดโดย {u} · {w}', { u: by ? by.name : '—', w: fmtWhen(p.briefAt) })) + '</em>' : '') + '</h3>';
+    if (can) {
+      h += '<div class="rte-wrap rte-brief-wrap">' + RT().toolbar('page', { image: false }) +
+        '<div class="rte rte-brief rte-doc" contenteditable="true" spellcheck="true" data-blocks="1" data-save="brief" data-key="b:' +
+        esc(p.id) + '" data-id="' + esc(p.id) + '" data-placeholder="' +
+        esc(L('เขียนบรีฟ: เป้าหมาย ขอบเขต ใครทำอะไร… ใช้หัวข้อ ตาราง และ @อ้างถึงได้')) + '">' +
+        RT().toHtml(p.brief, { editable: true, blocks: true }) + '</div></div>';
+    } else {
+      h += p.brief ? RT().toHtml(p.brief, { blocks: true }) : '<div class="ovw-empty">' + L('ยังไม่มีบรีฟ') + '</div>';
+    }
+    h += '</section>';
+
+    /* ทรัพยากรสำคัญ — ลิงก์และไฟล์ที่ทีมต้องเปิดบ่อย */
+    h += '<section class="ovw-card"><h3>' + L('ทรัพยากรสำคัญ') +
+      (can ? '<span class="ovw-acts"><button class="as-link" data-act="kr-link" data-id="' + esc(p.id) + '">+ ' + L('ลิงก์') +
+        '</button><button class="as-link" data-act="kr-file" data-id="' + esc(p.id) + '">+ ' + L('ไฟล์') + '</button>' +
+        '<input type="file" id="krFile" data-act="kr-file-pick" data-id="' + esc(p.id) + '" hidden></span>' : '') + '</h3>';
+    if (!p.resources.length) {
+      h += '<div class="ovw-empty">' + L('รวมลิงก์และไฟล์ที่ทีมต้องใช้บ่อยไว้ตรงนี้ เช่น บรีฟลูกค้า ไฟล์ดีไซน์ สเปก') + '</div>';
+    }
+    p.resources.forEach(function (r, i) {
+      h += '<div class="kr-row">' + I(r.kind === 'file' ? (S.isImageAtt(r) ? 'image' : 'paperclip') : 'link', 14) +
+        '<span class="grow">' + fileLink(r) + (r.kind === 'link' ? '<em>' + esc(String(r.url).replace(/^https?:\/\//, '').slice(0, 60)) + '</em>' : '') +
+        (r.size ? '<em>' + esc(fmtBytes(r.size)) + '</em>' : '') + '</span>' +
+        (can ? '<button class="btn btn-sm btn-ghost" data-act="kr-move" data-id="' + esc(p.id) + '" data-r="' + esc(r.id) + '" data-delta="-1"' +
+          (i ? '' : ' disabled') + ' title="' + L('ย้ายขึ้น') + '">' + I('arrowUp', 12) + '</button>' +
+          '<button class="btn btn-sm btn-ghost" data-act="kr-del" data-id="' + esc(p.id) + '" data-r="' + esc(r.id) + '" title="' +
+          L('เอาออก') + '">' + I('close', 12) + '</button>' : '') + '</div>';
+    });
+    h += '</section>';
+
+    /* หมุดหมาย — เพิ่ม ติ๊ก และเลื่อนวันได้จากตรงนี้ */
+    var all = p.msShow === 'all';
+    var ms = S.projectMilestones(p.id, all);
+    var canW = S.can('write') && S.canInProject(p.id, 'edit');
+    h += '<section class="ovw-card"><h3>' + I('diamond', 13) + ' ' + L('หมุดหมาย') +
+      '<span class="ovw-acts"><span class="segmented sm"><button data-act="ms-show" data-id="' + esc(p.id) + '" data-v="open" class="' +
+      (all ? '' : 'on') + '">' + L('ยังไม่ถึง') + '</button><button data-act="ms-show" data-id="' + esc(p.id) + '" data-v="all" class="' +
+      (all ? 'on' : '') + '">' + L('ทั้งหมด') + '</button></span>' +
+      (canW ? '<button class="as-link" data-act="ms-add" data-id="' + esc(p.id) + '">+ ' + L('เพิ่ม') + '</button>' : '') + '</span></h3>';
+    if (!ms.length) h += '<div class="ovw-empty">' + L('ยังไม่มีหมุดหมาย หมุดหมายคือจุดสำคัญ เช่น ส่งแบบให้ลูกค้า หรือวันเปิดตัว') + '</div>';
+    ms.forEach(function (t) {
+      var w = S.can('write', t.id);
+      h += '<div class="ms-row' + (t.completed ? ' done' : '') + '">' + checkbox(t) +
+        '<button class="grow ms-nm" data-act="open-task" data-id="' + esc(t.id) + '">' + esc(t.name) + '</button>' +
+        (w ? '<input type="date" class="ms-date' + dueClass(t.dueOn, t.completed) + '" data-act="ms-due" data-id="' + esc(t.id) +
+          '" value="' + esc(t.dueOn || '') + '">'
+           : '<span class="chip' + dueClass(t.dueOn, t.completed) + '">' + (t.dueOn ? fmtDate(t.dueOn) : '—') + '</span>') + '</div>';
+    });
+    h += '</section>';
+    return h;
+  }
+
+  function ovwExtraSide(p) {
+    var pfs = S.portfoliosOfProject(p.id).filter(function (f) { return !S.portfolioHidden || !S.portfolioHidden(f.id); });
+    var h = '<section class="ovw-card"><h3>' + L('อยู่ในพอร์ตโฟลิโอ') +
+      (S.can('structure') ? '<button class="as-link" data-act="add-to-portfolio" data-id="' + esc(p.id) + '">+ ' + L('เพิ่ม') + '</button>' : '') + '</h3>';
+    if (!pfs.length) h += '<div class="ovw-empty">' + L('ยังไม่ได้อยู่ในพอร์ตโฟลิโอไหน') + '</div>';
+    pfs.forEach(function (f) {
+      var st = f.status ? projectState(f.status.state) : null;
+      h += '<button class="ovw-pf" data-act="go" data-route="portfolio" data-id="' + esc(f.id) + '">' +
+        '<span class="swatch" style="background:' + esc(f.color || 'var(--accent)') + '"></span><span class="grow">' + esc(f.name) + '</span>' +
+        (st ? '<span class="status-pill" style="background:' + st.color + '22;color:' + st.color + '"><i style="background:' + st.color +
+          '"></i>' + esc(L(st.label)) + '</span>' : '') + '</button>';
+    });
+    return h + '</section>';
+  }
+
+  /* ---------- แดชบอร์ด ---------- */
+  function widgetSpec(pid, w) {
+    var items = S.dashItems(pid, w);
+    var d = S.chartData(items, w, pid);
+    var fmt = null;
+    var ym = /^(sum|avg):(.+)$/.exec(w.y || '');
+    if (ym) {
+      var f = S.fieldDef(ym[2]);
+      if (f && f.format) fmt = function (n) { return S.formatNumber(f, Math.round(n * 100) / 100); };
+    } else if (w.y === 'est' || w.y === 'actual') {
+      fmt = function (n) { return (Math.round(n * 10) / 10) + ' ' + L('ชม.'); };
+    }
+    return { type: w.kind, cats: d.cats, series: d.series, values: d.values, bench: d.bench,
+      number: d.number ? { value: d.number.value } : null,
+      fmt: fmt, act: 'dash-click', wid: w.id, empty: L('ไม่มีข้อมูลตามตัวกรองนี้'),
+      h: w.kind === 'number' ? 120 : 240, w: w.full && global.innerWidth >= 860 ? 980 : 560 };
+  }
+
+  function widgetHtml(pid, w) {
+    var def = S.DASH_KINDS.filter(function (x) { return x[0] === w.kind; })[0];
+    var title = w.title ? L(w.title) : L(def ? def[1] : '');
+    var h = '<section class="dw' + (w.full ? ' full' : '') + (w.kind === 'number' ? ' num' : '') + '" data-w="' + esc(w.id) + '">' +
+      '<header><b class="grow">' + esc(title) + '</b>' +
+      (w.filters.length ? '<span class="dw-flt" title="' + L('มีตัวกรอง') + '">' + I('filter', 12) + w.filters.length + '</span>' : '');
+    h += '<button class="btn btn-sm btn-ghost" data-act="dash-menu" data-w="' + esc(w.id) + '" title="' + L('ตัวเลือก') + '">' +
+      I('more', 14) + '</button></header>';
+    if (w.kind === 'text') {
+      h += '<div class="dw-text">' + (w.text ? RT().toHtml(w.text, { blocks: true }) : '<span class="ovw-empty">' +
+        L('ข้อความว่าง กด ⋯ แล้วแก้ไข') + '</span>') + '</div>';
+    } else {
+      h += '<div class="dw-chart">' + global.Charts.svg(widgetSpec(pid, w)) + '</div>';
+    }
+    return h + '</section>';
+  }
+
+  function dashBuilderView(projectId) {
+    var p = S.project(projectId);
+    if (!p) return '';
+    var list = S.dashWidgets(projectId);
+    var canEdit = S.canEditDash(projectId);
+    var h = '<div class="dashb"><div class="dashb-bar"><b>' + L('แดชบอร์ด') + '</b><span class="dashb-n">' +
+      esc(L('{n}/{max} วิดเจ็ต', { n: list.length, max: S.DASH_MAX })) + '</span><span class="grow"></span>' +
+      '<button class="btn btn-sm" data-act="update-status">' + L('อัปเดตสถานะ') + '</button>' +
+      (canEdit ? '<button class="btn btn-sm btn-primary" data-act="dash-add"' + (list.length >= S.DASH_MAX ? ' disabled' : '') + '>' +
+        I('plus', 13) + ' ' + L('เพิ่มวิดเจ็ต') + '</button>' : '') + '</div>';
+    h += '<div class="dashb-grid">';
+    list.forEach(function (w) { h += widgetHtml(projectId, w); });
+    h += '</div></div>';
+    return h;
+  }
+
+  /* ---------- ประกาศ: คำตอบ เข้าร่วม ไฟล์แนบ ---------- */
+  function msgComposer(key, pid, msgId, placeholder) {
+    return '<div class="rte-wrap rte-msg-wrap">' + RT().toolbar(true) +
+      '<div class="rte rte-msg" contenteditable="true" data-key="' + esc(key) + '" data-id="' + esc(pid) + '"' +
+      (msgId ? ' data-msg="' + esc(msgId) + '"' : '') + ' data-placeholder="' + esc(placeholder) + '"></div></div>';
+  }
+
+  function pendingFiles(ui, k) {
+    var pend = (ui && ui.files && ui.files[k]) || [];
+    return attChips(pend, function (a) {
+      return '<button class="x" data-act="msg-file-del" data-k="' + esc(k) + '" data-f="' + esc(a.id) + '">' + I('close', 11) + '</button>';
+    });
+  }
+
+  function messageCard(pid, m, ui) {
+    var by = S.user(m.by), me = S.me();
+    var mine = me && m.by === me.id;
+    var joined = me && (m.followers || []).indexOf(me.id) >= 0;
+    var canC = S.canInProject(pid, 'comment');
+    var h = '<article class="msg-card" id="msg-' + esc(m.id) + '"><div class="msg-head">' + avatar(by, 'md') +
+      '<div class="grow">' + (m.title ? '<b>' + esc(m.title) + '</b>' : '') +
+      '<em>' + esc(by ? by.name : '—') + ' · ' + esc(fmtWhen(m.at)) + '</em></div>' +
+      (canC ? '<button class="btn btn-sm btn-ghost msg-join' + (joined ? ' on' : '') + '" data-act="msg-join" data-id="' + esc(pid) +
+        '" data-msg="' + esc(m.id) + '" title="' + esc(joined ? L('ออกจากการสนทนา ไม่รับแจ้งเตือนคำตอบ') : L('เข้าร่วม รับแจ้งเตือนเมื่อมีคนตอบ')) + '">' +
+        I(joined ? 'bell' : 'plus', 12) + ' ' + (joined ? L('เข้าร่วมแล้ว') : L('เข้าร่วม')) + '</button>' : '') +
+      (mine || S.can('manage')
+        ? '<button class="x" data-act="delete-message" data-id="' + esc(pid) + '" data-msg="' + esc(m.id) + '" title="' +
+          L('ลบประกาศนี้') + '">' + I('close', 13) + '</button>' : '') +
+      '</div><div class="msg-body">' + richText(m.body) + '</div>' + attChips(m.atts);
+    var reps = m.replies || [];
+    var ppl = (m.followers || []).map(S.user).filter(Boolean);
+    h += '<div class="msg-foot"><span>' + esc(L('{n} คำตอบ', { n: reps.length })) + '</span>' +
+      (ppl.length ? '<span class="msg-ppl" title="' + esc(ppl.map(function (u) { return u.name; }).join(', ')) + '">' +
+        ppl.slice(0, 5).map(function (u) { return avatar(u, 'sm'); }).join('') + '</span>' : '') + '</div>';
+    if (reps.length) {
+      h += '<div class="msg-replies">';
+      reps.forEach(function (r) {
+        var ru = S.user(r.by);
+        h += '<div class="msg-reply">' + avatar(ru, 'sm') + '<div class="grow"><em>' + esc(ru ? ru.name : '—') + ' · ' + esc(fmtWhen(r.at)) +
+          '</em>' + richText(r.body) + attChips(r.atts) + '</div>' +
+          ((me && r.by === me.id) || S.can('manage') ? '<button class="x" data-act="msg-reply-del" data-id="' + esc(pid) + '" data-msg="' +
+            esc(m.id) + '" data-r="' + esc(r.id) + '" title="' + L('ลบคำตอบ') + '">' + I('close', 12) + '</button>' : '') + '</div>';
+      });
+      h += '</div>';
+    }
+    if (canC) {
+      h += '<div class="msg-replybox">' + msgComposer('mr:' + m.id, pid, m.id, L('ตอบ… พิมพ์ @ เพื่ออ้างถึง')) +
+        pendingFiles(ui, 'r:' + m.id) +
+        '<div class="msg-actions"><button class="btn btn-sm btn-ghost" data-act="msg-file" data-k="r:' + esc(m.id) + '">' + I('paperclip', 13) + ' ' +
+        L('แนบไฟล์') + '</button><span class="grow"></span><button class="btn btn-primary btn-sm" data-act="msg-reply" data-id="' + esc(pid) +
+        '" data-msg="' + esc(m.id) + '">' + L('ตอบ') + '</button></div></div>';
+    }
+    return h + '</article>';
+  }
+
   global.Render = {
     adminView: adminView, roleLabel: roleLabel, authTag: authTag,
     teamReady: teamReady, syncChip: syncChip, syncMenu: syncMenu, disabledScreen: disabledScreen,
@@ -4595,7 +4789,8 @@
     sidebar: sidebar, topbar: topbar, viewToolbar: viewToolbar, filterCount: filterCount, bulkbar: bulkbar,
     VIEWS_WITH_TOOLBAR: VIEWS_WITH_TOOLBAR,
     listView: listView, boardView: boardView, timelineView: timelineView,
-    homeView: homeView, dashboardView: dashboardView, profileView: profileView,
+    homeView: homeView, dashboardView: dashBuilderView, profileView: profileView,
+    widgetSpec: widgetSpec, messageCard: messageCard, msgComposer: msgComposer, pendingFiles: pendingFiles, attChips: attChips, fileLink: fileLink,
     overviewView: overviewView, filesView: filesView, messagesView: messagesView,
     projectsView: projectsView,
     portfolioView: portfolioView, PF_TABS: PF_TABS,

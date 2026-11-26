@@ -31,6 +31,9 @@
   --ok:          #37c5ab;
   --ok-bg:       #e4f7f3;
   --info:        #14aaf5;
+  /* 3c — ชุดสีกราฟ (เรียงให้ติดกันแยกออกง่าย) และสีเส้นทางวิกฤต */
+  --chart-1: #796eff; --chart-2: #14aaf5; --chart-3: #37c5ab; --chart-4: #f5a623;
+  --chart-5: #fd612c; --chart-6: #aa62e3; --chart-7: #e362e3; --chart-8: #6d6e6f; --crit: #e8384f;
 
   --scroll:      #d5d6d8;
   --scroll-hi:   #b8b9bc;
@@ -80,6 +83,8 @@
     --ok:          #4fd8bd;
     --ok-bg:       #1d3733;
     --info:        #56c3fb;
+    --chart-1: #9c93ff; --chart-2: #56c3fb; --chart-3: #4fd8bd; --chart-4: #ffc061;
+    --chart-5: #ff8a6b; --chart-6: #c792f0; --chart-7: #f07ad8; --chart-8: #a2a5ab; --crit: #ff6b7d;
 
     --scroll:      #3a3d42;
     --scroll-hi:   #4d5157;
@@ -115,6 +120,8 @@
   --ok:          #4fd8bd;
   --ok-bg:       #1d3733;
   --info:        #56c3fb;
+  --chart-1: #9c93ff; --chart-2: #56c3fb; --chart-3: #4fd8bd; --chart-4: #ffc061;
+  --chart-5: #ff8a6b; --chart-6: #c792f0; --chart-7: #f07ad8; --chart-8: #a2a5ab; --crit: #ff6b7d;
 
   --scroll:      #3a3d42;
   --scroll-hi:   #4d5157;
@@ -4114,4 +4121,129 @@ button.chip.tag:hover { filter: brightness(.94); text-decoration: underline; }
   .te-st .opt-select { flex-basis: calc(100% - 40px); }
   .ptu-role { flex-basis: 100%; }
   .fe-branch { margin-left: 8px; }
+}
+
+/* ====================== 3c — กราฟ แดชบอร์ด ภาพรวม ประกาศ บล็อกเอกสาร เส้นทางวิกฤต ====================== */
+
+/* กราฟ (app/charts.js) — ทุกสีมาจาก token */
+.chart { width: 100%; height: auto; display: block; font-family: inherit; overflow: visible; }
+.chart text { font-family: inherit; }
+.ch-grid { stroke: var(--line); stroke-width: 1; }
+.ch-base { stroke: var(--line-strong); stroke-width: 1; }
+.ch-ax { fill: var(--fg-faint); font-size: 11px; }
+.ch-lg { fill: var(--fg-soft); font-size: 11px; }
+.ch-val { fill: var(--fg-soft); font-size: 10.5px; font-weight: 600; }
+.ch-empty { fill: var(--fg-faint); font-size: 13px; }
+.ch-big { fill: var(--fg); font-size: 52px; font-weight: 700; }
+.ch-mid { fill: var(--fg); font-size: 20px; font-weight: 700; }
+.ch-sub { fill: var(--fg-soft); font-size: 13px; }
+.ch-line { fill: none; stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
+.ch-stem { stroke-width: 2.4; }
+.ch-bench { stroke: var(--danger); stroke-width: 1.5; stroke-dasharray: 6 4; }
+.ch-hit { cursor: pointer; }
+.ch-hit:hover { opacity: .8; }
+
+/* แดชบอร์ด */
+.dashb { padding: 16px 24px 60px; max-width: 1180px; }
+.dashb-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.dashb-bar > b { font-size: 15px; }
+.dashb-n { font-size: 12px; color: var(--fg-faint); }
+.dashb-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.dw { background: var(--bg-raise); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 12px 14px; min-width: 0; }
+.dw.full { grid-column: 1 / -1; }
+.dw header { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.dw header b { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dw-flt { font-size: 11px; color: var(--fg-faint); display: inline-flex; align-items: center; gap: 2px; }
+.dw-text { font-size: 13.5px; }
+.dash-tasks { max-height: 60vh; overflow: auto; }
+.dwe { display: flex; flex-direction: column; gap: 10px; }
+.dwe-kinds { display: flex; flex-wrap: wrap; gap: 6px; }
+.dwe-kind { border: 1px solid var(--line); background: var(--bg); color: var(--fg-soft); border-radius: 999px; padding: 4px 11px; font-size: 12.5px; cursor: pointer; }
+.dwe-kind.on { background: var(--accent-bg); border-color: var(--accent); color: var(--accent-dk); font-weight: 600; }
+.dwe-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.dwe-row .field { flex: 1 1 160px; margin: 0; }
+.dwe-prev { border: 1px dashed var(--line); border-radius: var(--radius); padding: 8px; background: var(--bg-sunk); }
+.dwe-text { min-height: 120px; border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; }
+.btn.btn-on { background: var(--accent-bg); color: var(--accent-dk); border-color: var(--accent); }
+
+/* ภาพรวม */
+.ovw-acts { margin-left: auto; display: inline-flex; align-items: center; gap: 10px; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.ovw-meta { font-style: normal; font-weight: 400; text-transform: none; letter-spacing: 0; margin-left: auto; font-size: 11.5px; }
+.segmented.sm button { padding: 2px 8px; font-size: 11.5px; }
+.kr-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--line-soft); font-size: 13.5px; }
+.kr-row .grow { min-width: 0; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.kr-row a { color: var(--accent); font-weight: 500; word-break: break-word; }
+.kr-row em, .msg-att em { font-style: normal; font-size: 11.5px; color: var(--fg-faint); }
+.ms-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-top: 1px solid var(--line-soft); }
+.ms-row.done .ms-nm { text-decoration: line-through; color: var(--fg-faint); }
+.ms-nm { text-align: left; background: none; border: 0; color: var(--fg); font-size: 13.5px; cursor: pointer; padding: 0; min-width: 0; }
+.ms-date { border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); font-size: 12px; padding: 2px 6px; }
+.ms-date.overdue { color: var(--danger); }
+.ovw-pf { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 0; border-top: 1px solid var(--line-soft); padding: 7px 0; color: var(--fg); font-size: 13.5px; cursor: pointer; text-align: left; }
+.ovw-pf:hover .grow { color: var(--accent); }
+.rte-brief { min-height: 90px; border: 1px solid transparent; border-radius: var(--radius); padding: 6px 8px; }
+.rte-brief:focus { border-color: var(--line-strong); outline: none; }
+
+/* บล็อกของเอกสาร (โหมด blocks ของ richtext) — ทั้งตอนแสดงและในตัวแก้ไข */
+.rt-doc .rt-h1, .rte h1 { font-size: 20px; font-weight: 700; margin: 10px 0 4px; }
+.rt-doc .rt-h2, .rte h2 { font-size: 16.5px; font-weight: 650; margin: 8px 0 3px; }
+.rt-doc .rt-h3 { font-size: 14.5px; font-weight: 600; margin: 6px 0 2px; }
+ul.rt-cl { list-style: none !important; padding-left: 4px !important; }
+ul.rt-cl > li { position: relative; padding-left: 24px; }
+ul.rt-cl > li::before { content: ''; position: absolute; left: 2px; top: .3em; width: 13px; height: 13px; border: 1.5px solid var(--fg-faint); border-radius: 3px; background: var(--bg); box-sizing: border-box; }
+ul.rt-cl > li[data-on="1"] { color: var(--fg-faint); text-decoration: line-through; }
+ul.rt-cl > li[data-on="1"]::before { background: var(--ok); border-color: var(--ok); }
+ul.rt-cl > li[data-on="1"]::after { content: ''; position: absolute; left: 6.5px; top: calc(.3em + 2px); width: 4px; height: 7px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.rte ul.rt-cl > li { cursor: text; }
+.rt-tablewrap { overflow-x: auto; margin: 6px 0; }
+.rt-table { border-collapse: collapse; font-size: 13px; min-width: 50%; }
+.rt-table td, .rt-table th { border: 1px solid var(--line-strong); padding: 5px 9px; vertical-align: top; min-width: 60px; text-align: left; }
+.rt-table th { background: var(--bg-sunk); font-weight: 600; }
+.rte .rt-table, .rte table { margin: 6px 0; border-collapse: collapse; }
+.rte table td, .rte table th { border: 1px solid var(--line-strong); padding: 5px 9px; min-width: 60px; }
+.rt-code, .rte pre { background: var(--bg-inset); border-radius: var(--radius); padding: 9px 12px; font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; white-space: pre-wrap; margin: 6px 0; overflow-x: auto; }
+.rt-quote, .rte blockquote { border-left: 3px solid var(--accent); margin: 6px 0; padding: 2px 0 2px 12px; color: var(--fg-soft); }
+.rt-hr, .rte hr { border: 0; border-top: 1px solid var(--line-strong); margin: 12px 0; }
+.rt-img { margin: 8px 0; }
+.rt-img img { max-width: 100%; max-height: 480px; border-radius: var(--radius); border: 1px solid var(--line); display: block; }
+.rt-img figcaption { font-size: 12px; color: var(--fg-faint); margin-top: 3px; }
+.rt-img-gone { display: inline-block; padding: 14px 18px; background: var(--bg-sunk); color: var(--fg-faint); border-radius: var(--radius); font-size: 12px; }
+.rte-bar.page { flex-wrap: wrap; }
+
+/* ประกาศ */
+.rte-msg { min-height: 64px; border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; background: var(--bg); }
+.msg-replybox .rte-msg { min-height: 38px; }
+.msg-atts { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px; }
+.msg-att { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-size: 12.5px; background: var(--bg-sunk); max-width: 100%; }
+.msg-att a { color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.msg-att .x { background: none; border: 0; color: var(--fg-faint); cursor: pointer; padding: 0; display: inline-flex; }
+.msg-foot { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 12px; color: var(--fg-faint); }
+.msg-ppl { display: inline-flex; gap: 2px; }
+.msg-replies { margin-top: 8px; border-top: 1px solid var(--line-soft); }
+.msg-reply { display: flex; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line-soft); }
+.msg-reply em { display: block; font-style: normal; font-size: 12px; color: var(--fg-faint); margin-bottom: 2px; }
+.msg-reply .x { background: none; border: 0; color: var(--fg-faint); cursor: pointer; align-self: flex-start; }
+.msg-replybox { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.msg-join.on { color: var(--accent-dk); }
+.msg-actions .grow { flex: 1; }
+
+/* หน้าต่างดูงานที่จะขยับตาม */
+.shift-list { border: 1px solid var(--line); border-radius: var(--radius); max-height: 52vh; overflow: auto; }
+.shift-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 16px auto; gap: 8px; padding: 7px 10px; border-top: 1px solid var(--line-soft); font-size: 13px; align-items: center; }
+.shift-row.head { border-top: 0; font-size: 11.5px; color: var(--fg-faint); font-weight: 600; }
+.shift-row.self { background: var(--bg-sunk); }
+.shift-row .grow { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* เส้นทางวิกฤต */
+.g-bar.crit, .tl-bar.crit, .g-ms.crit, .tl-milestone.crit { box-shadow: 0 0 0 2px var(--crit); }
+.g-dep-line.crit { stroke: var(--crit); stroke-width: 2.4; stroke-dasharray: none; }
+
+@media (max-width: 860px) {
+  .dashb-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 620px) {
+  .dashb { padding: 12px 12px 60px; }
+  .shift-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .shift-row > span:nth-child(2), .shift-row > span:nth-child(3) { display: none; }
+  .ovw-acts { flex-wrap: wrap; justify-content: flex-end; }
 }
