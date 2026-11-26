@@ -236,6 +236,13 @@
 | PUT · DELETE | `/api/portfolios/{id}/children/{childId}` | ST | พอร์ตโฟลิโอย่อย · ตรวจวนด้วย recursive CTE → `409` (4a) |
 | GET · POST · PATCH · DELETE | `/api/portfolios/{id}/fields[/{fid}]` · `PUT …/values/{itemId}` | ST (อ่าน: ทุกคน) | ฟิลด์ number/text/select/date/person/rollup (`rollup_src` + `rollup_fn` คำนวณตอนอ่านจากงานที่ผู้ขอเห็นได้เท่านั้น) (4a) |
 | GET · POST · PATCH · DELETE | `/api/portfolios/{id}/views[/{vid}]` | ST (อ่าน: ทุกคน) | แท็บมุมมอง `{name, view: {filters, sorts, group, hide}}` · `default_view_id` (4a) |
+| GET · POST · PATCH · DELETE | `/api/goals[/{id}]` | อ่าน: ตาม privacy (private = เจ้าของ/สมาชิก/สมาชิกทีม/OA) · สร้าง: W (เป้าหมายทีมต้องเป็นสมาชิกทีม) · แก้: เจ้าของ/สมาชิก/ผู้ดูแลทีม/OA · ลบ: เจ้าของ/OA | ห้ามวนของ `parent_id` → `409` · ลบแล้วลูกขึ้นไปอยู่ใต้แม่ · ลง audit `goal.*` (4a) |
+| PUT | `/api/goals/{id}/metric` · `/value` | แก้เป้าหมายได้ | วิธีวัด (manual/subgoals+weights รวม 100/projects+projBy/tasks) · ค่าปัจจุบัน (manual เท่านั้น) · เขียนจุด `goal_history` ของวันนั้น (4a) |
+| POST | `/api/goals/{id}/updates` · `/close` · `/reopen` | แก้เป้าหมายได้ | สถานะ on_track/at_risk/off_track · ผล achieved/partial/missed/dropped · แจ้งเจ้าของ+สมาชิก (4a) |
+| POST · DELETE | `/api/goals/{id}/comments[/{cid}]` · `PUT/DELETE …/related/{itemId}` | C / แก้เป้าหมายได้ | ความเห็น (@ แจ้งเตือน) · งานที่เกี่ยวข้อง project/portfolio/task (4a) |
+| GET | `/api/goals.csv` · `/api/strategy-map` | ทุกคน (กรองตามสิทธิ์) | ส่งออก CSV · ต้นไม้ พันธกิจ → เป้าหมาย → เป้าหมายย่อย → โปรเจกต์ (4a) |
+| PUT | `/api/settings/goals` | OA | `{fyStart, mission}` · `goal_fields` (4a) |
+| — | (เตือนเป้าหมาย) | — | ตอนนี้สร้างตอนเปิดแอป สัปดาห์ละครั้งต่อเป้าหมายที่ไม่ได้อัปเดตเกิน 7 วัน (`notification.dedupe = goal:<id>:<วันจันทร์>`) — เฟส 5 ย้ายไปงานตามเวลา (4a) |
 | POST | `/api/portfolios/{id}/status` · `/messages` | ST / C | อัปเดตสถานะพร้อมข้อความ · ประกาศของพอร์ตโฟลิโอ (ตารางประกาศเดียวกับโปรเจกต์) (4a) |
 
 `/api/home` รวมทุกอย่างไว้ในคำขอเดียวโดยตั้งใจ ถ้าแยกเป็นห้าคำขอ หน้าแรกจะเปิด

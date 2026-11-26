@@ -390,6 +390,8 @@
     } else if (r.type === 'teams') {
       body = R.teamsView();
     } else if (r.type === 'goals' || r.type === 'goal') {
+      /* เป้าหมายส่วนตัวที่ไม่ได้เป็นสมาชิก — ถอยไปหน้ารวมเงียบ ๆ เหมือนไม่มีอยู่ */
+      if (r.type === 'goal' && (!S.goal(r.id) || !S.canSeeGoal(r.id))) { state.route = { type: 'goals', view: 'company' }; return renderAll(); }
       body = goalsBody(r);
     } else if (r.type === 'mytasks') {
       body = R.myTasksView(state.sel, state.mt);
@@ -6230,7 +6232,7 @@
     list.forEach(function (x) {
       var on = cur.indexOf(x.id) >= 0;
       h += '<button data-act="ref-toggle" data-id="' + esc(taskId) + '" data-field="' + esc(fid) + '" data-ref="' + esc(x.id) + '">' +
-        popCheck(on) + '<span class="grow">' + esc(x.name) + '</span><em>' + esc(L(({ task: 'งาน', project: 'โปรเจกต์', portfolio: 'พอร์ตโฟลิโอ' })[x.kind])) + '</em></button>';
+        popCheck(on) + '<span class="grow">' + esc(x.name) + '</span><em>' + esc(L(({ task: 'งาน', project: 'โปรเจกต์', portfolio: 'พอร์ตโฟลิโอ', goal: 'เป้าหมาย' })[x.kind])) + '</em></button>';
     });
     return h + '</div></div>';
   }
@@ -7093,6 +7095,410 @@
   }
   var goalsBody2 = null;
 
+  /* ====================== 4a ส่วนที่ 2 — เป้าหมาย แผนผังกลยุทธ์ ====================== */
+  state.goalsUi = { closed: false, fy: 'all' };
+  state.goalUi = { gtab: 'comments' };
+  state.smap = { x: 0, y: 0, k: 1 };
+
+  goalsBody2 = function (r) {
+    if (r.type === 'goal') {
+      if (!S.goal(r.id) || !S.canSeeGoal(r.id)) { state.route = { type: 'goals', view: 'company' }; return R.goalsView('company', goalsUiArg()); }
+      return R.goalView(r.id, state.goalUi);
+    }
+    return R.goalsView(r.view || 'company', goalsUiArg());
+  };
+  function goalsUiArg() { return { closed: state.goalsUi.closed, fy: state.goalsUi.fy, map: state.smap }; }
+  function goGoal(id) { state.route = { type: 'goal', id: id }; state.goalUi = { gtab: 'comments' }; clearSel(); renderAll(); }
+
+  function userOpts(cur, blank) {
+    return (blank ? '<option value="">' + esc(blank) + '</option>' : '') + S.db.users.filter(function (u) { return u.active !== false; }).map(function (u) {
+      return '<option value="' + esc(u.id) + '"' + (u.id === cur ? ' selected' : '') + '>' + esc(u.name) + '</option>';
+    }).join('');
+  }
+
+  function goalEditHtml(id, preset) {
+    var g = id ? S.goal(id) : null;
+    preset = preset || {};
+    var cur = g || { name: '', owner: S.db.currentUserId, team: preset.team || null, period: { k: 'fy', fy: S.fyOf() }, privacy: 'public',
+      members: [], parent: preset.parent || null, desc: '' };
+    var bad = id ? S.goalDescendants(id) : {};
+    var teamsOk = S.isAdmin() ? S.teams() : S.myTeams();
+    var fyNow = S.fyOf(), per = cur.period || {};
+    var h = '<h2>' + (g ? L('แก้ไขเป้าหมาย') : L('เป้าหมายใหม่')) + '</h2>';
+    h += '<div class="field"><label>' + L('ชื่อเป้าหมาย') + '</label><input id="gName" class="inp" maxlength="200" value="' + esc(cur.name) + '"></div>';
+    h += '<div class="g-grid"><div class="field"><label>' + L('เจ้าของ') + '</label><select id="gOwner" class="inp">' + userOpts(cur.owner) + '</select></div>';
+    h += '<div class="field"><label>' + L('ระดับ') + '</label><select id="gTeam" class="inp"><option value="">' + L('บริษัท') + '</option>' +
+      teamsOk.map(function (t) { return '<option value="' + esc(t.id) + '"' + (cur.team === t.id ? ' selected' : '') + '>' + esc(L('ทีม') + ' · ' + t.name) + '</option>'; }).join('') +
+      '</select></div>';
+    h += '<div class="field"><label>' + L('ช่วงเวลา') + '</label><select id="gPerK" class="inp">' + S.GOAL_PERIODS.map(function (p) {
+      return '<option value="' + p[0] + '"' + ((per.k || 'fy') === p[0] ? ' selected' : '') + '>' + esc(L(p[1])) + '</option>'; }).join('') + '</select></div>';
+    h += '<div class="field"><label>' + L('ปีงบ') + '</label><select id="gFy" class="inp">' + [fyNow - 1, fyNow, fyNow + 1, fyNow + 2].map(function (y) {
+      return '<option value="' + y + '"' + ((+per.fy || fyNow) === y ? ' selected' : '') + '>FY' + String(y).slice(2) + '</option>'; }).join('') + '</select></div>';
+    h += '<div class="field"><label>' + L('เริ่ม (กำหนดเอง)') + '</label><input id="gFrom" type="date" class="inp" value="' + esc(per.from || '') + '"></div>';
+    h += '<div class="field"><label>' + L('สิ้นสุด (กำหนดเอง)') + '</label><input id="gTo" type="date" class="inp" value="' + esc(per.to || '') + '"></div>';
+    h += '<div class="field"><label>' + L('ความเป็นส่วนตัว') + '</label><select id="gPriv" class="inp"><option value="public">' + L('สาธารณะ') + '</option><option value="private"' +
+      (cur.privacy === 'private' ? ' selected' : '') + '>' + L('ส่วนตัว (เฉพาะสมาชิก)') + '</option></select></div>';
+    h += '<div class="field"><label>' + L('เป้าหมายแม่') + '</label><select id="gParent" class="inp"><option value="">' + L('ไม่มี') + '</option>' +
+      S.visibleGoals().filter(function (x) { return x.id !== id && !bad[x.id]; }).map(function (x) {
+        return '<option value="' + esc(x.id) + '"' + (cur.parent === x.id ? ' selected' : '') + '>' + esc(x.name) + '</option>'; }).join('') + '</select></div></div>';
+    h += '<label class="opt-lbl">' + L('สมาชิก') + '</label><div class="g-mem">' + S.db.users.filter(function (u) { return u.active !== false; }).map(function (u) {
+      return '<label><input type="checkbox" class="gMem" value="' + esc(u.id) + '"' + (cur.members.indexOf(u.id) >= 0 ? ' checked' : '') + '> ' + esc(u.name) + '</label>'; }).join('') + '</div>';
+    h += '<div class="field"><label>' + L('คำอธิบาย') + '</label><textarea id="gDesc" class="inp" rows="3">' + esc(cur.desc) + '</textarea></div>';
+    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button><button class="btn btn-primary" data-act="goal-save"' +
+      (g ? ' data-id="' + esc(g.id) + '"' : '') + '>' + (g ? L('บันทึก') : L('สร้างเป้าหมาย')) + '</button></div>';
+    return h;
+  }
+  function readGoalForm() {
+    var v = function (s) { var e = $modal.querySelector(s); return e ? e.value : ''; };
+    var k = v('#gPerK') || 'fy';
+    return {
+      name: v('#gName').trim(), owner: v('#gOwner') || S.db.currentUserId, team: v('#gTeam') || null,
+      period: { k: k, fy: +v('#gFy') || S.fyOf(), from: k === 'custom' ? v('#gFrom') || null : null, to: k === 'custom' ? v('#gTo') || null : null },
+      privacy: v('#gPriv') === 'private' ? 'private' : 'public', parent: v('#gParent') || null, desc: v('#gDesc'),
+      members: Array.prototype.map.call($modal.querySelectorAll('.gMem:checked'), function (c) { return c.value; })
+    };
+  }
+
+  /* ---------- ตั้งค่าความคืบหน้า ---------- */
+  function goalMetricHtml() {
+    var e = state.gm, g = S.goal(e.id), m = e.m;
+    var h = '<h2>' + L('ตั้งค่าความคืบหน้า') + '</h2><div class="flt-chips">';
+    S.GOAL_SRCS.forEach(function (s) {
+      h += '<button class="flt-chip' + (m.src === s[0] ? ' on' : '') + '" data-act="gm-src" data-v="' + s[0] + '">' + esc(L(s[1])) + '</button>';
+    });
+    h += '</div><div class="g-grid">';
+    h += '<div class="field"><label>' + L('หน่วย') + '</label><select id="gmUnit" class="inp">' + [['percent', L('เปอร์เซ็นต์')], ['number', L('ตัวเลข')], ['currency', L('เงิน')]]
+      .map(function (u) { return '<option value="' + u[0] + '"' + (m.unit === u[0] ? ' selected' : '') + '>' + esc(u[1]) + '</option>'; }).join('') + '</select></div>';
+    if (m.unit !== 'percent') {
+      h += '<div class="field"><label>' + L('ค่าเริ่มต้น') + '</label><input id="gmStart" type="number" step="any" class="inp" value="' + esc(m.start) + '"></div>';
+      h += '<div class="field"><label>' + L('ค่าเป้าหมาย') + '</label><input id="gmTarget" type="number" step="any" class="inp" value="' + esc(m.target) + '"></div>';
+      if (m.unit === 'currency') h += '<div class="field"><label>' + L('สกุลเงิน') + '</label><select id="gmCur" class="inp">' + S.CURRENCIES.map(function (c) {
+        var code = c.id || c; return '<option value="' + esc(code) + '"' + (m.currency === code ? ' selected' : '') + '>' + esc(code) + '</option>'; }).join('') + '</select></div>';
+    }
+    if (m.src === 'manual') h += '<div class="field"><label>' + L('ค่าปัจจุบัน') + '</label><input id="gmCurrent" type="number" step="any" class="inp" value="' + esc(m.current) + '"></div>';
+    h += '</div>';
+    if (m.src === 'subgoals') {
+      var kids = S.subGoals(e.id);
+      h += '<div class="field"><label>' + L('วิธีรวม') + '</label><select id="gmAgg" class="inp"><option value="avg">' + L('ค่าเฉลี่ยของความคืบหน้า (ใส่น้ำหนักได้)') +
+        '</option><option value="sum"' + (m.agg === 'sum' ? ' selected' : '') + '>' + L('รวมค่าของเป้าหมายย่อย (หน่วยตัวเลข/เงิน)') + '</option></select></div>';
+      if (!kids.length) h += '<p class="prj-note">' + L('ยังไม่มีเป้าหมายย่อย') + '</p>';
+      else {
+        h += '<label class="opt-lbl">' + L('น้ำหนัก (%) — เว้นว่างทั้งหมด = เท่ากัน รวมต้องได้ 100') + '</label>';
+        kids.forEach(function (c) {
+          var w = m.weights && m.weights[c.id] != null ? m.weights[c.id] : '';
+          h += '<div class="pff-row"><span class="grow"><b>' + esc(c.name) + '</b><em>' + Math.round(S.goalProgress(c.id).pct) + '%</em></span>' +
+            '<input type="number" min="0" max="100" class="inp gm-w" data-g="' + esc(c.id) + '" value="' + esc(w) + '" style="width:80px"></div>';
+        });
+      }
+    }
+    if (m.src === 'projects') {
+      h += '<div class="field"><label>' + L('นับจาก') + '</label><select id="gmBy" class="inp"><option value="tasks">' + L('งานที่เสร็จ') + '</option><option value="milestones"' +
+        (m.projBy === 'milestones' ? ' selected' : '') + '>' + L('หมุดหมายที่เสร็จ') + '</option></select></div><div class="pf-pick pf-pick-sm">';
+      S.visibleProjects().forEach(function (p) {
+        var on = m.projects.indexOf(p.id) >= 0;
+        h += '<label class="pf-pick-row' + (on ? ' on' : '') + '"><input type="checkbox" class="gm-p" value="' + esc(p.id) + '"' + (on ? ' checked' : '') + '>' +
+          '<span class="hproj-ic" style="background:' + esc(p.color) + '22">' + esc(p.icon) + '</span><span class="grow"><b>' + esc(p.name) + '</b></span></label>';
+      });
+      h += '</div>';
+    }
+    if (m.src === 'tasks') {
+      h += '<div class="flt-line"><input id="gmTq" class="inp" placeholder="' + esc(L('ค้นหางาน…')) + '" value="' + esc(e.q || '') + '">' +
+        '<button class="btn btn-sm" data-act="gm-tsearch">' + L('ค้นหา') + '</button></div><div class="pf-pick pf-pick-sm">';
+      var ids = m.tasks.slice();
+      (e.q ? S.searchAdv({ q: e.q, limit: 20 }).map(function (x) { return x.task || x; }) : []).forEach(function (t) { if (t && t.id && ids.indexOf(t.id) < 0) ids.push(t.id); });
+      ids.forEach(function (tid) {
+        var t = S.task(tid);
+        if (!t) return;
+        var on = m.tasks.indexOf(tid) >= 0;
+        h += '<button class="pf-pick-row' + (on ? ' on' : '') + '" data-act="gm-task" data-id="' + esc(tid) + '">' + (t.completed ? '✓' : '○') +
+          '<span class="grow"><b>' + esc(t.name) + '</b></span>' + (on ? R.ICON.check : I('plus', 14)) + '</button>';
+      });
+      h += '</div>';
+    }
+    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button><button class="btn btn-primary" data-act="gm-save">' + L('บันทึก') + '</button></div>';
+    void g;
+    return h;
+  }
+  /** อ่านค่าจากหน้าต่างกลับเข้า state.gm ก่อนวาดใหม่ */
+  function readMetric() {
+    var m = state.gm.m, q = function (s) { return $modal.querySelector(s); };
+    if (q('#gmUnit')) m.unit = q('#gmUnit').value;
+    if (q('#gmStart')) m.start = +q('#gmStart').value || 0;
+    if (q('#gmTarget')) m.target = q('#gmTarget').value === '' ? 100 : +q('#gmTarget').value;
+    if (q('#gmCur')) m.currency = q('#gmCur').value;
+    if (q('#gmCurrent')) m.current = +q('#gmCurrent').value || 0;
+    if (q('#gmAgg')) m.agg = q('#gmAgg').value;
+    if (q('#gmBy')) m.projBy = q('#gmBy').value;
+    if (q('#gmTq')) state.gm.q = q('#gmTq').value;
+    var ws = $modal.querySelectorAll('.gm-w');
+    if (ws.length) {
+      var w = {}, any = false;
+      Array.prototype.forEach.call(ws, function (i) { if (i.value !== '') { w[i.dataset.g] = +i.value; any = true; } });
+      m.weights = any ? w : null;
+    }
+    var ps = $modal.querySelectorAll('.gm-p');
+    if (ps.length) m.projects = Array.prototype.filter.call(ps, function (c) { return c.checked; }).map(function (c) { return c.value; });
+  }
+
+  function goalStateHtml(id, kind) {
+    var list = kind === 'close' ? S.GOAL_OUTCOMES : S.GOAL_STATES, cur = state.gst;
+    var h = '<h2>' + (kind === 'close' ? L('ปิดเป้าหมาย') : L('อัปเดตสถานะเป้าหมาย')) + '</h2><div class="flt-chips">';
+    list.forEach(function (x) {
+      h += '<button class="flt-chip' + (cur === x.id ? ' on' : '') + '" data-act="gst-pick" data-id="' + esc(id) + '" data-k="' + kind + '" data-v="' + x.id + '">' +
+        '<i class="flt-dot" style="background:' + x.color + '"></i>' + esc(L(x.label)) + '</button>';
+    });
+    h += '</div><div class="field"><label>' + (kind === 'close' ? L('หมายเหตุ') : L('สรุปความคืบหน้า')) + '</label><textarea id="gstText" class="inp" rows="4">' +
+      esc(state.gstText || '') + '</textarea></div>';
+    return h + '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button><button class="btn btn-primary" data-act="gst-save" data-id="' +
+      esc(id) + '" data-k="' + kind + '">' + (kind === 'close' ? L('ปิดเป้าหมาย') : L('โพสต์อัปเดต')) + '</button></div>';
+  }
+  function goalRelHtml(id) {
+    var g = S.goal(id), q = state.grq || '';
+    var h = '<h2>' + L('เชื่อมงานกับเป้าหมาย') + '</h2><input id="grq" class="inp" placeholder="' + esc(L('ค้นหาโปรเจกต์ พอร์ตโฟลิโอ หรืองาน…')) + '" value="' + esc(q) + '">' +
+      '<div class="pf-pick" id="grList">' + goalRelList(id, q) + '</div>';
+    void g;
+    return h + '<div class="modal-acts"><button class="btn btn-primary" data-act="close-modal">' + L('เสร็จแล้ว') + '</button></div>';
+  }
+  function goalRelList(id, q) {
+    var g = S.goal(id);
+    return S.refSearch({ kinds: ['project', 'portfolio', 'task'] }, q).map(function (x) {
+      var on = g.rel.indexOf(x.id) >= 0;
+      return '<button class="pf-pick-row' + (on ? ' on' : '') + '" data-act="goal-rel" data-id="' + esc(id) + '" data-item="' + esc(x.id) + '" data-re="1">' +
+        '<span class="grow"><b>' + esc(x.name) + '</b><em>' + esc(L(({ task: 'งาน', project: 'โปรเจกต์', portfolio: 'พอร์ตโฟลิโอ' })[x.kind])) + '</em></span>' +
+        (on ? R.ICON.check : I('plus', 14)) + '</button>';
+    }).join('') || '<p class="prj-note">' + L('พิมพ์เพื่อค้นหางาน') + '</p>';
+  }
+  document.addEventListener('input', function (e) {
+    if (e.target && e.target.id === 'grq' && state.grGoal) {
+      state.grq = e.target.value;
+      var l = document.getElementById('grList');
+      if (l) l.innerHTML = goalRelList(state.grGoal, state.grq);
+    }
+  });
+
+  act4a2 = function (act, el, e) {
+    var id = el.dataset.id;
+    switch (act) {
+      case 'go-goal': if (e) e.stopPropagation(); closePops(); closeSidebar(); goGoal(id); return true;
+      case 'go-goals':
+        state.route = { type: 'goals', view: el.dataset.v || 'company' };
+        clearSel(); renderAll();
+        return true;
+      case 'goal-tab': state.goalUi.gtab = el.dataset.v; renderViewBody(); return true;
+      case 'goal-new':
+        openModal(goalEditHtml(null, { parent: el.dataset.parent || null,
+          team: el.dataset.team ? ((S.myTeams()[0] || {}).id || null) : null }), true);
+        return true;
+      case 'goal-edit': openModal(goalEditHtml(id), true); return true;
+      case 'goal-save': {
+        var f = readGoalForm();
+        if (!f.name) { toast(L('ใส่ชื่อเป้าหมายก่อน')); return true; }
+        if (f.period.k === 'custom' && (!f.period.from || !f.period.to || f.period.to < f.period.from)) { toast(L('ตั้งวันเริ่มและวันสิ้นสุดให้ถูกต้อง')); return true; }
+        if (id) {
+          var r = S.updateGoal(id, f);
+          if (r === 'cycle') { toast(L('เลือกเป้าหมายแม่นี้ไม่ได้ เพราะจะวนกัน')); return true; }
+          if (!r) { denyToast(); return true; }
+          closeModal(); renderAll(); toast(L('บันทึกเป้าหมายแล้ว'), L('ย้อนกลับ'), 'undo');
+        } else {
+          var ng = S.createGoal(f);
+          if (!ng) { denyToast(); return true; }
+          closeModal(); goGoal(ng.id); toast(L('สร้างเป้าหมายแล้ว'), L('ย้อนกลับ'), 'undo');
+        }
+        return true;
+      }
+      case 'goal-value': {
+        var gv = S.goal(id);
+        askText(L('ค่าปัจจุบันของ “{t}”', { t: gv.name }), gv.metric.current, function (v) {
+          if (v === null || v === '') return;
+          if (S.setGoalValue(id, v)) { renderAll(); toast(L('อัปเดตค่าแล้ว'), L('ย้อนกลับ'), 'undo'); } else toast(L('ใส่ตัวเลขให้ถูกต้อง'));
+        }, { type: 'number', note: gv.metric.unit === 'percent' ? L('เปอร์เซ็นต์ 0–100') : L('เป้าหมาย {t}', { t: S.goalValueText(gv, gv.metric.target) }) });
+        return true;
+      }
+      case 'goal-metric':
+        state.gm = { id: id, m: S.clone(S.goal(id).metric), q: '' };
+        openModal(goalMetricHtml(), true);
+        return true;
+      case 'gm-src': readMetric(); state.gm.m.src = el.dataset.v; openModal(goalMetricHtml(), true); return true;
+      case 'gm-tsearch': readMetric(); openModal(goalMetricHtml(), true); return true;
+      case 'gm-task': {
+        readMetric();
+        var ts = state.gm.m.tasks, at = ts.indexOf(id);
+        if (at >= 0) ts.splice(at, 1); else ts.push(id);
+        openModal(goalMetricHtml(), true);
+        return true;
+      }
+      case 'gm-save': {
+        readMetric();
+        var mm = state.gm.m;
+        if (mm.src === 'subgoals' && mm.weights) {
+          var tot = 0;
+          Object.keys(mm.weights).forEach(function (k) { tot += +mm.weights[k] || 0; });
+          if (Math.abs(tot - 100) > 0.01) { toast(L('น้ำหนักรวมต้องได้ 100 (ตอนนี้ {n})', { n: tot })); return true; }
+        }
+        if (mm.unit !== 'percent' && mm.target === mm.start) { toast(L('ค่าเป้าหมายต้องต่างจากค่าเริ่มต้น')); return true; }
+        if (S.updateGoal(state.gm.id, { metric: mm })) { closeModal(); renderAll(); toast(L('บันทึกวิธีวัดความคืบหน้าแล้ว'), L('ย้อนกลับ'), 'undo'); }
+        else denyToast();
+        return true;
+      }
+      case 'goal-update':
+      case 'goal-close':
+        state.gst = act === 'goal-close' ? 'achieved' : ((S.goal(id).status || {}).state || 'on_track');
+        state.gstText = '';
+        openModal(goalStateHtml(id, act === 'goal-close' ? 'close' : 'update'));
+        return true;
+      case 'gst-pick': {
+        var gt = $modal.querySelector('#gstText');
+        state.gstText = gt ? gt.value : '';
+        state.gst = el.dataset.v;
+        openModal(goalStateHtml(id, el.dataset.k));
+        return true;
+      }
+      case 'gst-save': {
+        var txt = ($modal.querySelector('#gstText') || {}).value || '';
+        var ok = el.dataset.k === 'close' ? S.closeGoal(id, state.gst, txt) : S.postGoalUpdate(id, state.gst, txt);
+        if (ok) { closeModal(); renderAll(); toast(el.dataset.k === 'close' ? L('ปิดเป้าหมายแล้ว') : L('โพสต์อัปเดตสถานะแล้ว'), L('ย้อนกลับ'), 'undo'); }
+        else denyToast();
+        return true;
+      }
+      case 'goal-reopen': if (S.reopenGoal(id)) { renderAll(); toast(L('เปิดเป้าหมายอีกครั้งแล้ว'), L('ย้อนกลับ'), 'undo'); } return true;
+      case 'goal-delete': {
+        var gd = S.goal(id);
+        askConfirm(L('ลบเป้าหมาย “{t}”?', { t: gd.name }), L('เป้าหมายย่อยจะย้ายไปอยู่ใต้เป้าหมายแม่ของมันแทน'), function () {
+          if (S.deleteGoal(id)) { state.route = { type: 'goals', view: 'company' }; renderAll(); toast(L('ลบเป้าหมายแล้ว'), L('ย้อนกลับ'), 'undo'); }
+          else denyToast();
+        }, { ok: L('ลบเป้าหมาย') });
+        return true;
+      }
+      case 'goal-rel-pick': state.grGoal = id; state.grq = ''; openModal(goalRelHtml(id)); return true;
+      case 'goal-rel': {
+        if (e) e.stopPropagation();
+        var on = S.toggleGoalRel(id, el.dataset.item);
+        if (on === null) { denyToast(); return true; }
+        if (el.dataset.re) { var l2 = document.getElementById('grList'); if (l2) l2.innerHTML = goalRelList(id, state.grq || ''); }
+        renderViewBody();
+        return true;
+      }
+      case 'goal-comment': {
+        var ce = $view.querySelector('.rte-msg[data-key="gc:' + id + '"]');
+        var md = ce ? global.RichText.fromNode(ce) : '';
+        if (!md.trim()) { toast(L('พิมพ์ข้อความก่อน')); return true; }
+        if (S.addGoalComment(id, md)) { setDraft('gc:' + id, ''); if (ce) ce.innerHTML = ''; renderAll(); }
+        return true;
+      }
+      case 'goal-cdel': if (S.deleteGoalComment(id, el.dataset.c)) { renderAll(); toast(L('ลบความเห็นแล้ว'), L('ย้อนกลับ'), 'undo'); } return true;
+      case 'goal-fv': {
+        var gf = (S.db.goalFields || []).filter(function (x) { return x.id === el.dataset.f; })[0], gg = S.goal(id);
+        if (!gf || !gg) return true;
+        var setF = function (v) { if (S.setGoalField(id, gf.id, v)) renderAll(); };
+        if (gf.type === 'select') {
+          askChoice(gf.name, '', gf.options.map(function (o) { return { label: o.name, primary: gg.fv[gf.id] === o.name, run: function () { setF(o.name); } }; })
+            .concat([{ label: L('ล้างค่า'), run: function () { setF(null); } }]));
+        } else askText(gf.name, gg.fv[gf.id] == null ? '' : gg.fv[gf.id], function (v) { setF(v === '' ? null : v); }, { type: gf.type === 'number' ? 'number' : 'text' });
+        return true;
+      }
+      case 'goal-csv':
+        downloadText(S.goalsCsv(), 'orbit-goals-' + S.today() + '.csv', 'text/csv;charset=utf-8');
+        return true;
+      case 'goal-png': {
+        var sv = $view.querySelector('.gv-chart svg.chart') || $view.querySelector('.gv-chart svg');
+        var gp = S.goal(id);
+        if (sv && gp) global.Charts.toPng(sv, safeFileName(gp.name), { title: gp.name, onError: function () { toast(L('ส่งออกรูปไม่สำเร็จ')); } });
+        return true;
+      }
+      case 'goal-mission':
+        if (!S.isAdmin()) { denyToast(); return true; }
+        askText(L('พันธกิจขององค์กร'), (S.db.settings || {}).mission || '', function (v) {
+          if (v === null) return;
+          if (S.setGoalSettings({ mission: v })) { renderAll(); toast(L('บันทึกพันธกิจแล้ว'), L('ย้อนกลับ'), 'undo'); }
+        }, { note: L('แสดงบนสุดของแผนผังกลยุทธ์ แก้ได้เฉพาะผู้ดูแลระบบ') });
+        return true;
+      case 'goal-field-add':
+        askText(L('ชื่อฟิลด์ของเป้าหมาย'), '', function (name) {
+          if (!name) return;
+          askChoice(L('ชนิดฟิลด์'), name, [
+            { label: L('ข้อความ'), run: function () { S.saveGoalField({ name: name, type: 'text' }); renderAll(); } },
+            { label: L('ตัวเลข'), run: function () { S.saveGoalField({ name: name, type: 'number' }); renderAll(); } },
+            { label: L('ตัวเลือกเดียว'), run: function () {
+              askText(L('ตัวเลือก (คั่นด้วยจุลภาค)'), '', function (ops) {
+                S.saveGoalField({ name: name, type: 'select', options: String(ops || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean)
+                  .map(function (n, i) { return { name: n, color: S.OPTION_COLORS[i % S.OPTION_COLORS.length] }; }) });
+                renderAll();
+              });
+            } }
+          ]);
+        }, { ok: L('ถัดไป') });
+        return true;
+      case 'goal-field-del':
+        if (S.deleteGoalField(el.dataset.f)) { renderAll(); toast(L('ลบฟิลด์แล้ว'), L('ย้อนกลับ'), 'undo'); }
+        return true;
+      case 'smap-zoom': {
+        var d = +el.dataset.d;
+        if (!d) state.smap = { x: 0, y: 0, k: 1 };
+        else state.smap.k = Math.max(0.3, Math.min(2.5, state.smap.k * (d > 0 ? 1.2 : 1 / 1.2)));
+        applySmap();
+        return true;
+      }
+    }
+    return false;
+  };
+  change4a2 = function (act, el) {
+    if (act === 'goal-fyf') { state.goalsUi.fy = el.value; renderViewBody(); return true; }
+    if (act === 'goal-closed') { state.goalsUi.closed = el.checked; renderViewBody(); return true; }
+    if (act === 'goal-remind') { S.updateGoal(el.dataset.id, { remind: el.checked }); return true; }
+    if (act === 'goal-fy') {
+      if (S.setGoalSettings({ fyStart: +el.value })) toast(L('ตั้งเดือนเริ่มปีงบแล้ว'), L('ย้อนกลับ'), 'undo');
+      return true;
+    }
+    return false;
+  };
+
+  /* ---------- แผนผังกลยุทธ์: ลากเลื่อน / ซูม ---------- */
+  function applySmap() {
+    var g = $view.querySelector('.smap-g');
+    if (g) g.setAttribute('transform', 'translate(' + state.smap.x + ',' + state.smap.y + ') scale(' + state.smap.k + ')');
+  }
+  function smapScale(svg) {
+    var vb = svg.viewBox.baseVal, r = svg.getBoundingClientRect();
+    return vb && vb.width && r.width ? vb.width / r.width : 1;
+  }
+  var smapDrag = null;
+  document.addEventListener('mousedown', function (e) {
+    var vp = e.target.closest && e.target.closest('.smap-vp');
+    if (!vp || e.button !== 0) return;
+    var svg = vp.querySelector('svg');
+    smapDrag = { x: e.clientX, y: e.clientY, ox: state.smap.x, oy: state.smap.y, s: svg ? smapScale(svg) : 1, moved: false };
+    vp.classList.add('grabbing');
+  });
+  document.addEventListener('mousemove', function (e) {
+    if (!smapDrag) return;
+    var dx = e.clientX - smapDrag.x, dy = e.clientY - smapDrag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 3) smapDrag.moved = true;
+    state.smap.x = smapDrag.ox + dx * smapDrag.s;
+    state.smap.y = smapDrag.oy + dy * smapDrag.s;
+    applySmap();
+  });
+  document.addEventListener('mouseup', function () {
+    if (!smapDrag) return;
+    if (smapDrag.moved) lastDragEnd = Date.now();     // ลากแล้วไม่นับเป็นคลิกบนกล่อง
+    smapDrag = null;
+    var vp = $view.querySelector('.smap-vp');
+    if (vp) vp.classList.remove('grabbing');
+  });
+  document.addEventListener('wheel', function (e) {
+    var vp = e.target.closest && e.target.closest('.smap-vp');
+    if (!vp) return;
+    e.preventDefault();
+    var svg = vp.querySelector('svg'), s = svg ? smapScale(svg) : 1, r = svg.getBoundingClientRect();
+    var px = (e.clientX - r.left) * s, py = (e.clientY - r.top) * s;
+    var k0 = state.smap.k, k1 = Math.max(0.3, Math.min(2.5, k0 * (e.deltaY < 0 ? 1.1 : 1 / 1.1)));
+    /* ซูมรอบตำแหน่งเมาส์ */
+    state.smap.x = px - (px - state.smap.x) * k1 / k0;
+    state.smap.y = py - (py - state.smap.y) * k1 / k0;
+    state.smap.k = k1;
+    applySmap();
+  }, { passive: false });
+
+
   /* ---------- ด่านตรวจสิทธิ์ ----------
    *
    * ทุกคำสั่งในแอปวิ่งผ่านตัวจัดการคลิกตัวเดียว จึงกันได้ที่จุดเดียวจบ
@@ -7246,6 +7652,14 @@
       'team-role', 'team-remove', 'team-req-ok', 'team-req-no', 'team-pin', 'team-pin-pick', 'team-res-add', 'team-res-del',
       'pfq-add', 'pfq-del', 'pfq-opt', 'pfq-field', 'pfq-op', 'pfq-val', 'pfq-val2', 'pfs-add', 'pfs-del', 'pfs-dir', 'pfs-key',
       'pfg-set', 'pfc-toggle', 'pfv-discard']);
+    /* 4a ส่วนที่ 2 — เป้าหมาย: สร้าง = ต้องเขียนได้ แก้/ปิด/อัปเดต/งานที่เกี่ยวข้อง store ตรวจว่าเป็นเจ้าของ สมาชิก
+     * ผู้ดูแลทีมของเป้าหมายทีม หรือผู้ดูแลระบบ · ความเห็น = แสดงความเห็นได้
+     * ปีงบ พันธกิจ ฟิลด์ของเป้าหมาย = ผู้ดูแลระบบเท่านั้น */
+    put('create', ['goal-new']);
+    put('self', ['goal-save', 'goal-edit', 'goal-value', 'goal-metric', 'gm-save', 'goal-update', 'goal-close', 'gst-save',
+      'goal-reopen', 'goal-delete', 'goal-rel', 'goal-rel-pick', 'goal-fv', 'goal-remind', 'goal-cdel']);
+    put('comment', ['goal-comment']);
+    put('manage', ['goal-mission', 'goal-fy', 'goal-field-add', 'goal-field-del']);
     return map;
   })();
 
@@ -7350,6 +7764,7 @@
         var rt = el.dataset.route;
         if (rt === 'project') { goProject(id); break; }
         if (rt === 'portfolio') { goPortfolio(id); break; }
+        if (rt === 'goal' || rt === 'team') { state.route = rt === 'goal' ? { type: 'goal', id: id } : { type: 'team', id: id, view: 'overview' }; clearSel(); renderAll(); break; }
         if (rt === 'profile') { goProfile(id); break; }
         state.route = { type: rt };
         state.calOffset = 0;
@@ -12274,6 +12689,8 @@
     try { S.checkDueReminders(); } catch (err) { console.error('เตือนกำหนดส่งไม่สำเร็จ', err); }
     /* 3b — งานเตือนรายงานสถานะวันศุกร์ (ทดสอบวันอื่นได้ด้วย Store.checkStatusReminders({ today: 'YYYY-MM-DD' })) */
     try { S.checkStatusReminders(); } catch (err2) { console.error('เตือนรายงานสถานะไม่สำเร็จ', err2); }
+    /* 4a — เตือนอัปเดตสถานะเป้าหมาย (สัปดาห์ละครั้ง) และจุดกราฟความคืบหน้าของวันนี้ */
+    try { S.checkGoalReminders(); } catch (err3) { console.error('เตือนเป้าหมายไม่สำเร็จ', err3); }
   }
   setTimeout(runReminders, 2500);
   setInterval(runReminders, 3600 * 1000);

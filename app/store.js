@@ -10,7 +10,7 @@
 
   var KEY = 'orbit.db.v4';
   var LEGACY_KEYS = ['orbit.db.v3', 'orbit.db.v2', 'orbit.db.v1', 'taskflow.db.v1'];   // ชื่อ/เวอร์ชันเดิม
-  var SCHEMA = 15;
+  var SCHEMA = 16;
 
   /* ---------- utilities ---------- */
 
@@ -1962,7 +1962,8 @@
     { id: 'drafts',   label: 'ร่างความเห็น',        icon: 'pencil' },
     { id: 'stats',    label: 'สถิติงานเสร็จ',       icon: 'chart' },
     { id: 'activity', label: 'กิจกรรมล่าสุด',       icon: 'bell' },
-    { id: 'forms',    label: 'ฟอร์ม',              icon: 'note' }       // 3b — ฟอร์มที่ส่งได้
+    { id: 'forms',    label: 'ฟอร์ม',              icon: 'note' },      // 3b — ฟอร์มที่ส่งได้
+    { id: 'goals',    label: 'เป้าหมาย',           icon: 'flag' }       // 4a — เป้าหมายของฉัน
   ];
   var HOME_DEFAULT = [
     { w: 'mine', full: false }, { w: 'projects', full: false },
@@ -5229,7 +5230,7 @@
     });
     if (nf.type === 'number') nf.format = normalizeFormat(field.format);
     if (nf.type === 'formula') { nf.expr = String(field.expr || ''); nf.out = field.out === 'date' ? 'date' : 'number'; nf.format = normalizeFormat(field.format); }
-    if (nf.type === 'ref') nf.kinds = (field.kinds || ['task', 'project', 'portfolio']).filter(function (k) { return ['task', 'project', 'portfolio'].indexOf(k) >= 0; });
+    if (nf.type === 'ref') nf.kinds = (field.kinds || ['task', 'project', 'portfolio', 'goal']).filter(function (k) { return ['task', 'project', 'portfolio', 'goal'].indexOf(k) >= 0; });
     p.fields.push(nf);
     commit();
     return nf;
@@ -10347,19 +10348,24 @@
   }
 
   /* ---------- ฟิลด์อ้างอิง ---------- */
-  var REF_KINDS = [['task', 'งาน'], ['project', 'โปรเจกต์'], ['portfolio', 'พอร์ตโฟลิโอ']];
+  var REF_KINDS = [['task', 'งาน'], ['project', 'โปรเจกต์'], ['portfolio', 'พอร์ตโฟลิโอ'], ['goal', 'เป้าหมาย']];
   function refItem(id) {
     if (/^t_/.test(id)) { var t = task(id); return t && canSeeTask(id) ? { id: id, kind: 'task', name: t.name, done: t.completed } : null; }
     if (/^p_/.test(id)) { var p = project(id); return p && projectAccess(id) ? { id: id, kind: 'project', name: p.name, color: p.color } : null; }
     if (/^pf_/.test(id)) { var f = portfolio(id); return f ? { id: id, kind: 'portfolio', name: f.name, color: f.color } : null; }
-    return null;      // g_ (เป้าหมาย) รอชิ้นงาน 4a
+    if (/^g_/.test(id)) { var g = goal(id); return g && canSeeGoal(id) ? { id: id, kind: 'goal', name: g.name, color: '#37c5ab' } : null; }
+    return null;
   }
   function refNames(v) {
     return [].concat(v || []).map(refItem).filter(Boolean).map(function (x) { return x.name; }).join(', ');
   }
   function refSearch(f, q) {
-    var ql = String(q || '').toLowerCase().trim(), kinds = (f && f.kinds && f.kinds.length) ? f.kinds : ['task', 'project', 'portfolio'];
+    var ql = String(q || '').toLowerCase().trim(), kinds = (f && f.kinds && f.kinds.length) ? f.kinds : ['task', 'project', 'portfolio', 'goal'];
     var out = [];
+    /* 4a — เป้าหมายขึ้นก่อน (มีไม่มาก) */
+    if (kinds.indexOf('goal') >= 0) visibleGoals().forEach(function (g) {
+      if (!ql || g.name.toLowerCase().indexOf(ql) >= 0) out.push({ id: g.id, kind: 'goal', name: g.name, color: '#37c5ab' });
+    });
     if (kinds.indexOf('project') >= 0) visibleProjects().forEach(function (p) {
       if (!ql || p.name.toLowerCase().indexOf(ql) >= 0) out.push({ id: p.id, kind: 'project', name: p.name, color: p.color });
     });
@@ -11126,6 +11132,443 @@
     return true;
   }
 
+  /* ====================== 4a ส่วนที่ 2 — เป้าหมาย แผนผังกลยุทธ์ ======================
+   *   db.goals[]  { id:'g_…', name, owner, team: null(บริษัท)|teamId, period: { k: fy|h1|h2|q1..q4|custom, fy, from, to },
+   *                 privacy: public|private, members: [uid], parent: gid|null, desc, fv: { gf_…: ค่า },
+   *                 metric: { src: manual|subgoals|projects|tasks, unit: percent|number|currency, start, target, current,
+   *                           currency, agg: avg|sum, weights: { gid: w } | null, projects: [pid], projBy: tasks|milestones, tasks: [tid] },
+   *                 status: { state, at, by } | null, updates: [{ id, state, text, pct, by, at }] (≤ 60),
+   *                 hist: [[YYYY-MM-DD, pct]] (≤ 180), closed: { outcome: achieved|partial|missed|dropped, note, by, at } | null,
+   *                 rel: [p_…|pf_…|t_…] งานที่เกี่ยวข้อง, comments: [{ id, by, at, body }], act: [{ at, by, k, p }] (≤ 100),
+   *                 remind: bool, by, at }
+   *   db.goalFields[] { id:'gf_…', name, type: text|number|select, options }  ฟิลด์ของเป้าหมาย (ทั้งองค์กร)
+   *   db.settings.fyStart (1–12)  mission / missionBy / missionAt */
+  var GOAL_STATES = [
+    { id: 'on_track',  label: 'ตามแผน',  color: '#37c5ab' },
+    { id: 'at_risk',   label: 'เสี่ยง',   color: '#f5a623' },
+    { id: 'off_track', label: 'หลุดแผน', color: '#e8384f' }
+  ];
+  var GOAL_OUTCOMES = [
+    { id: 'achieved', label: 'สำเร็จ',          color: '#37c5ab' },
+    { id: 'partial',  label: 'สำเร็จบางส่วน',   color: '#f5a623' },
+    { id: 'missed',   label: 'ไม่สำเร็จ',        color: '#e8384f' },
+    { id: 'dropped',  label: 'ยกเลิก',          color: '#9ca0a8' }
+  ];
+  var GOAL_PERIODS = [['fy', 'ทั้งปีงบ'], ['h1', 'ครึ่งปีแรก'], ['h2', 'ครึ่งปีหลัง'], ['q1', 'ไตรมาส 1'], ['q2', 'ไตรมาส 2'],
+                      ['q3', 'ไตรมาส 3'], ['q4', 'ไตรมาส 4'], ['custom', 'กำหนดเอง']];
+  var GOAL_SRCS = [['manual', 'กรอกเอง'], ['subgoals', 'จากเป้าหมายย่อย'], ['projects', 'จากโปรเจกต์'], ['tasks', 'จากงาน']];
+
+  function fyStart() { var m = parseInt(((db && db.settings) || {}).fyStart, 10); return m >= 1 && m <= 12 ? m : 1; }
+  /** ปีงบตั้งชื่อตามปีที่สิ้นสุด (เริ่ม ต.ค. 2025 → FY2026) เริ่มมกราคม = ปีปฏิทิน */
+  function fyOf(dateIso) {
+    var d = new Date((dateIso || today()) + 'T00:00:00'), m = fyStart();
+    return m === 1 ? d.getFullYear() : (d.getMonth() + 1 >= m ? d.getFullYear() + 1 : d.getFullYear());
+  }
+  function monthStart(y, m0) { return iso(new Date(y, m0, 1)); }
+  function periodRange(p) {
+    p = p || {};
+    if (p.k === 'custom') return { from: p.from || today(), to: p.to || p.from || today() };
+    var fy = parseInt(p.fy, 10) || fyOf(), m = fyStart();
+    var y0 = m === 1 ? fy : fy - 1, m0 = m - 1;            // วันแรกของปีงบ
+    var off = { fy: [0, 12], h1: [0, 6], h2: [6, 6], q1: [0, 3], q2: [3, 3], q3: [6, 3], q4: [9, 3] }[p.k] || [0, 12];
+    var from = monthStart(y0, m0 + off[0]);
+    var to = addDays(monthStart(y0, m0 + off[0] + off[1]), -1);
+    return { from: from, to: to };
+  }
+  function periodLabel(p) {
+    p = p || {};
+    if (p.k === 'custom') { var r = periodRange(p); return r.from + ' – ' + r.to; }
+    var fy = 'FY' + String(parseInt(p.fy, 10) || fyOf()).slice(2);
+    return p.k === 'fy' || !p.k ? fy : p.k.toUpperCase() + ' ' + fy;
+  }
+
+  function normalizeGoal(g) {
+    g.name = String(g.name || 'เป้าหมาย').slice(0, 200);
+    if (!g.owner) g.owner = null;
+    if (!('team' in g)) g.team = null;
+    g.period = isObj(g.period) ? g.period : { k: 'fy', fy: fyOf() };
+    if (g.privacy !== 'private') g.privacy = 'public';
+    g.members = Array.isArray(g.members) ? g.members : [];
+    if (!('parent' in g)) g.parent = null;
+    if (typeof g.desc !== 'string') g.desc = '';
+    g.fv = isObj(g.fv) ? g.fv : {};
+    var m = g.metric = isObj(g.metric) ? g.metric : {};
+    if (['manual', 'subgoals', 'projects', 'tasks'].indexOf(m.src) < 0) m.src = 'manual';
+    if (['percent', 'number', 'currency'].indexOf(m.unit) < 0) m.unit = 'percent';
+    m.start = isFinite(+m.start) ? +m.start : 0;
+    m.target = isFinite(+m.target) && m.target !== null && m.target !== '' ? +m.target : 100;
+    m.current = isFinite(+m.current) ? +m.current : m.start;
+    m.currency = m.currency || 'THB';
+    if (m.agg !== 'sum') m.agg = 'avg';
+    m.weights = isObj(m.weights) ? m.weights : null;
+    m.projects = Array.isArray(m.projects) ? m.projects : [];
+    if (m.projBy !== 'milestones') m.projBy = 'tasks';
+    m.tasks = Array.isArray(m.tasks) ? m.tasks : [];
+    if (!('status' in g)) g.status = null;
+    g.updates = Array.isArray(g.updates) ? g.updates : [];
+    g.hist = Array.isArray(g.hist) ? g.hist.filter(function (h) { return Array.isArray(h) && h.length === 2; }) : [];
+    if (!('closed' in g)) g.closed = null;
+    g.rel = Array.isArray(g.rel) ? g.rel : [];
+    g.comments = Array.isArray(g.comments) ? g.comments : [];
+    g.act = Array.isArray(g.act) ? g.act : [];
+    g.remind = g.remind !== false;
+    return g;
+  }
+  function migrate4aGoals(d) {
+    d.goals = Array.isArray(d.goals) ? d.goals.filter(function (g) { return g && g.id; }) : [];
+    d.goals.forEach(normalizeGoal);
+    var ids = {};
+    d.goals.forEach(function (g) { ids[g.id] = true; });
+    d.goals.forEach(function (g) { if (g.parent && !ids[g.parent]) g.parent = null; });
+    d.goalFields = Array.isArray(d.goalFields) ? d.goalFields.filter(function (f) { return f && f.id; }) : [];
+    d.settings = d.settings || {};
+    if (typeof d.settings.mission !== 'string') d.settings.mission = '';
+  }
+
+  /* ---------- สิทธิ์ ---------- */
+  function goals() { return db.goals || []; }
+  function goal(id) { return (db.goals || []).filter(function (g) { return g.id === id; })[0] || null; }
+  function canSeeGoal(id) {
+    var g = goal(id), me0 = db.currentUserId;
+    if (!g || !isActive()) return false;
+    if (isAdmin() || g.owner === me0 || g.members.indexOf(me0) >= 0) return true;
+    if (g.privacy === 'private') return !!(g.team && isTeamMember(g.team));
+    if (role() === 'guest') return !!(g.team && isTeamMember(g.team));
+    return !g.team || canSeeTeam(g.team);
+  }
+  function canEditGoal(id) {
+    var g = goal(id), me0 = db.currentUserId;
+    if (!g || !can('write')) return false;
+    return isAdmin() || g.owner === me0 || g.members.indexOf(me0) >= 0 || (!!g.team && canManageTeam(g.team));
+  }
+  function visibleGoals() { return goals().filter(function (g) { return canSeeGoal(g.id); }); }
+  function subGoals(id) { return goals().filter(function (g) { return g.parent === id; }); }
+  function goalAncestors(id) {
+    var out = {}, g = goal(id), guard = 0;
+    while (g && g.parent && guard++ < 50) { out[g.parent] = true; g = goal(g.parent); }
+    return out;
+  }
+  function goalDescendants(id) {
+    var out = {}, stack = [id];
+    while (stack.length) subGoals(stack.pop()).forEach(function (c) { if (!out[c.id]) { out[c.id] = true; stack.push(c.id); } });
+    return out;
+  }
+  function gAct(g, k, p) {
+    g.act.push({ at: new Date().toISOString(), by: db.currentUserId, k: k, p: p || null });
+    if (g.act.length > 100) g.act = g.act.slice(-100);
+  }
+  function goalPeople(g) {
+    var out = [];
+    [g.owner].concat(g.members).forEach(function (u) { if (u && out.indexOf(u) < 0 && user(u)) out.push(u); });
+    return out;
+  }
+
+  /* ---------- ความคืบหน้า ---------- */
+  function taskDone(t) {
+    if (t.completed) return true;
+    var sd = t.cstatus ? statusDef(t.cstatus) : null;
+    return !!(sd && sd.st.done);                   // 3b — สถานะของชนิดงานที่นับว่าเสร็จ
+  }
+  /** { pct (0–100), value, start, target, unit, src, detail } — กันวนด้วย seen */
+  function goalProgress(id, seen) {
+    var g = goal(id);
+    if (!g) return { pct: 0, value: 0 };
+    seen = seen || {};
+    if (seen[id]) return { pct: 0, value: 0 };
+    seen[id] = true;
+    var m = g.metric, out = { unit: m.unit, start: m.start, target: m.target, src: m.src, detail: '' };
+    var fromValue = function (v) {
+      if (m.unit === 'percent') return Math.max(0, Math.min(100, v));
+      var span = m.target - m.start;
+      return span ? Math.max(0, Math.min(100, (v - m.start) / span * 100)) : (v >= m.target ? 100 : 0);
+    };
+    if (m.src === 'subgoals') {
+      var kids = subGoals(id).filter(function (c) { return !c.closed || c.closed.outcome !== 'dropped'; });
+      if (!kids.length) { out.value = m.unit === 'percent' ? 0 : m.start; out.pct = 0; }
+      else if (m.agg === 'sum' && m.unit !== 'percent') {
+        var sum = 0;
+        kids.forEach(function (c) { sum += goalProgress(c.id, seen).value || 0; });
+        out.value = sum; out.pct = fromValue(sum);
+      } else {
+        var w = m.weights, tw = 0, acc = 0;
+        kids.forEach(function (c) {
+          var wt = w && isFinite(+w[c.id]) ? +w[c.id] : (w ? 0 : 1);
+          tw += wt; acc += goalProgress(c.id, seen).pct * wt;
+        });
+        out.pct = tw ? acc / tw : 0;
+        out.value = m.unit === 'percent' ? out.pct : m.start + (m.target - m.start) * out.pct / 100;
+      }
+      out.detail = kids.length;
+    } else if (m.src === 'projects') {
+      var done = 0, total = 0;
+      m.projects.forEach(function (pid) {
+        if (!project(pid)) return;
+        if (m.projBy === 'milestones') {
+          projectMilestones(pid, true).forEach(function (t) { total++; if (taskDone(t)) done++; });
+        } else {
+          tasksInProject(pid).forEach(function (x) { total++; if (taskDone(x.task)) done++; });
+        }
+      });
+      out.pct = total ? done * 100 / total : 0; out.done = done; out.total = total;
+      out.value = m.unit === 'percent' ? out.pct : m.start + (m.target - m.start) * out.pct / 100;
+    } else if (m.src === 'tasks') {
+      var d2 = 0, t2 = 0;
+      m.tasks.forEach(function (tid) { var t = task(tid); if (!t) return; t2++; if (taskDone(t)) d2++; });
+      out.pct = t2 ? d2 * 100 / t2 : 0; out.done = d2; out.total = t2;
+      out.value = m.unit === 'percent' ? out.pct : m.start + (m.target - m.start) * out.pct / 100;
+    } else {
+      out.value = m.current;
+      out.pct = fromValue(m.current);
+    }
+    out.pct = Math.round(out.pct * 10) / 10;
+    out.value = Math.round(out.value * 100) / 100;
+    return out;
+  }
+  function goalValueText(g, v) {
+    var m = g.metric;
+    if (m.unit === 'percent') return (Math.round(v * 10) / 10) + '%';
+    if (m.unit === 'currency') return formatNumber({ format: { kind: 'currency', currency: m.currency } }, v);
+    return formatNumber(null, v);
+  }
+  /** บันทึกจุดของกราฟวันนี้ (แทนจุดเดิมของวันเดียวกัน) — คืน true เมื่อเปลี่ยน */
+  function stampHist(g) {
+    var p = goalProgress(g.id).pct, td = today(), last = g.hist[g.hist.length - 1];
+    if (last && last[0] === td) { if (last[1] === p) return false; last[1] = p; return true; }
+    if (last && last[1] === p && g.hist.length > 1) return false;
+    g.hist.push([td, p]);
+    if (g.hist.length > 180) g.hist = g.hist.slice(-180);
+    return true;
+  }
+
+  /* ---------- สร้าง แก้ ลบ ---------- */
+  function createGoal(attrs) {
+    attrs = attrs || {};
+    if (!can('write') || !String(attrs.name || '').trim()) return null;
+    if (attrs.team && !(isTeamMember(attrs.team) || isAdmin())) return null;
+    snapshot('สร้างเป้าหมาย');
+    db.goals = db.goals || [];
+    var g = normalizeGoal({
+      id: uid('g'), name: String(attrs.name).trim(), owner: attrs.owner || db.currentUserId, team: attrs.team || null,
+      period: attrs.period, privacy: attrs.privacy, members: attrs.members || [], parent: attrs.parent && goal(attrs.parent) ? attrs.parent : null,
+      desc: attrs.desc || '', metric: attrs.metric || {}, by: db.currentUserId, at: new Date().toISOString()
+    });
+    gAct(g, 'สร้างเป้าหมายนี้');
+    db.goals.push(g);
+    stampHist(g);
+    if (g.parent) { var pg = goal(g.parent); stampHist(pg); }
+    if (g.owner !== db.currentUserId) notifyOnly(null, [g.owner], 'ตั้งให้คุณเป็นเจ้าของเป้าหมาย “{t}”', 'assigned', { t: g.name }, false, { route: 'goal:' + g.id });
+    audit('goal.create', g.name);
+    commit();
+    return g;
+  }
+  function updateGoal(id, patch) {
+    var g = goal(id);
+    if (!g || !canEditGoal(id)) return false;
+    if ('parent' in patch && patch.parent && (patch.parent === id || goalDescendants(id)[patch.parent] || !goal(patch.parent))) return 'cycle';
+    snapshot('แก้เป้าหมาย');
+    var oldParent = g.parent;
+    ['name', 'owner', 'team', 'period', 'privacy', 'members', 'parent', 'desc', 'remind'].forEach(function (k) {
+      if (k in patch) g[k] = patch[k];
+    });
+    if (patch.metric) {
+      Object.keys(patch.metric).forEach(function (k) { g.metric[k] = patch.metric[k]; });
+      gAct(g, 'เปลี่ยนวิธีวัดความคืบหน้า');
+    }
+    normalizeGoal(g);
+    if ('name' in patch || 'period' in patch || 'owner' in patch) gAct(g, 'แก้รายละเอียดเป้าหมาย');
+    if ('parent' in patch && patch.parent !== oldParent) gAct(g, 'ย้ายไปอยู่ใต้ “{t}”', { t: g.parent ? goal(g.parent).name : '—' });
+    [g.id, oldParent, g.parent].forEach(function (x) { var gg = x && goal(x); if (gg) stampHist(gg); });
+    commit();
+    return true;
+  }
+  function setGoalValue(id, v) {
+    var g = goal(id);
+    if (!g || !canEditGoal(id) || g.metric.src !== 'manual' || !isFinite(+v)) return false;
+    snapshot('อัปเดตค่าเป้าหมาย');
+    var before = g.metric.current;
+    g.metric.current = +v;
+    gAct(g, 'อัปเดตค่าจาก {a} เป็น {b}', { a: goalValueText(g, before), b: goalValueText(g, +v) });
+    stampHist(g);
+    var a = goalAncestors(id);
+    Object.keys(a).forEach(function (x) { stampHist(goal(x)); });
+    commit();
+    return true;
+  }
+  function deleteGoal(id) {
+    var g = goal(id);
+    if (!g || !(isAdmin() || g.owner === db.currentUserId)) return false;
+    snapshot('ลบเป้าหมาย');
+    db.goals = db.goals.filter(function (x) { return x.id !== id; });
+    db.goals.forEach(function (x) {
+      if (x.parent === id) x.parent = g.parent;               // ลูกขึ้นไปอยู่ใต้แม่ของตัวที่ถูกลบ
+      if (x.metric.weights) delete x.metric.weights[id];
+    });
+    audit('goal.delete', g.name);
+    commit();
+    return true;
+  }
+  function postGoalUpdate(id, state, text) {
+    var g = goal(id);
+    if (!g || !canEditGoal(id) || !GOAL_STATES.some(function (s) { return s.id === state; })) return null;
+    snapshot('อัปเดตสถานะเป้าหมาย');
+    var pct = goalProgress(id).pct;
+    var u = { id: uid('gu'), state: state, text: String(text || '').slice(0, 20000), pct: pct, by: db.currentUserId, at: new Date().toISOString() };
+    g.updates.push(u);
+    if (g.updates.length > 60) g.updates = g.updates.slice(-60);
+    g.status = { state: state, at: u.at, by: u.by };
+    gAct(g, 'อัปเดตสถานะเป็น “{s}”', { s: (GOAL_STATES.filter(function (s) { return s.id === state; })[0] || {}).label });
+    stampHist(g);
+    notifyOnly(null, goalPeople(g), 'อัปเดตสถานะเป้าหมาย “{t}”', 'status', { t: g.name }, false, { route: 'goal:' + id });
+    commit();
+    return u;
+  }
+  function closeGoal(id, outcome, note) {
+    var g = goal(id);
+    if (!g || !canEditGoal(id) || !GOAL_OUTCOMES.some(function (o) { return o.id === outcome; })) return false;
+    snapshot('ปิดเป้าหมาย');
+    g.closed = { outcome: outcome, note: String(note || '').slice(0, 2000), by: db.currentUserId, at: new Date().toISOString() };
+    stampHist(g);
+    gAct(g, 'ปิดเป้าหมาย: {o}', { o: (GOAL_OUTCOMES.filter(function (o) { return o.id === outcome; })[0] || {}).label });
+    notifyOnly(null, goalPeople(g), 'ปิดเป้าหมาย “{t}”', 'status', { t: g.name }, false, { route: 'goal:' + id });
+    audit('goal.close', g.name, outcome);
+    commit();
+    return true;
+  }
+  function reopenGoal(id) {
+    var g = goal(id);
+    if (!g || !g.closed || !canEditGoal(id)) return false;
+    snapshot('เปิดเป้าหมายอีกครั้ง');
+    g.closed = null;
+    gAct(g, 'เปิดเป้าหมายอีกครั้ง');
+    commit();
+    return true;
+  }
+  function addGoalComment(id, body) {
+    var g = goal(id);
+    body = String(body || '').trim();
+    if (!g || !body || !canSeeGoal(id) || !can('comment')) return null;
+    snapshot('แสดงความเห็นในเป้าหมาย');
+    var c = { id: uid('gc'), by: db.currentUserId, at: new Date().toISOString(), body: body.slice(0, 20000) };
+    g.comments.push(c);
+    var men = parseMentions(body);
+    if (men.length) notifyOnly(null, men, 'พูดถึงคุณในเป้าหมาย “{t}”', 'mention', { t: g.name }, false, { route: 'goal:' + id });
+    notifyOnly(null, goalPeople(g).filter(function (u) { return men.indexOf(u) < 0; }), 'แสดงความเห็นในเป้าหมาย “{t}”', 'comment',
+      { t: g.name }, false, { route: 'goal:' + id });
+    commit();
+    return c;
+  }
+  function deleteGoalComment(id, cid) {
+    var g = goal(id), c = g && g.comments.filter(function (x) { return x.id === cid; })[0];
+    if (!c || (c.by !== db.currentUserId && !can('manage'))) return false;
+    snapshot('ลบความเห็น');
+    g.comments = g.comments.filter(function (x) { return x.id !== cid; });
+    commit();
+    return true;
+  }
+  function toggleGoalRel(id, itemId) {
+    var g = goal(id);
+    if (!g || !canEditGoal(id) || !/^(p|pf|t)_/.test(itemId)) return null;
+    var at = g.rel.indexOf(itemId);
+    snapshot(at >= 0 ? 'เอางานที่เกี่ยวข้องออก' : 'เพิ่มงานที่เกี่ยวข้อง');
+    if (at >= 0) g.rel.splice(at, 1); else g.rel.push(itemId);
+    commit();
+    return at < 0;
+  }
+  function setGoalField(id, fid, v) {
+    var g = goal(id), fd = (db.goalFields || []).filter(function (f) { return f.id === fid; })[0];
+    if (!g || !fd || !canEditGoal(id)) return false;
+    if (fd.type === 'number') v = v === '' || v === null || !isFinite(+v) ? null : +v;
+    snapshot('แก้ฟิลด์ของเป้าหมาย');
+    if (v === null || v === '') delete g.fv[fid]; else g.fv[fid] = v;
+    commit();
+    return true;
+  }
+  function saveGoalField(def) {
+    if (!isAdmin() || !def || !String(def.name || '').trim()) return null;
+    snapshot('แก้ฟิลด์ของเป้าหมาย');
+    db.goalFields = db.goalFields || [];
+    var f = def.id ? db.goalFields.filter(function (x) { return x.id === def.id; })[0] : null;
+    if (!f) { f = { id: uid('gf') }; db.goalFields.push(f); }
+    f.name = String(def.name).trim().slice(0, 80);
+    f.type = ['text', 'number', 'select'].indexOf(def.type) >= 0 ? def.type : 'text';
+    f.options = f.type === 'select' ? normalizeOptions(def.options || []) : [];
+    commit();
+    return f;
+  }
+  function deleteGoalField(fid) {
+    if (!isAdmin()) return false;
+    snapshot('ลบฟิลด์ของเป้าหมาย');
+    db.goalFields = (db.goalFields || []).filter(function (f) { return f.id !== fid; });
+    goals().forEach(function (g) { delete g.fv[fid]; });
+    commit();
+    return true;
+  }
+  function setGoalSettings(patch) {
+    if (!isAdmin()) return false;
+    snapshot('ตั้งค่าเป้าหมาย');
+    db.settings = db.settings || {};
+    if ('fyStart' in patch) db.settings.fyStart = Math.max(1, Math.min(12, parseInt(patch.fyStart, 10) || 1));
+    if ('mission' in patch) {
+      db.settings.mission = String(patch.mission || '').slice(0, 2000);
+      db.settings.missionBy = db.currentUserId;
+      db.settings.missionAt = new Date().toISOString();
+    }
+    audit('settings.goals', null, 'fyStart' in patch ? 'ปีงบเริ่มเดือน {v}' : 'แก้พันธกิจ', { v: db.settings.fyStart });
+    commit();
+    return true;
+  }
+
+  /* ---------- ใช้ร่วมกับพอร์ตโฟลิโอ หน้าแรก อ้างอิง CSV ---------- */
+  /** เป้าหมายที่ผูกกับโปรเจกต์/พอร์ตโฟลิโอนี้ (วัดผลจาก หรืออยู่ในงานที่เกี่ยวข้อง) */
+  function goalsOfItem(itemId) {
+    return visibleGoals().filter(function (g) { return (g.metric.src === 'projects' && g.metric.projects.indexOf(itemId) >= 0) || g.rel.indexOf(itemId) >= 0; });
+  }
+  function myGoals() {
+    var me0 = db.currentUserId;
+    return visibleGoals().filter(function (g) { return g.owner === me0 || g.members.indexOf(me0) >= 0; });
+  }
+  function goalsCsv(list) {
+    var q = function (s) { s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    var fields = db.goalFields || [];
+    var rows = [['name', 'owner', 'team', 'period', 'from', 'to', 'progress_pct', 'current', 'start', 'target', 'unit', 'source',
+      'status', 'closed', 'parent'].concat(fields.map(function (f) { return f.name; }))];
+    (list || visibleGoals()).forEach(function (g) {
+      var p = goalProgress(g.id), r = periodRange(g.period);
+      rows.push([g.name, (user(g.owner) || {}).name || '', g.team ? (team(g.team) || {}).name || '' : 'บริษัท', periodLabel(g.period),
+        r.from, r.to, p.pct, p.value, g.metric.start, g.metric.target, g.metric.unit, g.metric.src,
+        g.status ? g.status.state : '', g.closed ? g.closed.outcome : '', g.parent ? (goal(g.parent) || {}).name || '' : '']
+        .concat(fields.map(function (f) { return g.fv[f.id] == null ? '' : g.fv[f.id]; })));
+    });
+    return '﻿' + rows.map(function (r) { return r.map(q).join(','); }).join('\r\n');
+  }
+  /** เตือนเจ้าของเป้าหมายที่ยังเปิดอยู่ให้อัปเดตสถานะ — ไม่ได้อัปเดตเกิน 7 วัน เตือนสัปดาห์ละครั้ง (dedupe ในกล่องข้อความ)
+   *  และบันทึกจุดกราฟความคืบหน้าของวันนี้ (เงียบ ๆ ไม่เป็นจุดย้อนกลับ) */
+  function checkGoalReminders(opts) {
+    if (!db || !isActive() || !(db.goals || []).length) return 0;
+    var td = (opts && opts.today) || today(), me0 = db.currentUserId, n = 0, changed = false;
+    var d = new Date(td + 'T00:00:00');
+    var wk = addDays(td, -((d.getDay() + 6) % 7));            // วันจันทร์ของสัปดาห์นี้
+    var have = {};
+    db.notifications.forEach(function (x) { if (x.dedupe && x.userId === me0) have[x.dedupe] = true; });
+    db.goals.forEach(function (g) {
+      if (g.closed) return;
+      if (stampHist(g)) changed = true;
+      if (g.owner !== me0 || !g.remind) return;
+      var last = g.updates.length ? String(g.updates[g.updates.length - 1].at).slice(0, 10) : String(g.at || '').slice(0, 10);
+      if (last && last > addDays(td, -7)) return;
+      var key = 'goal:' + g.id + ':' + wk;
+      if (have[key]) return;
+      have[key] = true;
+      db.notifications.push({ id: uid('n'), userId: me0, taskId: null, projectId: null, route: 'goal:' + g.id,
+        text: fill('ถึงเวลาอัปเดตสถานะเป้าหมาย “{t}”', { t: g.name }), key: 'ถึงเวลาอัปเดตสถานะเป้าหมาย “{t}”', params: { t: g.name },
+        kind: 'status', actorName: null, actorId: null, bookmarked: false, dedupe: key,
+        createdAt: new Date().toISOString(), read: false, archived: false });
+      n++; changed = true;
+    });
+    if (changed) { dropIndex(); persist(); listeners.forEach(function (fn) { fn(); }); }
+    return n;
+  }
+
   db = hydrate();
 
   global.Store = {
@@ -11383,5 +11826,19 @@
     pfSetDefaultTab: pfSetDefaultTab, postPortfolioUpdate: postPortfolioUpdate
   };
   Object.keys(X4A).forEach(function (k) { global.Store[k] = X4A[k]; });
+  /* 4a ส่วนที่ 2 — เป้าหมาย */
+  var X4B = {
+    GOAL_STATES: GOAL_STATES, GOAL_OUTCOMES: GOAL_OUTCOMES, GOAL_PERIODS: GOAL_PERIODS, GOAL_SRCS: GOAL_SRCS,
+    fyStart: fyStart, fyOf: fyOf, periodRange: periodRange, periodLabel: periodLabel,
+    goals: goals, goal: goal, canSeeGoal: canSeeGoal, canEditGoal: canEditGoal, visibleGoals: visibleGoals,
+    subGoals: subGoals, goalAncestors: goalAncestors, goalDescendants: goalDescendants, goalProgress: goalProgress,
+    goalValueText: goalValueText, createGoal: createGoal, updateGoal: updateGoal, setGoalValue: setGoalValue,
+    deleteGoal: deleteGoal, postGoalUpdate: postGoalUpdate, closeGoal: closeGoal, reopenGoal: reopenGoal,
+    addGoalComment: addGoalComment, deleteGoalComment: deleteGoalComment, toggleGoalRel: toggleGoalRel,
+    setGoalField: setGoalField, saveGoalField: saveGoalField, deleteGoalField: deleteGoalField,
+    setGoalSettings: setGoalSettings, goalsOfItem: goalsOfItem, myGoals: myGoals, goalsCsv: goalsCsv,
+    checkGoalReminders: checkGoalReminders, taskDone: taskDone
+  };
+  Object.keys(X4B).forEach(function (k) { global.Store[k] = X4B[k]; });
 
 })(window);

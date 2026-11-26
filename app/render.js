@@ -218,6 +218,8 @@
          '<span class="grow">' + L('ปฏิทินรวม') + '</span></button>';
     h += '<button class="sb-item' + (route.type === 'pages' ? ' active' : '') +
          '" data-act="go" data-route="pages">' + I('note') + '<span class="grow">' + L('หน้าเอกสาร') + '</span></button>';
+    h += '<button class="sb-item' + (route.type === 'goals' || route.type === 'goal' ? ' active' : '') +
+         '" data-act="go" data-route="goals">' + I('flag') + '<span class="grow">' + L('เป้าหมาย') + '</span></button>';
     h += '</div>';
 
     function projectItem(p) {
@@ -420,6 +422,8 @@
         esc(tmT.name) + '</span><span class="chip">' + esc(L(teamPrivacyLabel(tmT.privacy))) + '</span></div></div>';
     } else if (route.type === 'teams') {
       h += '<div class="tb-title">' + I('users', 20) + ' ' + L('ทีมทั้งหมด') + '</div>';
+    } else if (route.type === 'goals' || route.type === 'goal') {
+      h += '<div class="tb-title">' + I('flag', 20) + ' ' + L('เป้าหมาย') + '</div>';
     } else if (route.type === 'mytasks') {
       h += '<div class="tb-title">' + I('checkCircle', 20) + ' ' + L('งานของฉัน') + '</div>';
     } else if (route.type === 'inbox') {
@@ -562,6 +566,14 @@
           (pfT.defaultTab === sv.id ? '<span class="tb-def" title="' + L('มุมมองเริ่มต้น') + '"></span>' : '') +
           (onP && S.can('structure') ? '<span class="tb-tab-caret" data-act="pfv-menu" data-id="' + esc(sv.id) + '" title="' +
             L('ตัวเลือกแท็บ') + '">' + I('chevronDown', 12) + '</span>' : '') + '</button>';
+      });
+      h += '</div>';
+    }
+    if (route.type === 'goals') {
+      h += '<div class="tb-tabs">';
+      GOAL_TABS.forEach(function (v) {
+        h += '<button class="tb-tab' + ((route.view || 'company') === v[0] ? ' active' : '') +
+          '" data-act="go-goals" data-v="' + v[0] + '">' + L(v[1]) + '</button>';
       });
       h += '</div>';
     }
@@ -2377,6 +2389,346 @@
     return h;
   }
 
+  /* ====================== 4a ส่วนที่ 2 — เป้าหมาย แผนผังกลยุทธ์ ====================== */
+  var GOAL_TABS = [['company', 'เป้าหมายบริษัท'], ['team', 'เป้าหมายทีม'], ['mine', 'ของฉัน'], ['map', 'แผนผังกลยุทธ์']];
+
+  function goalState(id) { return S.GOAL_STATES.filter(function (x) { return x.id === id; })[0] || null; }
+  function goalOutcome(id) { return S.GOAL_OUTCOMES.filter(function (x) { return x.id === id; })[0] || null; }
+  function goalPill(g) {
+    if (g.closed) {
+      var o = goalOutcome(g.closed.outcome) || { label: g.closed.outcome, color: '#9ca0a8' };
+      return '<span class="status-pill" style="background:' + o.color + '22;color:' + o.color + '"><i style="background:' + o.color + '"></i>' + esc(L(o.label)) + '</span>';
+    }
+    var st = g.status ? goalState(g.status.state) : null;
+    return st ? '<span class="status-pill" style="background:' + st.color + '22;color:' + st.color + '"><i style="background:' + st.color + '"></i>' +
+      esc(L(st.label)) + '</span>' : '<span class="pf-none">' + L('ยังไม่อัปเดต') + '</span>';
+  }
+  function goalColor(g) {
+    if (g.closed) return (goalOutcome(g.closed.outcome) || {}).color || '#9ca0a8';
+    var st = g.status ? goalState(g.status.state) : null;
+    return st ? st.color : 'var(--accent)';
+  }
+  function goalBar(g, p) {
+    p = p || S.goalProgress(g.id);
+    return '<span class="pf-bar"><i style="width:' + p.pct + '%;background:' + goalColor(g) + '"></i></span><span class="pf-pct">' + Math.round(p.pct) + '%</span>';
+  }
+
+  function goalRow(g, depth) {
+    var p = S.goalProgress(g.id), ow = S.user(g.owner), tm = g.team ? S.team(g.team) : null;
+    return '<div class="gl-row' + (g.closed ? ' closed' : '') + '" data-act="go-goal" data-id="' + esc(g.id) + '" style="--gl-d:' + (depth || 0) + '">' +
+      '<span class="gl-nm">' + (depth ? '<span class="gl-tree">└</span>' : '') + I('flag', 14) + '<span class="grow"><b>' + esc(g.name) + '</b><em>' +
+      esc(S.periodLabel(g.period)) + (tm ? ' · ' + esc(tm.name) : '') + (g.privacy === 'private' ? ' · ' + L('ส่วนตัว') : '') + '</em></span></span>' +
+      '<span class="gl-prog">' + goalBar(g, p) + '</span>' +
+      '<span class="gl-st">' + goalPill(g) + '</span>' +
+      '<span class="gl-ow">' + (ow ? avatar(ow, 'sm') : '') + '</span></div>';
+  }
+
+  function goalsView(tab, ui) {
+    ui = ui || {};
+    tab = tab || 'company';
+    if (tab === 'map') return strategyMap(ui);
+    var all = S.visibleGoals().filter(function (g) {
+      if (!ui.closed && g.closed) return false;
+      if (ui.fy && ui.fy !== 'all') {
+        var r = S.periodRange(g.period), fr = S.periodRange({ k: 'fy', fy: +ui.fy });
+        if (r.to < fr.from || r.from > fr.to) return false;
+      }
+      return true;
+    });
+    var h = '<div class="glv"><div class="glv-tb">';
+    var fyNow = S.fyOf();
+    h += '<select class="opt-select" data-act="goal-fyf">' + [['all', L('ทุกช่วงเวลา')]].concat([fyNow - 1, fyNow, fyNow + 1].map(function (y) {
+      return [String(y), 'FY' + String(y).slice(2)];
+    })).map(function (o) { return '<option value="' + o[0] + '"' + ((ui.fy || 'all') === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select>';
+    h += '<label class="gl-chk"><input type="checkbox" data-act="goal-closed"' + (ui.closed ? ' checked' : '') + '> ' + L('แสดงที่ปิดแล้ว') + '</label>';
+    h += '<span class="grow"></span><button class="btn btn-sm" data-act="goal-csv">' + I('archive', 13) + ' ' + L('ส่งออก CSV') + '</button>';
+    if (S.can('write')) h += '<button class="btn btn-sm btn-primary" data-act="goal-new" data-team="' + (tab === 'team' ? '1' : '') + '">' + I('plus', 13) + ' ' + L('เป้าหมายใหม่') + '</button>';
+    h += '</div>';
+    var ids = {};
+    all.forEach(function (g) { ids[g.id] = true; });
+    var tree = function (list, depth, seen) {
+      var out = '';
+      list.forEach(function (g) {
+        if (seen[g.id]) return;
+        seen[g.id] = true;
+        out += goalRow(g, depth);
+        out += tree(all.filter(function (c) { return c.parent === g.id; }), Math.min(depth + 1, 6), seen);
+      });
+      return out;
+    };
+    var head = '<div class="gl-head"><span>' + L('เป้าหมาย') + '</span><span>' + L('ความคืบหน้า') + '</span><span>' + L('สถานะ') + '</span><span>' + L('เจ้าของ') + '</span></div>';
+    if (tab === 'company') {
+      var roots = all.filter(function (g) { return !g.team && (!g.parent || !ids[g.parent]); });
+      h += '<div class="gl-tbl">' + head + (roots.length ? tree(roots, 0, {}) : '<div class="pfx-empty">' + L('ยังไม่มีเป้าหมายบริษัท') + '</div>') + '</div>';
+    } else if (tab === 'team') {
+      var tms = S.visibleTeams();
+      var any = false;
+      tms.forEach(function (tm) {
+        var list = all.filter(function (g) { return g.team === tm.id; });
+        if (!list.length) return;
+        any = true;
+        var rs = list.filter(function (g) { return !g.parent || !ids[g.parent] || (S.goal(g.parent) || {}).team !== tm.id; });
+        h += '<div class="gl-tbl"><div class="pfx-grp"><i style="background:' + esc(tm.color) + '"></i><b>' + esc(tm.icon + ' ' + tm.name) + '</b><span>' +
+          list.length + '</span></div>' + tree(rs, 0, {}) + '</div>';
+      });
+      if (!any) h += '<div class="ovw-empty">' + L('ยังไม่มีเป้าหมายของทีม') + '</div>';
+    } else {
+      var mine = S.myGoals().filter(function (g) { return ids[g.id]; });
+      h += '<div class="gl-tbl">' + head + (mine.length ? mine.map(function (g) { return goalRow(g, 0); }).join('')
+        : '<div class="pfx-empty">' + L('ยังไม่มีเป้าหมายที่คุณเป็นเจ้าของหรือสมาชิก') + '</div>') + '</div>';
+    }
+    return h + '</div>';
+  }
+
+  function goalSourceText(g, p) {
+    var m = g.metric;
+    if (m.src === 'manual') return L('กรอกค่าเอง');
+    if (m.src === 'subgoals') return L('จากเป้าหมายย่อย {n} ข้อ ({a})', { n: p.detail || 0,
+      a: m.agg === 'sum' && m.unit !== 'percent' ? L('รวมค่า') : (m.weights ? L('ถ่วงน้ำหนัก') : L('ค่าเฉลี่ย')) });
+    if (m.src === 'projects') return L('จาก{x}ที่เสร็จใน {n} โปรเจกต์ ({d}/{t})', { x: m.projBy === 'milestones' ? L('หมุดหมาย') : L('งาน'),
+      n: m.projects.length, d: p.done || 0, t: p.total || 0 });
+    return L('จากงาน {d}/{t} ที่เสร็จ', { d: p.done || 0, t: p.total || 0 });
+  }
+
+  function goalChartSpec(g) {
+    var hist = g.hist.slice(-60), r = S.periodRange(g.period);
+    var span = Math.max(1, S.daysBetween(r.from, r.to));
+    var exp = function (d) { return Math.max(0, Math.min(100, Math.round(S.daysBetween(r.from, d) / span * 1000) / 10)); };
+    if (hist.length === 1) hist = [[r.from, 0]].concat(hist);
+    return { type: 'line', cats: hist.map(function (x) { return { key: x[0], label: fmtDate(x[0]) }; }),
+      series: [{ key: 'p', label: L('ความคืบหน้า'), color: goalColor(g) }, { key: 'e', label: L('ควรจะถึง'), color: 'var(--fg-faint)', dash: true }],
+      values: hist.map(function (x) { return [x[1], exp(x[0])]; }), fmt: function (n) { return Math.round(n) + '%'; },
+      empty: L('ยังไม่มีข้อมูล'), h: 200, legend: true };
+  }
+
+  function goalView(id, ui) {
+    var g = S.goal(id);
+    if (!g || !S.canSeeGoal(id)) return '<div class="empty"><div class="big">🎯</div>' + L('ไม่พบเป้าหมายนี้ หรือคุณไม่มีสิทธิ์เห็น') + '</div>';
+    ui = ui || {};
+    var ed = S.canEditGoal(id), p = S.goalProgress(id), m = g.metric;
+    var h = '<div class="gv"><div class="gv-main">';
+    h += '<div class="gv-crumb"><button class="as-link" data-act="go-goals" data-v="' + (g.team ? 'team' : 'company') + '">' + I('arrowLeft', 12) + ' ' + L('เป้าหมาย') + '</button>';
+    S.goalAncestors ? Object.keys(S.goalAncestors(id)).reverse().forEach(function (a) {
+      var ag = S.goal(a);
+      if (ag && S.canSeeGoal(a)) h += ' / <button class="as-link" data-act="go-goal" data-id="' + esc(a) + '">' + esc(ag.name) + '</button>';
+    }) : null;
+    h += '</div>';
+    h += '<div class="gv-head"><h1>' + I('flag', 20) + ' ' + esc(g.name) + '</h1>' + goalPill(g) + '</div>';
+    /* ความคืบหน้า */
+    h += '<div class="ovw-card gv-prog"><div class="gv-big"><b>' + Math.round(p.pct) + '%</b><span>' +
+      (m.unit === 'percent' ? '' : esc(S.goalValueText(g, p.value) + ' / ' + S.goalValueText(g, m.target))) + '</span></div>' +
+      '<div class="gv-bar">' + goalBar(g, p) + '</div><div class="gv-src">' + esc(goalSourceText(g, p)) + '</div>';
+    if (ed) {
+      h += '<div class="gv-acts">' + (m.src === 'manual' && !g.closed ? '<button class="btn btn-sm btn-primary" data-act="goal-value" data-id="' + esc(id) + '">' +
+        L('อัปเดตค่า') + '</button>' : '') + '<button class="btn btn-sm" data-act="goal-metric" data-id="' + esc(id) + '">' + I('settings', 13) + ' ' +
+        L('ตั้งค่าความคืบหน้า') + '</button></div>';
+    }
+    h += '</div>';
+    h += '<div class="ovw-card"><h3>' + L('ความคืบหน้าตามเวลา') + '<button class="as-link" data-act="goal-png" data-id="' + esc(id) + '">' + I('image', 12) + ' PNG</button></h3>' +
+      '<div class="gv-chart">' + global.Charts.svg(goalChartSpec(g)) + '</div></div>';
+    if (g.desc) h += '<div class="ovw-card"><h3>' + L('คำอธิบาย') + '</h3><div class="sth-txt">' + richText(g.desc) + '</div></div>';
+    /* เป้าหมายย่อย */
+    var kids = S.subGoals(id).filter(function (c) { return S.canSeeGoal(c.id); });
+    h += '<div class="ovw-card"><h3>' + L('เป้าหมายย่อย') + '<span class="admin-count">' + kids.length + '</span>' + (S.can('write') ? '<button class="as-link" data-act="goal-new" data-parent="' +
+      esc(id) + '">' + I('plus', 12) + ' ' + L('เพิ่ม') + '</button>' : '') + '</h3>';
+    if (!kids.length) h += '<div class="ovw-empty">' + L('แตกเป้าหมายนี้เป็นเป้าหมายย่อยของทีมหรือของแต่ละคนได้') + '</div>';
+    kids.forEach(function (c) {
+      var w = m.weights && m.weights[c.id] != null ? m.weights[c.id] : null;
+      h += goalRow(c, 0).replace('<span class="gl-ow">', (w != null && m.src === 'subgoals' ? '<span class="chip gv-w">' + esc(w) + '%</span>' : '') + '<span class="gl-ow">');
+    });
+    h += '</div>';
+    /* งานที่เกี่ยวข้อง */
+    var rel = g.rel.map(S.refItem).filter(Boolean);
+    var src = m.src === 'projects' ? m.projects.map(S.refItem).filter(Boolean) : m.src === 'tasks' ? m.tasks.map(S.refItem).filter(Boolean) : [];
+    h += '<div class="ovw-card"><h3>' + L('งานที่เกี่ยวข้อง') + (ed ? '<button class="as-link" data-act="goal-rel-pick" data-id="' + esc(id) + '">' + I('plus', 12) + ' ' +
+      L('เชื่อมงาน') + '</button>' : '') + '</h3>';
+    if (!rel.length && !src.length) h += '<div class="ovw-empty">' + L('เชื่อมโปรเจกต์ พอร์ตโฟลิโอ หรืองานที่ช่วยให้เป้าหมายนี้สำเร็จ') + '</div>';
+    if (src.length) h += '<div class="gv-sub">' + L('ใช้วัดความคืบหน้า') + '</div><div class="gv-rel">' + relChips(src, null, id) + '</div>';
+    if (rel.length) h += '<div class="gv-rel">' + relChips(rel, ed, id) + '</div>';
+    h += '</div>';
+    /* อัปเดตสถานะ */
+    h += '<div class="ovw-card"><h3>' + L('อัปเดตสถานะ') + (ed && !g.closed ? '<button class="as-link" data-act="goal-update" data-id="' + esc(id) + '">' + I('plus', 12) + ' ' +
+      L('อัปเดตสถานะ') + '</button>' : '') + '</h3>';
+    if (!g.updates.length) h += '<div class="ovw-empty">' + L('ยังไม่เคยอัปเดตสถานะ') + '</div>';
+    g.updates.slice().reverse().slice(0, 10).forEach(function (u) {
+      var st = goalState(u.state) || { label: u.state, color: '#9ca0a8' }, by = S.user(u.by);
+      h += '<article class="sth"><div class="sth-head"><span class="status-pill" style="background:' + st.color + '22;color:' + st.color + '"><i style="background:' +
+        st.color + '"></i>' + esc(L(st.label)) + '</span><div class="grow"><b>' + Math.round(u.pct) + '%</b><em>' + esc(by ? by.name : '—') + ' · ' +
+        esc(fmtWhen(u.at)) + '</em></div></div>' + (u.text ? '<div class="sth-txt">' + richText(u.text) + '</div>' : '') + '</article>';
+    });
+    h += '</div>';
+    /* ความเห็น / กิจกรรม */
+    var gt = ui.gtab || 'comments';
+    h += '<div class="ovw-card"><div class="hcard-tabs"><button class="tb-tab' + (gt === 'comments' ? ' active' : '') + '" data-act="goal-tab" data-v="comments">' +
+      L('ความเห็น') + ' (' + g.comments.length + ')</button><button class="tb-tab' + (gt === 'activity' ? ' active' : '') + '" data-act="goal-tab" data-v="activity">' +
+      L('กิจกรรม') + '</button></div>';
+    if (gt === 'activity') {
+      g.act.slice().reverse().forEach(function (a) {
+        var by = S.user(a.by);
+        var ap = {}; Object.keys(a.p || {}).forEach(function (k) { ap[k] = L(String(a.p[k])); });
+        h += '<div class="gv-act"><b>' + esc(by ? by.name : '—') + '</b> ' + esc(L(a.k, ap)) + '<em>' + esc(fmtWhen(a.at)) + '</em></div>';
+      });
+    } else {
+      g.comments.forEach(function (c) {
+        var by = S.user(c.by), me = S.me();
+        h += '<div class="msg-reply">' + avatar(by, 'sm') + '<div class="grow"><em>' + esc(by ? by.name : '—') + ' · ' + esc(fmtWhen(c.at)) + '</em>' +
+          richText(c.body) + '</div>' + ((me && c.by === me.id) || S.can('manage') ? '<button class="x" data-act="goal-cdel" data-id="' + esc(id) +
+          '" data-c="' + esc(c.id) + '" title="' + L('ลบ') + '">' + I('close', 12) + '</button>' : '') + '</div>';
+      });
+      if (S.can('comment')) {
+        h += '<div class="msg-replybox">' + msgComposer('gc:' + id, '', '', L('แสดงความเห็น… พิมพ์ @ เพื่ออ้างถึง')) +
+          '<div class="msg-actions"><span class="grow"></span><button class="btn btn-primary btn-sm" data-act="goal-comment" data-id="' + esc(id) + '">' +
+          L('ส่ง') + '</button></div></div>';
+      }
+    }
+    h += '</div></div>';
+    /* แถบข้าง */
+    var ow = S.user(g.owner), tm = g.team ? S.team(g.team) : null, par = g.parent ? S.goal(g.parent) : null;
+    h += '<div class="gv-side"><div class="ovw-card"><h3>' + L('รายละเอียด') + (ed ? '<button class="as-link" data-act="goal-edit" data-id="' + esc(id) + '">' +
+      I('pencil', 12) + ' ' + L('แก้ไข') + '</button>' : '') + '</h3>';
+    var kv2 = function (k, v) { return '<div class="gv-kv"><span>' + esc(k) + '</span><div>' + v + '</div></div>'; };
+    h += kv2(L('เจ้าของ'), ow ? avatar(ow, 'sm') + ' ' + esc(ow.name) : '—');
+    h += kv2(L('ระดับ'), tm ? '<button class="as-link" data-act="go-team" data-id="' + esc(tm.id) + '">' + esc(tm.icon + ' ' + tm.name) + '</button>' : esc(L('บริษัท')));
+    var pr = S.periodRange(g.period);
+    h += kv2(L('ช่วงเวลา'), esc(S.periodLabel(g.period)) + '<em>' + esc(fmtDate(pr.from) + ' – ' + fmtDate(pr.to)) + '</em>');
+    h += kv2(L('เป้าหมายแม่'), par && S.canSeeGoal(par.id) ? '<button class="as-link" data-act="go-goal" data-id="' + esc(par.id) + '">' + esc(par.name) + '</button>' : '—');
+    h += kv2(L('ความเป็นส่วนตัว'), esc(g.privacy === 'private' ? L('ส่วนตัว (เฉพาะสมาชิก)') : L('สาธารณะ')));
+    h += kv2(L('สมาชิก'), g.members.map(S.user).filter(Boolean).map(function (u) { return avatar(u, 'sm'); }).join('') || '—');
+    (S.db.goalFields || []).forEach(function (f) {
+      var v = g.fv[f.id];
+      h += kv2(f.name, (ed ? '<button class="as-link gv-fv" data-act="goal-fv" data-id="' + esc(id) + '" data-f="' + esc(f.id) + '">' : '') +
+        (v == null || v === '' ? '<span class="pf-none">—</span>' : esc(f.type === 'number' ? S.formatNumber(null, v) : v)) + (ed ? '</button>' : ''));
+    });
+    h += '</div>';
+    if (g.closed) {
+      var oc = goalOutcome(g.closed.outcome) || {};
+      h += '<div class="ovw-card"><h3>' + L('ปิดแล้ว') + '</h3>' + goalPill(g) + (g.closed.note ? '<div class="sth-txt">' + esc(g.closed.note) + '</div>' : '') +
+        '<div class="gv-src">' + esc(fmtWhen(g.closed.at)) + '</div>' + (ed ? '<button class="btn btn-sm" data-act="goal-reopen" data-id="' + esc(id) + '">' +
+        L('เปิดอีกครั้ง') + '</button>' : '') + '</div>';
+      void oc;
+    }
+    if (ed) {
+      h += '<div class="gv-side-acts">' + (!g.closed ? '<button class="btn btn-sm" data-act="goal-close" data-id="' + esc(id) + '">' + I('check', 13) + ' ' + L('ปิดเป้าหมาย') + '</button>' : '') +
+        '<label class="gl-chk"><input type="checkbox" data-act="goal-remind" data-id="' + esc(id) + '"' + (g.remind ? ' checked' : '') + '> ' + L('เตือนอัปเดตทุกสัปดาห์') + '</label>' +
+        '<button class="btn btn-sm btn-ghost danger" data-act="goal-delete" data-id="' + esc(id) + '">' + I('trash', 13) + ' ' + L('ลบเป้าหมาย') + '</button></div>';
+    }
+    h += '</div></div>';
+    return h;
+  }
+
+  function relChips(items, removable, gid) {
+    return items.map(function (x) {
+      var act = x.kind === 'task' ? ' data-act="open-task" data-id="' + esc(x.id) + '"' : ' data-act="go" data-route="' + x.kind + '" data-id="' + esc(x.id) + '"';
+      return '<span class="mchip ' + (x.kind === 'task' ? 'mchip-task' : 'mchip-proj') + (x.done ? ' done' : '') + '"' + act + '>' +
+        (x.kind === 'task' ? '<span class="mi">' + (x.done ? '✓' : '○') + '</span>' : '<span class="mi sw" style="background:' + esc(x.color || 'var(--accent)') + '"></span>') +
+        esc(x.name) + (removable ? '<button class="x" data-act="goal-rel" data-id="' + esc(gid) + '" data-item="' + esc(x.id) + '">✕</button>' : '') + '</span>';
+    }).join('');
+  }
+
+  /* ---------- แผนผังกลยุทธ์ ----------
+   * พันธกิจ → เป้าหมายบริษัท (และเป้าหมายทีมที่ไม่มีแม่) → เป้าหมายย่อย → โปรเจกต์ที่ใช้วัดผล/เกี่ยวข้อง
+   * วางเป็นต้นไม้บนลงล่าง ลากเพื่อเลื่อน ล้อเมาส์/ปุ่มเพื่อซูม (ui.map = { x, y, k }) */
+  function strategyMap(ui) {
+    var mission = (S.db.settings && S.db.settings.mission) || '';
+    var vis = S.visibleGoals().filter(function (g) { return ui.closed || !g.closed; });
+    var ids = {};
+    vis.forEach(function (g) { ids[g.id] = true; });
+    var NW = 210, NH = 66, GX = 26, GY = 70;
+    var root = { kind: 'mission', label: mission || L('ยังไม่ได้ตั้งพันธกิจ'), kids: [] };
+    var build = function (g, seen) {
+      seen[g.id] = true;
+      var n = { kind: 'goal', g: g, kids: [] };
+      vis.filter(function (c) { return c.parent === g.id && !seen[c.id]; }).forEach(function (c) { n.kids.push(build(c, seen)); });
+      var pids = [];
+      (g.metric.src === 'projects' ? g.metric.projects : []).concat(g.rel).forEach(function (x) { if (/^p_/.test(x) && pids.indexOf(x) < 0 && S.project(x) && S.projectAccess(x)) pids.push(x); });
+      pids.forEach(function (pid) { n.kids.push({ kind: 'project', p: S.project(pid), kids: [] }); });
+      return n;
+    };
+    var seen = {};
+    vis.filter(function (g) { return !g.parent || !ids[g.parent]; })
+      .sort(function (a, b) { return (a.team ? 1 : 0) - (b.team ? 1 : 0); })
+      .forEach(function (g) { root.kids.push(build(g, seen)); });
+    /* วาง x ตามลำดับใบ */
+    var leaf = 0, maxD = 0, nodes = [], edges = [];
+    var place = function (n, d) {
+      n.d = d; maxD = Math.max(maxD, d);
+      if (!n.kids.length) { n.x = leaf * (NW + GX); leaf++; }
+      else {
+        n.kids.forEach(function (c) { place(c, d + 1); });
+        n.x = (n.kids[0].x + n.kids[n.kids.length - 1].x) / 2;
+      }
+      n.y = d * (NH + GY);
+      nodes.push(n);
+      n.kids.forEach(function (c) { edges.push([n, c]); });
+    };
+    place(root, 0);
+    var W = Math.max(leaf, 1) * (NW + GX), H = (maxD + 1) * (NH + GY);
+    var mp = ui.map || { x: 0, y: 0, k: 1 };
+    var svg = '<svg class="smap-svg" viewBox="0 0 ' + Math.max(W, 600) + ' ' + Math.max(H, 300) + '" preserveAspectRatio="xMidYMin meet">' +
+      '<g class="smap-g" transform="translate(' + mp.x + ',' + mp.y + ') scale(' + mp.k + ')">';
+    edges.forEach(function (e) {
+      var x1 = e[0].x + NW / 2, y1 = e[0].y + NH, x2 = e[1].x + NW / 2, y2 = e[1].y, my = (y1 + y2) / 2;
+      svg += '<path class="smap-edge" d="M' + x1 + ',' + y1 + ' C' + x1 + ',' + my + ' ' + x2 + ',' + my + ' ' + x2 + ',' + y2 + '"/>';
+    });
+    nodes.forEach(function (n) {
+      var title, sub, color, act, pct = null;
+      if (n.kind === 'mission') { title = L('พันธกิจ'); sub = n.label; color = 'var(--accent)'; act = ''; }
+      else if (n.kind === 'goal') {
+        var pr = S.goalProgress(n.g.id), tm = n.g.team ? S.team(n.g.team) : null;
+        title = n.g.name; sub = S.periodLabel(n.g.period) + (tm ? ' · ' + tm.name : ' · ' + L('บริษัท'));
+        color = goalColor(n.g); pct = pr.pct; act = ' data-act="go-goal" data-id="' + esc(n.g.id) + '"';
+      } else {
+        var ps = S.projectStats(n.p.id);
+        title = n.p.icon + ' ' + n.p.name; sub = L('โปรเจกต์'); color = n.p.color; pct = ps.percent;
+        act = ' data-act="go" data-route="project" data-id="' + esc(n.p.id) + '"';
+      }
+      var tt = function (s, k) { s = String(s || ''); return s.length > k ? s.slice(0, k - 1) + '…' : s; };
+      svg += '<g class="smap-node smap-k-' + n.kind + '"' + act + ' transform="translate(' + n.x + ',' + n.y + ')">' +
+        '<rect width="' + NW + '" height="' + NH + '" rx="10"/><rect class="smap-accent" width="5" height="' + NH + '" rx="2" style="fill:' + color + '"/>' +
+        '<text x="14" y="23" class="smap-t">' + esc(tt(title, 26)) + '</text><text x="14" y="41" class="smap-s">' + esc(tt(sub, 34)) + '</text>' +
+        (pct != null ? '<rect x="14" y="50" width="' + (NW - 60) + '" height="5" rx="2.5" class="smap-track"/><rect x="14" y="50" width="' +
+          Math.max(0, (NW - 60) * pct / 100) + '" height="5" rx="2.5" style="fill:' + color + '"/><text x="' + (NW - 12) + '" y="56" text-anchor="end" class="smap-p">' +
+          Math.round(pct) + '%</text>' : '') + '</g>';
+    });
+    svg += '</g></svg>';
+    var h = '<div class="smap"><div class="smap-mission">' + I('flag', 15) + '<div class="grow"><b>' + L('พันธกิจ') + '</b><div>' +
+      (mission ? esc(mission) : '<span class="pf-none">' + L('ยังไม่ได้ตั้งพันธกิจ') + '</span>') + '</div></div>' +
+      (S.isAdmin() ? '<button class="btn btn-sm" data-act="goal-mission">' + I('pencil', 13) + ' ' + L('แก้พันธกิจ') + '</button>' : '') + '</div>';
+    h += '<div class="smap-tools"><button class="btn btn-sm" data-act="smap-zoom" data-d="1" title="' + L('ซูมเข้า') + '">+</button>' +
+      '<button class="btn btn-sm" data-act="smap-zoom" data-d="-1" title="' + L('ซูมออก') + '">−</button>' +
+      '<button class="btn btn-sm" data-act="smap-zoom" data-d="0">' + L('พอดีจอ') + '</button><span class="smap-hint">' + L('ลากเพื่อเลื่อน ใช้ล้อเมาส์เพื่อซูม') + '</span></div>';
+    h += '<div class="smap-vp">' + svg + '</div></div>';
+    return h;
+  }
+
+  /** วิดเจ็ตหน้าแรก — เป้าหมายของฉัน */
+  function homeGoalsBody() {
+    var list = S.myGoals().filter(function (g) { return !g.closed; });
+    if (!list.length) return '<div class="hempty">' + L('ยังไม่มีเป้าหมายที่คุณเป็นเจ้าของหรือสมาชิก') + '</div>';
+    return list.slice(0, HOME_ROWS).map(function (g) {
+      return '<div class="hrow" data-act="go-goal" data-id="' + esc(g.id) + '">' + I('flag', 13) + '<span class="nm">' + esc(g.name) + '</span>' +
+        '<span class="hgoal-bar">' + goalBar(g) + '</span></div>';
+    }).join('') + (list.length > HOME_ROWS ? '<div class="hmore">+' + (list.length - HOME_ROWS) + ' ' + L('อื่น ๆ') + '</div>' : '');
+  }
+
+  /** ส่วน "เป้าหมาย" ในหน้าผู้ดูแล — ปีงบ พันธกิจ ฟิลด์ของเป้าหมาย */
+  function adminGoalsSection() {
+    var fy = S.fyStart();
+    var h = '<section class="admin-sec" id="adminGoals"><h3>' + L('เป้าหมาย') + '</h3><div class="admin-grid">';
+    h += '<div class="kv"><span class="k">' + L('ปีงบประมาณเริ่มเดือน') + '</span><span class="v"><select class="opt-select" data-act="goal-fy">' +
+      MONF().map(function (mn, i) { return '<option value="' + (i + 1) + '"' + (fy === i + 1 ? ' selected' : '') + '>' + esc(mn) + '</option>'; }).join('') +
+      '</select></span></div>';
+    h += '<div class="kv"><span class="k">' + L('พันธกิจ') + '</span><span class="v">' + esc((S.db.settings || {}).mission || '—') +
+      ' <button class="as-link" data-act="goal-mission">' + L('แก้ไข') + '</button></span></div></div>';
+    h += '<div class="gf-list"><b>' + L('ฟิลด์ของเป้าหมาย') + '</b>';
+    (S.db.goalFields || []).forEach(function (f) {
+      h += '<span class="chip">' + esc(f.name) + ' · ' + esc(L(({ text: 'ข้อความ', number: 'ตัวเลข', select: 'ตัวเลือกเดียว' })[f.type])) +
+        '<button data-act="goal-field-del" data-f="' + esc(f.id) + '" title="' + L('ลบ') + '">✕</button></span>';
+    });
+    h += '<button class="btn btn-sm" data-act="goal-field-add">' + I('plus', 13) + ' ' + L('เพิ่มฟิลด์') + '</button></div></section>';
+    return h;
+  }
+
   /* ====================== 4a — ทีม ====================== */
   var TEAM_TABS = [['overview', 'ภาพรวม'], ['tasks', 'งานทั้งหมด'], ['messages', 'ข้อความ'], ['calendar', 'ปฏิทินทีม']];
 
@@ -2817,6 +3169,11 @@
           '</em></span>' + I('arrowRight', 13) + '</button>';
       });
       o = { title: hTitle(I('note', 15), L('ฟอร์ม')), body: fb };
+    } else if (w === 'goals') {
+      /* 4a — เป้าหมายที่ฉันเป็นเจ้าของหรือสมาชิก */
+      o = { title: hTitle(I('flag', 15), L('เป้าหมายของฉัน')),
+        action: '<button class="btn btn-sm btn-ghost" data-act="go-goals" data-v="mine">' + L('ดูทั้งหมด') + '</button>',
+        body: homeGoalsBody() };
     }
     if (!o) return '';
     o.cls = (x.full ? 'full' : 'half') + (edit ? ' hw-edit' : '');
@@ -4889,6 +5246,7 @@
     h += '</ul></details>';
     h += '</section>';
 
+    h += adminGoalsSection();      // 4a — ปีงบ พันธกิจ ฟิลด์ของเป้าหมาย
     /* ---- 4a ทีม ---- ผู้ดูแลระบบเห็นทุกทีม รวมทีมส่วนตัว */
     h += '<section class="admin-sec" id="adminTeams"><h3>' + L('ทีม') + '<span class="admin-count">' +
       L('{n} ทีม', { n: S.teams().length }) + '</span><button class="btn btn-sm btn-primary" data-act="team-new">' +
@@ -5398,6 +5756,7 @@
     overviewView: overviewView, filesView: filesView, messagesView: messagesView,
     projectsView: projectsView,
     portfolioView: portfolioView, PF_TABS: PF_TABS, PF_COLS: PF_COLS, rollupFnLabel: rollupFnLabel,
+    GOAL_TABS: GOAL_TABS, goalsView: goalsView, goalView: goalView, strategyMap: strategyMap, goalChartSpec: goalChartSpec,
     TEAM_TABS: TEAM_TABS, teamsView: teamsView, teamView: teamView, teamPrivacyLabel: teamPrivacyLabel,
     pfStatePill: pfStatePill,
     myTasksView: myTasksView, inboxView: inboxView, trashView: trashView, approvalIcon: approvalIcon,

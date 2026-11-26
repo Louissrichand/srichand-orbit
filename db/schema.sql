@@ -685,6 +685,64 @@ CREATE TABLE dbo.team_resources (
     created_by  UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
     created_at  DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME()
 );
+/* 4a ส่วนที่ 2 — เป้าหมาย (db.goals) ความคืบหน้าคำนวณตอนอ่านเมื่อ metric_src ≠ manual
+   (subgoals = เฉลี่ย/ถ่วงน้ำหนัก/รวมค่า, projects = งานหรือหมุดหมายที่เสร็จ, tasks = งานที่เลือก — สถานะกำหนดเองที่ done นับว่าเสร็จ)
+   goal_history เก็บจุดกราฟวันละหนึ่งจุด (≤ 180) · ปีงบเริ่มเดือน settings.fy_start · พันธกิจ settings.mission (แก้ได้เฉพาะ OA) */
+CREATE TABLE dbo.goals (
+    id           UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    name         NVARCHAR(200)    NOT NULL,
+    owner_id     UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    team_id      UNIQUEIDENTIFIER NULL,          -- NULL = เป้าหมายบริษัท (FK หลังสร้าง dbo.teams)
+    parent_id    UNIQUEIDENTIFIER NULL REFERENCES dbo.goals(id),
+    period_kind  VARCHAR(6)       NOT NULL DEFAULT 'fy' CONSTRAINT ck_goals_period CHECK (period_kind IN ('fy','h1','h2','q1','q2','q3','q4','custom')),
+    fiscal_year  SMALLINT         NULL,
+    period_from  DATE             NULL,
+    period_to    DATE             NULL,
+    privacy      VARCHAR(7)       NOT NULL DEFAULT 'public' CONSTRAINT ck_goals_privacy CHECK (privacy IN ('public','private')),
+    description  NVARCHAR(MAX)    NULL,
+    metric_src   VARCHAR(8)       NOT NULL DEFAULT 'manual' CONSTRAINT ck_goals_src CHECK (metric_src IN ('manual','subgoals','projects','tasks')),
+    metric_unit  VARCHAR(8)       NOT NULL DEFAULT 'percent' CONSTRAINT ck_goals_unit CHECK (metric_unit IN ('percent','number','currency')),
+    start_value  DECIMAL(18,4)    NOT NULL DEFAULT 0,
+    target_value DECIMAL(18,4)    NOT NULL DEFAULT 100,
+    current_value DECIMAL(18,4)   NOT NULL DEFAULT 0,
+    currency     CHAR(3)          NULL,
+    agg          VARCHAR(3)       NOT NULL DEFAULT 'avg',      -- avg | sum
+    proj_by      VARCHAR(10)      NOT NULL DEFAULT 'tasks',    -- tasks | milestones
+    status_state VARCHAR(10)      NULL,                        -- on_track | at_risk | off_track
+    closed_outcome VARCHAR(8)     NULL CONSTRAINT ck_goals_outcome CHECK (closed_outcome IN ('achieved','partial','missed','dropped')),
+    closed_note  NVARCHAR(2000)   NULL,
+    closed_at    DATETIME2(0)     NULL,
+    remind       BIT              NOT NULL DEFAULT 1,
+    created_by   UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    created_at   DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME()
+);
+CREATE TABLE dbo.goal_members (goal_id UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.goals(id) ON DELETE CASCADE,
+    user_id UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.users(id), CONSTRAINT pk_goal_members PRIMARY KEY (goal_id, user_id));
+CREATE TABLE dbo.goal_weights (goal_id UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.goals(id), child_id UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.goals(id),
+    weight DECIMAL(5,2) NOT NULL, CONSTRAINT pk_goal_weights PRIMARY KEY (goal_id, child_id));   -- รวมต้อง = 100
+CREATE TABLE dbo.goal_sources (goal_id UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.goals(id) ON DELETE CASCADE,
+    item_id UNIQUEIDENTIFIER NOT NULL,          -- project (src=projects) หรือ task (src=tasks)
+    CONSTRAINT pk_goal_sources PRIMARY KEY (goal_id, item_id));
+CREATE TABLE dbo.goal_related (goal_id UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.goals(id) ON DELETE CASCADE,
+    item_id UNIQUEIDENTIFIER NOT NULL,          -- project | portfolio | task
+    CONSTRAINT pk_goal_related PRIMARY KEY (goal_id, item_id));
+CREATE TABLE dbo.goal_updates (id BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY, goal_id UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.goals(id) ON DELETE CASCADE,
+    state VARCHAR(10) NOT NULL, body NVARCHAR(MAX) NULL, progress DECIMAL(5,1) NOT NULL, author_id UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    created_at DATETIME2(0) NOT NULL DEFAULT SYSUTCDATETIME());
+CREATE TABLE dbo.goal_history (goal_id UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.goals(id) ON DELETE CASCADE, day DATE NOT NULL,
+    progress DECIMAL(5,1) NOT NULL, CONSTRAINT pk_goal_history PRIMARY KEY (goal_id, day));
+CREATE TABLE dbo.goal_comments (id UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(), goal_id UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.goals(id) ON DELETE CASCADE,
+    author_id UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id), body NVARCHAR(MAX) NOT NULL, created_at DATETIME2(0) NOT NULL DEFAULT SYSUTCDATETIME());
+CREATE TABLE dbo.goal_activity (id BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY, goal_id UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.goals(id) ON DELETE CASCADE,
+    actor_id UNIQUEIDENTIFIER NULL, msg_key NVARCHAR(200) NOT NULL, params NVARCHAR(1000) NULL, created_at DATETIME2(0) NOT NULL DEFAULT SYSUTCDATETIME());
+CREATE TABLE dbo.goal_fields (id UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(), name NVARCHAR(80) NOT NULL,
+    type VARCHAR(6) NOT NULL CONSTRAINT ck_goal_fields_type CHECK (type IN ('text','number','select')), options_json NVARCHAR(MAX) NULL);
+CREATE TABLE dbo.goal_field_values (goal_id UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.goals(id) ON DELETE CASCADE,
+    field_id UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.goal_fields(id) ON DELETE CASCADE, value_json NVARCHAR(4000) NULL,
+    CONSTRAINT pk_goal_field_values PRIMARY KEY (goal_id, field_id));
+-- custom_fields.ref_kinds ตอนนี้รวม goal ได้แล้ว (task,project,portfolio,goal)
+GO
+
 CREATE TABLE dbo.project_teams (
     project_id  UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.projects(id) ON DELETE CASCADE,
     team_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.teams(id) ON DELETE CASCADE,
