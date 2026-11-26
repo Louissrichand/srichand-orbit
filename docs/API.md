@@ -244,6 +244,18 @@
 | PUT | `/api/settings/goals` | OA | `{fyStart, mission}` · `goal_fields` (4a) |
 | — | (เตือนเป้าหมาย) | — | ตอนนี้สร้างตอนเปิดแอป สัปดาห์ละครั้งต่อเป้าหมายที่ไม่ได้อัปเดตเกิน 7 วัน (`notification.dedupe = goal:<id>:<วันจันทร์>`) — เฟส 5 ย้ายไปงานตามเวลา (4a) |
 | POST | `/api/portfolios/{id}/status` · `/messages` | ST / C | อัปเดตสถานะพร้อมข้อความ · ประกาศของพอร์ตโฟลิโอ (ตารางประกาศเดียวกับโปรเจกต์) (4a) |
+| GET | `/api/workload?scope=project:{id}\|portfolio:{id}\|all[&team=]&from&to&measure=count\|effort&src=estimate\|field:{fid}&unit=h\|pt\|pct` | ทุกคน (งานที่ผู้ขอเห็นได้) | แถวต่อคน ช่องต่อวัน → รวมตามซูม · แรงงานกระจายบนวันทำงานของโปรเจกต์ (`all` = จ–ศ) · ความจุ × วันทำงานที่ไม่ได้ลา (4b) |
+| GET · POST · DELETE | `/api/users/{id}/away[/{rangeId}]` | ตัวเอง / OA | `{from, to, note}` หลายช่วง · การมอบหมายแบบวนรอบข้ามคนที่ไม่อยู่วันนั้น (4b) |
+| PUT | `/api/users/{id}/capacity` | ตัวเอง / OA | `{count, h, pt, pct}` ต่อวันทำงาน · ลง audit `user.capacity` (4b) |
+| PATCH | `/api/tasks/{id}/move` | W ของงาน | `{shiftDays, assigneeId}` ลากในภาระงาน — คงความยาวช่วง หนึ่งธุรกรรม (4b) |
+| GET · PUT | `/api/timesheets/{userId}/{week}` · `…/cells/{taskId}/{date}` | ตัวเอง (อ่าน: + ผู้ตรวจ) | ตารางรายสัปดาห์ · ตั้งเวลารวมของช่อง (ปรับ/เพิ่ม/ลบรายการ) · `423` ถ้าสัปดาห์ส่งหรืออนุมัติแล้ว (4b) |
+| PATCH | `/api/time-entries/{id}` | เจ้าของ / W ของงาน | `{billable, category, note, minutes, date}` · `423` ถ้าล็อก (4b) |
+| POST | `/api/timesheets/{week}/submit` · `/recall` | ตัวเอง | ส่งตรวจ → แจ้งผู้ตรวจ (OA + `timesheet_reviewers` + PA ของโปรเจกต์ที่ลงเวลา) · ดึงกลับได้ก่อนตรวจ (4b) |
+| POST | `/api/timesheets/{id}/approve` · `/reject` · `/reopen` | ผู้ตรวจ (ไม่ใช่เจ้าของ) · reopen: OA | `{note}` · อนุมัติแล้วล็อก · ลง audit `time.*` (4b) |
+| GET | `/api/time-entries.csv?from&to[&userId]` | ตัวเอง / ผู้ตรวจ / OA | CSV พร้อม billable, category, สถานะไทม์ชีต (4b) |
+| PUT | `/api/settings/timesheets` | OA | `{categories[], reviewers[]}` (4b) |
+| GET · POST · PATCH · DELETE | `/api/reports[/{id}]` | อ่าน: เจ้าของ/คนที่แชร์/สมาชิกทีมที่แชร์/ทุกคนถ้า `share_org` (ยกเว้น guest) · แก้: เจ้าของ · ลบ: เจ้าของ/OA | `{name, scope:{k,id,ids}, share:{org,users,teams}}` ≤ 20 วิดเจ็ต · ข้อมูลกราฟคิดตามสิทธิ์ผู้ขอ (4b) |
+| GET | `/api/reports/{id}/widgets/{wid}/data` | อ่านรายงานได้ | `{cats, series, values, number}` — src tasks (ตัวกรอง/แกนเหมือนแดชบอร์ด 3c + แกน `project`) projects/portfolios/goals (แกน status/owner/team/period, Y count/avg:progress/sum:open/sum:overdue) (4b) |
 
 `/api/home` รวมทุกอย่างไว้ในคำขอเดียวโดยตั้งใจ ถ้าแยกเป็นห้าคำขอ หน้าแรกจะเปิด
 คอนเนกชัน Azure SQL แบบ serverless พร้อมกันห้าเส้นทุกครั้งที่มีคนเปิดแอป

@@ -33,10 +33,10 @@
     if (!u) return '<span class="' + cls + ' avatar-empty">+</span>';
     /* คนที่ตั้งสถานะไม่อยู่ ติดจุดส้มไว้ที่วงกลม
      * คนที่กำลังจะมอบหมายงานให้จะได้เห็นก่อนกด ไม่ใช่รู้ตอนงานเลยกำหนดไปแล้ว */
-    var away = S.isAway && S.isAway(u.id);
+    var aw = S.awayNow ? S.awayNow(u.id) : null, away = !!aw;      // 4b — ช่วงไม่อยู่หลายช่วง
     var tip = esc(u.name) +
-      (away ? ' · ' + L('ไม่อยู่ถึง {d}', { d: fmtDate(u.away.until) }) +
-              (u.away.note ? ' · ' + u.away.note : '') : '');
+      (away ? ' · ' + esc(L('ไม่อยู่ถึง {d}', { d: fmtDate(aw.until) })) +
+              (aw.note ? ' · ' + esc(aw.note) : '') : '');
     /* มีรูปก็ใช้รูป ไม่มีก็ตัวย่อบนวงกลมสีเหมือนเดิม
      * สีพื้นยังใส่ไว้ใต้รูป ระหว่างที่รูปยังไม่ขึ้นจะได้ไม่เป็นช่องโหว่ */
     return '<span class="' + cls + (away ? ' is-away' : '') +
@@ -220,6 +220,8 @@
          '" data-act="go" data-route="pages">' + I('note') + '<span class="grow">' + L('หน้าเอกสาร') + '</span></button>';
     h += '<button class="sb-item' + (route.type === 'goals' || route.type === 'goal' ? ' active' : '') +
          '" data-act="go" data-route="goals">' + I('flag') + '<span class="grow">' + L('เป้าหมาย') + '</span></button>';
+    /* 4b — ภาระงานของทุกคน ไทม์ชีต และรายงานรวม */
+    if (global.Render && global.Render.sidebarExt) h += global.Render.sidebarExt(route);
     h += '</div>';
 
     function projectItem(p) {
@@ -454,6 +456,8 @@
     } else if (route.type === 'form') {
       var tfx = S.formById(route.id);
       h += '<div class="tb-title">' + I('note', 18) + ' ' + (tfx ? esc(tfx.f.name) : L('ฟอร์ม')) + '</div>';
+    } else if (global.Render.topbarExt) {
+      h += global.Render.topbarExt(route) || '';                 // 4b
     }
 
     h += '<div class="tb-spacer"></div>';
@@ -502,6 +506,7 @@
     } else if (route.type === 'teams' && S.can('structure')) {
       h += '<button class="btn btn-primary" data-act="team-new">' + L('+ สร้างทีม') + '</button>';
     }
+    if (global.Render.topbarActsExt) h += global.Render.topbarActsExt(route) || '';   // 4b
     h += '</div>';
 
     if (route.type === 'project') {
@@ -2036,7 +2041,7 @@
    */
 
   var PF_TABS = [['list', 'รายการ'], ['timeline', 'ไทม์ไลน์'], ['dashboard', 'สรุปผล'],
-                 ['progress', 'ความคืบหน้า'], ['messages', 'ประกาศ']];
+                 ['progress', 'ความคืบหน้า'], ['workload', 'ภาระงาน'], ['messages', 'ประกาศ']];
 
   function pfProgress(pct, color) {
     return '<span class="pf-bar" title="' + pct + '%"><i style="width:' + pct +
@@ -3249,9 +3254,11 @@
       (u.pronouns ? '<small>(' + esc(u.pronouns) + ')</small>' : '') + '</h1>';
 
     if (away) {
+      var awp = S.awayNow(u.id);
       h += '<div class="prof-away">' + I('calendar', 14) + '<span>' +
-        esc(L('ไม่อยู่ถึง {d}', { d: fmtDate(u.away.until) })) +
-        (u.away.note ? ' · ' + esc(u.away.note) : '') + '</span></div>';
+        esc(L('ไม่อยู่ถึง {d}', { d: fmtDate(awp.until) })) +
+        (awp.note ? ' · ' + esc(awp.note) : '') + '</span>' +
+        (isMe ? '<button class="as-link" data-act="set-away">' + L('จัดการช่วงไม่อยู่') + '</button>' : '') + '</div>';
     } else if (isMe) {
       h += '<button class="prof-away as-link" data-act="set-away">' + I('calendar', 14) +
         '<span>' + L('ตั้งสถานะไม่อยู่') + '</span></button>';
@@ -4958,7 +4965,7 @@
 
     h += '<button class="acct-away" data-act="set-away">' + I('calendar', 14) +
       '<span class="grow">' + (away
-        ? esc(L('ไม่อยู่ถึง {d}', { d: fmtDate(me.away.until) }))
+        ? esc(L('ไม่อยู่ถึง {d}', { d: fmtDate(S.awayNow(me.id).until) }))
         : L('ตั้งสถานะไม่อยู่')) + '</span></button>';
 
     h += '<div class="pop-sep"></div>';
@@ -5113,7 +5120,13 @@
     'team.member': 'ได้เพิ่มสมาชิกทีม', 'team.member-remove': 'ได้ถอดสมาชิกออกจากทีม', 'team.join': 'ได้เข้าร่วมทีม',
     'project.team': 'ได้แชร์โปรเจกต์ให้ทีม', 'portfolio.nest': 'ได้ใส่พอร์ตโฟลิโอย่อย',
     'goal.create': 'ได้สร้างเป้าหมาย', 'goal.delete': 'ได้ลบเป้าหมาย', 'goal.close': 'ได้ปิดเป้าหมาย',
-    'settings.goals': 'ได้เปลี่ยนการตั้งค่าเป้าหมาย'
+    'settings.goals': 'ได้เปลี่ยนการตั้งค่าเป้าหมาย',
+    /* 4b */
+    'user.capacity': 'ได้ตั้งความจุงาน', 'time.submit': 'ได้ส่งไทม์ชีต', 'time.recall': 'ได้ดึงไทม์ชีตกลับ',
+    'time.approve': 'ได้อนุมัติไทม์ชีต', 'time.reject': 'ได้ตีกลับไทม์ชีต', 'time.reopen': 'ได้ปลดล็อกไทม์ชีต',
+    'time.export': 'ได้ส่งออกรายการเวลา', 'settings.timesheet': 'ได้เปลี่ยนการตั้งค่าไทม์ชีต',
+    'report.create': 'ได้สร้างรายงาน', 'report.delete': 'ได้ลบรายงาน', 'report.share': 'ได้เปลี่ยนการแชร์รายงาน',
+    'files.migrate': 'ได้ย้ายไฟล์แนบออกจากไฟล์ข้อมูล'
   };
   function auditText(a) { return AUDIT_TEXT[a] || a; }
 
@@ -5247,6 +5260,7 @@
     h += '</section>';
 
     h += adminGoalsSection();      // 4a — ปีงบ พันธกิจ ฟิลด์ของเป้าหมาย
+    if (global.Render.adminExt) h += global.Render.adminExt();   // 4b — ความจุ ไทม์ชีต ไฟล์แนบ
     /* ---- 4a ทีม ---- ผู้ดูแลระบบเห็นทุกทีม รวมทีมส่วนตัว */
     h += '<section class="admin-sec" id="adminTeams"><h3>' + L('ทีม') + '<span class="admin-count">' +
       L('{n} ทีม', { n: S.teams().length }) + '</span><button class="btn btn-sm btn-primary" data-act="team-new">' +

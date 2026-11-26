@@ -56,6 +56,9 @@
     ff: null, fe: null, te: null, tte: null, sb: null, npTab: 'blank', ttSec: null
   };
 
+  /* 4b — ที่เสียบของส่วนขยาย (ดู EXT_API ท้ายไฟล์) */
+  var EXT = { acts: [], changes: [], routes: {}, projViews: {}, pfViews: {}, after: [], openRoute: null, deep: [], hooks: {} };
+
   /* มุมมองที่ทำงานอยู่ของโปรเจกต์
    * อยู่บนแท็บที่บันทึกไว้ = สำเนาของแท็บนั้น (แก้แล้วกด "บันทึกมุมมอง" ถึงจะทับของทีม)
    * อยู่บนแท็บในตัว = มุมมองส่วนตัวของคนนี้ จำลง db.personal เองทุกครั้งที่วาด (ดู persistView) */
@@ -190,6 +193,7 @@
     else if (r.type === 'trash' && r.pid) parts = ['trash', r.pid];
     else if (r.type === 'profile') parts = ['profile', r.id];
     else if (r.type === 'form') parts = ['form', r.id];
+    else if (EXT.routes[r.type]) parts = EXT.routes[r.type].hash(r);
     else parts = [r.type];
     if (state.openTaskId) parts.push(state.openTaskId);
     return '#/' + parts.join('/');
@@ -237,6 +241,11 @@
 
   function routeOf(seg, taskId) {
     var type = seg.length ? seg[0] : 'task';
+    /* 4b — หน้าที่ส่วนขยายลงทะเบียนไว้ (ภาระงาน ไทม์ชีต รายงาน) */
+    if (EXT.routes[type]) {
+      var xr = EXT.routes[type].parse(seg);
+      return xr ? { route: xr, taskId: taskId } : null;
+    }
     if (type === 'task') {
       if (!taskId || !S.task(taskId)) return null;
       return { route: homeRouteOf(taskId), taskId: taskId };
@@ -376,11 +385,13 @@
       else if (r.view === 'files') body = R.filesView(r.id);
       else if (r.view === 'messages') body = R.messagesView(r.id, { files: state.msgFiles });
       else if (r.view === 'pages') body = R.pagesView(r.id, r.page, pageUi());
+      else if (EXT.projViews[r.view]) body = EXT.projViews[r.view](r.id, r);       // 4b — ภาระงาน สื่อฝัง
       else body = R.listView(r.id, v, state.sel, { subOpen: state.subOpen, cursor: state.cursor });
     } else if (r.type === 'portfolio') {
       if (!S.portfolio(r.id)) { state.route = { type: 'home' }; return renderAll(); }
       if (r.sv && !S.pfSavedView(r.id, r.sv)) { delete r.sv; r.view = 'list'; }
-      body = R.portfolioView(r.id, r.view || 'list', { view: pfViewFor(r.id), sv: r.sv || null, dirty: pfDirty(),
+      if (!r.sv && EXT.pfViews[r.view]) body = EXT.pfViews[r.view](r.id, r);
+      else body = R.portfolioView(r.id, r.view || 'list', { view: pfViewFor(r.id), sv: r.sv || null, dirty: pfDirty(),
         files: state.msgFiles });
     } else if (r.type === 'team') {
       if (!S.team(r.id) || !S.canSeeTeam(r.id)) { state.route = { type: 'teams' }; return renderAll(); }
@@ -426,6 +437,9 @@
     } else if (r.type === 'form') {
       if (!state.ff || state.ff.id !== r.id) state.ff = { id: r.id, ans: {} };
       body = R.formPage(r.id, state.ff);
+    } else if (EXT.routes[r.type]) {
+      body = EXT.routes[r.type].body(r);
+      if (body === null) return renderAll();          // ส่วนขยายเปลี่ยนเส้นทางเอง (เช่นไม่มีสิทธิ์)
     }
 
     // ออกจาก Gantt แล้วแผงตัวเลือกไม่มีความหมายอีก ปล่อยค้างไว้จะบังหน้าจอเปล่า ๆ
@@ -464,6 +478,7 @@
     restoreTimelineScroll();
     restoreGanttScroll();
     markKbCursor();
+    EXT.after.forEach(function (fn) { try { fn($view); } catch (e) { console.error(e); } });
   }
 
   /* ---------- แถบเครื่องมือ Gantt ----------
@@ -3579,6 +3594,9 @@
       case 'overdue':
         return +tr.n ? L('เลยกำหนด {n} {u}', { n: tr.n, u: tr.unit === 'hours' ? L('ชั่วโมง') : L('วัน') }) : L('เลยกำหนด');
       case 'manual': return L('กดรันเอง') + (tr.label ? ': ' + tr.label : '');
+      case 'timelog':
+        return (+tr.min ? L('บันทึกเวลาอย่างน้อย {n} นาที', { n: +tr.min }) : L('บันทึกเวลา')) +
+          (tr.bill === 'yes' ? ' · ' + L('เก็บเงินได้') : tr.bill === 'no' ? ' · ' + L('ไม่เก็บเงิน') : '');
       case 'form': {
         var tfm = tr.form ? S.formById(tr.form) : null;
         return tr.form ? L('ส่งฟอร์ม “{f}”', { f: tfm ? tfm.f.name : L('(ฟอร์มถูกลบ)') }) : L('มีคนส่งฟอร์ม');
@@ -3797,6 +3815,7 @@
     if (type === 'manual') tr.label = '';
     if (type === 'form') tr.form = '';
     if (type === 'cstatus') { tr.ctype = ''; tr.v = ''; }
+    if (type === 'timelog') { tr.min = 0; tr.bill = ''; }
     if (type === 'scheduled') { tr.freq = 'weekly'; tr.day = 1; tr.scope = 'once'; }
     if (type === 'due' || type === 'start') tr.mode = 'any';
     if (type === 'field') {
@@ -3871,6 +3890,10 @@
         return '<input class="opt-select" data-act="ae-tp"' + d('label') + ' maxlength="60" value="' + esc(tr.label || '') +
           '" placeholder="' + esc(L('ชื่อปุ่ม เช่น ส่งตรวจ')) + '">';
       /* 3b — ฟอร์ม และสถานะของชนิดงานกำหนดเอง */
+      case 'timelog':
+        return '<div class="flt-val">' + L('อย่างน้อย') + ' <input type="number" min="0" max="1440" class="opt-select flt-n" data-act="ae-tp"' +
+          d('min') + ' data-t="num" value="' + esc(tr.min || 0) + '"> ' + L('นาที') + '</div>' +
+          auSel('ae-tp', [['', L('เก็บเงินได้หรือไม่ก็ได้')], ['yes', L('เฉพาะเวลาที่เก็บเงินได้')], ['no', L('เฉพาะเวลาที่ไม่เก็บเงิน')]], tr.bill || '', d('bill'));
       case 'form':
         return auSel('ae-tp', [['', L('ฟอร์มใดก็ได้ของโปรเจกต์นี้')]].concat(((p && p.forms) || []).map(function (f) { return [f.id, f.name]; })), tr.form, d('form'));
       case 'cstatus': {
@@ -6216,6 +6239,10 @@
       '<div class="field"><label>' + L('วันที่') + '</label><input id="teDate" type="date" value="' + S.today() + '"></div>' +
       '<div class="field"><label>' + L('ระยะเวลา') + ' *</label><input id="teDur" placeholder="' + esc(L('เช่น 1h 30m, 1:30 หรือ 45m')) + '"></div>' +
       '<div class="field"><label>' + L('บันทึก') + '</label><input id="teNote" maxlength="500" placeholder="' + esc(L('ทำอะไรไป (ไม่บังคับ)')) + '"></div>' +
+      /* 4b — ไทม์ชีต: เก็บเงินลูกค้าได้ไหม และหมวดของเวลา */
+      '<div class="prj-2col"><div class="field"><label>' + L('หมวดเวลา') + '</label><select id="teCat"><option value="">' + L('ไม่ระบุ') + '</option>' +
+      S.timeCats().map(function (c) { return '<option value="' + esc(c) + '">' + esc(L(c)) + '</option>'; }).join('') + '</select></div>' +
+      '<label class="field te-bill"><input type="checkbox" id="teBill"> ' + L('เก็บเงินลูกค้าได้ (billable)') + '</label></div>' +
       '<div class="modal-actions"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
       '<button class="btn btn-primary" data-act="tt-save" data-id="' + esc(taskId) + '">' + L('บันทึก') + '</button></div>';
   }
@@ -6359,7 +6386,10 @@
       case 'tt-save': {
         var mins = S.parseDuration((document.getElementById('teDur') || {}).value);
         if (!mins) { toast(L('ใส่ระยะเวลาให้ถูกต้อง เช่น 1h 30m')); return true; }
-        S.addTimeEntry(id, { minutes: mins, date: (document.getElementById('teDate') || {}).value, note: (document.getElementById('teNote') || {}).value });
+        var teBill = document.getElementById('teBill');
+        var teOk = S.addTimeEntry(id, { minutes: mins, date: (document.getElementById('teDate') || {}).value, note: (document.getElementById('teNote') || {}).value,
+          billable: teBill && teBill.checked ? true : null, category: (document.getElementById('teCat') || {}).value || null });
+        if (!teOk) { toast(L('สัปดาห์นี้ส่งไทม์ชีตหรืออนุมัติแล้ว ลงเวลาเพิ่มไม่ได้')); return true; }
         closeModal();
         toast(L('บันทึกเวลา {v} แล้ว', { v: S.fmtMinutes(mins) }), L('ย้อนกลับ'), 'undo');
         return true;
@@ -6459,6 +6489,7 @@
   }
   /** ลิงก์จากกล่องข้อความ 'team:<id>[:แท็บ]' 'portfolio:<id>[:แท็บ]' 'goal:<id>' */
   function openRoute4a(r) {
+    if (EXT.openRoute && EXT.openRoute(r)) return true;          // 4b — ไทม์ชีต รายงาน
     var m = /^(team|portfolio|goal):([^:]+)(?::(\w+))?$/.exec(String(r || ''));
     if (!m) return false;
     if (m[1] === 'team') { if (S.team(m[2])) goTeam(m[2], m[3]); return true; }
@@ -7750,6 +7781,7 @@
     if (act3c(act, el, e)) return;                // 3c
     if (act3c2(act, el, e)) return;
     if (act4a(act, el, e)) return;                // 4a
+    for (var xa = 0; xa < EXT.acts.length; xa++) if (EXT.acts[xa](act, el, e)) return;   // 4b
 
     switch (act) {
 
@@ -11140,6 +11172,7 @@
     if (change3c(act, el)) return;                // 3c
     if (change3c2(act, el)) return;
     if (change4a(act, el)) return;                // 4a
+    for (var xc = 0; xc < EXT.changes.length; xc++) if (EXT.changes[xc](act, el, e)) return;   // 4b
 
     if (act === 'photo-file') { takePhoto(el); return; }
     if (act === 'att-file') { takeAttachment(el); return; }
@@ -12631,6 +12664,34 @@
     e.returnValue = '';
   });
 
+  /* ---------- 4b — ส่วนขยาย ----------
+   * ไฟล์ที่โหลดก่อน main.js (ui4b.js) ใส่ฟังก์ชันเริ่มต้นไว้ใน window.OrbitExt
+   * แล้วได้เครื่องมือชุดเดียวกับที่ main.js ใช้ (หน้าต่าง ถามผู้ใช้ ตารางสิทธิ์ เส้นทาง) ผ่าน api ด้านล่าง
+   * main.js จึงไม่ต้องโตขึ้นอีกทุกครั้งที่มีหน้าใหม่ */
+  var EXT_API = {
+    state: state, S: S, R: R, L: L, I: I, esc: esc,
+    renderAll: renderAll, renderViewBody: renderViewBody, renderTopbar: renderTopbar, refreshView: refreshView,
+    openModal: openModal, closeModal: closeModal, toast: toast,
+    askText: askText, askConfirm: askConfirm, askChoice: askChoice, openPop: openPop, closePops: closePops,
+    denyToast: denyToast, downloadText: downloadText, safeFileName: safeFileName,
+    openTask: openTask, goProject: goProject, clearSel: clearSel, syncHash: syncHash, closeSidebar: closeSidebar,
+    settingsModal: settingsModal, readFiles: readFiles, skippedToast: skippedToast,
+    markDragEnd: function () { lastDragEnd = Date.now(); },
+    needs: function (cap, list) { list.forEach(function (a) { NEEDS[a] = cap; }); },
+    act: function (fn) { EXT.acts.push(fn); },
+    change: function (fn) { EXT.changes.push(fn); },
+    route: function (type, def) { EXT.routes[type] = def; },
+    projView: function (id, fn) { EXT.projViews[id] = fn; },
+    pfView: function (id, fn) { EXT.pfViews[id] = fn; },
+    after: function (fn) { EXT.after.push(fn); },
+    openRoute: function (fn) { var prev = EXT.openRoute; EXT.openRoute = function (r) { return fn(r) || (prev ? prev(r) : false); }; },
+    deep: function (type) { EXT.deep.push(type); },
+    hook: function (name, fn) { EXT.hooks[name] = fn; }
+  };
+  (global.OrbitExt || []).forEach(function (init) {
+    try { init(EXT_API); } catch (err) { console.error('เริ่มส่วนขยายไม่สำเร็จ', err); }
+  });
+
   /* ---------- boot ---------- */
 
   global.Orbit = { toast: toast, state: state, render: renderAll };
@@ -12664,7 +12725,7 @@
     if ((global.location.hash || '').indexOf('#/task/') === 0) return true;
     if (!parsed) return false;
     if (parsed.taskId) return true;
-    return ['project', 'portfolio', 'search', 'profile', 'tag', 'form', 'team', 'goal'].indexOf(parsed.route.type) >= 0;
+    return ['project', 'portfolio', 'search', 'profile', 'tag', 'form', 'team', 'goal'].concat(EXT.deep).indexOf(parsed.route.type) >= 0;
   }
 
   var boot = readHash();

@@ -95,7 +95,7 @@ CREATE TABLE dbo.projects (
     CONSTRAINT ck_proj_vis  CHECK (visibility IN ('org','private')),
     /* ต้องตรงกับ PROJECT_VIEWS ใน app/store.js */
     CONSTRAINT ck_proj_view CHECK (default_view IN ('overview','list','board','timeline','gantt',
-                                                    'calendar','dashboard','messages','pages','files'))
+                                                    'calendar','dashboard','messages','pages','files','workload','embed'))
 );
 CREATE INDEX ix_projects_live ON dbo.projects(deleted_at, archived_at) INCLUDE (name, visibility);
 GO
@@ -1130,5 +1130,93 @@ CREATE TABLE dbo.attachment_pins (
     created_by  UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
     created_at  DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME(),
     CONSTRAINT pk_attachment_pins PRIMARY KEY (attachment_id, pin_no)
+);
+GO
+
+/* ======================================================================
+ * 4b — ภาระงาน ช่วงไม่อยู่ ความจุ ไทม์ชีต รายงานรวม (SCHEMA 17)
+ * ====================================================================== */
+
+/* ช่วงไม่อยู่หลายช่วงต่อคน (users.away_until / away_note เดิม = ช่วงที่ครอบวันนี้) — from_date NULL = เริ่มไปแล้ว */
+CREATE TABLE dbo.user_away_ranges (
+    id          UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    user_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.users(id) ON DELETE CASCADE,
+    from_date   DATE             NULL,
+    to_date     DATE             NOT NULL,
+    note        NVARCHAR(140)    NULL,
+    CONSTRAINT ck_away_range CHECK (from_date IS NULL OR from_date <= to_date)
+);
+CREATE INDEX ix_away_user ON dbo.user_away_ranges(user_id, to_date);
+
+/* ความจุต่อวันทำงาน (users.prefs.capacity) — เจ้าตัวหรือผู้ดูแลระบบแก้ */
+CREATE TABLE dbo.user_capacity (
+    user_id     UNIQUEIDENTIFIER NOT NULL PRIMARY KEY REFERENCES dbo.users(id) ON DELETE CASCADE,
+    tasks_per_day  DECIMAL(7,2)  NOT NULL DEFAULT 3,
+    hours_per_day  DECIMAL(7,2)  NOT NULL DEFAULT 8,
+    points_per_day DECIMAL(7,2)  NOT NULL DEFAULT 5,
+    pct_per_day    DECIMAL(7,2)  NOT NULL DEFAULT 100
+);
+
+/* ไทม์ชีตรายสัปดาห์ — ส่งแล้ว/อนุมัติแล้ว = ล็อกรายการเวลาของคนนั้นในสัปดาห์นั้น (ตรวจใน API ก่อนเขียน time_entries) */
+CREATE TABLE dbo.timesheets (
+    id           UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    user_id      UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.users(id),
+    week_start   DATE             NOT NULL,          -- วันจันทร์
+    status       NVARCHAR(12)     NOT NULL DEFAULT 'draft',
+    minutes      INT              NULL,               -- ยอดตอนส่ง
+    submitted_at DATETIME2(0)     NULL,
+    reviewed_by  UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    reviewed_at  DATETIME2(0)     NULL,
+    note         NVARCHAR(500)    NULL,
+    CONSTRAINT uq_timesheet UNIQUE (user_id, week_start),
+    CONSTRAINT ck_ts_status CHECK (status IN ('draft','submitted','approved','rejected'))
+);
+CREATE TABLE dbo.timesheet_history (
+    timesheet_id UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.timesheets(id) ON DELETE CASCADE,
+    seq          INT              NOT NULL,
+    action       NVARCHAR(12)     NOT NULL,          -- submitted|recalled|approved|rejected|reopened
+    by_user      UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    at           DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME(),
+    note         NVARCHAR(500)    NULL,
+    CONSTRAINT pk_timesheet_history PRIMARY KEY (timesheet_id, seq)
+);
+/* หมวดของเวลา + ผู้ตรวจเพิ่มเติม (settings.timeCats / settings.tsReviewers) */
+CREATE TABLE dbo.time_categories (
+    name        NVARCHAR(60)     NOT NULL PRIMARY KEY,
+    sort_order  INT              NOT NULL DEFAULT 0
+);
+CREATE TABLE dbo.timesheet_reviewers (
+    user_id     UNIQUEIDENTIFIER NOT NULL PRIMARY KEY REFERENCES dbo.users(id) ON DELETE CASCADE
+);
+
+/* รายงานรวม (แดชบอร์ดข้ามโปรเจกต์) — ข้อมูลในกราฟคิดตามสิทธิ์ของผู้เปิดดูเสมอ */
+CREATE TABLE dbo.reports (
+    id          UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    name        NVARCHAR(120)    NOT NULL,
+    owner_id    UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.users(id),
+    scope_kind  NVARCHAR(10)     NOT NULL DEFAULT 'org',   -- org|team|portfolio|projects
+    scope_id    UNIQUEIDENTIFIER NULL,                     -- team / portfolio
+    share_org   BIT              NOT NULL DEFAULT 0,
+    created_at  DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT ck_report_scope CHECK (scope_kind IN ('org','team','portfolio','projects'))
+);
+CREATE TABLE dbo.report_projects (
+    report_id   UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.reports(id) ON DELETE CASCADE,
+    project_id  UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.projects(id),
+    CONSTRAINT pk_report_projects PRIMARY KEY (report_id, project_id)
+);
+CREATE TABLE dbo.report_shares (
+    report_id   UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.reports(id) ON DELETE CASCADE,
+    user_id     UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    team_id     UNIQUEIDENTIFIER NULL REFERENCES dbo.teams(id),
+    CONSTRAINT ck_report_share CHECK ((user_id IS NULL) <> (team_id IS NULL))
+);
+/* วิดเจ็ต — config เป็น JSON รูปแบบเดียวกับ dashboard_widgets + src (tasks|projects|portfolios|goals) และ q (all|open|done|overdue) */
+CREATE TABLE dbo.report_widgets (
+    id          UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    report_id   UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.reports(id) ON DELETE CASCADE,
+    sort_order  INT              NOT NULL,
+    src         NVARCHAR(12)     NOT NULL DEFAULT 'tasks',
+    config      NVARCHAR(MAX)    NOT NULL CHECK (ISJSON(config) = 1)
 );
 GO

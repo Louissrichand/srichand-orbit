@@ -13,7 +13,7 @@ function ReadUtf8($p) { [System.IO.File]::ReadAllText($p, [System.Text.Encoding]
 
 # ลำดับต้องตรงกับ index.html — ตัวหลังเรียกใช้ตัวหน้า
 $files = @('config.js', 'i18n.js', 'icons.js', 'auth.js', 'store.js',
-           'cloud.js', 'sync.js', 'richtext.js', 'charts.js', 'render.js', 'gantt.js', 'main.js')
+           'cloud.js', 'sync.js', 'richtext.js', 'charts.js', 'render.js', 'render4b.js', 'gantt.js', 'ui4b.js', 'main.js')
 
 # Artifact โหลดไฟล์ข้างเคียงไม่ได้เลย ฟอนต์จึงต้องฝังมาเป็น data URI เหมือนกัน
 function InlineFonts($css, $base) {

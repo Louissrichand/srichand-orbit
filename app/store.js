@@ -10,7 +10,19 @@
 
   var KEY = 'orbit.db.v4';
   var LEGACY_KEYS = ['orbit.db.v3', 'orbit.db.v2', 'orbit.db.v1', 'taskflow.db.v1'];   // ชื่อ/เวอร์ชันเดิม
-  var SCHEMA = 16;
+  var SCHEMA = 17;
+
+  /* 4b — ค่าคงที่ที่ migrate() ใช้ (ต้องประกาศก่อน hydrate() ทำงาน) */
+  var TIME_CATS_DEFAULT = ['งานลูกค้า', 'งานภายใน', 'ประชุม', 'อบรม'];
+  var TS_STATES = [
+    { id: 'draft', label: 'ร่าง', color: '#9ca0a8' },
+    { id: 'submitted', label: 'รอตรวจ', color: '#f5a623' },
+    { id: 'approved', label: 'อนุมัติแล้ว', color: '#37c5ab' },
+    { id: 'rejected', label: 'ตีกลับ', color: '#e8384f' }
+  ];
+  var CAP_DEFAULT = { count: 3, h: 8, pt: 5, pct: 100 };
+  var REPORT_MAX = 100, REPORT_W_MAX = 20, AWAY_MAX = 40;
+  var ISO_RE = /^\d{4}-\d\d-\d\d$/;
 
   /* ---------- utilities ---------- */
 
@@ -662,6 +674,7 @@
     });
     migrate3c(d);
     migrate4a(d);
+    migrate4b(d);
     prunePersonal(d);
     if (!d.users.some(function (u) { return u.role === 'admin'; })) {
       var firstUser = d.users.filter(function (u) { return u.id === d.currentUserId; })[0] || d.users[0];
@@ -2295,7 +2308,10 @@
     { id: 'dashboard', label: 'สรุปผล',   icon: 'chart',      desc: 'ตัวเลขรวมและความคืบหน้า' },
     { id: 'messages',  label: 'ประกาศ',    icon: 'send',       desc: 'เรื่องของทั้งโปรเจกต์ที่ไม่ได้ผูกกับงานชิ้นไหน' },
     { id: 'pages',     label: 'หน้า',      icon: 'note',       desc: 'เอกสารของโปรเจกต์ บรีฟ สรุปประชุม คู่มือ' },
-    { id: 'files',     label: 'ไฟล์',     icon: 'paperclip',  desc: 'ไฟล์แนบทุกชิ้นในโปรเจกต์รวมไว้ที่เดียว' }
+    { id: 'files',     label: 'ไฟล์',     icon: 'paperclip',  desc: 'ไฟล์แนบทุกชิ้นในโปรเจกต์รวมไว้ที่เดียว' },
+    /* 4b — ภาระงานของคนในโปรเจกต์ และสื่อฝัง (เปิดเองเมื่อต้องการ ไม่ขึ้นเป็นแท็บให้โปรเจกต์ที่ยังไม่เคยเลือกมุมมอง) */
+    { id: 'workload',  label: 'ภาระงาน',  icon: 'users',      desc: 'ใครรับงานเท่าไรในแต่ละวัน/สัปดาห์ เทียบกับความจุ' },
+    { id: 'embed',     label: 'สื่อฝัง',    icon: 'link',       desc: 'ฝัง Google Docs/Sheets/Slides, Figma, Miro, Loom, YouTube หรือไฟล์ Microsoft 365', optIn: true }
   ];
 
   /* ---------- ประกาศของโปรเจกต์ ----------
@@ -2374,7 +2390,7 @@
   function projectViews(projectId) {
     var p = project(projectId);
     var ids = p && p.views;
-    if (!ids || !ids.length) return PROJECT_VIEWS.map(function (v) { return v.id; });
+    if (!ids || !ids.length) return PROJECT_VIEWS.filter(function (v) { return !v.optIn; }).map(function (v) { return v.id; });
     /* เรียงตามลำดับมาตรฐานเสมอ ไม่ใช่ตามลำดับที่กดเปิด
      * ไม่งั้นแท็บจะสลับที่ทุกครั้งที่เพิ่มมุมมอง แล้วคนกดผิดเพราะจำตำแหน่งเดิมไว้ */
     return PROJECT_VIEWS.map(function (v) { return v.id; })
@@ -6030,6 +6046,10 @@
   function setAway(until, note) {
     var u = me();
     if (!u) return;
+    /* 4b — สถานะไม่อยู่เป็นหลายช่วงแล้ว ปุ่มเดิม "ไม่อยู่ถึงวันที่" = แทนช่วงที่ครอบวันนี้ด้วยช่วงใหม่ที่เริ่มวันนี้ */
+    var td0 = today();
+    u.awayRanges = (u.awayRanges || []).filter(function (r) { return !((!r.from || r.from <= td0) && r.to >= td0); });
+    if (until) u.awayRanges.push({ id: uid('aw'), from: td0, to: until, note: note || '' });
     u.away = until ? { until: until, note: note || '' } : null;
     /* ไม่ใส่ target เพราะเป็นการกระทำกับตัวเอง ชื่อผู้ทำอยู่หน้าบรรทัดแล้ว
      * ถ้าใส่ด้วยจะอ่านว่า "สมชาย ได้ตั้งสถานะไม่อยู่ สมชาย" */
@@ -6037,10 +6057,9 @@
     commit();
   }
 
-  function isAway(userId) {
-    var u = user(userId);
-    if (!u || !u.away || !u.away.until) return false;
-    return u.away.until >= today();
+  /** 4b — ไม่อยู่ในวันนั้นไหม (ไม่ระบุ = วันนี้) ดูทุกช่วงใน awayRanges — ใช้ทั้งป้าย การมอบหมายแบบวนรอบ และภาระงาน */
+  function isAway(userId, date) {
+    return !!awayOn(userId, date);
   }
 
   /* ======================================================================
@@ -9443,6 +9462,7 @@
       case 'type': return [t.ctype || t.type || 'task'];
       case 'cstatus': return [t.cstatus || ''];
       case 'completed': return [t.completed ? 'done' : 'open'];
+      case 'project': return [m ? m.projectId : ''];         // 4b — รายงานข้ามโปรเจกต์
     }
     if (by && by.indexOf('field:') === 0) {
       var v = fieldValue(t.id, by.slice(6));
@@ -9459,6 +9479,8 @@
     if (by === 'completed') return [{ key: 'open', label: L('ยังไม่เสร็จ'), color: 'var(--chart-1)' },
       { key: 'done', label: L('เสร็จแล้ว'), color: 'var(--ok)' }];
     if (by === 'section') out = ((p && p.sections) || []).map(function (s) { return { key: s.id, label: s.name }; });
+    else if (by === 'project') out = Object.keys(seen).filter(function (k) { return k && project(k); })
+      .map(function (k) { var pp = project(k); return { key: k, label: pp.name, color: pp.color }; });
     else if (by === 'priority') out = PRIORITIES.filter(function (x) { return x.id !== 'none'; })
       .map(function (x) { return { key: x.id, label: L(x.label), color: x.color }; });
     else if (by === 'assignee' || (by.indexOf('field:') === 0 && (fieldDef(by.slice(6)) || {}).type === 'person')) {
@@ -10053,14 +10075,17 @@
     var t = task(taskId);
     var mins = Math.round(+(e && e.minutes) || 0);
     if (!t || mins <= 0) return null;
+    var who0 = (e.userId && user(e.userId)) ? e.userId : db.currentUserId;
+    var day0 = /^\d{4}-\d\d-\d\d$/.test(e.date || '') ? e.date : today();
+    if (tsLocked(who0, day0)) return null;           // 4b — สัปดาห์ที่ส่ง/อนุมัติไทม์ชีตแล้วถูกล็อก
     snapshot('บันทึกเวลา');
-    var x = { id: uid('te'), userId: (e.userId && user(e.userId)) ? e.userId : db.currentUserId,
-      date: /^\d{4}-\d\d-\d\d$/.test(e.date || '') ? e.date : today(), minutes: Math.min(mins, 24 * 60 * 7),
-      note: String(e.note || '').slice(0, 500), billable: null, category: null };
+    var x = { id: uid('te'), userId: who0, date: day0, minutes: Math.min(mins, 24 * 60 * 7),
+      note: String(e.note || '').slice(0, 500), billable: e.billable == null ? null : !!e.billable,
+      category: e.category ? String(e.category).slice(0, 60) : null };
     t.time = t.time || [];
     t.time.push(x);
     log(taskId, 'บันทึกเวลา {v}', { v: fmtMinutes(x.minutes) });
-    autoFire('timelog', taskId, { minutes: x.minutes });
+    autoFire('timelog', taskId, { minutes: x.minutes, billable: x.billable });
     commit();
     return x;
   }
@@ -10068,6 +10093,7 @@
     var t = task(taskId);
     var e = t && (t.time || []).filter(function (x) { return x.id === entryId; })[0];
     if (!e || (e.userId !== db.currentUserId && !can('write', taskId))) return false;
+    if (tsLocked(e.userId, e.date)) return false;
     snapshot('ลบรายการเวลา');
     t.time = t.time.filter(function (x) { return x !== e; });
     commit();
@@ -11840,5 +11866,866 @@
     checkGoalReminders: checkGoalReminders, taskDone: taskDone
   };
   Object.keys(X4B).forEach(function (k) { global.Store[k] = X4B[k]; });
+
+  /* ======================================================================
+   * 4b — ภาระงาน (workload) ช่วงไม่อยู่หลายช่วง ความจุ ไทม์ชีต รายงานรวม
+   * ====================================================================== */
+
+  /* ค่าคงที่ของ 4b อยู่บนสุดของไฟล์ (ใกล้ SCHEMA) เพราะ migrate() ถูกเรียกตอนโหลดก่อนถึงบรรทัดนี้ */
+  function migrate4b(d) {
+    d.users.forEach(function (u) {
+      if (!Array.isArray(u.awayRanges)) {
+        u.awayRanges = [];
+        /* สถานะไม่อยู่แบบเดิมมีแค่ "ถึงวันไหน" — กลายเป็นช่วงที่ไม่มีวันเริ่ม (นับว่าเริ่มไปแล้ว) */
+        if (u.away && u.away.until) u.awayRanges.push({ id: 'aw_' + String(u.id).slice(-8) + '_0', from: null, to: u.away.until, note: u.away.note || '' });
+      }
+      u.awayRanges = u.awayRanges.filter(function (r) { return r && r.id && ISO_RE.test(r.to || ''); });
+      u.awayRanges.forEach(function (r) { if (r.from && !ISO_RE.test(r.from)) r.from = null; r.note = String(r.note || ''); });
+      u.away = awayMirror(u);
+    });
+    d.timesheets = Array.isArray(d.timesheets) ? d.timesheets.filter(function (x) { return x && x.id && x.userId && ISO_RE.test(x.week || ''); }) : [];
+    d.timesheets.forEach(function (x) {
+      if (!TS_STATES.some(function (s) { return s.id === x.status; })) x.status = 'draft';
+      x.hist = Array.isArray(x.hist) ? x.hist.slice(-30) : [];
+    });
+    d.reports = Array.isArray(d.reports) ? d.reports.filter(function (r) { return r && r.id; }) : [];
+    d.reports.forEach(normalizeReport);
+    d.settings = d.settings || {};
+    if (!Array.isArray(d.settings.timeCats)) d.settings.timeCats = TIME_CATS_DEFAULT.slice();
+    if (!Array.isArray(d.settings.tsReviewers)) d.settings.tsReviewers = [];
+    d.projects.forEach(function (p) {
+      p.embeds = Array.isArray(p.embeds) ? p.embeds.filter(function (e) { return e && e.id && e.url; }) : [];
+    });
+  }
+
+  /* ---------- ช่วงไม่อยู่ (หลายช่วง) ----------
+   * user.awayRanges = [{ id, from (null = เริ่มไปแล้ว), to, note }]
+   * user.away ยังเก็บไว้เป็นสำเนาของช่วงที่ครอบวันนี้ ({ until, note }) ให้ข้อมูล/โค้ดเดิมอ่านได้ */
+  function awayMirror(u, onDay) {
+    var d = onDay || today();
+    var r = (u.awayRanges || []).filter(function (x) { return (!x.from || x.from <= d) && x.to >= d; })[0];
+    return r ? { until: r.to, note: r.note || '' } : null;
+  }
+  function awayRanges(userId) {
+    var u = user(userId || db.currentUserId);
+    return u && Array.isArray(u.awayRanges) ? u.awayRanges : [];
+  }
+  /** ช่วงที่ครอบวันนั้น (ไม่ระบุ = วันนี้) หรือ null */
+  function awayOn(userId, date) {
+    var d = date || today(), rs = awayRanges(userId);
+    for (var i = 0; i < rs.length; i++) if ((!rs[i].from || rs[i].from <= d) && rs[i].to >= d) return rs[i];
+    return null;
+  }
+  /** สำหรับป้าย "ไม่อยู่ถึง …" { until, note, from } หรือ null */
+  function awayNow(userId) {
+    var r = awayOn(userId);
+    return r ? { until: r.to, note: r.note || '', from: r.from } : null;
+  }
+  function canEditPerson(userId) { return isActive() && !!user(userId) && (userId === db.currentUserId || isAdmin()); }
+  function addAwayRange(userId, from, to, note) {
+    var u = user(userId);
+    if (!u || !canEditPerson(userId) || !ISO_RE.test(to || '') || (from && !ISO_RE.test(from))) return null;
+    if (from && from > to) { var x = from; from = to; to = x; }
+    snapshot('ตั้งช่วงไม่อยู่');
+    var r = { id: uid('aw'), from: from || null, to: to, note: String(note || '').trim().slice(0, 140) };
+    var td = today();
+    /* ช่วงที่จบไปนานแล้วตัดทิ้งเมื่อเกินจำนวน เก็บที่ยังไม่จบไว้ก่อนเสมอ */
+    u.awayRanges = (u.awayRanges || []).concat([r]).sort(function (a, b) { return (a.from || '') < (b.from || '') ? -1 : 1; });
+    while (u.awayRanges.length > AWAY_MAX) {
+      var old = u.awayRanges.filter(function (y) { return y.to < td; })[0];
+      if (!old) break;
+      u.awayRanges = u.awayRanges.filter(function (y) { return y !== old; });
+    }
+    u.away = awayMirror(u);
+    audit('user.away', userId === db.currentUserId ? null : u.name, (r.from || '…') + ' – ' + r.to);
+    commit();
+    return r;
+  }
+  function removeAwayRange(userId, id) {
+    var u = user(userId);
+    if (!u || !canEditPerson(userId) || !(u.awayRanges || []).some(function (r) { return r.id === id; })) return false;
+    snapshot('ลบช่วงไม่อยู่');
+    u.awayRanges = u.awayRanges.filter(function (r) { return r.id !== id; });
+    u.away = awayMirror(u);
+    audit('user.back', userId === db.currentUserId ? null : u.name, null);
+    commit();
+    return true;
+  }
+  /** วันในช่วง [from, to] ที่ไม่อยู่ { iso: true } */
+  function awayDays(userId, from, to) {
+    var out = {};
+    awayRanges(userId).forEach(function (r) {
+      var a = r.from && r.from > from ? r.from : from, b = r.to < to ? r.to : to;
+      for (var d = a, g = 0; d <= b && g < 800; d = addDays(d, 1), g++) out[d] = true;
+    });
+    return out;
+  }
+
+  /* ---------- ความจุงานต่อวัน ----------
+   * user.prefs.capacity = { count, h, pt, pct } — จำนวนงาน / ชั่วโมง / พอยต์ / เปอร์เซ็นต์ ต่อวันทำงาน
+   * เจ้าตัวกับผู้ดูแลระบบแก้ได้ */
+  function capacityOf(userId) {
+    var u = user(userId), c = (u && u.prefs && u.prefs.capacity) || {};
+    var out = {};
+    Object.keys(CAP_DEFAULT).forEach(function (k) {
+      var v = +c[k];
+      out[k] = isFinite(v) && v >= 0 && c[k] !== null && c[k] !== '' && c[k] !== undefined ? v : CAP_DEFAULT[k];
+    });
+    return out;
+  }
+  function setCapacity(userId, patch) {
+    var u = user(userId);
+    if (!u || !canEditPerson(userId) || !patch) return false;
+    var cur = capacityOf(userId), next = {};
+    Object.keys(CAP_DEFAULT).forEach(function (k) {
+      var v = k in patch ? +patch[k] : cur[k];
+      next[k] = isFinite(v) ? Math.max(0, Math.min(1000, Math.round(v * 100) / 100)) : cur[k];
+    });
+    if (JSON.stringify(next) === JSON.stringify(cur)) return false;
+    snapshot('ตั้งความจุงาน');
+    u.prefs = u.prefs || {};
+    u.prefs.capacity = next;
+    audit('user.capacity', u.name, '{h} ชม./วัน · {c} งาน/วัน', { h: next.h, c: next.count });
+    commit();
+    return true;
+  }
+
+  /* ---------- ภาระงาน ----------
+   * scope = { kind: 'project', id } | { kind: 'portfolio', id } | { kind: 'all', team: '' | teamId }
+   * cfg   = { measure: 'count' | 'effort', src: 'estimate' | 'field:<id>', unit: 'h' | 'pt' | 'pct', zoom: 'day' | 'week' | 'month', anchor }
+   * งานที่ยังไม่เสร็จ มีผู้รับผิดชอบ และมีวัน — นับต่อวัน แล้วรวมเป็นช่องตามระดับซูม
+   * แบบนับงาน: งานหนึ่งชิ้นนับ 1 ทุกวันทำงานในช่วงของมัน
+   * แบบแรงงาน: ชั่วโมง/พอยต์กระจายเท่า ๆ กันบนวันทำงานในช่วง ส่วน % คือสัดส่วนต่อวัน (ไม่กระจาย) */
+  var WL_ZOOMS = ['day', 'week', 'month'];
+  function wlDefaultCfg() { return { measure: 'count', src: 'estimate', unit: 'h', zoom: 'week', anchor: null }; }
+  function wlScopeKey(scope) { return scope.kind === 'all' ? 'all' : scope.kind + ':' + scope.id; }
+  /** ตั้งค่าที่จำไว้ต่อคนต่อขอบเขต (เงียบ ๆ ไม่มีจุดย้อนกลับ) */
+  function wlCfg(scope) {
+    var st = personalOf(), c = (st.wl && st.wl[wlScopeKey(scope)]) || {};
+    var out = wlDefaultCfg();
+    if (c.measure === 'effort') out.measure = 'effort';
+    if (typeof c.src === 'string' && (c.src === 'estimate' || c.src.indexOf('field:') === 0)) out.src = c.src;
+    if (['h', 'pt', 'pct'].indexOf(c.unit) >= 0) out.unit = c.unit;
+    if (WL_ZOOMS.indexOf(c.zoom) >= 0) out.zoom = c.zoom;
+    if (typeof c.team === 'string') out.team = c.team;
+    return out;
+  }
+  function setWlCfg(scope, patch) {
+    if (!me()) return false;
+    var st = personalOf();
+    if (!isObj(st.wl)) st.wl = {};
+    var k = wlScopeKey(scope), cur = st.wl[k] || {};
+    Object.keys(patch || {}).forEach(function (x) { if (x !== 'anchor') cur[x] = patch[x]; });
+    st.wl[k] = cur;
+    persist();
+    return true;
+  }
+  function wlProjects(scope) {
+    if (scope.kind === 'project') return project(scope.id) && projectAccess(scope.id) ? [project(scope.id)] : [];
+    if (scope.kind === 'portfolio') return portfolio(scope.id) ? allProjectsUnder(scope.id) : [];
+    if (scope.kind === 'team' || (scope.kind === 'all' && scope.team)) return teamProjects(scope.team || scope.id);
+    return visibleProjects();
+  }
+  function taskWorkMode(t) {
+    var root = rootOf(t), ms = root ? (index().memByTask[root.id] || []) : [];
+    var p = ms.length ? project(ms[0].projectId) : null;
+    var m = p && p.workDays;
+    return !m || m === 'all' ? 'mon-fri' : m;
+  }
+  /** วันทำงานในช่วงของงาน (ไม่มีวันทำงานเลย = ใช้ทุกวันในช่วง) */
+  function taskDays(t) {
+    var s = t.startOn || t.dueOn, e = t.dueOn || t.startOn;
+    if (!s) return [];
+    if (s > e) { var x = s; s = e; e = x; }
+    if (daysBetween(s, e) > 400) s = addDays(e, -400);
+    var mode = taskWorkMode(t), days = [], all = [];
+    for (var d = s; d <= e; d = addDays(d, 1)) { all.push(d); if (isWorkday(d, mode)) days.push(d); }
+    return days.length ? days : all;
+  }
+  /** ค่าแรงงานของงานหนึ่งชิ้น — null = ไม่มีค่า (ไม่นับในแบบแรงงาน) */
+  function effortOf(t, cfg) {
+    if (cfg.measure !== 'effort') return 1;
+    if (cfg.src === 'estimate') return t.estimate == null ? null : t.estimate / 60;
+    var fid = String(cfg.src || '').slice(6);
+    var v = fid ? fieldValue(t.id, fid) : null;
+    return v === null || v === undefined || v === '' || isNaN(+v) ? null : +v;
+  }
+  /** ฟิลด์ตัวเลขที่ใช้เป็นแรงงานได้ (ของโปรเจกต์ในขอบเขต + คลังฟิลด์) */
+  function wlEffortFields(scope) {
+    var seen = {}, out = [];
+    var add = function (f, p) {
+      if (!f || seen[f.id] || fieldKind(f) !== 'number') return;
+      seen[f.id] = true;
+      var lib = (db.fieldLib || []).some(function (x) { return x.id === f.id; });
+      out.push({ id: f.id, name: f.name + (!lib && p && scope.kind !== 'project' ? ' (' + p.name + ')' : ''), lib: lib });
+    };
+    (db.fieldLib || []).forEach(function (f) { add(f, null); });
+    /* ภาระงานรวมทั้งองค์กรใช้ได้เฉพาะคลังฟิลด์ — ฟิลด์ของโปรเจกต์เดียวมีค่าแค่ในโปรเจกต์นั้น */
+    if (scope.kind !== 'all' || scope.team) {
+      wlProjects(scope).forEach(function (p) { (p.fields || []).forEach(function (f) { add(fieldDef(f.id) || f, p); }); });
+    }
+    return out;
+  }
+  function wlCols(zoom, anchor) {
+    var a = anchor && ISO_RE.test(anchor) ? anchor : today(), cols = [], i, s;
+    var mon = function (d) { return addDays(d, -((new Date(d + 'T00:00:00').getDay() + 6) % 7)); };
+    if (zoom === 'day') {
+      s = mon(a);
+      for (i = 0; i < 21; i++) { var dd = addDays(s, i); cols.push({ key: dd, from: dd, to: dd }); }
+    } else if (zoom === 'month') {
+      s = a.slice(0, 8) + '01';
+      for (i = 0; i < 6; i++) { var m0 = addMonths(s, i); cols.push({ key: m0, from: m0, to: addDays(addMonths(m0, 1), -1) }); }
+    } else {
+      s = mon(a);
+      for (i = 0; i < 12; i++) { var w0 = addDays(s, i * 7); cols.push({ key: w0, from: w0, to: addDays(w0, 6) }); }
+    }
+    return cols;
+  }
+  function wlStep(zoom, anchor, dir) {
+    var a = anchor && ISO_RE.test(anchor) ? anchor : today();
+    if (!dir) return today();
+    if (zoom === 'day') return addDays(a, 7 * dir);
+    if (zoom === 'month') return addMonths(a, 3 * dir);
+    return addDays(a, 28 * dir);
+  }
+  /** งานในขอบเขต (ยังไม่เสร็จ มีผู้รับผิดชอบ มีวัน เห็นได้) รวมงานย่อยทุกชั้น ไม่ซ้ำ */
+  function wlTasks(scope) {
+    var out = [], seen = {};
+    var walk = function (t, g) {
+      if (seen[t.id]) return;
+      seen[t.id] = true;
+      if (!t.completed && t.assigneeId && (t.dueOn || t.startOn) && canSeeTask(t.id)) out.push(t);
+      if (g < 6) subtasks(t.id).forEach(function (s) { walk(s, g + 1); });
+    };
+    if (scope.kind === 'all' && !scope.team) {
+      db.tasks.forEach(function (t) {
+        if (seen[t.id]) return;
+        seen[t.id] = true;
+        if (!t.completed && t.assigneeId && (t.dueOn || t.startOn) && canSeeTask(t.id)) out.push(t);
+      });
+      return out;
+    }
+    wlProjects(scope).forEach(function (p) { tasksInProject(p.id).forEach(function (x) { walk(x.task, 0); }); });
+    return out;
+  }
+  /** คนที่แสดงเป็นแถว — ผู้รับผิดชอบงานในขอบเขต + สมาชิก (โปรเจกต์ที่มีรายชื่อ / ทีม) */
+  function wlPeople(scope, tasks) {
+    var seen = {}, out = [];
+    var add = function (u) { if (u && !seen[u] && user(u) && user(u).active !== false) { seen[u] = true; out.push(u); } };
+    if (scope.kind === 'project') projectMembers(scope.id).forEach(function (m) { add(m.userId); });
+    var tid = scope.kind === 'all' ? scope.team : null;
+    if (tid && team(tid)) team(tid).members.forEach(function (m) { add(m.u); });
+    tasks.forEach(function (t) { if (!tid || isTeamMember(tid, t.assigneeId)) add(t.assigneeId); });
+    if (scope.kind === 'all' && !tid) add(db.currentUserId);
+    return out.sort(function (a, b) {
+      if (a === db.currentUserId) return -1;
+      if (b === db.currentUserId) return 1;
+      return user(a).name.localeCompare(user(b).name);
+    });
+  }
+  function workload(scope, cfg) {
+    cfg = cfg || wlDefaultCfg();
+    var cols = wlCols(cfg.zoom, cfg.anchor);
+    var from = cols[0].from, to = cols[cols.length - 1].to;
+    var tasks = wlTasks(scope);
+    var people = wlPeople(scope, tasks);
+    var capKey = cfg.measure === 'effort' ? cfg.unit : 'count';
+    var noEffort = 0;
+    var rows = people.map(function (u) {
+      var cap = capacityOf(u)[capKey], away = awayDays(u, from, to);
+      var daily = {}, list = [], warn = [];
+      tasks.forEach(function (t) {
+        if (t.assigneeId !== u) return;
+        var days = taskDays(t);
+        if (!days.length || days[days.length - 1] < from || days[0] > to) return;
+        var e = effortOf(t, cfg);
+        if (e === null) { noEffort++; list.push({ t: t, s: t.startOn || t.dueOn, e: t.dueOn || t.startOn, v: null }); return; }
+        var per = cfg.measure === 'effort' && cfg.unit !== 'pct' ? e / days.length : e;
+        var hitAway = false;
+        days.forEach(function (d) {
+          if (d < from || d > to) return;
+          daily[d] = (daily[d] || 0) + per;
+          if (away[d]) hitAway = true;
+        });
+        var s0 = t.startOn || t.dueOn, e0 = t.dueOn || t.startOn;
+        list.push({ t: t, s: s0 < e0 ? s0 : e0, e: s0 < e0 ? e0 : s0, v: e });
+        if (hitAway) warn.push(t.id);
+      });
+      var cells = cols.map(function (c) {
+        var v = 0, capC = 0, awayN = 0, n = 0;
+        for (var d = c.from; d <= c.to; d = addDays(d, 1)) {
+          n++;
+          v += daily[d] || 0;
+          var wd = isWorkday(d, 'mon-fri');
+          if (away[d]) awayN++;
+          else if (wd) capC += cap;
+        }
+        v = Math.round(v * 100) / 100;
+        return { v: v, cap: Math.round(capC * 100) / 100, away: awayN, days: n, over: v > capC + 1e-9 && v > 0 };
+      });
+      list.sort(function (a, b) { return a.s < b.s ? -1 : a.s > b.s ? 1 : 0; });
+      return { uid: u, cells: cells, tasks: list, warn: warn, cap: cap,
+        over: cells.some(function (c) { return c.over; }) };
+    });
+    return { cols: cols, rows: rows, from: from, to: to, cfg: cfg, capKey: capKey, noEffort: noEffort };
+  }
+  /** ลากในภาระงาน — เลื่อนวัน (คงความยาวช่วง) และ/หรือเปลี่ยนผู้รับผิดชอบ ย้อนกลับได้ในครั้งเดียว */
+  function wlMove(taskId, delta, toUser) {
+    var t = task(taskId);
+    if (!t || !can('write', taskId)) return false;
+    delta = parseInt(delta, 10) || 0;
+    var reassign = toUser && toUser !== t.assigneeId && user(toUser);
+    if (!delta && !reassign) return false;
+    batch('ย้ายงานในภาระงาน', null, function () {
+      var patch = {};
+      if (delta) {
+        if (t.startOn) patch.startOn = addDays(t.startOn, delta);
+        if (t.dueOn) patch.dueOn = addDays(t.dueOn, delta);
+      }
+      if (reassign) patch.assigneeId = toUser;
+      updateTask(taskId, patch);
+    });
+    return true;
+  }
+
+  /* ---------- ไทม์ชีต ----------
+   * db.timesheets = [{ id, userId, week (วันจันทร์), status: draft|submitted|approved|rejected, submittedAt, minutes,
+   *                    reviewedBy, reviewedAt, note, hist: [{ s, by, at, note }] }]
+   * ส่งแล้วหรืออนุมัติแล้ว = ล็อก รายการเวลาของคนนั้นในสัปดาห์นั้นแก้/เพิ่ม/ลบไม่ได้ (ดึงกลับได้ก่อนมีคนตรวจ)
+   * ผู้ตรวจ = ผู้ดูแลระบบ + รายชื่อผู้ตรวจที่ตั้งไว้ + ผู้ดูแลโปรเจกต์ของงานที่ลงเวลาไว้ในสัปดาห์นั้น */
+  function weekOf(d) {
+    d = d && ISO_RE.test(d) ? d : today();
+    return addDays(d, -((new Date(d + 'T00:00:00').getDay() + 6) % 7));
+  }
+  function tsFind(userId, week) {
+    return (db.timesheets || []).filter(function (x) { return x.userId === userId && x.week === week; })[0] || null;
+  }
+  function tsById(id) { return (db.timesheets || []).filter(function (x) { return x.id === id; })[0] || null; }
+  function tsStatus(userId, week) { var x = tsFind(userId, week); return x ? x.status : 'draft'; }
+  function tsLocked(userId, date) {
+    if (!date || !ISO_RE.test(date)) return false;
+    var x = tsFind(userId, weekOf(date));
+    return !!x && (x.status === 'submitted' || x.status === 'approved');
+  }
+  function weekEntries(userId, week) {
+    var end = addDays(week, 6), out = [];
+    db.tasks.forEach(function (t) {
+      (t.time || []).forEach(function (e) {
+        if (e.userId === userId && e.date >= week && e.date <= end) out.push({ t: t, e: e });
+      });
+    });
+    return out;
+  }
+  function taskProjectName(t) {
+    var r = rootOf(t), ms = r ? (index().memByTask[r.id] || []) : [];
+    var p = ms.length ? project(ms[0].projectId) : null;
+    return p ? p.name : '';
+  }
+  /** ตารางรายสัปดาห์ { days[7], rows[{ t, see, project, cells[7], total, billable: true|false|null|'mixed', category }], col[7], total, billable, ts } */
+  function timesheetGrid(userId, week, extraIds) {
+    week = weekOf(week);
+    var days = [];
+    for (var i = 0; i < 7; i++) days.push(addDays(week, i));
+    var rows = {}, order = [];
+    var row = function (t) {
+      if (!rows[t.id]) {
+        rows[t.id] = { t: t, see: canSeeTask(t.id), project: taskProjectName(t), cells: [0, 0, 0, 0, 0, 0, 0], total: 0,
+          billable: undefined, category: undefined, n: 0 };
+        order.push(t.id);
+      }
+      return rows[t.id];
+    };
+    weekEntries(userId, week).forEach(function (x) {
+      var r = row(x.t), k = daysBetween(week, x.e.date);
+      r.cells[k] += +x.e.minutes || 0;
+      r.total += +x.e.minutes || 0;
+      r.n++;
+      var b = x.e.billable == null ? null : !!x.e.billable;
+      r.billable = r.billable === undefined ? b : (r.billable === b ? b : 'mixed');
+      var c = x.e.category || '';
+      r.category = r.category === undefined ? c : (r.category === c ? c : '*');
+    });
+    (extraIds || []).forEach(function (id) { var t = task(id); if (t && !rows[id]) row(t); });
+    var col = [0, 0, 0, 0, 0, 0, 0], total = 0, bill = 0;
+    var list = order.map(function (id) {
+      var r = rows[id];
+      if (r.billable === undefined) r.billable = null;
+      if (r.category === undefined) r.category = '';
+      r.cells.forEach(function (m, k) { col[k] += m; });
+      total += r.total;
+      if (r.billable === true) bill += r.total;
+      return r;
+    });
+    weekEntries(userId, week).forEach(function (x) { if (x.e.billable === true && rows[x.t.id] && rows[x.t.id].billable === 'mixed') bill += +x.e.minutes || 0; });
+    return { userId: userId, week: week, days: days, rows: list, col: col, total: total, billable: bill,
+      ts: tsFind(userId, week), status: tsStatus(userId, week), locked: tsLocked(userId, week) };
+  }
+  /** ตั้งเวลารวมของช่องตาราง (งาน × วัน) ของตัวเอง — ปรับรายการล่าสุด เพิ่มใหม่ หรือลบเมื่อเป็น 0 */
+  function setTimeCell(taskId, date, minutes, meta) {
+    var t = task(taskId), me0 = db.currentUserId;
+    if (!t || !ISO_RE.test(date || '') || !can('comment', taskId) || tsLocked(me0, date)) return false;
+    minutes = Math.max(0, Math.min(24 * 60, Math.round(+minutes || 0)));
+    t.time = t.time || [];
+    var mine = t.time.filter(function (e) { return e.userId === me0 && e.date === date; });
+    var cur = mine.reduce(function (a, e) { return a + (+e.minutes || 0); }, 0);
+    if (cur === minutes) return false;
+    snapshot('แก้ไทม์ชีต');
+    if (!minutes) t.time = t.time.filter(function (e) { return mine.indexOf(e) < 0; });
+    else if (!mine.length) {
+      var x = { id: uid('te'), userId: me0, date: date, minutes: minutes, note: '',
+        billable: meta && meta.billable != null ? !!meta.billable : null, category: (meta && meta.category) || null };
+      t.time.push(x);
+      log(taskId, 'บันทึกเวลา {v}', { v: fmtMinutes(minutes) });
+      autoFire('timelog', taskId, { minutes: minutes, billable: x.billable });
+    } else {
+      var diff = minutes - cur, last = mine[mine.length - 1];
+      if ((+last.minutes || 0) + diff > 0) last.minutes = (+last.minutes || 0) + diff;
+      else {
+        mine[0].minutes = minutes;
+        t.time = t.time.filter(function (e) { return mine.indexOf(e) <= 0; });
+      }
+    }
+    commit();
+    return true;
+  }
+  /** แก้รายการเวลา (เจ้าของ หรือคนที่แก้งานได้) — billable / category / note / minutes / date */
+  function updateTimeEntry(taskId, entryId, patch) {
+    var t = task(taskId);
+    var e = t && (t.time || []).filter(function (x) { return x.id === entryId; })[0];
+    if (!e || !patch || (e.userId !== db.currentUserId && !can('write', taskId))) return false;
+    if (tsLocked(e.userId, e.date) || (patch.date && tsLocked(e.userId, patch.date))) return false;
+    snapshot('แก้รายการเวลา');
+    if ('billable' in patch) e.billable = patch.billable === null ? null : !!patch.billable;
+    if ('category' in patch) e.category = patch.category ? String(patch.category).slice(0, 60) : null;
+    if ('note' in patch) e.note = String(patch.note || '').slice(0, 500);
+    if ('minutes' in patch && +patch.minutes > 0) e.minutes = Math.min(24 * 60 * 7, Math.round(+patch.minutes));
+    if (patch.date && ISO_RE.test(patch.date)) e.date = patch.date;
+    commit();
+    return true;
+  }
+  /** ตั้งเก็บเงินได้/หมวดให้รายการของตัวเองทั้งแถว (งานเดียวในสัปดาห์นั้น) */
+  function setTimeRowMeta(taskId, week, patch) {
+    var t = task(taskId), me0 = db.currentUserId;
+    week = weekOf(week);
+    if (!t || !patch || tsLocked(me0, week)) return false;
+    var end = addDays(week, 6);
+    var list = (t.time || []).filter(function (e) { return e.userId === me0 && e.date >= week && e.date <= end; });
+    if (!list.length) return false;
+    snapshot('แก้ไทม์ชีต');
+    list.forEach(function (e) {
+      if ('billable' in patch) e.billable = patch.billable === null ? null : !!patch.billable;
+      if ('category' in patch) e.category = patch.category || null;
+    });
+    commit();
+    return true;
+  }
+  function tsReviewersFor(x) {
+    var out = {};
+    db.users.forEach(function (u) { if (u.role === 'admin' && u.active !== false) out[u.id] = true; });
+    ((db.settings || {}).tsReviewers || []).forEach(function (u) { if (user(u)) out[u] = true; });
+    var projs = {};
+    weekEntries(x.userId, x.week).forEach(function (y) {
+      var r = rootOf(y.t);
+      (index().memByTask[r ? r.id : y.t.id] || []).forEach(function (m) { projs[m.projectId] = true; });
+    });
+    Object.keys(projs).forEach(function (pid) {
+      db.users.forEach(function (u) { if (u.active !== false && projectAccess(pid, u.id) === 'admin') out[u.id] = true; });
+    });
+    delete out[x.userId];
+    return Object.keys(out);
+  }
+  function canReviewTimesheet(x) {
+    if (typeof x === 'string') x = tsById(x);
+    if (!x || !isActive()) return false;
+    if (x.userId === db.currentUserId) return false;
+    return isAdmin() || tsReviewersFor(x).indexOf(db.currentUserId) >= 0;
+  }
+  function submitTimesheet(week) {
+    var me0 = db.currentUserId;
+    week = weekOf(week);
+    if (!isActive()) return null;
+    var x = tsFind(me0, week);
+    if (x && (x.status === 'submitted' || x.status === 'approved')) return null;
+    var list = weekEntries(me0, week);
+    if (!list.length) return 'empty';
+    snapshot('ส่งไทม์ชีต');
+    var now = new Date().toISOString();
+    if (!x) { x = { id: uid('ts'), userId: me0, week: week, status: 'draft', hist: [] }; db.timesheets = db.timesheets || []; db.timesheets.push(x); }
+    x.status = 'submitted';
+    x.submittedAt = now;
+    x.minutes = list.reduce(function (a, y) { return a + (+y.e.minutes || 0); }, 0);
+    x.reviewedBy = null; x.reviewedAt = null; x.note = '';
+    x.hist.push({ s: 'submitted', by: me0, at: now });
+    notifyOnly(null, tsReviewersFor(x), 'ส่งไทม์ชีตสัปดาห์ {w} รอตรวจ ({h})', 'timesheet', { w: week, h: fmtMinutes(x.minutes) }, false, { route: 'ts:' + x.id });
+    audit('time.submit', null, week);
+    commit();
+    return x;
+  }
+  function recallTimesheet(week) {
+    var x = tsFind(db.currentUserId, weekOf(week));
+    if (!x || x.status !== 'submitted') return false;
+    snapshot('ดึงไทม์ชีตกลับ');
+    x.status = 'draft';
+    x.hist.push({ s: 'recalled', by: db.currentUserId, at: new Date().toISOString() });
+    audit('time.recall', null, x.week);
+    commit();
+    return true;
+  }
+  function reviewTimesheet(id, approve, note) {
+    var x = tsById(id);
+    if (!x || x.status !== 'submitted' || !canReviewTimesheet(x)) return false;
+    snapshot(approve ? 'อนุมัติไทม์ชีต' : 'ตีกลับไทม์ชีต');
+    var now = new Date().toISOString();
+    x.status = approve ? 'approved' : 'rejected';
+    x.reviewedBy = db.currentUserId;
+    x.reviewedAt = now;
+    x.note = String(note || '').slice(0, 500);
+    x.hist.push({ s: x.status, by: db.currentUserId, at: now, note: x.note });
+    if (x.hist.length > 30) x.hist = x.hist.slice(-30);
+    notifyOnly(null, [x.userId], approve ? 'อนุมัติไทม์ชีตสัปดาห์ {w} แล้ว' : 'ตีกลับไทม์ชีตสัปดาห์ {w}', 'timesheet', { w: x.week }, false, { route: 'ts:' + x.id });
+    var u = user(x.userId);
+    audit(approve ? 'time.approve' : 'time.reject', u ? u.name : x.userId, x.week);
+    commit();
+    return true;
+  }
+  /** ปลดล็อกไทม์ชีตที่อนุมัติแล้ว (ผู้ดูแลระบบ) — กลับเป็นร่างให้เจ้าของแก้แล้วส่งใหม่ */
+  function reopenTimesheet(id) {
+    var x = tsById(id);
+    if (!x || x.status !== 'approved' || !isAdmin()) return false;
+    snapshot('ปลดล็อกไทม์ชีต');
+    x.status = 'draft';
+    x.hist.push({ s: 'reopened', by: db.currentUserId, at: new Date().toISOString() });
+    var u = user(x.userId);
+    audit('time.reopen', u ? u.name : x.userId, x.week);
+    commit();
+    return true;
+  }
+  /** คิวที่ฉันตรวจได้ (รอตรวจก่อน แล้วที่ตรวจล่าสุด) */
+  function tsReviewQueue() {
+    return (db.timesheets || []).filter(function (x) { return x.status !== 'draft' && canReviewTimesheet(x); })
+      .sort(function (a, b) {
+        var pa = a.status === 'submitted' ? 0 : 1, pb = b.status === 'submitted' ? 0 : 1;
+        return pa - pb || (a.week < b.week ? 1 : a.week > b.week ? -1 : 0);
+      }).slice(0, 200);
+  }
+  function myTimesheets() {
+    return (db.timesheets || []).filter(function (x) { return x.userId === db.currentUserId; })
+      .sort(function (a, b) { return a.week < b.week ? 1 : -1; });
+  }
+  function timeCats() { return ((db.settings || {}).timeCats || TIME_CATS_DEFAULT).slice(); }
+  function setTsSettings(patch) {
+    if (!isAdmin() || !patch) return false;
+    snapshot('ตั้งค่าไทม์ชีต');
+    db.settings = db.settings || {};
+    if (Array.isArray(patch.cats)) {
+      var seen = {};
+      db.settings.timeCats = patch.cats.map(function (c) { return String(c || '').trim().slice(0, 60); })
+        .filter(function (c) { if (!c || seen[c]) return false; seen[c] = true; return true; }).slice(0, 30);
+    }
+    if (Array.isArray(patch.reviewers)) db.settings.tsReviewers = patch.reviewers.filter(function (u) { return !!user(u); });
+    audit('settings.timesheet', null, null);
+    commit();
+    return true;
+  }
+  /** CSV ของรายการเวลา — userId/week ระบุ = ไทม์ชีตสัปดาห์เดียว; ไม่ระบุ = ทุกคนในช่วง from–to (ผู้ดูแล/ผู้ตรวจ) */
+  function timesheetCsv(opts) {
+    opts = opts || {};
+    var rows = [['date', 'user', 'email', 'project', 'task', 'task_id', 'minutes', 'hours', 'billable', 'category', 'note', 'week', 'status'].join(',')];
+    var from = opts.week ? weekOf(opts.week) : (opts.from || '0000-00-00');
+    var to = opts.week ? addDays(weekOf(opts.week), 6) : (opts.to || '9999-12-31');
+    var n = 0;
+    db.tasks.forEach(function (t) {
+      (t.time || []).forEach(function (e) {
+        if (e.date < from || e.date > to) return;
+        if (opts.userId && e.userId !== opts.userId) return;
+        var wk = weekOf(e.date), x = tsFind(e.userId, wk);
+        if (!opts.userId && e.userId !== db.currentUserId && !isAdmin() && !(x && canReviewTimesheet(x))) return;
+        var u = user(e.userId), see = canSeeTask(t.id) || e.userId === db.currentUserId || (x && canReviewTimesheet(x));
+        rows.push([e.date, u ? u.name : e.userId, u ? u.email || '' : '', see ? taskProjectName(t) : '', see ? t.name : '—', t.id, e.minutes,
+          ((+e.minutes || 0) / 60).toFixed(2), e.billable == null ? '' : (e.billable ? 'yes' : 'no'), e.category || '', see ? e.note || '' : '',
+          wk, x ? x.status : 'draft'].map(csvCell).join(','));
+        n++;
+      });
+    });
+    audit('time.export', null, 'ส่งออก {n} รายการเวลา', { n: n });
+    commit();
+    return '﻿' + rows.join('\r\n');
+  }
+  /* 3a — ทริกเกอร์ "บันทึกเวลา" (store ปลุก autoFire('timelog') ทุกครั้งที่มีรายการเวลาใหม่)
+   *   tr.min  อย่างน้อยกี่นาที (0 = ทุกครั้ง)   tr.bill  '' | 'yes' | 'no' */
+  autoRegister('trigger', { id: 'timelog', label: 'บันทึกเวลา', match: function (tr, ev) {
+    if (+tr.min && (+ev.info.minutes || 0) < +tr.min) return false;
+    if (tr.bill === 'yes' && ev.info.billable !== true) return false;
+    if (tr.bill === 'no' && ev.info.billable === true) return false;
+    return true;
+  } });
+
+  /* ---------- รายงานรวม (แดชบอร์ดข้ามโปรเจกต์) ----------
+   * report = { id:'rp_…', name, owner, scope: { k: org|team|portfolio|projects, id, ids[] },
+   *            share: { org: bool, users[], teams[] }, widgets: [widget + src: tasks|projects|goals|portfolios], by, at }
+   * ข้อมูลในกราฟคิดตามสิทธิ์ของคนที่เปิดดูเสมอ แชร์รายงานจึงไม่ทำให้ใครเห็นงานที่ตัวเองไม่มีสิทธิ์ */
+  var REPORT_SRCS = [['tasks', 'งาน'], ['projects', 'โปรเจกต์'], ['portfolios', 'พอร์ตโฟลิโอ'], ['goals', 'เป้าหมาย']];
+  var REPORT_SCOPES = [['org', 'ทั้งองค์กร'], ['team', 'ทีม'], ['portfolio', 'พอร์ตโฟลิโอ'], ['projects', 'เลือกโปรเจกต์']];
+  function normalizeReport(r) {
+    r.name = String(r.name || 'รายงาน').slice(0, 120);
+    r.scope = isObj(r.scope) ? r.scope : { k: 'org' };
+    if (['org', 'team', 'portfolio', 'projects'].indexOf(r.scope.k) < 0) r.scope.k = 'org';
+    r.scope.ids = Array.isArray(r.scope.ids) ? r.scope.ids : [];
+    if (!('id' in r.scope)) r.scope.id = null;
+    r.share = isObj(r.share) ? r.share : {};
+    r.share.org = !!r.share.org;
+    r.share.users = Array.isArray(r.share.users) ? r.share.users : [];
+    r.share.teams = Array.isArray(r.share.teams) ? r.share.teams : [];
+    r.widgets = Array.isArray(r.widgets) ? r.widgets.filter(function (w) { return w && w.id; }).map(normalizeRWidget).slice(0, REPORT_W_MAX) : [];
+    return r;
+  }
+  function normalizeRWidget(w) {
+    normalizeWidget(w);
+    if (['tasks', 'projects', 'portfolios', 'goals'].indexOf(w.src) < 0) w.src = 'tasks';
+    if (typeof w.q !== 'string') w.q = 'all';       // ตัวกรองด่วน all | open | done | overdue
+    return w;
+  }
+  function reports() { return db.reports || []; }
+  function report(id) { return reports().filter(function (r) { return r.id === id; })[0] || null; }
+  function canSeeReport(id) {
+    var r = typeof id === 'string' ? report(id) : id, me0 = db.currentUserId;
+    if (!r || !isActive()) return false;
+    if (r.owner === me0 || r.share.users.indexOf(me0) >= 0) return true;
+    if (r.share.teams.some(function (t) { return isTeamMember(t, me0); })) return true;
+    return r.share.org && role() !== 'guest';
+  }
+  function canEditReport(id) {
+    var r = typeof id === 'string' ? report(id) : id;
+    return !!r && can('write') && (r.owner === db.currentUserId || r.share.editors === true && canSeeReport(r));
+  }
+  function visibleReports() { return reports().filter(function (r) { return canSeeReport(r); }); }
+  function createReport(attrs) {
+    attrs = attrs || {};
+    if (!can('write') || reports().length >= REPORT_MAX * 10) return null;
+    var name = String(attrs.name || '').trim();
+    if (!name) return null;
+    snapshot('สร้างรายงาน');
+    db.reports = db.reports || [];
+    var ws = (attrs.widgets || defaultReportWidgets()).map(function (w) { w = clone(w); w.id = uid('rw'); return w; });
+    var r = normalizeReport({ id: uid('rp'), name: name, owner: db.currentUserId, scope: attrs.scope || { k: 'org' },
+      share: attrs.share || {}, widgets: ws, by: db.currentUserId, at: new Date().toISOString() });
+    db.reports.push(r);
+    audit('report.create', r.name, null);
+    commit();
+    return r;
+  }
+  function defaultReportWidgets() {
+    return [
+      { kind: 'number', title: 'งานที่ยังไม่เสร็จ', src: 'tasks', y: 'count', q: 'open' },
+      { kind: 'number', title: 'เลยกำหนด', src: 'tasks', y: 'count', q: 'overdue' },
+      { kind: 'stack', title: 'งานตามโปรเจกต์', src: 'tasks', x: 'project', split: 'completed', full: true },
+      { kind: 'donut', title: 'สถานะโปรเจกต์', src: 'projects', x: 'status' },
+      { kind: 'bar', title: 'ความคืบหน้าเป้าหมาย', src: 'goals', x: 'owner', y: 'avg:progress' }
+    ].map(normalizeRWidget);
+  }
+  function updateReport(id, patch) {
+    var r = report(id);
+    if (!r || !canEditReport(r) || !patch) return false;
+    snapshot('แก้รายงาน');
+    if ('name' in patch && String(patch.name || '').trim()) r.name = String(patch.name).trim().slice(0, 120);
+    if (patch.scope) r.scope = patch.scope;
+    if (patch.share && r.owner === db.currentUserId) r.share = patch.share;
+    normalizeReport(r);
+    if (patch.share) audit('report.share', r.name, null);
+    commit();
+    return true;
+  }
+  function deleteReport(id) {
+    var r = report(id);
+    if (!r || (r.owner !== db.currentUserId && !isAdmin())) return false;
+    snapshot('ลบรายงาน');
+    db.reports = reports().filter(function (x) { return x !== r; });
+    audit('report.delete', r.name, null);
+    commit();
+    return true;
+  }
+  function saveReportWidget(id, w) {
+    var r = report(id);
+    if (!r || !canEditReport(r) || !w) return null;
+    var c = normalizeRWidget(clone(w)), at = r.widgets.map(function (x) { return x.id; }).indexOf(c.id);
+    if (at < 0 && r.widgets.length >= REPORT_W_MAX) return null;
+    snapshot('แก้รายงาน');
+    if (at >= 0) r.widgets[at] = c;
+    else { c.id = uid('rw'); r.widgets.push(c); }
+    commit();
+    return c;
+  }
+  function deleteReportWidget(id, wid) {
+    var r = report(id);
+    if (!r || !canEditReport(r)) return false;
+    snapshot('ลบวิดเจ็ต');
+    r.widgets = r.widgets.filter(function (x) { return x.id !== wid; });
+    commit();
+    return true;
+  }
+  function moveReportWidget(id, wid, delta) {
+    var r = report(id);
+    if (!r || !canEditReport(r)) return false;
+    var i = r.widgets.map(function (x) { return x.id; }).indexOf(wid), j = i + delta;
+    if (i < 0 || j < 0 || j >= r.widgets.length) return false;
+    snapshot('จัดลำดับวิดเจ็ต');
+    var x = r.widgets.splice(i, 1)[0];
+    r.widgets.splice(j, 0, x);
+    commit();
+    return true;
+  }
+  /** โปรเจกต์ในขอบเขตของรายงาน (เฉพาะที่คนเปิดดูเห็นได้) */
+  function reportProjects(r) {
+    var s = r.scope;
+    if (s.k === 'team') return s.id && team(s.id) ? teamProjects(s.id) : [];
+    if (s.k === 'portfolio') return s.id && portfolio(s.id) ? allProjectsUnder(s.id) : [];
+    if (s.k === 'projects') return s.ids.map(project).filter(function (p) { return p && projectAccess(p.id); });
+    return visibleProjects();
+  }
+  var REPORT_Q = {
+    all: [], open: [{ f: 'completed', op: 'no', v: null }], done: [{ f: 'completed', op: 'yes', v: null }],
+    overdue: [{ f: 'due', op: 'overdue', v: null }, { f: 'completed', op: 'no', v: null }]
+  };
+  /** งานในขอบเขต [{ task, membership }] ไม่ซ้ำ ผ่านตัวกรองด่วน + ตัวกรองของวิดเจ็ต */
+  function reportTaskItems(r, w) {
+    var seen = {}, out = [], conds = (REPORT_Q[w.q] || []).concat(w.filters || []);
+    reportProjects(r).forEach(function (p) {
+      tasksInProject(p.id).forEach(function (x) {
+        if (seen[x.task.id] || !canSeeTask(x.task.id)) return;
+        seen[x.task.id] = true;
+        if (conds.every(function (c) { return matchCond(x.task, c, x.membership); })) out.push(x);
+      });
+    });
+    return out;
+  }
+  /** แถวของแหล่งข้อมูลที่ไม่ใช่งาน [{ kind, id, name, keys: { status, owner, team, period }, y: { count, progress, open, overdue } }] */
+  function reportRows(r, src) {
+    var out = [];
+    if (src === 'projects') {
+      reportProjects(r).forEach(function (p) {
+        var st = projectStats(p.id);
+        out.push({ kind: 'project', id: p.id, name: p.name, color: p.color,
+          keys: { status: p.status ? p.status.state : '', owner: p.owner || '' },
+          y: { count: 1, progress: st.percent || 0, open: Math.max(0, (st.total || 0) - (st.done || 0)), overdue: st.overdue || 0 } });
+      });
+    } else if (src === 'portfolios') {
+      var ids = null;
+      if (r.scope.k === 'portfolio' && r.scope.id) { ids = pfDescendants(r.scope.id); ids[r.scope.id] = true; }
+      portfolios().forEach(function (f) {
+        if (ids && !ids[f.id]) return;
+        if (portfolioHidden && portfolioHidden(f.id)) return;
+        var st = portfolioStats(f.id);
+        out.push({ kind: 'portfolio', id: f.id, name: f.name, color: f.color,
+          keys: { status: f.status ? f.status.state : '', owner: f.owner || f.createdBy || '' },
+          y: { count: 1, progress: st.percent || 0, open: Math.max(0, st.total - st.done), overdue: st.overdue || 0 } });
+      });
+    } else if (src === 'goals') {
+      var pids = null;
+      if (r.scope.k === 'portfolio' || r.scope.k === 'projects') {
+        pids = {};
+        reportProjects(r).forEach(function (p) { pids[p.id] = true; });
+      }
+      visibleGoals().forEach(function (g) {
+        if (r.scope.k === 'team' && g.team !== r.scope.id) return;
+        if (pids && !g.metric.projects.concat(g.rel).some(function (x) { return pids[x]; })) return;
+        var pr = goalProgress(g.id);
+        out.push({ kind: 'goal', id: g.id, name: g.name,
+          keys: { status: g.closed ? g.closed.outcome : (g.status ? g.status.state : ''), owner: g.owner || '', team: g.team || '',
+            period: periodLabel ? periodLabel(g.period) : '' },
+          y: { count: 1, progress: Math.round(pr.pct || 0), open: g.closed ? 0 : 1, overdue: 0 } });
+      });
+    }
+    return out;
+  }
+  function reportCatDefs(src, by, seen) {
+    var out = [];
+    if (by === 'status') {
+      var states = PROJECT_STATES.concat(src === 'goals' ? (GOAL_STATES || []).concat(GOAL_OUTCOMES || []) : []);
+      states.forEach(function (s) { if (seen[s.id] && !out.some(function (o) { return o.key === s.id; })) out.push({ key: s.id, label: L(s.label), color: s.color }); });
+    } else if (by === 'owner') {
+      Object.keys(seen).forEach(function (k) { var u = user(k); if (u) out.push({ key: k, label: u.name, color: u.color }); });
+    } else if (by === 'team') {
+      Object.keys(seen).forEach(function (k) { var t = team(k); if (t) out.push({ key: k, label: t.name, color: t.color }); });
+    }
+    var known = {};
+    out.forEach(function (c) { known[c.key] = true; });
+    Object.keys(seen).forEach(function (k) { if (k && !known[k]) out.push({ key: k, label: k }); });
+    if (seen['']) out.push({ key: '', label: by === 'team' ? L('ระดับบริษัท') : L('ไม่ระบุ'), color: 'var(--fg-faint)' });
+    return out;
+  }
+  /** ข้อมูลกราฟของวิดเจ็ตในรายงาน { cats, series, values, number } */
+  function reportData(id, w) {
+    var r = typeof id === 'string' ? report(id) : id;
+    w = normalizeRWidget(clone(w));
+    if (!r) return { cats: [], series: [], values: [], number: null };
+    if (w.src === 'tasks') {
+      var items = reportTaskItems(r, w);
+      return chartData(items, w, null);
+    }
+    var rows = reportRows(r, w.src);
+    var ym = /^(avg|sum):(\w+)$/.exec(w.y || '');
+    var yk = ym ? ym[2] : 'count', agg = ym ? ym[1] : 'sum';
+    var yv = function (x) { return x.y[yk] == null ? 0 : x.y[yk]; };
+    var calc = function (list) {
+      if (!list.length) return 0;
+      var s = list.reduce(function (a, x) { return a + yv(x); }, 0);
+      return agg === 'avg' ? Math.round(s / list.length * 10) / 10 : s;
+    };
+    if (w.kind === 'number') return { cats: [], series: [], values: [], number: { value: calc(rows) } };
+    var by = ['status', 'owner', 'team', 'period'].indexOf(w.x) >= 0 ? w.x : 'status';
+    var split = (w.kind === 'stack' || w.kind === 'group') && ['status', 'owner', 'team'].indexOf(w.split) >= 0 && w.split !== by ? w.split : '';
+    var bucket = {}, seenX = {}, seenS = {};
+    rows.forEach(function (x) {
+      var xk = x.keys[by] || '', sk = split ? (x.keys[split] || '') : 'v';
+      seenX[xk] = true; seenS[sk] = true;
+      (bucket[xk + '\u0001' + sk] = bucket[xk + '\u0001' + sk] || []).push(x);
+    });
+    var cats = by === 'period' ? Object.keys(seenX).sort().map(function (k) { return { key: k, label: k || L('ไม่ระบุ') }; }) : reportCatDefs(w.src, by, seenX);
+    var series = split ? reportCatDefs(w.src, split, seenS) : [{ key: 'v', label: '' }];
+    return { cats: cats, series: series, number: null, bench: w.bench,
+      values: cats.map(function (c) { return series.map(function (s) { return calc(bucket[c.key + '\u0001' + s.key] || []); }); }) };
+  }
+  /** ของที่อยู่ในแท่ง/ชิ้นที่คลิก [{ kind: task|project|portfolio|goal, id, name }] */
+  function reportClick(id, wid, cat, ser) {
+    var r = report(id), w = r && r.widgets.filter(function (x) { return x.id === wid; })[0];
+    if (!r || !w) return [];
+    if (w.src === 'tasks') {
+      var items = reportTaskItems(r, w);
+      return items.filter(function (x) {
+        if (w.kind === 'number' || cat === undefined || cat === null) return true;
+        if (w.kind === 'burnup' || w.kind === 'burndown' || w.x === 'period') return true;
+        if (catKeys(x.task, x.membership, w.x).indexOf(cat) < 0) return false;
+        if (ser && ser !== 'v' && w.split) return catKeys(x.task, x.membership, w.split).indexOf(ser) >= 0;
+        return true;
+      }).slice(0, 200).map(function (x) { return { kind: 'task', id: x.task.id, name: x.task.name }; });
+    }
+    var by = w.x || 'status';
+    return reportRows(r, w.src).filter(function (x) {
+      if (w.kind === 'number' || cat === undefined || cat === null) return true;
+      if ((x.keys[by] || '') !== cat) return false;
+      if (ser && ser !== 'v' && w.split) return (x.keys[w.split] || '') === ser;
+      return true;
+    }).map(function (x) { return { kind: x.kind, id: x.id, name: x.name }; });
+  }
+
+  var X4B2 = {
+    TIME_CATS_DEFAULT: TIME_CATS_DEFAULT, TS_STATES: TS_STATES, CAP_DEFAULT: CAP_DEFAULT,
+    awayRanges: awayRanges, awayOn: awayOn, awayNow: awayNow, addAwayRange: addAwayRange, removeAwayRange: removeAwayRange,
+    awayDays: awayDays, canEditPerson: canEditPerson, capacityOf: capacityOf, setCapacity: setCapacity,
+    WL_ZOOMS: WL_ZOOMS, wlCfg: wlCfg, setWlCfg: setWlCfg, wlEffortFields: wlEffortFields, wlCols: wlCols, wlStep: wlStep,
+    wlTasks: wlTasks, wlProjects: wlProjects, taskDays: taskDays, effortOf: effortOf, workload: workload, wlMove: wlMove,
+    weekOf: weekOf, tsFind: tsFind, tsById: tsById, tsStatus: tsStatus, tsLocked: tsLocked, weekEntries: weekEntries,
+    timesheetGrid: timesheetGrid, setTimeCell: setTimeCell, updateTimeEntry: updateTimeEntry, setTimeRowMeta: setTimeRowMeta,
+    tsReviewersFor: tsReviewersFor, canReviewTimesheet: canReviewTimesheet, submitTimesheet: submitTimesheet,
+    recallTimesheet: recallTimesheet, reviewTimesheet: reviewTimesheet, reopenTimesheet: reopenTimesheet,
+    tsReviewQueue: tsReviewQueue, myTimesheets: myTimesheets, timeCats: timeCats, setTsSettings: setTsSettings,
+    timesheetCsv: timesheetCsv, taskProjectName: taskProjectName,
+    REPORT_SRCS: REPORT_SRCS, REPORT_SCOPES: REPORT_SCOPES, REPORT_W_MAX: REPORT_W_MAX,
+    reports: reports, report: report, visibleReports: visibleReports, canSeeReport: canSeeReport, canEditReport: canEditReport,
+    createReport: createReport, updateReport: updateReport, deleteReport: deleteReport, saveReportWidget: saveReportWidget,
+    deleteReportWidget: deleteReportWidget, moveReportWidget: moveReportWidget, reportProjects: reportProjects,
+    reportData: reportData, reportClick: reportClick, normalizeRWidget: normalizeRWidget
+  };
+  Object.keys(X4B2).forEach(function (k) { global.Store[k] = X4B2[k]; });
 
 })(window);
