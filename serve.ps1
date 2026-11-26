@@ -19,6 +19,7 @@ $types = @{
   '.ico'  = 'image/x-icon'
   '.png'  = 'image/png'
   '.woff2'= 'font/woff2'
+  '.webmanifest' = 'application/manifest+json; charset=utf-8'
   '.md'   = 'text/plain; charset=utf-8'
 }
 

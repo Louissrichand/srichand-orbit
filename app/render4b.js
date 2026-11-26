@@ -38,7 +38,10 @@
     return item('workload', 'gauge', 'ภาระงาน', route.type === 'workload') +
       '<button class="sb-item' + (route.type === 'timesheets' ? ' active' : '') + '" data-act="go" data-route="timesheets">' + I('clock') +
       '<span class="grow">' + L('ไทม์ชีต') + '</span>' + (due ? '<span class="count alert" title="' + esc(L('ไทม์ชีตรอตรวจ')) + '">' + due + '</span>' : '') + '</button>' +
-      item('reports', 'chart', 'รายงาน', route.type === 'reports' || route.type === 'report');
+      item('reports', 'chart', 'รายงาน', route.type === 'reports' || route.type === 'report') +
+      (global.OrbitPWA && global.OrbitPWA.canInstall() ? '<button class="sb-item sb-install" data-act="pwa-install" title="' +
+        esc(L('ติดตั้งเป็นแอปบนเครื่องนี้ เปิดได้จากหน้าจอหลัก')) + '">' + I('install') + '<span class="grow">' + L('ติดตั้ง Orbit') + '</span>' +
+        '<span class="sb-x" data-act="pwa-dismiss" title="' + esc(L('ไม่ต้องแสดงอีก')) + '">' + I('close', 11) + '</span></button>' : '');
   }
   function topbarExt(route) {
     if (route.type === 'workload') return '<div class="tb-title">' + I('gauge', 20) + ' ' + L('ภาระงาน') + '</div>';
@@ -489,7 +492,72 @@
     return h;
   }
 
+  /* ====================== 4b ส่วนที่ 2 — สื่อฝัง ไฟล์แนบ ====================== */
+  function fmtBytes(b) {
+    if (!b) return '0 KB';
+    if (b < 1024 * 1024) return Math.max(1, Math.round(b / 1024)) + ' KB';
+    return (b / 1024 / 1024).toFixed(1) + ' MB';
+  }
+  /** แท็บสื่อฝังของโปรเจกต์ — embedId = ชิ้นที่เลือก (ไม่ระบุ = ชิ้นแรก) */
+  function embedView(pid, embedId) {
+    var list = S.projectEmbeds(pid);
+    var canEd = S.can('structure') && S.canInProject(pid, 'edit');
+    var cur = list.filter(function (x) { return x.id === embedId; })[0] || list[0] || null;
+    var h = '<div class="emb"><div class="emb-bar">';
+    list.forEach(function (x) {
+      h += '<button class="emb-tab' + (cur && cur.id === x.id ? ' on' : '') + '" data-act="emb-pick" data-id="' + esc(x.id) + '">' + I('link', 12) + ' ' + esc(x.name) + '</button>';
+    });
+    if (canEd) h += '<button class="btn btn-sm" data-act="emb-add" data-id="' + esc(pid) + '"' + (list.length >= S.EMBED_MAX ? ' disabled' : '') + '>' + I('plus', 13) + ' ' + L('ฝังลิงก์') + '</button>';
+    h += '<span class="grow"></span>';
+    if (cur) {
+      h += '<a class="btn btn-sm btn-ghost" href="' + esc(cur.url) + '" target="_blank" rel="noopener noreferrer">' + I('arrowRight', 13) + ' ' + L('เปิดในแท็บใหม่') + '</a>';
+      if (canEd) h += '<button class="btn btn-sm btn-ghost" data-act="emb-rename" data-id="' + esc(pid) + '" data-e="' + esc(cur.id) + '" title="' + L('เปลี่ยนชื่อ') + '">' + I('pencil', 13) + '</button>' +
+        '<button class="btn btn-sm btn-ghost" data-act="emb-del" data-id="' + esc(pid) + '" data-e="' + esc(cur.id) + '" title="' + L('เอาออก') + '">' + I('trash', 13) + '</button>';
+    }
+    h += '</div>';
+    if (!cur) {
+      return h + '<div class="empty"><div class="big">🧩</div>' + L('ฝังเอกสารหรือไฟล์งานออกแบบไว้ในโปรเจกต์ ทีมเปิดดูได้โดยไม่ต้องสลับแอป') +
+        '<p class="muted">' + esc(S.EMBED_HOSTS.map(function (x) { return x.label; }).join(' · ')) + '</p></div></div>';
+    }
+    /* sandbox: ให้สคริปต์ของบริการนั้นทำงานในกรอบของมันเอง แต่เปิดหน้าต่างใหม่หรือพาแท็บนี้ไปที่อื่นไม่ได้ */
+    h += '<div class="emb-frame"><iframe src="' + esc(cur.src) + '" title="' + esc(cur.name) + '" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" ' +
+      'sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms allow-presentation allow-downloads" ' +
+      'allow="fullscreen; clipboard-write; encrypted-media; picture-in-picture"></iframe></div>' +
+      '<p class="emb-note">' + esc(L('ถ้ากรอบว่าง แปลว่าไฟล์ยังไม่ได้แชร์ให้คนที่เปิดดู หรือบริการนั้นไม่ยอมให้ฝัง — กด “เปิดในแท็บใหม่”')) + '</p></div>';
+    return h;
+  }
+  /** ส่วน "ไฟล์แนบ" ในหน้าผู้ดูแล — สถานะที่เก็บไฟล์ + เครื่องมือย้ายไฟล์ที่ฝังอยู่ในไฟล์ข้อมูลขึ้นไดรฟ์ */
+  function adminExt2() {
+    var F = global.OrbitFiles, st = F ? F.status() : { mode: 'local', reason: 'local' };
+    var blobs = S.inlineBlobs(), total = 0, inTrash = 0;
+    blobs.forEach(function (b) { total += b.url.length; if (b.path[0] === 'trash') inTrash++; });
+    var h = '<section class="admin-sec" id="adminFiles"><h3>' + L('ไฟล์แนบ') + '</h3>';
+    h += '<div class="att-state ' + (st.mode === 'graph' ? (st.reason ? 'warn' : 'ok') : 'local') + '">' + I(st.mode === 'graph' ? (st.reason ? 'cloudOff' : 'cloudCheck') : 'cloud', 15) + '<span>' +
+      esc(st.mode === 'graph'
+        ? (st.reason === 'offline' ? L('ออฟไลน์อยู่ — อัปโหลดหรือดาวน์โหลดไฟล์ไม่ได้จนกว่าจะต่อเน็ต')
+          : L('ไฟล์ใหม่เก็บบน SharePoint/OneDrive ในโฟลเดอร์ {f}/attachments ไฟล์ละไม่เกิน 100 MB', { f: F.baseFolder() }) + (st.fake ? ' · ' + L('(ทดสอบด้วย Graph จำลอง)') : ''))
+        : st.reason === 'signed-out' ? L('ยังไม่ได้เข้าสู่ระบบบัญชีบริษัท — ไฟล์ยังเก็บในไฟล์ข้อมูล ไม่เกิน 2 MB')
+        : L('โหมดเครื่องเดียว — ไฟล์เก็บในไฟล์ข้อมูล ไม่เกิน 2 MB ต่อไฟล์')) + '</span></div>';
+    h += '<div class="kv"><span class="k">' + L('ไฟล์ที่ยังฝังในไฟล์ข้อมูล') + '</span><span class="v">' +
+      esc(L('{n} ไฟล์ · ประมาณ {s}', { n: blobs.length, s: fmtBytes(total) })) + (inTrash ? ' · ' + esc(L('อยู่ในถังขยะ {n}', { n: inTrash })) : '') + '</span></div>';
+    h += '<button class="btn btn-sm' + (st.mode === 'graph' && !st.reason && blobs.length ? ' btn-primary' : '') + '" data-act="files-migrate"' +
+      (st.mode === 'graph' && !st.reason && blobs.length ? '' : ' disabled') + '>' + I('upload', 13) + ' ' + L('ย้ายไฟล์แนบออกจากไฟล์ข้อมูล') + '</button>';
+    if (st.mode !== 'graph') h += '<p class="prj-note">' + L('ใช้ได้เมื่อเข้าสู่ระบบโหมดทีมแล้ว ไฟล์จะถูกอัปขึ้นไดรฟ์ แล้วในข้อมูลเหลือแค่ลิงก์ (ย้อนกลับได้)') + '</p>';
+    return h + '</section>';
+  }
+  /** แถบบอกสถานะที่เก็บไฟล์ในหน้าต่างแนบไฟล์ */
+  function attStateHtml() {
+    var F = global.OrbitFiles, st = F ? F.status() : { mode: 'local', reason: 'local' };
+    var cls = st.mode === 'graph' ? (st.reason ? 'warn' : 'ok') : 'local';
+    var txt = st.mode === 'graph'
+      ? (st.reason === 'offline' ? L('ออฟไลน์อยู่ — แนบไฟล์ไม่ได้จนกว่าจะต่อเน็ต') : L('เก็บบน SharePoint/OneDrive ของบริษัท ไฟล์ละไม่เกิน 100 MB'))
+      : st.reason === 'signed-out' ? L('ยังไม่ได้เข้าสู่ระบบบัญชีบริษัท — ไฟล์จะเก็บในไฟล์ข้อมูล ไม่เกิน 2 MB')
+      : L('โหมดเครื่องเดียว — ไฟล์เก็บมาทั้งไฟล์ ไม่เกิน 2 MB ต่อไฟล์');
+    return '<div class="att-state ' + cls + '">' + I(st.mode === 'graph' ? (st.reason ? 'cloudOff' : 'cloudCheck') : 'cloud', 15) + '<span>' + esc(txt) + '</span></div>';
+  }
+
   var X = {
+    embedView: embedView, adminExt2: adminExt2, attStateHtml: attStateHtml, fmtBytes4b: fmtBytes,
     sidebarExt: sidebarExt, topbarExt: topbarExt, topbarActsExt: topbarActsExt, adminExt: adminExt,
     workloadView: workloadView, awayModal: awayModal, timesheetsView: timesheetsView,
     reportsView: reportsView, reportView: reportView, rpSpec: rpSpec, rpXOptions: rpXOptions, rpYOptions: rpYOptions,

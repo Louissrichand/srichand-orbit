@@ -1220,3 +1220,35 @@ CREATE TABLE dbo.report_widgets (
     config      NVARCHAR(MAX)    NOT NULL CHECK (ISJSON(config) = 1)
 );
 GO
+
+/* ======================================================================
+ * 4b ส่วนที่ 2 — ไฟล์บน SharePoint/OneDrive และสื่อฝัง
+ * ====================================================================== */
+
+/* ไฟล์แนบที่อยู่บนไดรฟ์ — ไม่มีเนื้อไฟล์ในฐานข้อมูล เก็บแค่รหัสไดรฟ์/ไอเท็มกับลิงก์เปิดดู
+ * ใช้กับ attachments / message_attachments / project_resources / page_images (blob_path = NULL เมื่อเป็นไฟล์บนไดรฟ์) */
+ALTER TABLE dbo.attachments ADD
+    drive_id       NVARCHAR(200)  NULL,
+    drive_item_id  NVARCHAR(200)  NULL,
+    web_url        NVARCHAR(2000) NULL,
+    is_linked      BIT            NOT NULL DEFAULT 0;   -- 1 = ลิงก์ไปไฟล์ที่มีอยู่แล้ว (เลือกจาก OneDrive/SharePoint) ไม่ได้อัปใหม่
+ALTER TABLE dbo.attachments ALTER COLUMN blob_path NVARCHAR(600) NULL;
+ALTER TABLE dbo.message_attachments ADD
+    drive_id       NVARCHAR(200)  NULL,
+    drive_item_id  NVARCHAR(200)  NULL,
+    web_url        NVARCHAR(2000) NULL;
+GO
+
+/* สื่อฝังของโปรเจกต์ (มุมมอง embed) — src คือลิงก์ฝังที่แปลงแล้ว ต้องผ่านรายการโฮสต์ที่อนุญาตเท่านั้น */
+CREATE TABLE dbo.project_embeds (
+    id          UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    project_id  UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.projects(id) ON DELETE CASCADE,
+    name        NVARCHAR(120)    NOT NULL,
+    source_url  NVARCHAR(2000)   NOT NULL,
+    embed_url   NVARCHAR(2000)   NOT NULL,
+    host        NVARCHAR(20)     NOT NULL,   -- gdocs|gdrive|figma|miro|loom|youtube|m365
+    created_by  UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    created_at  DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT ck_embed_host CHECK (host IN ('gdocs','gdrive','figma','miro','loom','youtube','m365'))
+);
+GO

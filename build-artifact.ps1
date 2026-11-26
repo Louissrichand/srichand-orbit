@@ -12,8 +12,8 @@ $base = Split-Path -Parent $MyInvocation.MyCommand.Path
 function ReadUtf8($p) { [System.IO.File]::ReadAllText($p, [System.Text.Encoding]::UTF8) }
 
 # ลำดับต้องตรงกับ index.html — ตัวหลังเรียกใช้ตัวหน้า
-$files = @('config.js', 'i18n.js', 'icons.js', 'auth.js', 'store.js',
-           'cloud.js', 'sync.js', 'richtext.js', 'charts.js', 'render.js', 'render4b.js', 'gantt.js', 'ui4b.js', 'main.js')
+$files = @('config.js', 'i18n.js', 'icons.js', 'auth.js', 'store.js', 'files.js',
+           'cloud.js', 'sync.js', 'richtext.js', 'charts.js', 'render.js', 'render4b.js', 'gantt.js', 'touch.js', 'pwa.js', 'ui4b.js', 'ui4b2.js', 'main.js')
 
 # Artifact โหลดไฟล์ข้างเคียงไม่ได้เลย ฟอนต์จึงต้องฝังมาเป็น data URI เหมือนกัน
 function InlineFonts($css, $base) {
@@ -51,6 +51,8 @@ $sb = New-Object System.Text.StringBuilder
 [void]$sb.AppendLine($css)
 [void]$sb.AppendLine('</style>')
 [void]$sb.AppendLine($markup)
+# 4b — บอก pwa.js ว่าเป็นไฟล์รวม ไม่ลงทะเบียน service worker (manifest อยู่ใน <head> ซึ่งไม่ถูกคัดมาอยู่แล้ว)
+[void]$sb.AppendLine("<script>window.ORBIT_BUILD = 'artifact';</script>")
 foreach ($f in $files) {
   [void]$sb.AppendLine('<script>')
   [void]$sb.AppendLine((ReadUtf8 (Join-Path $base "app/$f")))

@@ -4639,3 +4639,44 @@ body.wl-dragging { cursor: grabbing; user-select: none; }
   .cap-row { grid-template-columns: minmax(0, 1fr) 56px 56px 56px 64px; padding: 5px 6px; }
   .cap-in { width: 52px; }
 }
+
+/* ====================== 4b ส่วนที่ 2 — ไฟล์บนไดรฟ์ ลากด้วยนิ้ว ติดตั้งแอป สื่อฝัง ====================== */
+.att-state { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; border-radius: var(--radius); padding: 8px 10px; margin: 4px 0 12px; }
+.att-state.ok { background: var(--ok-bg); color: var(--fg); }
+.att-state.ok svg { color: var(--ok); }
+.att-state.warn { background: var(--warn-bg); color: var(--warn-fg); }
+.att-state.local { background: var(--bg-sunk); color: var(--fg-soft); }
+.att-state svg { flex: none; margin-top: 1px; }
+.att-cloud-pick { margin-top: 8px; }
+.att-drop[disabled] { opacity: .5; cursor: not-allowed; }
+.att-prog { position: relative; margin-top: 12px; border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; font-size: 12.5px; overflow: hidden; }
+.att-prog span { position: relative; z-index: 1; }
+.att-prog i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent-bg); transition: width .2s; }
+.att-err { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 8px 10px; border-radius: var(--radius); background: var(--danger-bg); color: var(--danger); font-size: 12.5px; }
+.att-err span { flex: 1; }
+.att-dl { display: inline-flex; align-items: center; padding: 2px 4px; margin-left: 4px; border-radius: 4px; color: var(--fg-soft); vertical-align: middle; }
+.att-dl:hover { background: var(--bg-sunk); color: var(--accent); }
+.att-cloud { display: inline-flex; color: var(--info); margin-left: 2px; vertical-align: middle; }
+img.gfile-broken { min-height: 40px; background: var(--bg-sunk); }
+.gp-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.gp-bar .inp { flex: 1; min-width: 160px; }
+.gp-trail { font-size: 12.5px; color: var(--fg-soft); margin-bottom: 6px; }
+.gp-list { display: flex; flex-direction: column; gap: 2px; max-height: 55vh; overflow: auto; }
+.sb-install { color: var(--sidebar-on); }
+.sb-install .sb-x { opacity: .6; padding: 2px; border-radius: 4px; display: inline-flex; }
+.sb-install .sb-x:hover { opacity: 1; background: var(--sidebar-pill); }
+.touch-ghost { position: fixed; z-index: 9999; pointer-events: none; opacity: .9; box-shadow: var(--shadow-lg); transform: rotate(1.5deg); background: var(--bg-raise); border-radius: var(--radius); }
+.touch-drag-src { opacity: .45; }
+body.touch-dragging { user-select: none; -webkit-user-select: none; }
+[draggable="true"] { -webkit-touch-callout: none; }
+.emb { padding: 12px 20px 30px; display: flex; flex-direction: column; height: calc(100vh - 130px); min-height: 420px; }
+.emb-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
+.emb-bar .grow { flex: 1; }
+.emb-tab { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 12.5px; color: var(--fg-soft); background: var(--bg); }
+.emb-tab.on { border-color: var(--accent); color: var(--accent-dk); background: var(--accent-bg); }
+.emb-frame { flex: 1; border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; background: var(--bg-sunk); }
+.emb-frame iframe { width: 100%; height: 100%; border: 0; display: block; }
+.emb-note { font-size: 12px; color: var(--fg-faint); margin: 8px 0 0; }
+@media (max-width: 620px) {
+  .emb { padding: 10px; height: calc(100vh - 150px); }
+}

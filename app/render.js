@@ -801,7 +801,7 @@
       '" data-section="' + esc(sectionId) + '"' +
       (blocked ? ' title="' + L('รองานอื่นให้เสร็จก่อน') + '"' : '') + '>';
     var cov = size !== 's' && show('cover') ? S.coverOf(t) : null;
-    if (cov) h += '<div class="card-cover"><img src="' + esc(cov.url) + '" alt="" loading="lazy" draggable="false"></div>';
+    if (cov) h += '<div class="card-cover"><img src="' + esc(S.attImgSrc(cov)) + '" alt="" loading="lazy" draggable="false"></div>';
     h += '<div class="top">';
     if (opts.selectable) h += selbox(t, opts.selected);
     h += checkbox(t) + '<span class="nm" data-dbl="rename" data-id="' + id + '" title="' +
@@ -3763,7 +3763,7 @@
         '<span class="grow">' +
         (r.att.url
           ? '<a href="' + esc(r.att.url) + '" target="_blank" rel="noopener noreferrer">' +
-            esc(r.att.name) + '</a>'
+            esc(r.att.name) + '</a>' + remoteBtns(r.att)
           : '<b>' + esc(r.att.name) + '</b>') +
         '<em>' + (by ? esc(by.name) + ' · ' : '') +
         (r.att.addedAt ? esc(fmtWhen(r.att.addedAt)) : L('ไม่ทราบเวลา')) + '</em></span>' +
@@ -4558,7 +4558,7 @@
         (a.url
           ? '<a href="' + esc(a.url) + '"' +
             (inline ? ' download="' + esc(a.name) + '"' : ' target="_blank" rel="noopener"') +
-            '>' + esc(a.name) + '</a>'
+            '>' + esc(a.name) + '</a>' + remoteBtns(a)
           : esc(a.name)) + '</span>' +
         (a.size ? '<span class="att-size">' + esc(fmtBytes(a.size)) + '</span>' : '') +
         (S.isImageAtt(a) && a.url && !t.parentId && S.can('write', t.id)
@@ -5050,7 +5050,8 @@
 
   var AUDIT_GROUP = {
     auth: 'การเข้าใช้งาน', user: 'จัดการสมาชิก', project: 'โปรเจกต์',
-    system: 'ระบบ', task: 'งาน', security: 'ความปลอดภัย', field: 'ฟิลด์', tag: 'แท็ก', template: 'เทมเพลต', team: 'ทีม', goal: 'เป้าหมาย', settings: 'ตั้งค่า'
+    system: 'ระบบ', task: 'งาน', security: 'ความปลอดภัย', field: 'ฟิลด์', tag: 'แท็ก', template: 'เทมเพลต', team: 'ทีม', goal: 'เป้าหมาย', settings: 'ตั้งค่า',
+    portfolio: 'พอร์ตโฟลิโอ', time: 'ไทม์ชีต', report: 'รายงาน', files: 'ไฟล์แนบ'
   };
   function auditGroupLabel(g) { return AUDIT_GROUP[g] || g; }
 
@@ -5372,7 +5373,14 @@
   function fileLink(a) {
     var inl = /^data:/.test(a.url || '');
     return '<a href="' + esc(a.url) + '"' + (inl ? ' download="' + esc(a.name) + '"' : ' target="_blank" rel="noopener noreferrer"') +
-      '>' + esc(a.name) + '</a>';
+      '>' + esc(a.name) + '</a>' + remoteBtns(a);
+  }
+  /** 4b — ไฟล์บน SharePoint/OneDrive: ปุ่มดาวน์โหลดผ่าน Graph (ลิงก์ชื่อไฟล์เปิดในไดรฟ์) */
+  function remoteBtns(a) {
+    if (!a || !a.remote || !a.driveItemId) return '';
+    return '<button class="att-dl" data-act="att-dl" data-drive="' + esc(a.driveId || '') + '" data-item="' + esc(a.driveItemId) + '" data-name="' + esc(a.name) +
+      '" title="' + esc(L('ดาวน์โหลดผ่าน Microsoft Graph')) + '">' + I('download', 12) + '</button>' +
+      '<span class="att-cloud" title="' + esc(a.linked ? L('ลิงก์ไปยังไฟล์ใน OneDrive/SharePoint') : L('เก็บบน SharePoint/OneDrive')) + '">' + I('cloud', 12) + '</span>';
   }
 
   function attChips(list, del) {
@@ -5729,7 +5737,7 @@
     var h = '<h2>' + esc(a.name) + '</h2><p class="modal-sub">' +
       esc(canW ? L('คลิกบนรูปเพื่อปักหมุด หมุดแต่ละอันกลายเป็นงานย่อย') : L('หมุดบนรูปนี้')) + '</p>' +
       '<div class="proof"><div class="proof-img' + (canW ? ' can' : '') + '" data-act="proof-pin" data-id="' + esc(taskId) + '" data-att="' + esc(attId) + '">' +
-      '<img src="' + esc(a.url) + '" alt="">';
+      '<img src="' + esc(S.attImgSrc(a)) + '" alt="">';
     pins.forEach(function (p) {
       var st = S.task(p.taskId);
       h += '<span class="proof-pin' + (st && st.completed ? ' done' : '') + '" style="left:' + (p.x * 100).toFixed(2) + '%;top:' +
@@ -5765,6 +5773,7 @@
     VIEWS_WITH_TOOLBAR: VIEWS_WITH_TOOLBAR,
     listView: listView, boardView: boardView, timelineView: timelineView,
     homeView: homeView, dashboardView: dashBuilderView, profileView: profileView,
+    remoteBtns: remoteBtns,
     pageEditor: pageEditor, pagesView: pagesView, timeSection: timeSection, timerPill: timerPill, refChips: refChips, proofHtml: proofHtml,
     widgetSpec: widgetSpec, messageCard: messageCard, msgComposer: msgComposer, pendingFiles: pendingFiles, attChips: attChips, fileLink: fileLink,
     overviewView: overviewView, filesView: filesView, messagesView: messagesView,

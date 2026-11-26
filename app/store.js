@@ -4479,12 +4479,12 @@
     /* เก็บคนแนบและเวลาไว้ด้วย หน้ารวมไฟล์ต้องตอบได้ว่าใครเอามาลงเมื่อไหร่
      * ไฟล์เก่าที่ไม่มีสองค่านี้ยังแสดงได้ แค่ไม่มีบรรทัดที่มา
      * ส่วน size กับ mime มีเฉพาะไฟล์ที่เลือกมาจากเครื่อง ลิงก์เปล่าไม่มี */
-    t.attachments.push({
+    t.attachments.push(withRemote({
       id: uid('a'), name: name, url: url || '',
       size: (meta && meta.size) || null,
       mime: (meta && meta.mime) || null,
       addedBy: db.currentUserId, addedAt: new Date().toISOString()
-    });
+    }, meta));
     log(taskId, 'แนบ “{f}”', { f: name });
     autoFire('attachment', taskId, { name: name });
     commit();
@@ -8342,7 +8342,7 @@
         var fv = answerFieldValue(fd, fs[1]);
         if (fv !== null) setFieldRaw(t.id, fd.id, fv);
       });
-      files.forEach(function (a) { addAttachment(t.id, String(a.name).slice(0, 200), a.url, { size: a.size, mime: a.mime }); });
+      files.forEach(function (a) { addAttachment(t.id, String(a.name).slice(0, 200), a.url, a); });
       log(t.id, 'ส่งผ่านฟอร์ม “{f}”', { f: f.name });
       if (t.assigneeId) notifyOnly(t.id, [t.assigneeId], 'มอบหมายงาน “{t}” ให้คุณ', 'assigned', { t: t.name });
       f.n = (f.n || 0) + 1;
@@ -9217,6 +9217,8 @@
 
   function cleanFile(f) {
     if (!f || !f.name) return null;
+    /* 4b — ไฟล์ที่อัปขึ้น SharePoint/OneDrive แล้ว เก็บแค่ข้อมูลอ้างอิง */
+    if (f.driveItemId) return withRemote({ id: uid('fa'), name: String(f.name).slice(0, 200), size: f.size || null, mime: f.mime || null }, f);
     var url = String(f.url || '');
     if (!/^data:/.test(url) || url.length > FILE_BYTES * 1.4) return null;
     return { id: uid('fa'), name: String(f.name).slice(0, 200), url: url, size: f.size || null, mime: f.mime || null };
@@ -9231,7 +9233,7 @@
     if (r.kind === 'file') {
       var f = cleanFile(r);
       if (!f) return null;
-      x = { id: uid('kr'), kind: 'file', name: f.name, url: f.url, size: f.size, mime: f.mime };
+      x = withRemote({ id: uid('kr'), kind: 'file', name: f.name, url: f.url, size: f.size, mime: f.mime }, f);
     } else {
       var u = String(r.url || '').trim();
       if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
@@ -9948,9 +9950,15 @@
     return true;
   }
   /** เก็บรูปลงหน้า ไม่ commit — ตัวแก้ไขแทรกรูปแล้วบันทึกพร้อมเนื้อหาเอง (ไม่งั้นหน้าวาดใหม่กลางการแทรก) */
-  function addPageImage(id, name, dataUri) {
+  function addPageImage(id, name, dataUri, meta) {
     var l = pageLoc(id);
     if (!l || !canEditPage(id)) return null;
+    if (meta && meta.driveItemId) {           // 4b — รูปที่อัปขึ้น SharePoint/OneDrive แล้ว
+      if (l.page.imgs.length >= PAGE_IMGS) return null;
+      var rim = withRemote({ id: uid('im'), name: String(name || '').slice(0, 120), bytes: meta.size || null, mime: meta.mime || null }, meta);
+      l.page.imgs.push(rim);
+      return { id: rim.id, url: attImgSrc(rim) };
+    }
     if (!/^data:image\/(png|jpe?g|gif|webp);base64,/i.test(dataUri || '')) return null;
     var bytes = Math.round((dataUri.length - dataUri.indexOf(',') - 1) * 0.75);
     if (bytes > PAGE_IMG_BYTES || l.page.imgs.length >= PAGE_IMGS) return null;
@@ -9960,7 +9968,7 @@
   }
   function pageImgMap(id) {
     var l = pageLoc(id), out = {};
-    if (l) l.page.imgs.forEach(function (i) { out[i.id] = i.url; });
+    if (l) l.page.imgs.forEach(function (i) { out[i.id] = attImgSrc(i); });
     return out;
   }
 
@@ -12727,5 +12735,172 @@
     reportData: reportData, reportClick: reportClick, normalizeRWidget: normalizeRWidget
   };
   Object.keys(X4B2).forEach(function (k) { global.Store[k] = X4B2[k]; });
+
+  /* ======================================================================
+   * 4b ส่วนที่ 2 — ไฟล์แนบบน SharePoint/OneDrive และสื่อฝัง
+   * ====================================================================== */
+
+  /* ไฟล์ที่อยู่บนไดรฟ์แล้วเก็บแค่ข้อมูลอ้างอิง { driveId, driveItemId, webUrl, remote: true } (url = webUrl ไว้เปิดดู) */
+  function withRemote(x, meta) {
+    if (!meta || !meta.driveItemId) return x;
+    x.driveId = String(meta.driveId || '').slice(0, 200) || null;
+    x.driveItemId = String(meta.driveItemId).slice(0, 200);
+    x.webUrl = String(meta.webUrl || meta.url || '').slice(0, 2000);
+    x.url = x.webUrl;
+    x.remote = true;
+    if (meta.linked) x.linked = true;          // แนบจากไฟล์ที่มีอยู่แล้วในไดรฟ์ (ไม่ได้อัปใหม่)
+    if (!x.size && meta.size) x.size = meta.size;
+    if (!x.mime && meta.mime) x.mime = meta.mime;
+    return x;
+  }
+  var PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  /** src ของรูปจากไฟล์แนบ — ไฟล์บนไดรฟ์ใช้รูปที่โหลดผ่าน Graph แล้ว ไม่งั้นพิกเซลใสพร้อมรหัสให้ files.js มาเติม */
+  function attImgSrc(a) {
+    if (!a) return '';
+    if (!a.remote || !a.driveItemId) return a.url || '';
+    var F = global.OrbitFiles, hit = F && F.cachedUrl ? F.cachedUrl(a) : null;
+    return hit || PIXEL + '#gfile=' + encodeURIComponent((a.driveId || '') + '|' + a.driveItemId);
+  }
+  /** ไฟล์ที่ยังฝังเป็น data URI อยู่ในข้อมูลทุกที่ (งาน ทรัพยากร ประกาศ คำตอบ รูปในหน้าเอกสาร ฟอร์ม ถังขยะ)
+   *  คืน [{ path, name, url, size, mime, entity }] — path คือเส้นทางคีย์จาก db ใช้ชี้กลับตอนแทนที่ */
+  function inlineBlobs() {
+    var out = [];
+    var walk = function (o, path, entity, depth) {
+      if (!o || typeof o !== 'object' || depth > 14) return;
+      if (Array.isArray(o)) { o.forEach(function (x, i) { walk(x, path.concat([i]), entity, depth + 1); }); return; }
+      if (typeof o.url === 'string' && o.url.indexOf('data:') === 0 && (o.name || o.id)) {
+        var b64 = o.url.indexOf(',') >= 0 ? o.url.length - o.url.indexOf(',') - 1 : o.url.length;
+        out.push({ path: path, name: o.name || (o.id + ''), url: o.url, size: o.size || o.bytes || Math.round(b64 * 0.75),
+          mime: o.mime || (/^data:([^;,]+)/.exec(o.url) || [])[1] || null, entity: entity || 'misc' });
+        return;
+      }
+      var ent = typeof o.id === 'string' && /^(t|p|pg|tm|pf|tr|g|rp|fm|m|pm|msg)_/.test(o.id) ? o.id : entity;
+      Object.keys(o).forEach(function (k) {
+        if (k === 'personal' && depth === 0) return;
+        walk(o[k], path.concat([k]), ent, depth + 1);
+      });
+    };
+    walk(db, [], null, 0);
+    return out;
+  }
+  function objAt(path) {
+    var o = db;
+    for (var i = 0; i < path.length && o; i++) o = o[path[i]];
+    return o || null;
+  }
+  /** แทน data URI ด้วยข้อมูลอ้างอิงบนไดรฟ์ (ผู้ดูแลระบบ) — [{ path, url (เดิม), meta }] ย้อนกลับได้ในครั้งเดียว
+   *  คืน { n, before, after } ขนาดไฟล์ข้อมูลก่อน/หลัง (ไบต์ของ JSON) */
+  function replaceInlineBlobs(list) {
+    if (!isAdmin() || !list || !list.length) return null;
+    var before = JSON.stringify(db).length, n = 0;
+    batch('ย้ายไฟล์แนบออกจากไฟล์ข้อมูล', null, function () {
+      list.forEach(function (x) {
+        var o = objAt(x.path);
+        if (!o || o.url !== x.url || !x.meta || !x.meta.driveItemId) return;   // ถูกแก้ระหว่างอัป — ข้าม
+        withRemote(o, x.meta);
+        if (!o.size && x.meta.size) o.size = x.meta.size;
+        n++;
+      });
+      var mid = JSON.stringify(db).length;
+      audit('files.migrate', null, 'ย้าย {n} ไฟล์ ลดขนาดไฟล์ข้อมูล {kb} KB', { n: n, kb: Math.round((before - mid) / 1024) });
+    });
+    return { n: n, before: before, after: JSON.stringify(db).length };
+  }
+
+  /* ---------- สื่อฝัง ----------
+   * project.embeds = [{ id, name, url (ลิงก์ที่ผู้ใช้วาง), src (ลิงก์ฝังที่แปลงแล้ว), host, by, at }] ≤ 20
+   * ฝังได้เฉพาะโฮสต์ในรายการ แปลงลิงก์แชร์ปกติเป็นลิงก์ฝังให้เมื่อรู้รูปแบบ */
+  var EMBED_HOSTS = [
+    { id: 'gdocs', label: 'Google Docs/Sheets/Slides', re: /^https:\/\/docs\.google\.com\// },
+    { id: 'gdrive', label: 'Google Drive', re: /^https:\/\/drive\.google\.com\// },
+    { id: 'figma', label: 'Figma', re: /^https:\/\/(www\.)?figma\.com\// },
+    { id: 'miro', label: 'Miro', re: /^https:\/\/miro\.com\// },
+    { id: 'loom', label: 'Loom', re: /^https:\/\/(www\.)?loom\.com\// },
+    { id: 'youtube', label: 'YouTube', re: /^https:\/\/(www\.)?(youtube\.com|youtube-nocookie\.com|youtu\.be)\// },
+    { id: 'm365', label: 'Microsoft 365 / SharePoint', re: /^https:\/\/([a-z0-9-]+\.sharepoint\.com|[a-z0-9-]+-my\.sharepoint\.com|onedrive\.live\.com|1drv\.ms|[a-z0-9-]+\.officeapps\.live\.com|forms\.office\.com|view\.officeapps\.live\.com)\// }
+  ];
+  var EMBED_MAX = 20;
+  /** { ok, src, host } หรือ { ok: false, reason } — reason: invalid | https | host */
+  function embedSrc(raw) {
+    var u = String(raw || '').trim();
+    var m = /<iframe[^>]+src=["']([^"']+)["']/i.exec(u);       // วางโค้ด <iframe> มาทั้งก้อนก็ได้
+    if (m) u = m[1].replace(/&amp;/g, '&');
+    if (!/^[a-z]+:\/\//i.test(u)) u = 'https://' + u;
+    var url;
+    try { url = new URL(u); } catch (e) { return { ok: false, reason: 'invalid' }; }
+    if (url.protocol !== 'https:') return { ok: false, reason: 'https' };
+    var s = url.href;
+    var host = EMBED_HOSTS.filter(function (h) { return h.re.test(s); })[0];
+    if (!host) return { ok: false, reason: 'host' };
+    var g;
+    if (host.id === 'youtube') {
+      var vid = url.hostname === 'youtu.be' ? url.pathname.slice(1) : (url.searchParams.get('v') || ((/\/(embed|shorts|live)\/([\w-]+)/.exec(url.pathname) || [])[2]));
+      if (!vid) return { ok: false, reason: 'invalid' };
+      s = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(vid.replace(/[^\w-]/g, ''));
+    } else if (host.id === 'loom') {
+      s = s.replace('/share/', '/embed/');
+    } else if (host.id === 'figma') {
+      if (url.hostname !== 'www.figma.com' || url.pathname.indexOf('/embed') !== 0) s = 'https://www.figma.com/embed?embed_host=orbit&url=' + encodeURIComponent(url.href);
+    } else if (host.id === 'miro') {
+      g = /\/app\/board\/([^/?#]+)/.exec(url.pathname);
+      if (g) s = 'https://miro.com/app/live-embed/' + g[1] + '/';
+    } else if (host.id === 'gdocs') {
+      g = /^\/(document|spreadsheets|presentation|forms)\/d\/(e\/)?([\w-]+)/.exec(url.pathname);
+      if (g && !/\/(preview|embed|pubhtml|viewform)/.test(url.pathname)) {
+        s = g[1] === 'presentation' ? 'https://docs.google.com/presentation/d/' + (g[2] || '') + g[3] + '/embed'
+          : g[1] === 'forms' ? 'https://docs.google.com/forms/d/' + (g[2] || '') + g[3] + '/viewform?embedded=true'
+          : 'https://docs.google.com/' + g[1] + '/d/' + (g[2] || '') + g[3] + '/preview';
+      }
+    } else if (host.id === 'gdrive') {
+      g = /\/file\/d\/([\w-]+)/.exec(url.pathname);
+      if (g) s = 'https://drive.google.com/file/d/' + g[1] + '/preview';
+    } else if (host.id === 'm365') {
+      /* ลิงก์แชร์ของ SharePoint/OneDrive แบบ Doc.aspx เปิดฝังได้ด้วย action=embedview */
+      if (/\/_layouts\/15\/(Doc|WopiFrame)\.aspx/i.test(url.pathname)) {
+        url.searchParams.set('action', 'embedview');
+        s = url.href;
+      }
+    }
+    return { ok: true, src: s, host: host.id, hostLabel: host.label };
+  }
+  function projectEmbeds(pid) { var p = project(pid); return p ? (p.embeds || []) : []; }
+  function addEmbed(pid, name, raw) {
+    var p = project(pid);
+    if (!p || !can('structure') || !canInProject(pid, 'edit')) return { ok: false, reason: 'perm' };
+    var e = embedSrc(raw);
+    if (!e.ok) return e;
+    if ((p.embeds || []).length >= EMBED_MAX) return { ok: false, reason: 'max' };
+    snapshot('เพิ่มสื่อฝัง');
+    p.embeds = p.embeds || [];
+    var x = { id: uid('em'), name: String(name || '').trim().slice(0, 120) || e.hostLabel, url: String(raw).trim().slice(0, 2000), src: e.src.slice(0, 2000),
+      host: e.host, by: db.currentUserId, at: new Date().toISOString() };
+    p.embeds.push(x);
+    commit();
+    return { ok: true, embed: x };
+  }
+  function removeEmbed(pid, id) {
+    var p = project(pid);
+    if (!p || !can('structure') || !canInProject(pid, 'edit')) return false;
+    if (!(p.embeds || []).some(function (x) { return x.id === id; })) return false;
+    snapshot('ลบสื่อฝัง');
+    p.embeds = p.embeds.filter(function (x) { return x.id !== id; });
+    commit();
+    return true;
+  }
+  function renameEmbed(pid, id, name) {
+    var p = project(pid), x = p && (p.embeds || []).filter(function (y) { return y.id === id; })[0];
+    if (!x || !can('structure') || !canInProject(pid, 'edit') || !String(name || '').trim()) return false;
+    snapshot('แก้สื่อฝัง');
+    x.name = String(name).trim().slice(0, 120);
+    commit();
+    return true;
+  }
+
+  var X4B3 = {
+    withRemote: withRemote, attImgSrc: attImgSrc, inlineBlobs: inlineBlobs, replaceInlineBlobs: replaceInlineBlobs,
+    EMBED_HOSTS: EMBED_HOSTS, EMBED_MAX: EMBED_MAX, embedSrc: embedSrc, projectEmbeds: projectEmbeds,
+    addEmbed: addEmbed, removeEmbed: removeEmbed, renameEmbed: renameEmbed
+  };
+  Object.keys(X4B3).forEach(function (k) { global.Store[k] = X4B3[k]; });
 
 })(window);

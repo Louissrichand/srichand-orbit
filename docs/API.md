@@ -255,6 +255,10 @@
 | GET | `/api/time-entries.csv?from&to[&userId]` | ตัวเอง / ผู้ตรวจ / OA | CSV พร้อม billable, category, สถานะไทม์ชีต (4b) |
 | PUT | `/api/settings/timesheets` | OA | `{categories[], reviewers[]}` (4b) |
 | GET · POST · PATCH · DELETE | `/api/reports[/{id}]` | อ่าน: เจ้าของ/คนที่แชร์/สมาชิกทีมที่แชร์/ทุกคนถ้า `share_org` (ยกเว้น guest) · แก้: เจ้าของ · ลบ: เจ้าของ/OA | `{name, scope:{k,id,ids}, share:{org,users,teams}}` ≤ 20 วิดเจ็ต · ข้อมูลกราฟคิดตามสิทธิ์ผู้ขอ (4b) |
+| POST | `/api/attachments/upload-session` | W ของงาน (C สำหรับประกาศ/คำตอบ) | `{entityId, name, size}` → เซิร์ฟเวอร์สร้าง Graph upload session ใต้ `Orbit/attachments/<entityId>/` แล้วคืน `uploadUrl` (≤ 100 MB) · ตอนนี้เบราว์เซอร์เรียก Graph เอง (app/files.js) (4b) |
+| POST · GET | `/api/tasks/{id}/attachments` · `/api/attachments/{id}/content` | W / ผู้เห็นงาน | บันทึก `{name, size, mime, driveId, driveItemId, webUrl, linked}` · ดาวน์โหลดผ่าน Graph ด้วยสิทธิ์ของแอป — ปิดช่องที่ไฟล์บนไดรฟ์เปิดได้ตามสิทธิ์ SharePoint แทนสิทธิ์โปรเจกต์ (4b) |
+| POST | `/api/admin/attachments/migrate` | OA | ย้าย data URI ที่ค้างในข้อมูล (งาน ทรัพยากร ประกาศ รูปในหน้า ถังขยะ เทมเพลต) ขึ้นไดรฟ์ คืน `{moved, failed, bytesBefore, bytesAfter}` · ลง audit `files.migrate` (4b) |
+| GET · POST · PATCH · DELETE | `/api/projects/{id}/embeds[/{eid}]` | อ่าน: ผู้เห็นโปรเจกต์ · แก้: E + ST | `{name, url}` → ตรวจรายการโฮสต์ที่อนุญาตแล้วแปลงเป็นลิงก์ฝัง (`embed_url`) ≤ 20 ต่อโปรเจกต์ · ห้ามรับ http หรือโฮสต์อื่น `422` (4b) |
 | GET | `/api/reports/{id}/widgets/{wid}/data` | อ่านรายงานได้ | `{cats, series, values, number}` — src tasks (ตัวกรอง/แกนเหมือนแดชบอร์ด 3c + แกน `project`) projects/portfolios/goals (แกน status/owner/team/period, Y count/avg:progress/sum:open/sum:overdue) (4b) |
 
 `/api/home` รวมทุกอย่างไว้ในคำขอเดียวโดยตั้งใจ ถ้าแยกเป็นห้าคำขอ หน้าแรกจะเปิด

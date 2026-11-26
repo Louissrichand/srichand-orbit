@@ -106,6 +106,8 @@
 
   /** จอสัมผัสไม่มี hover — ใช้ตัดสินว่าจะเปิดการลากไหม */
   function isTouch() {
+    /* 4b — ลากด้วยนิ้วผ่าน touch.js (กดค้างแล้วลาก) ต้องผ่านตัวจัดการลากชุดเดิมได้ */
+    if (global.OrbitTouch && global.OrbitTouch.active) return false;
     try { return global.matchMedia('(hover: none)').matches; } catch (e) { return false; }
   }
 
@@ -5273,6 +5275,7 @@
           R.esc(L('ห้ามรบกวนถึง {t}', { t: R.fmtDate(S.iso(du)) + ' ' + R.fmtTime(du) })) + '</span>' +
           '<button class="btn btn-sm" data-act="dnd-off">' + L('เลิกพัก') + '</button></div>';
       }
+      if (EXT.hooks.settingsNotify) h += EXT.hooks.settingsNotify();     // 4b — แจ้งเตือนของเบราว์เซอร์
       h += '<div class="prj-warn">' + I('alert', 15) + '<span>' +
         L('การแจ้งเตือนทางอีเมลยังไม่เปิด จะทำได้เมื่อเชื่อมต่อระบบส่วนกลางแล้ว ตอนนี้ทุกอย่างอยู่ในกล่องข้อความของแอป') +
         '</span></div>';
@@ -5648,6 +5651,8 @@
 
   /** อ่านไฟล์ที่เลือกเป็น data URI — ไฟล์ที่เกินขนาดข้ามไป แล้วบอกจำนวนที่ข้าม */
   function readFiles(inputEl, max, cb) {
+    /* 4b — โหมดทีมอัปขึ้น SharePoint/OneDrive แทน (ui4b2.js) แล้วคืนข้อมูลอ้างอิงรูปแบบเดียวกัน */
+    if (EXT.hooks.readFiles && EXT.hooks.readFiles(inputEl, max, cb)) return;
     var files = Array.prototype.slice.call(inputEl.files || []);
     inputEl.value = '';
     if (!files.length) return;
@@ -6049,7 +6054,8 @@
     if (act === 'kr-file-pick') {
       var kpid = el.dataset.id;
       readFiles(el, S.FILE_BYTES, function (list, skipped) {
-        list.forEach(function (f) { S.addResource(kpid, { kind: 'file', name: f.name, url: f.url, size: f.size, mime: f.mime }); });
+        list.forEach(function (f) { S.addResource(kpid, { kind: 'file', name: f.name, url: f.url, size: f.size, mime: f.mime,
+          driveId: f.driveId, driveItemId: f.driveItemId, webUrl: f.webUrl }); });
         skippedToast(skipped, '2 MB');
       });
       return true;
@@ -6202,7 +6208,7 @@
       readFiles(imgInput, S.PAGE_IMG_BYTES, function (list, skipped) {
         skippedToast(skipped, '500 KB');
         list.forEach(function (f) {
-          var im = S.addPageImage(id, f.name, f.url);
+          var im = S.addPageImage(id, f.name, f.url, f);
           if (im) cb(im.id, im.url, '');
           else toast(L('แทรกรูปไม่ได้ (ชนิดไฟล์ ขนาด หรือครบจำนวนแล้ว)'));
         });
@@ -6215,7 +6221,7 @@
     S.db.projects.forEach(function (p) { all = all.concat(p.pages || []); });
     for (var i = 0; i < all.length; i++) {
       var hit = (all[i].imgs || []).filter(function (x) { return x.id === imgId; })[0];
-      if (hit) return hit.url;
+      if (hit) return S.attImgSrc(hit);
     }
     return '';
   };
