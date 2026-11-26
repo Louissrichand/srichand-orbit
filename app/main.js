@@ -180,7 +180,10 @@
     var r = state.route, parts;
     if (r.type === 'project') parts = ['project', r.id, r.sv || r.view].concat(r.view === 'pages' && r.page ? [r.page] : []);
     else if (r.type === 'pages') parts = r.page ? ['pages', r.page] : ['pages'];
-    else if (r.type === 'portfolio') parts = ['portfolio', r.id, r.view || 'list'];
+    else if (r.type === 'portfolio') parts = ['portfolio', r.id, r.sv || r.view || 'list'];
+    else if (r.type === 'team') parts = ['team', r.id, r.view || 'overview'];
+    else if (r.type === 'goals') parts = ['goals', r.view || 'company'];
+    else if (r.type === 'goal') parts = ['goal', r.id];
     else if (r.type === 'search') parts = r.ss ? ['saved', r.ss] : (r.q ? ['search', encodeURIComponent(r.q)] : ['search']);
     else if (r.type === 'tag') parts = ['tag', encodeURIComponent(r.name)];
     else if (r.type === 'noaccess') parts = ['project', r.id];
@@ -255,11 +258,24 @@
       return { route: { type: 'project', id: seg[1], view: v }, taskId: taskId };
     }
     if (type === 'portfolio' && seg[1]) {
-      if (!S.portfolio(seg[1])) return null;
+      var pfx = S.portfolio(seg[1]);
+      if (!pfx) return null;
+      /* 4a — แท็บที่บันทึกไว้ #/portfolio/<id>/pv_… และแท็บเริ่มต้นเมื่อไม่ระบุ */
+      var pvId = seg[2] && seg[2].indexOf('pv_') === 0 ? seg[2] : (!seg[2] && pfx.defaultTab ? pfx.defaultTab : null);
+      if (pvId && S.pfSavedView(seg[1], pvId)) return { route: { type: 'portfolio', id: seg[1], view: 'list', sv: pvId }, taskId: taskId };
       var pv = seg[2] || 'list';
       var pok = R.PF_TABS.some(function (x) { return x[0] === pv; });
       return { route: { type: 'portfolio', id: seg[1], view: pok ? pv : 'list' }, taskId: taskId };
     }
+    /* 4a — ทีม #/team/<id>/<แท็บ> หน้ารวมทีม #/teams เป้าหมาย #/goals/<แท็บ> และ #/goal/<id> */
+    if (type === 'team' && seg[1]) {
+      if (!S.team(seg[1])) return null;
+      var tv = R.TEAM_TABS.some(function (x) { return x[0] === seg[2]; }) ? seg[2] : 'overview';
+      return { route: { type: 'team', id: seg[1], view: tv }, taskId: taskId };
+    }
+    if (type === 'teams') return { route: { type: 'teams' }, taskId: taskId };
+    if (type === 'goals') return { route: { type: 'goals', view: seg[1] || 'company' }, taskId: taskId };
+    if (type === 'goal' && seg[1]) return { route: { type: 'goal', id: seg[1] }, taskId: taskId };
     if (type === 'search') {
       var sq = '';
       try { sq = seg[1] ? decodeURIComponent(seg[1]) : ''; } catch (e) { sq = seg[1] || ''; }
@@ -363,7 +379,18 @@
       else body = R.listView(r.id, v, state.sel, { subOpen: state.subOpen, cursor: state.cursor });
     } else if (r.type === 'portfolio') {
       if (!S.portfolio(r.id)) { state.route = { type: 'home' }; return renderAll(); }
-      body = R.portfolioView(r.id, r.view || 'list');
+      if (r.sv && !S.pfSavedView(r.id, r.sv)) { delete r.sv; r.view = 'list'; }
+      body = R.portfolioView(r.id, r.view || 'list', { view: pfViewFor(r.id), sv: r.sv || null, dirty: pfDirty(),
+        files: state.msgFiles });
+    } else if (r.type === 'team') {
+      if (!S.team(r.id) || !S.canSeeTeam(r.id)) { state.route = { type: 'teams' }; return renderAll(); }
+      var tcx = calxGet('team:' + r.id);
+      body = R.teamView(r.id, r.view || 'overview', { files: state.msgFiles, tdone: state.teamDone,
+        calMode: tcx.mode, anchor: tcx.anchor });
+    } else if (r.type === 'teams') {
+      body = R.teamsView();
+    } else if (r.type === 'goals' || r.type === 'goal') {
+      body = goalsBody(r);
     } else if (r.type === 'mytasks') {
       body = R.myTasksView(state.sel, state.mt);
     } else if (r.type === 'inbox') {
@@ -1820,6 +1847,7 @@
     h += item('project-access', 'shield', L('ใครเข้าถึงโปรเจกต์นี้ได้')) ;
     h += item('project-look', 'pencil', L('ตั้งสีและไอคอน'));
     h += item('add-to-portfolio', 'star', L('เพิ่มเข้าพอร์ตโฟลิโอ'));
+    h += item('team-share', 'users', L('แชร์ให้ทีม…'));
     h += '<div class="pop-sep"></div>';
     h += item('update-status', 'flag', L('อัปเดตสถานะโปรเจกต์'));
     h += item('proj-notify-menu', 'bell', L('การแจ้งเตือนของโปรเจกต์นี้'));
@@ -1947,6 +1975,30 @@
         h += '<span class="chip">' + R.esc(p.icon) + ' ' + R.esc(p.name) +
           '<button data-act="pf-remove" data-pf="' + R.esc(pfId) + '" data-id="' + R.esc(p.id) +
           '" title="' + L('ถอดออก') + '">✕</button></span>';
+      });
+      h += '</div>';
+    }
+    /* 4a — พอร์ตโฟลิโอย่อย ซ้อนกันได้หลายชั้นแต่ห้ามวน (ตัวที่จะทำให้วนแสดงเป็นกดไม่ได้) */
+    var others = S.portfolios().filter(function (x) { return x.id !== pfId && f.portfolioIds.indexOf(x.id) < 0; });
+    h += '<label class="opt-lbl">' + L('พอร์ตโฟลิโอย่อย') + '</label>';
+    if (!others.length) h += '<p class="prj-note">' + L('ไม่มีพอร์ตโฟลิโออื่นให้ใส่') + '</p>';
+    else {
+      h += '<div class="pf-pick pf-pick-sm">';
+      others.forEach(function (x) {
+        var ok = S.canNestPortfolio(pfId, x.id);
+        h += '<button class="pf-pick-row' + (ok ? '' : ' off') + '" data-act="pf-nest" data-pf="' + R.esc(pfId) + '" data-id="' + R.esc(x.id) + '"' +
+          (ok ? '' : ' title="' + R.esc(L('ใส่ไม่ได้ เพราะพอร์ตโฟลิโอนี้ครอบพอร์ตโฟลิโอปัจจุบันอยู่แล้ว (จะวนกัน)')) + '"') + '>' +
+          '<span class="hproj-ic" style="background:' + R.esc(x.color) + '22">' + R.esc(x.icon) + '</span>' +
+          '<span class="grow"><b>' + R.esc(x.name) + '</b><em>' + (ok ? L('{n} โปรเจกต์', { n: S.allProjectsUnder(x.id).length })
+            : L('จะทำให้วนกัน')) + '</em></span>' + I(ok ? 'plus' : 'blocked', 15) + '</button>';
+      });
+      h += '</div>';
+    }
+    if (f.portfolioIds.length) {
+      h += '<div class="pf-inside" style="margin-top:8px">';
+      f.portfolioIds.map(S.portfolio).filter(Boolean).forEach(function (x) {
+        h += '<span class="chip">' + R.esc(x.icon) + ' ' + R.esc(x.name) + '<button data-act="pf-unnest" data-pf="' + R.esc(pfId) +
+          '" data-id="' + R.esc(x.id) + '" title="' + L('ถอดออก') + '">✕</button></span>';
       });
       h += '</div>';
     }
@@ -6387,6 +6439,660 @@
     return false;
   }
 
+  /* ====================== 4a — ทีม พอร์ตโฟลิโอ (ส่วนที่ 1) ====================== */
+
+  function goPortfolio(id) {
+    var f = S.portfolio(id);
+    if (!f) return;
+    state.route = f.defaultTab && S.pfSavedView(id, f.defaultTab)
+      ? { type: 'portfolio', id: id, view: 'list', sv: f.defaultTab } : { type: 'portfolio', id: id, view: 'list' };
+    clearSel();
+    renderAll();
+  }
+  function goTeam(id, view) {
+    if (!S.team(id)) return;
+    state.route = { type: 'team', id: id, view: view || 'overview' };
+    clearSel();
+    renderAll();
+  }
+  /** ลิงก์จากกล่องข้อความ 'team:<id>[:แท็บ]' 'portfolio:<id>[:แท็บ]' 'goal:<id>' */
+  function openRoute4a(r) {
+    var m = /^(team|portfolio|goal):([^:]+)(?::(\w+))?$/.exec(String(r || ''));
+    if (!m) return false;
+    if (m[1] === 'team') { if (S.team(m[2])) goTeam(m[2], m[3]); return true; }
+    if (m[1] === 'portfolio') {
+      if (!S.portfolio(m[2])) return true;
+      state.route = { type: 'portfolio', id: m[2], view: m[3] || 'list' };
+      renderAll();
+      return true;
+    }
+    if (m[1] === 'goal' && typeof S.goal === 'function' && S.goal(m[2])) {
+      state.route = { type: 'goal', id: m[2] };
+      renderAll();
+      return true;
+    }
+    return true;
+  }
+  /** โปรเจกต์ที่สร้างจากปุ่ม "โปรเจกต์ใหม่" ในพอร์ตโฟลิโอ ใส่เข้าพอร์ตโฟลิโอนั้นทันที */
+  function npToPortfolio(p) {
+    var pf = state.npPf;
+    state.npPf = null;
+    if (p && pf && S.portfolio(pf)) S.addToPortfolio(pf, p.id);
+  }
+
+  /* ---------- มุมมองของพอร์ตโฟลิโอ ---------- */
+  function pfViewFor(id) {
+    var r = state.route;
+    state.pfWork = state.pfWork || {};
+    if (r.type === 'portfolio' && r.id === id && r.sv) {
+      var sv = S.pfSavedView(id, r.sv);
+      if (sv) {
+        if (!state.pfWork[r.sv]) state.pfWork[r.sv] = S.pfFillView(S.clone(sv.view));
+        return state.pfWork[r.sv];
+      }
+    }
+    if (!state.pfWork['@' + id]) state.pfWork['@' + id] = S.pfView(id);
+    return state.pfWork['@' + id];
+  }
+  function pfDirty() {
+    var r = state.route;
+    if (r.type !== 'portfolio' || !r.sv || !state.pfWork || !state.pfWork[r.sv]) return false;
+    var sv = S.pfSavedView(r.id, r.sv);
+    return !!sv && JSON.stringify(S.pfFillView(S.clone(sv.view))) !== JSON.stringify(state.pfWork[r.sv]);
+  }
+  function pfViewChanged() {
+    var r = state.route;
+    if (r.type !== 'portfolio') return;
+    if (!r.sv) S.setPfView(r.id, pfViewFor(r.id));
+    renderViewBody();
+    if (state.pfOptOpen) openModal(pfOptsHtml(), true);
+  }
+
+  function pfOptsHtml() {
+    var id = state.route.id, f = S.portfolio(id);
+    if (!f) return '';
+    var v = pfViewFor(id), page = state.pfOptPage || 'filters', key = 'pf:' + id;
+    var tabs = [['filters', L('ตัวกรอง')], ['sorts', L('เรียง')], ['group', L('จัดกลุ่ม')], ['cols', L('คอลัมน์')]];
+    var h = '<h2>' + L('ตัวเลือกมุมมองพอร์ตโฟลิโอ') + '</h2><div class="hcard-tabs pfo-tabs">';
+    tabs.forEach(function (t) {
+      h += '<button class="tb-tab' + (page === t[0] ? ' active' : '') + '" data-act="pfv-opts" data-page="' + t[0] + '">' + esc(t[1]) + '</button>';
+    });
+    h += '</div><div class="pfo-body">';
+    if (page === 'filters') {
+      var ffs = S.filterFields(key);
+      if (!v.filters.length) h += '<p class="prj-note">' + L('ยังไม่มีตัวกรอง') + '</p>';
+      v.filters.forEach(function (c, i) {
+        var def = S.filterField(key, c.f);
+        var ops = def ? S.FILTER_OPS[def.kind] || [] : [];
+        h += '<div class="flt-row">' + (i ? '<span class="flt-and">' + L('และ') + '</span>' : '') + '<div class="flt-line">' +
+          optSelect('pfq-field', ffs.map(function (x) { return [x.id, x.custom ? x.label : L(x.label)]; }), c.f, ' data-i="' + i + '"') +
+          optSelect('pfq-op', ops.map(function (o) { return [o[0], L(o[1])]; }), c.op, ' data-i="' + i + '"') +
+          '<button class="flt-del" data-act="pfq-del" data-i="' + i + '" title="' + L('เอาเงื่อนไขนี้ออก') + '">' + I('close', 13) + '</button></div>' +
+          fltValueHtml(key, c, i, 'pfq') + '</div>';
+      });
+      h += '<button class="btn btn-sm" data-act="pfq-add">' + I('plus', 13) + ' ' + L('เพิ่มตัวกรอง') + '</button>';
+    } else if (page === 'sorts') {
+      var keys = S.filterFields(key).map(function (x) { return [x.id, x.custom ? x.label : L(x.label)]; });
+      if (!v.sorts.length) h += '<p class="prj-note">' + L('เรียงตามลำดับที่เพิ่มเข้าพอร์ต') + '</p>';
+      v.sorts.forEach(function (s, i) {
+        h += '<div class="flt-line">' + optSelect('pfs-key', keys, s.k, ' data-i="' + i + '"') +
+          '<button class="btn btn-sm" data-act="pfs-dir" data-i="' + i + '">' + (s.d === 'desc' ? L('มากไปน้อย') : L('น้อยไปมาก')) + '</button>' +
+          '<button class="flt-del" data-act="pfs-del" data-i="' + i + '">' + I('close', 13) + '</button></div>';
+      });
+      if (v.sorts.length < 3) h += '<button class="btn btn-sm" data-act="pfs-add">' + I('plus', 13) + ' ' + L('เพิ่มการเรียง') + '</button>';
+    } else if (page === 'group') {
+      var gs = S.PF_GROUPS.map(function (g) { return [g[0], L(g[1])]; })
+        .concat((f.fields || []).filter(function (x) { return x.type === 'select' || x.type === 'person'; })
+          .map(function (x) { return ['pff:' + x.id, x.name]; }));
+      h += '<div class="flt-chips">';
+      gs.forEach(function (g) {
+        h += '<button class="flt-chip' + ((v.group || 'none') === g[0] ? ' on' : '') + '" data-act="pfg-set" data-v="' + esc(g[0]) + '">' + esc(g[1]) + '</button>';
+      });
+      h += '</div>';
+    } else {
+      var cols = R.PF_COLS.filter(function (c) { return c[0] !== 'goals' || typeof S.goalsOfItem === 'function'; })
+        .map(function (c) { return [c[0], L(c[1])]; })
+        .concat((f.fields || []).map(function (x) { return ['pff:' + x.id, x.name]; }));
+      cols.forEach(function (c) {
+        var on = v.hide.indexOf(c[0]) < 0;
+        h += '<label class="pfo-col"><input type="checkbox" data-act="pfc-toggle" data-v="' + esc(c[0]) + '"' + (on ? ' checked' : '') + '> ' + esc(c[1]) + '</label>';
+      });
+    }
+    h += '</div><div class="modal-acts"><button class="btn btn-primary" data-act="pfo-close">' + L('เสร็จแล้ว') + '</button></div>';
+    return h;
+  }
+
+  /* ---------- ฟิลด์ของพอร์ตโฟลิโอ ---------- */
+  var PFF_TYPE_LABELS = { number: 'ตัวเลข', text: 'ข้อความ', select: 'ตัวเลือกเดียว', date: 'วันที่', person: 'บุคคล', rollup: 'รวมจากงาน (rollup)' };
+  function pffManageHtml(pfId) {
+    var f = S.portfolio(pfId);
+    if (!f) return '';
+    var h = '<h2>' + L('ฟิลด์ของพอร์ตโฟลิโอ') + '</h2><p class="prj-note">' +
+      L('ฟิลด์กรอกค่าแยกต่อแถว (โปรเจกต์/พอร์ตโฟลิโอย่อย) ส่วน rollup รวมค่าฟิลด์ตัวเลขจากงานในโปรเจกต์ให้เอง') + '</p>';
+    if (!f.fields.length) h += '<div class="ovw-empty">' + L('ยังไม่มีฟิลด์') + '</div>';
+    f.fields.forEach(function (fd) {
+      h += '<div class="pff-row">' + I(fd.type === 'rollup' ? 'bolt' : 'hash', 14) + '<span class="grow"><b>' + esc(fd.name) + '</b><em>' +
+        esc(L(PFF_TYPE_LABELS[fd.type] || fd.type)) + (fd.type === 'rollup' ? ' · ' + esc(L(R.rollupFnLabel(fd.fn))) : '') + '</em></span>' +
+        '<button class="icon-btn" data-act="pff-edit" data-id="' + esc(pfId) + '" data-f="' + esc(fd.id) + '" title="' + L('แก้ไข') + '">' + I('pencil', 13) + '</button>' +
+        '<button class="icon-btn" data-act="pff-del" data-id="' + esc(pfId) + '" data-f="' + esc(fd.id) + '" title="' + L('ลบ') + '">' + I('trash', 13) + '</button></div>';
+    });
+    h += '<div class="modal-acts"><button class="btn" data-act="pff-new" data-id="' + esc(pfId) + '">' + I('plus', 13) + ' ' + L('เพิ่มฟิลด์') + '</button>' +
+      '<button class="btn btn-primary" data-act="close-modal">' + L('เสร็จแล้ว') + '</button></div>';
+    return h;
+  }
+  function pffEditHtml() {
+    var e = state.pffEdit, d = e.def, f = S.portfolio(e.pf);
+    var h = '<h2>' + (d.id ? L('แก้ฟิลด์') : L('เพิ่มฟิลด์')) + '</h2>';
+    h += '<div class="field"><label>' + L('ชื่อฟิลด์') + '</label><input id="pffName" class="inp" maxlength="80" value="' + esc(d.name || '') + '"></div>';
+    h += '<label class="opt-lbl">' + L('ชนิด') + '</label><div class="flt-chips">';
+    S.PF_FIELD_TYPES.forEach(function (t) {
+      h += '<button class="flt-chip' + (d.type === t ? ' on' : '') + '"' + (d.id ? ' disabled' : ' data-act="pff-type" data-v="' + t + '"') + '>' +
+        esc(L(PFF_TYPE_LABELS[t])) + '</button>';
+    });
+    h += '</div>';
+    if (d.type === 'select') {
+      h += '<div class="field"><label>' + L('ตัวเลือก (คั่นด้วยจุลภาค)') + '</label><input id="pffOpts" class="inp" value="' +
+        esc((d.options || []).map(function (o) { return o.name; }).join(', ')) + '"></div>';
+    }
+    if (d.type === 'rollup') {
+      var srcs = S.pfRollupSources(e.pf);
+      h += '<div class="field"><label>' + L('รวมค่าจากฟิลด์ตัวเลขของงาน') + '</label>';
+      if (!srcs.length) h += '<p class="prj-note">' + L('ยังไม่มีฟิลด์ตัวเลขในโปรเจกต์ใต้พอร์ตโฟลิโอนี้') + '</p>';
+      else h += '<select id="pffSrc" class="inp">' + srcs.map(function (s) {
+        return '<option value="' + esc(s.id) + '"' + (d.src === s.id ? ' selected' : '') + '>' + esc(s.name) + '</option>';
+      }).join('') + '</select>';
+      h += '</div><div class="field"><label>' + L('วิธีรวม') + '</label><select id="pffFn" class="inp">' + S.ROLLUP_FNS.map(function (x) {
+        return '<option value="' + x + '"' + (d.fn === x ? ' selected' : '') + '>' + esc(L(R.rollupFnLabel(x))) + '</option>';
+      }).join('') + '</select></div>';
+    }
+    if (d.type === 'number' || d.type === 'rollup') {
+      var fm = d.format || {};
+      h += '<div class="field"><label>' + L('รูปแบบตัวเลข') + '</label><select id="pffFmt" class="inp">' +
+        S.NUMBER_FORMATS.map(function (x) { return '<option value="' + x.id + '"' + ((fm.kind || 'number') === x.id ? ' selected' : '') + '>' + esc(L(x.label)) + '</option>'; }).join('') +
+        '</select></div>';
+    }
+    h += '<div class="modal-acts"><button class="btn" data-act="pff-manage" data-id="' + esc(e.pf) + '">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="pff-save">' + L('บันทึก') + '</button></div>';
+    return h;
+  }
+
+  /* ---------- ทีม: หน้าต่าง ---------- */
+  function teamEditHtml(tid) {
+    var t = tid ? S.team(tid) : null;
+    var cur = t || { name: '', desc: '', privacy: 'public', color: S.PALETTE[S.teams().length % S.PALETTE.length], icon: '👥' };
+    var h = '<h2>' + (t ? L('แก้ไขทีม') : L('สร้างทีม')) + '</h2>';
+    h += '<div class="field"><label>' + L('ชื่อทีม') + '</label><input id="tmName" class="inp" maxlength="120" value="' + esc(cur.name) + '"></div>';
+    h += '<div class="field"><label>' + L('คำอธิบาย') + '</label><textarea id="tmDesc" class="inp" rows="3">' + esc(cur.desc) + '</textarea></div>';
+    h += '<label class="opt-lbl">' + L('ความเป็นส่วนตัว') + '</label>';
+    S.TEAM_PRIVACY.forEach(function (p) {
+      h += '<label class="tm-priv"><input type="radio" name="tmPriv" value="' + p.id + '"' + (cur.privacy === p.id ? ' checked' : '') + '>' +
+        '<span><b>' + esc(L(p.label)) + '</b><em>' + esc(L(p.desc)) + '</em></span></label>';
+    });
+    h += '<label class="opt-lbl">' + L('สี') + '</label><div class="swatch-pick" id="pColors">';
+    S.PALETTE.forEach(function (c) {
+      h += '<button type="button" data-color="' + c + '" class="' + (c === cur.color ? 'on' : '') + '" style="background:' + c + '"></button>';
+    });
+    h += '</div><div class="field" style="max-width:170px;margin-top:12px"><label>' + L('ไอคอน (อีโมจิ)') + '</label><input id="tmIcon" class="inp" maxlength="4" value="' +
+      esc(cur.icon) + '"></div>';
+    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button><button class="btn btn-primary" data-act="team-save"' +
+      (t ? ' data-id="' + esc(t.id) + '"' : '') + '>' + (t ? L('บันทึก') : L('สร้างทีม')) + '</button></div>';
+    return h;
+  }
+  function teamMenuHtml(tid) {
+    var t = S.team(tid), h = '';
+    if (!t) return '';
+    var manage = S.canManageTeam(tid), mem = S.isTeamMember(tid);
+    if (manage) {
+      h += '<button data-act="team-edit" data-id="' + esc(tid) + '">' + I('pencil', 14) + '<span class="grow">' + L('แก้ไขทีม') + '</span></button>';
+      h += '<button data-act="team-add-member" data-id="' + esc(tid) + '">' + I('users', 14) + '<span class="grow">' + L('เพิ่มสมาชิก') + '</span></button>';
+    }
+    h += '<button data-act="copy-link-team" data-id="' + esc(tid) + '">' + I('link', 14) + '<span class="grow">' + L('คัดลอกลิงก์ทีม') + '</span></button>';
+    if (mem) {
+      h += '<div class="pop-sep"></div><button data-act="team-remove" data-id="' + esc(tid) + '" data-u="' + esc(S.db.currentUserId) + '">' +
+        I('signOut', 14) + '<span class="grow">' + L('ออกจากทีม') + '</span></button>';
+    }
+    if (manage) {
+      h += '<button class="danger" data-act="team-delete" data-id="' + esc(tid) + '">' + I('trash', 14) + '<span class="grow">' + L('ลบทีม') + '</span></button>';
+    }
+    return h;
+  }
+  function teamAddMemberHtml(tid) {
+    var t = S.team(tid);
+    var h = '<h2>' + L('เพิ่มสมาชิกเข้า {t}', { t: t.name }) + '</h2><div class="pf-pick">';
+    var rest = S.db.users.filter(function (u) { return u.active !== false && !t.members.some(function (m) { return m.u === u.id; }); });
+    if (!rest.length) h += '<p class="prj-note">' + L('ทุกคนอยู่ในทีมนี้แล้ว') + '</p>';
+    rest.forEach(function (u) {
+      h += '<button class="pf-pick-row" data-act="team-add-pick" data-id="' + esc(tid) + '" data-u="' + esc(u.id) + '">' + R.avatar(u, 'sm') +
+        '<span class="grow"><b>' + esc(u.name) + '</b><em>' + esc(u.email || '') + '</em></span>' + I('plus', 15) + '</button>';
+    });
+    return h + '</div><div class="modal-acts"><button class="btn btn-primary" data-act="close-modal">' + L('เสร็จแล้ว') + '</button></div>';
+  }
+  function teamPinHtml(tid) {
+    var t = S.team(tid);
+    var h = '<h2>' + L('ปักหมุดในทีม') + '</h2><div class="pf-pick">';
+    S.visibleProjects().map(function (p) { return { o: p, k: 'project' }; })
+      .concat(S.portfolios().map(function (f) { return { o: f, k: 'portfolio' }; })).forEach(function (x) {
+        var on = t.pins.indexOf(x.o.id) >= 0;
+        h += '<button class="pf-pick-row' + (on ? ' on' : '') + '" data-act="team-pin" data-id="' + esc(tid) + '" data-item="' + esc(x.o.id) + '" data-re="1">' +
+          '<span class="hproj-ic" style="background:' + esc(x.o.color) + '22">' + esc(x.o.icon) + '</span><span class="grow"><b>' + esc(x.o.name) +
+          '</b><em>' + esc(x.k === 'portfolio' ? L('พอร์ตโฟลิโอ') : L('โปรเจกต์')) + '</em></span>' + (on ? R.ICON.check : I('plus', 15)) + '</button>';
+      });
+    return h + '</div><div class="modal-acts"><button class="btn btn-primary" data-act="close-modal">' + L('เสร็จแล้ว') + '</button></div>';
+  }
+  function teamShareHtml(pid) {
+    var p = S.project(pid);
+    var h = '<h2>' + L('แชร์ {p} ให้ทีม', { p: p.name }) + '</h2><p class="prj-note">' +
+      L('สมาชิกของทีมได้สิทธิ์ตามที่เลือก บวกเพิ่มจากสิทธิ์ที่มีอยู่แล้ว (ใช้ระดับที่สูงที่สุด) โปรเจกต์ปิดก็เห็นได้ถ้าแชร์ให้ทีม') + '</p>';
+    var list = S.visibleTeams();
+    if (!list.length) h += '<div class="ovw-empty">' + L('ยังไม่มีทีม สร้างได้จากแถบซ้ายที่หัวข้อ “ทีม”') + '</div>';
+    list.forEach(function (t) {
+      var cur = (p.teams || []).filter(function (s) { return s.id === t.id; })[0];
+      h += '<div class="pff-row"><span class="hproj-ic" style="background:' + esc(t.color) + '22">' + esc(t.icon) + '</span><span class="grow"><b>' +
+        esc(t.name) + '</b><em>' + esc(L('{n} สมาชิก', { n: t.members.length })) + '</em></span>' +
+        optSelect('team-share-set', [['', L('ไม่แชร์')]].concat(S.PROJECT_ACCESS.map(function (a) { return [a.id, L(a.label)]; })),
+          cur ? cur.access : '', ' data-p="' + esc(pid) + '" data-t="' + esc(t.id) + '"') + '</div>';
+    });
+    return h + '<div class="modal-acts"><button class="btn btn-primary" data-act="close-modal">' + L('เสร็จแล้ว') + '</button></div>';
+  }
+  function pfUpdateHtml(pfId) {
+    var f = S.portfolio(pfId);
+    var cur = state.pfUpd || (f.status ? f.status.state : 'on_track');
+    var h = '<h2>' + L('อัปเดตสถานะพอร์ตโฟลิโอ') + '</h2><div class="flt-chips">';
+    S.PROJECT_STATES.forEach(function (x) {
+      h += '<button class="flt-chip' + (cur === x.id ? ' on' : '') + '" data-act="pf-update-state" data-id="' + esc(pfId) + '" data-v="' + x.id + '">' +
+        '<i class="flt-dot" style="background:' + x.color + '"></i>' + esc(L(x.label)) + '</button>';
+    });
+    h += '</div><div class="field"><label>' + L('สรุปความคืบหน้า') + '</label><textarea id="pfUpdText" class="inp" rows="5" placeholder="' +
+      esc(L('เกิดอะไรขึ้นบ้าง อะไรเสี่ยง ต้องการความช่วยเหลือเรื่องไหน')) + '">' + esc(state.pfUpdText || '') + '</textarea></div>';
+    return h + '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button><button class="btn btn-primary" data-act="pf-update-post" data-id="' +
+      esc(pfId) + '">' + L('โพสต์อัปเดต') + '</button></div>';
+  }
+  function pickedTeamColor(fb) {
+    var on = $modal.querySelector('#pColors button.on');
+    return on ? on.dataset.color : fb;
+  }
+
+  /** คำสั่งคลิกของชิ้นงาน 4a — คืน true เมื่อจัดการแล้ว */
+  function act4a(act, el, e) {
+    var id = el.dataset.id;
+    var rid = state.route.id;
+    switch (act) {
+      /* --- ทีม --- */
+      case 'go-team': closeSidebar(); closePops(); closeModal(); goTeam(id); return true;
+      case 'team-tab':
+        state.route.view = el.dataset.v;
+        renderAll();
+        return true;
+      case 'team-tdone': state.teamDone = el.dataset.v === '1'; renderViewBody(); return true;
+      case 'team-new': closePops(); openModal(teamEditHtml(null)); return true;
+      case 'team-edit': closePops(); openModal(teamEditHtml(id)); return true;
+      case 'team-save': {
+        var tn = ($modal.querySelector('#tmName') || {}).value || '';
+        if (!tn.trim()) { toast(L('ใส่ชื่อทีมก่อน')); return true; }
+        var pr = $modal.querySelector('input[name="tmPriv"]:checked');
+        var attrs = { name: tn.trim(), desc: ($modal.querySelector('#tmDesc') || {}).value || '', privacy: pr ? pr.value : 'public',
+          color: pickedTeamColor(null), icon: (($modal.querySelector('#tmIcon') || {}).value || '').trim() || '👥' };
+        if (id) {
+          if (!attrs.color) delete attrs.color;
+          if (S.updateTeam(id, attrs)) { closeModal(); toast(L('บันทึกทีมแล้ว'), L('ย้อนกลับ'), 'undo'); }
+          else denyToast();
+        } else {
+          var nt = S.createTeam(attrs);
+          closeModal();
+          if (nt) { goTeam(nt.id); toast(L('สร้างทีมแล้ว'), L('ย้อนกลับ'), 'undo'); } else denyToast();
+        }
+        return true;
+      }
+      case 'team-join': {
+        e.stopPropagation();
+        var jr = S.joinTeam(id);
+        toast(jr === 'joined' ? L('เข้าร่วมทีมแล้ว') : jr === 'requested' ? L('ส่งคำขอเข้าร่วมแล้ว รอผู้ดูแลทีมอนุมัติ') : L('เข้าร่วมทีมนี้ไม่ได้'));
+        renderAll();
+        return true;
+      }
+      case 'team-menu':
+        if (popIsOpenFor(el)) { closePops(); return true; }
+        openPop(el, teamMenuHtml(id));
+        return true;
+      case 'copy-link-team':
+        closePops();
+        copyText(global.location.href.split('#')[0] + '#/team/' + id, L('คัดลอกลิงก์ทีมแล้ว'));
+        return true;
+      case 'team-privacy': {
+        var tp = S.team(id);
+        if (!tp) return true;
+        var ph = '';
+        S.TEAM_PRIVACY.forEach(function (p) {
+          ph += '<button data-act="team-privacy-set" data-id="' + esc(id) + '" data-v="' + p.id + '"><span class="grow">' + esc(L(p.label)) + '</span>' +
+            (tp.privacy === p.id ? R.ICON.check : '') + '</button>';
+        });
+        openPop(el, ph);
+        return true;
+      }
+      case 'team-privacy-set':
+        closePops();
+        if (S.updateTeam(id, { privacy: el.dataset.v })) { renderAll(); toast(L('เปลี่ยนความเป็นส่วนตัวแล้ว'), L('ย้อนกลับ'), 'undo'); }
+        return true;
+      case 'team-delete': {
+        closePops();
+        var td = S.team(id);
+        if (!td) return true;
+        askConfirm(L('ลบทีม “{t}”?', { t: td.name }), L('โปรเจกต์ที่แชร์ให้ทีมยังอยู่ครบ แต่สมาชิกจะไม่ได้สิทธิ์ผ่านทีมนี้อีก'), function () {
+          if (S.deleteTeam(id)) {
+            if (state.route.type === 'team' && state.route.id === id) state.route = { type: 'teams' };
+            renderAll();
+            toast(L('ลบทีมแล้ว'), L('ย้อนกลับ'), 'undo');
+          }
+        }, { ok: L('ลบทีม') });
+        return true;
+      }
+      case 'team-add-member': closePops(); openModal(teamAddMemberHtml(id)); return true;
+      case 'team-add-pick':
+        if (S.addTeamMember(id, el.dataset.u, 'member')) { openModal(teamAddMemberHtml(id)); renderAll(); } else denyToast();
+        return true;
+      case 'team-role': {
+        var tr = S.team(id), mm = tr && tr.members.filter(function (m) { return m.u === el.dataset.u; })[0];
+        if (!mm) return true;
+        if (!S.setTeamRole(id, el.dataset.u, mm.role === 'admin' ? 'member' : 'admin')) toast(L('ต้องมีผู้ดูแลทีมอย่างน้อยหนึ่งคน'));
+        else { renderAll(); toast(L('เปลี่ยนบทบาทแล้ว'), L('ย้อนกลับ'), 'undo'); }
+        return true;
+      }
+      case 'team-remove': {
+        closePops();
+        var self = el.dataset.u === S.db.currentUserId, tu = el.dataset.u;
+        askConfirm(self ? L('ออกจากทีมนี้?') : L('ถอดสมาชิกคนนี้ออกจากทีม?'), self ? L('สิทธิ์ที่ได้ผ่านทีมจะหายไปด้วย') : '', function () {
+          if (S.removeTeamMember(id, tu)) { renderAll(); toast(self ? L('ออกจากทีมแล้ว') : L('ถอดออกแล้ว'), L('ย้อนกลับ'), 'undo'); }
+          else toast(L('ต้องมีผู้ดูแลทีมอย่างน้อยหนึ่งคน'));
+        }, { ok: self ? L('ออกจากทีม') : L('ถอดออก') });
+        return true;
+      }
+      case 'team-req-ok':
+      case 'team-req-no':
+        if (S.answerTeamRequest(id, el.dataset.u, act === 'team-req-ok')) renderAll(); else denyToast();
+        return true;
+      case 'team-pin-pick': openModal(teamPinHtml(id)); return true;
+      case 'team-pin': {
+        e.stopPropagation();
+        var pn = S.toggleTeamPin(id, el.dataset.item);
+        if (pn === null) toast(L('ปักหมุดไม่ได้ (ครบ {n} รายการ หรือไม่มีสิทธิ์)', { n: S.TEAM_PIN_MAX }));
+        if (el.dataset.re) openModal(teamPinHtml(id));
+        renderAll();
+        return true;
+      }
+      case 'team-res-add':
+        askText(L('ลิงก์ (URL)'), 'https://', function (url) {
+          if (!url || url === 'https://') return;
+          askText(L('ชื่อที่แสดง'), '', function (name) {
+            if (!S.addTeamResource(id, name, url)) toast(L('เพิ่มไม่ได้ — ตรวจลิงก์ หรือครบ {n} รายการแล้ว', { n: S.TEAM_RES_MAX }));
+            else renderAll();
+          }, { note: L('เว้นว่างได้ จะใช้ลิงก์เป็นชื่อ') });
+        }, { type: 'url', ok: L('ถัดไป') });
+        return true;
+      case 'team-res-del':
+        if (S.removeTeamResource(id, el.dataset.r)) { renderAll(); toast(L('เอาออกแล้ว'), L('ย้อนกลับ'), 'undo'); }
+        return true;
+      case 'team-share': closePops(); openModal(teamShareHtml(id || rid)); return true;
+
+      /* --- พอร์ตโฟลิโอ --- */
+      case 'pf-open':
+        if (el.dataset.kind === 'portfolio') goPortfolio(id); else goProject(id);
+        return true;
+      case 'pf-nest': {
+        var nr = S.addPortfolioToPortfolio(el.dataset.pf, id);
+        if (nr === 'cycle') toast(L('ใส่ไม่ได้ เพราะจะทำให้พอร์ตโฟลิโอวนซ้อนกันเอง'));
+        else if (nr) { openModal(portfolioAddModal(el.dataset.pf)); renderAll(); }
+        return true;
+      }
+      case 'pf-unnest':
+        e.stopPropagation();
+        if (S.removePortfolioFromPortfolio(el.dataset.pf, id)) {
+          if ($mdBack.classList.contains('open') && $modal.querySelector('.pf-pick')) openModal(portfolioAddModal(el.dataset.pf));
+          renderAll();
+          toast(L('ถอดออกจากพอร์ตโฟลิโอแล้ว'), L('ย้อนกลับ'), 'undo');
+        }
+        return true;
+      case 'pf-newproj':
+        state.npTab = 'blank';
+        openModal(projectModal(null));
+        state.npPf = el.dataset.pf;                   // หลัง openModal — ปุ่มสร้าง/เทมเพลตจะใส่เข้าพอร์ตนี้
+        return true;
+      case 'pfv-open': {
+        var pvf = S.portfolio(rid), sv = S.pfSavedView(rid, id);
+        if (!pvf || !sv) return true;
+        state.route = { type: 'portfolio', id: rid, view: 'list', sv: id };
+        renderAll();
+        return true;
+      }
+      case 'pfv-menu': {
+        e.stopPropagation();
+        var mh = '<button data-act="pfv-rename" data-id="' + esc(id) + '">' + I('pencil', 14) + '<span class="grow">' + L('เปลี่ยนชื่อแท็บ') + '</span></button>' +
+          '<button data-act="pfv-default" data-id="' + esc(id) + '">' + I('star', 14) + '<span class="grow">' + L('ตั้งเป็นแท็บเริ่มต้น') + '</span></button>' +
+          '<div class="pop-sep"></div><button class="danger" data-act="pfv-delete" data-id="' + esc(id) + '">' + I('trash', 14) +
+          '<span class="grow">' + L('ลบแท็บ') + '</span></button>';
+        openPop(el, mh);
+        return true;
+      }
+      case 'pfv-rename': {
+        closePops();
+        var rv = S.pfSavedView(rid, id);
+        if (rv) askText(L('ชื่อแท็บ'), rv.name, function (v) { if (v && S.pfUpdateView(rid, id, { name: v })) renderAll(); });
+        return true;
+      }
+      case 'pfv-default': closePops(); if (S.pfSetDefaultTab(rid, id)) { renderAll(); toast(L('ตั้งเป็นแท็บเริ่มต้นแล้ว'), L('ย้อนกลับ'), 'undo'); } return true;
+      case 'pfv-delete':
+        closePops();
+        if (S.pfDeleteView(rid, id)) {
+          state.route = { type: 'portfolio', id: rid, view: 'list' };
+          renderAll();
+          toast(L('ลบแท็บแล้ว'), L('ย้อนกลับ'), 'undo');
+        }
+        return true;
+      case 'pfv-save':
+        askText(L('ชื่อแท็บมุมมอง'), L('มุมมองใหม่'), function (v) {
+          if (!v) return;
+          var nv = S.pfSaveView(rid, v, pfViewFor(rid));
+          if (!nv) { toast(L('บันทึกไม่ได้')); return; }
+          state.route = { type: 'portfolio', id: rid, view: 'list', sv: nv.id };
+          renderAll();
+          toast(L('บันทึกเป็นแท็บแล้ว'), L('ย้อนกลับ'), 'undo');
+        }, { ok: L('บันทึก') });
+        return true;
+      case 'pfv-update':
+        if (state.route.sv && S.pfUpdateView(rid, state.route.sv, { view: pfViewFor(rid) })) {
+          delete state.pfWork[state.route.sv];
+          renderAll();
+          toast(L('บันทึกมุมมองแล้ว'), L('ย้อนกลับ'), 'undo');
+        }
+        return true;
+      case 'pfv-discard':
+        if (state.route.sv && state.pfWork) delete state.pfWork[state.route.sv];
+        renderAll();
+        return true;
+      case 'pfv-opts':
+        state.pfOptPage = el.dataset.page || 'filters';
+        state.pfOptOpen = true;
+        openModal(pfOptsHtml(), true);
+        return true;
+      case 'pfo-close': state.pfOptOpen = false; closeModal(); return true;
+      case 'pfq-add': {
+        var qv = pfViewFor(rid), ff = S.filterFields('pf:' + rid)[0];
+        var fop = (S.FILTER_OPS[ff.kind] || [['is']])[0][0];
+        qv.filters.push({ f: ff.id, op: fop, v: fltDefaultV(ff.kind, fop) });
+        pfViewChanged();
+        return true;
+      }
+      case 'pfq-del': pfViewFor(rid).filters.splice(+el.dataset.i, 1); pfViewChanged(); return true;
+      case 'pfq-opt': {
+        var oc = pfViewFor(rid).filters[+el.dataset.i];
+        if (!oc) return true;
+        var ov = [].concat(oc.v || []), vv = el.dataset.v, at = ov.indexOf(vv);
+        if (at >= 0) ov.splice(at, 1); else ov.push(vv);
+        oc.v = ov;
+        pfViewChanged();
+        return true;
+      }
+      case 'pfs-add': pfViewFor(rid).sorts.push({ k: 'name', d: 'asc' }); pfViewChanged(); return true;
+      case 'pfs-del': pfViewFor(rid).sorts.splice(+el.dataset.i, 1); pfViewChanged(); return true;
+      case 'pfs-dir': {
+        var sd = pfViewFor(rid).sorts[+el.dataset.i];
+        if (sd) sd.d = sd.d === 'desc' ? 'asc' : 'desc';
+        pfViewChanged();
+        return true;
+      }
+      case 'pfg-set': pfViewFor(rid).group = el.dataset.v; pfViewChanged(); return true;
+
+      /* --- ฟิลด์ของพอร์ตโฟลิโอ --- */
+      case 'pff-manage': closePops(); state.pffEdit = null; openModal(pffManageHtml(id || rid)); return true;
+      case 'pff-new':
+        state.pffEdit = { pf: id, def: { name: '', type: 'number', options: [], fn: 'sum', src: '', format: null } };
+        openModal(pffEditHtml());
+        return true;
+      case 'pff-edit': {
+        var ef = S.portfolio(id), efd = ef && S.pfField(ef, el.dataset.f);
+        if (!efd) return true;
+        state.pffEdit = { pf: id, def: S.clone(efd) };
+        openModal(pffEditHtml());
+        return true;
+      }
+      case 'pff-type': {
+        var pe = state.pffEdit;
+        if (!pe) return true;
+        var nmI = $modal.querySelector('#pffName');
+        if (nmI) pe.def.name = nmI.value;
+        pe.def.type = el.dataset.v;
+        openModal(pffEditHtml());
+        return true;
+      }
+      case 'pff-save': {
+        var ps = state.pffEdit;
+        if (!ps) return true;
+        var d = ps.def;
+        d.name = (($modal.querySelector('#pffName') || {}).value || '').trim();
+        if (!d.name) { toast(L('ใส่ชื่อฟิลด์ก่อน')); return true; }
+        var oi = $modal.querySelector('#pffOpts');
+        if (oi) d.options = oi.value.split(',').map(function (x) { return x.trim(); }).filter(Boolean)
+          .map(function (n, i) { return { name: n, color: S.OPTION_COLORS[i % S.OPTION_COLORS.length] }; });
+        var si = $modal.querySelector('#pffSrc'), fi = $modal.querySelector('#pffFn'), mi = $modal.querySelector('#pffFmt');
+        if (si) d.src = si.value;
+        if (fi) d.fn = fi.value;
+        if (mi) d.format = mi.value === 'number' ? null : { kind: mi.value, currency: mi.value === 'currency' ? 'THB' : null, decimals: null };
+        if (d.type === 'rollup' && !d.src) { toast(L('เลือกฟิลด์ต้นทางก่อน')); return true; }
+        if (!S.savePfField(ps.pf, d)) { toast(L('บันทึกไม่ได้ (ครบ {n} ฟิลด์แล้ว?)', { n: S.PF_FIELD_MAX })); return true; }
+        state.pffEdit = null;
+        openModal(pffManageHtml(ps.pf));
+        renderAll();
+        return true;
+      }
+      case 'pff-del': {
+        var dpf = id, dfid = el.dataset.f;
+        askConfirm(L('ลบฟิลด์นี้?'), L('ค่าที่กรอกไว้ในฟิลด์นี้จะหายไปด้วย'), function () {
+          if (S.deletePfField(dpf, dfid)) { renderAll(); toast(L('ลบฟิลด์แล้ว'), L('ย้อนกลับ'), 'undo'); }
+        }, { ok: L('ลบฟิลด์') });
+        return true;
+      }
+      case 'pff-cell': {
+        e.stopPropagation();
+        var cf = S.portfolio(el.dataset.pf), cfd = cf && S.pfField(cf, el.dataset.f);
+        if (!cfd) return true;
+        var it = S.portfolioItems(cf.id).filter(function (x) { return x.id === el.dataset.item; })[0];
+        if (!it) return true;
+        var curV = S.pfFieldValue(cf, it, cfd.id);
+        var setV = function (v) { if (S.setPfValue(cf.id, it.id, cfd.id, v)) { renderAll(); toast(L('บันทึกแล้ว'), L('ย้อนกลับ'), 'undo'); } };
+        if (cfd.type === 'select' || cfd.type === 'person') {
+          var ch = (cfd.type === 'select' ? cfd.options.map(function (o) { return { label: o.name, v: o.name }; })
+            : S.db.users.filter(function (u) { return u.active !== false; }).map(function (u) { return { label: u.name, v: u.id }; }))
+            .map(function (o) { return { label: o.label, primary: o.v === curV, run: function () { setV(o.v); } }; });
+          ch.push({ label: L('ล้างค่า'), run: function () { setV(null); } });
+          askChoice(cfd.name + ' · ' + it.o.name, '', ch);
+        } else {
+          askText(cfd.name + ' · ' + it.o.name, curV == null ? '' : curV, function (v) { setV(v === '' ? null : v); },
+            { type: cfd.type === 'number' ? 'number' : cfd.type === 'date' ? 'date' : 'text' });
+        }
+        return true;
+      }
+      case 'pf-update':
+        state.pfUpd = null; state.pfUpdText = '';
+        openModal(pfUpdateHtml(id));
+        return true;
+      case 'pf-update-state': {
+        var ut = $modal.querySelector('#pfUpdText');
+        state.pfUpdText = ut ? ut.value : '';
+        state.pfUpd = el.dataset.v;
+        openModal(pfUpdateHtml(id));
+        return true;
+      }
+      case 'pf-update-post': {
+        var upf = S.portfolio(id);
+        var st = state.pfUpd || (upf && upf.status ? upf.status.state : 'on_track');
+        var txt = ($modal.querySelector('#pfUpdText') || {}).value || '';
+        if (S.postPortfolioUpdate(id, st, txt)) {
+          closeModal();
+          renderAll();
+          toast(L('โพสต์อัปเดตสถานะแล้ว'), L('ย้อนกลับ'), 'undo');
+        }
+        return true;
+      }
+    }
+    return act4a2 ? act4a2(act, el, e) : false;
+  }
+  var act4a2 = null;                    // ส่วนที่ 2 (เป้าหมาย) เสียบเพิ่ม
+
+  /** change ของชิ้นงาน 4a */
+  function change4a(act, el) {
+    var rid = state.route.id;
+    if (act === 'pfq-field' || act === 'pfq-op' || act === 'pfq-val' || act === 'pfq-val2') {
+      var c = pfViewFor(rid).filters[+el.dataset.i];
+      if (!c) return true;
+      if (act === 'pfq-field') {
+        var def = S.filterField('pf:' + rid, el.value);
+        c.f = el.value;
+        c.op = ((def && S.FILTER_OPS[def.kind]) || [['is']])[0][0];
+        c.v = fltDefaultV(def ? def.kind : 'text', c.op);
+      } else if (act === 'pfq-op') {
+        var d2 = S.filterField('pf:' + rid, c.f);
+        c.op = el.value;
+        c.v = fltDefaultV(d2 ? d2.kind : 'text', c.op);
+      } else if (act === 'pfq-val2') {
+        c.v = [].concat(Array.isArray(c.v) ? c.v : ['', '']);
+        c.v[1] = el.value;
+      } else if (c.op === 'between') {
+        c.v = [].concat(Array.isArray(c.v) ? c.v : ['', '']);
+        c.v[0] = el.value;
+      } else c.v = el.value;
+      pfViewChanged();
+      return true;
+    }
+    if (act === 'pfs-key') {
+      var s = pfViewFor(rid).sorts[+el.dataset.i];
+      if (s) s.k = el.value;
+      pfViewChanged();
+      return true;
+    }
+    if (act === 'pfc-toggle') {
+      var v = pfViewFor(rid), k = el.dataset.v, at = v.hide.indexOf(k);
+      if (el.checked && at >= 0) v.hide.splice(at, 1);
+      if (!el.checked && at < 0) v.hide.push(k);
+      pfViewChanged();
+      return true;
+    }
+    if (act === 'team-share-set') {
+      if (S.shareProjectWithTeam(el.dataset.p, el.dataset.t, el.value || null)) {
+        openModal(teamShareHtml(el.dataset.p));
+        renderAll();
+        toast(el.value ? L('แชร์ให้ทีมแล้ว') : L('เลิกแชร์ให้ทีมแล้ว'), L('ย้อนกลับ'), 'undo');
+      } else { denyToast(); openModal(teamShareHtml(el.dataset.p)); }
+      return true;
+    }
+    return change4a2 ? change4a2(act, el) : false;
+  }
+  var change4a2 = null;
+
+  /** หน้าเป้าหมาย (ส่วนที่ 2) */
+  function goalsBody(r) {
+    return goalsBody2 ? goalsBody2(r) : '<div class="empty"><div class="big">🎯</div>' + L('ยังไม่มีหน้าเป้าหมาย') + '</div>';
+  }
+  var goalsBody2 = null;
+
   /* ---------- ด่านตรวจสิทธิ์ ----------
    *
    * ทุกคำสั่งในแอปวิ่งผ่านตัวจัดการคลิกตัวเดียว จึงกันได้ที่จุดเดียวจบ
@@ -6529,6 +7235,17 @@
     put('create', ['pg-task']);
     put('write:task', ['tt-est', 'proof-pin', 'proof-unpin', 'ref-toggle']);
     put('comment', ['tt-add', 'tt-save', 'tt-del', 'timer-start']);
+    /* 4a — ทีม: สร้าง/แชร์โปรเจกต์ให้ทีม = แก้โครงสร้าง; จัดการทีม (สมาชิก ความเป็นส่วนตัว ลบ ปักหมุด ทรัพยากร)
+     * store ตรวจซ้ำว่าเป็นผู้ดูแลทีม/ผู้ดูแลระบบ/สมาชิก ส่วนเข้าร่วม/ออก/ขอเข้าร่วมเป็นเรื่องของตัวเอง
+     * พอร์ตโฟลิโอ: ซ้อน ฟิลด์ ค่าในฟิลด์ แท็บมุมมอง โปรเจกต์ใหม่ อัปเดตสถานะ = แก้โครงสร้าง
+     * ตัวกรอง/เรียง/จัดกลุ่ม/คอลัมน์ของพอร์ตโฟลิโอเป็นมุมมองของแต่ละคน */
+    put('structure', ['team-new', 'team-share', 'team-share-set', 'pf-nest', 'pf-unnest', 'pf-newproj',
+      'pfv-save', 'pfv-update', 'pfv-rename', 'pfv-default', 'pfv-delete', 'pff-new', 'pff-edit', 'pff-save', 'pff-del',
+      'pff-cell', 'pf-update', 'pf-update-post']);
+    put('self', ['team-save', 'team-edit', 'team-join', 'team-privacy-set', 'team-delete', 'team-add-member', 'team-add-pick',
+      'team-role', 'team-remove', 'team-req-ok', 'team-req-no', 'team-pin', 'team-pin-pick', 'team-res-add', 'team-res-del',
+      'pfq-add', 'pfq-del', 'pfq-opt', 'pfq-field', 'pfq-op', 'pfq-val', 'pfq-val2', 'pfs-add', 'pfs-del', 'pfs-dir', 'pfs-key',
+      'pfg-set', 'pfc-toggle', 'pfv-discard']);
     return map;
   })();
 
@@ -6618,6 +7335,7 @@
     if (!allowed(act, el)) return;
     if (act3c(act, el, e)) return;                // 3c
     if (act3c2(act, el, e)) return;
+    if (act4a(act, el, e)) return;                // 4a
 
     switch (act) {
 
@@ -6631,10 +7349,7 @@
         closeSidebar();
         var rt = el.dataset.route;
         if (rt === 'project') { goProject(id); break; }
-        if (rt === 'portfolio') {
-          state.route = { type: 'portfolio', id: id, view: 'list' };
-          clearSel(); renderAll(); break;
-        }
+        if (rt === 'portfolio') { goPortfolio(id); break; }
         if (rt === 'profile') { goProfile(id); break; }
         state.route = { type: rt };
         state.calOffset = 0;
@@ -8342,6 +9057,8 @@
         if (el.dataset.route === 'mytasks') {
           state.route = { type: 'mytasks' }; clearSel(); renderAll(); break;
         }
+        /* 4a — ทีม/พอร์ตโฟลิโอ/เป้าหมาย route = 'team:<id>[:แท็บ]' */
+        if (openRoute4a(el.dataset.route)) break;
         /* ประกาศพาไปหน้าประกาศ การรายงานสถานะพาไปหน้าภาพรวมของโปรเจกต์ */
         var npid = el.dataset.project;
         if (npid && S.project(npid)) goProject(npid, el.dataset.route === 'p-overview' ? 'overview' : 'messages');
@@ -8664,7 +9381,7 @@
         break;
 
       /* --- projects --- */
-      case 'new-project': state.npTab = 'blank'; openModal(projectModal(null)); break;
+      case 'new-project': state.npTab = 'blank'; state.npPf = null; openModal(projectModal(null)); break;
       case 'create-project': {
         var secInput = document.getElementById('pSections');
         var secs = secInput ? secInput.value.split(',').map(function (x) { return x.trim(); })
@@ -8677,7 +9394,7 @@
           sections: (secs && secs.length) ? secs : null
         });
         closeModal();
-        goProject(np.id);
+        npToPortfolio(np); goProject(np.id);
         toast(L('สร้างโปรเจกต์แล้ว'));
         break;
       }
@@ -9586,7 +10303,7 @@
         closeModal();
         state.npTab = 'blank';
         if (ptp) {
-          goProject(ptp.id);
+          npToPortfolio(ptp); goProject(ptp.id);
           toast(L('สร้างโปรเจกต์จากเทมเพลตแล้ว'), L('ย้อนกลับ'), 'undo');
         }
         break;
@@ -10007,6 +10724,7 @@
     if (!allowed(act, el)) { renderAll(); return; }   // วาดใหม่เพื่อคืนค่าเดิมให้ช่องกรอก
     if (change3c(act, el)) return;                // 3c
     if (change3c2(act, el)) return;
+    if (change4a(act, el)) return;                // 4a
 
     if (act === 'photo-file') { takePhoto(el); return; }
     if (act === 'att-file') { takeAttachment(el); return; }
@@ -11531,7 +12249,7 @@
     if ((global.location.hash || '').indexOf('#/task/') === 0) return true;
     if (!parsed) return false;
     if (parsed.taskId) return true;
-    return ['project', 'portfolio', 'search', 'profile', 'tag', 'form'].indexOf(parsed.route.type) >= 0;
+    return ['project', 'portfolio', 'search', 'profile', 'tag', 'form', 'team', 'goal'].indexOf(parsed.route.type) >= 0;
   }
 
   var boot = readHash();

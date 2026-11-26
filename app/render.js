@@ -283,6 +283,22 @@
       h += '</div>';
     }
 
+    /* 4a — ทีมที่เป็นสมาชิก หัวข้อกดได้ = หน้ารวมทีมทั้งหมด (เรียกดู/ขอเข้าร่วม) */
+    h += '<div class="sb-section"><div class="sb-label"><button class="sb-labelbtn" data-act="go" data-route="teams" title="' +
+      L('ดูทีมทั้งหมด') + '">' + L('ทีม') + '</button>' +
+      (S.can('structure') ? '<button data-act="team-new" title="' + L('สร้างทีม') + '">+</button>' : '') + '</div>';
+    S.myTeams().forEach(function (tm) {
+      h += '<button class="sb-item' + (route.type === 'team' && route.id === tm.id ? ' active' : '') +
+        '" data-act="go-team" data-id="' + esc(tm.id) + '"><span class="emoji">' + esc(tm.icon) + '</span>' +
+        '<span class="swatch" style="background:' + esc(tm.color) + '"></span><span class="grow">' + esc(tm.name) + '</span>' +
+        (tm.privacy === 'private' ? '<span class="lockmark" title="' + L('ทีมส่วนตัว') + '">' + I('shield', 12) + '</span>' : '') +
+        '</button>';
+    });
+    if (!S.myTeams().length) {
+      h += '<button class="sb-item" data-act="go" data-route="teams">' + I('users') + '<span class="grow">' + L('เรียกดูทีม') + '</span></button>';
+    }
+    h += '</div>';
+
     h += '<div class="sb-section">';
 
     /* คลังก็ต้องกรองตามสิทธิ์เหมือนกัน ไม่งั้นเก็บเข้าคลังแล้วโปรเจกต์ปิดโผล่ให้ทุกคนเห็น */
@@ -397,6 +413,13 @@
       h += '</div>' +
         (f.description ? '<div class="tb-desc">' + esc(f.description) + '</div>' : '') +
         '</div>';
+    } else if (route.type === 'team') {
+      var tmT = S.team(route.id);
+      if (!tmT) return '';
+      h += '<div style="min-width:0"><div class="tb-title"><span class="emoji">' + esc(tmT.icon) + '</span><span class="nm">' +
+        esc(tmT.name) + '</span><span class="chip">' + esc(L(teamPrivacyLabel(tmT.privacy))) + '</span></div></div>';
+    } else if (route.type === 'teams') {
+      h += '<div class="tb-title">' + I('users', 20) + ' ' + L('ทีมทั้งหมด') + '</div>';
     } else if (route.type === 'mytasks') {
       h += '<div class="tb-title">' + I('checkCircle', 20) + ' ' + L('งานของฉัน') + '</div>';
     } else if (route.type === 'inbox') {
@@ -459,9 +482,21 @@
         I('archive', 14) + '<span class="hide-sm">' + L('เก็บทั้งหมด') + '</span></button>';
     } else if (route.type === 'portfolio') {
       h += '<button class="btn btn-primary" data-act="pf-add" data-pf="' + esc(route.id) + '">' +
-           L('+ เพิ่มโปรเจกต์เข้าพอร์ต') + '</button>';
+           L('+ เพิ่มเข้าพอร์ต') + '</button>';
       h += '<button class="btn btn-ghost" data-act="pf-menu" data-id="' + esc(route.id) +
            '" title="' + L('เมนูพอร์ตโฟลิโอ') + '">' + I('more') + '</button>';
+    } else if (route.type === 'team') {
+      var tmB = S.team(route.id);
+      if (tmB && !S.isTeamMember(tmB.id) && tmB.privacy !== 'private' && S.role() !== 'guest') {
+        var req = tmB.requests.some(function (r) { return r.u === S.db.currentUserId; });
+        h += req ? '<span class="chip">' + L('ส่งคำขอแล้ว') + '</span>'
+          : '<button class="btn btn-primary" data-act="team-join" data-id="' + esc(tmB.id) + '">' +
+            (tmB.privacy === 'public' ? L('เข้าร่วมทีม') : L('ขอเข้าร่วม')) + '</button>';
+      }
+      h += '<button class="btn btn-ghost" data-act="team-menu" data-id="' + esc(route.id) + '" title="' +
+        L('เมนูทีม') + '">' + I('more') + '</button>';
+    } else if (route.type === 'teams' && S.can('structure')) {
+      h += '<button class="btn btn-primary" data-act="team-new">' + L('+ สร้างทีม') + '</button>';
     }
     h += '</div>';
 
@@ -512,10 +547,29 @@
       h += '</div>';
     }
     if (route.type === 'portfolio') {
+      var pfT = S.portfolio(route.id);
       h += '<div class="tb-tabs">';
       PF_TABS.forEach(function (v) {
-        h += '<button class="tb-tab' + ((route.view || 'list') === v[0] ? ' active' : '') +
-             '" data-act="set-view" data-view="' + v[0] + '">' + L(v[1]) + '</button>';
+        h += '<button class="tb-tab' + ((route.view || 'list') === v[0] && !route.sv ? ' active' : '') +
+             '" data-act="set-view" data-view="' + v[0] + '">' + L(v[1]) +
+             (pfT && !pfT.defaultTab && v[0] === 'list' && pfT.views.length ? '<span class="tb-def" title="' + L('มุมมองเริ่มต้น') + '"></span>' : '') + '</button>';
+      });
+      /* 4a — แท็บมุมมองที่บันทึกไว้ (ตัวกรอง/เรียง/จัดกลุ่มของรายการ) */
+      ((pfT && pfT.views) || []).forEach(function (sv) {
+        var onP = route.sv === sv.id;
+        h += '<button class="tb-tab tb-sv' + (onP ? ' active' : '') + '" data-act="pfv-open" data-id="' + esc(sv.id) + '" title="' +
+          esc(sv.name) + '"><span class="tb-sv-ic">📊</span><span class="tb-sv-nm">' + esc(sv.name) + '</span>' +
+          (pfT.defaultTab === sv.id ? '<span class="tb-def" title="' + L('มุมมองเริ่มต้น') + '"></span>' : '') +
+          (onP && S.can('structure') ? '<span class="tb-tab-caret" data-act="pfv-menu" data-id="' + esc(sv.id) + '" title="' +
+            L('ตัวเลือกแท็บ') + '">' + I('chevronDown', 12) + '</span>' : '') + '</button>';
+      });
+      h += '</div>';
+    }
+    if (route.type === 'team') {
+      h += '<div class="tb-tabs">';
+      TEAM_TABS.forEach(function (v) {
+        h += '<button class="tb-tab' + ((route.view || 'overview') === v[0] ? ' active' : '') +
+          '" data-act="team-tab" data-v="' + v[0] + '">' + L(v[1]) + '</button>';
       });
       h += '</div>';
     }
@@ -1969,17 +2023,19 @@
    * หนึ่งแถวคือหนึ่งโปรเจกต์ ไม่ใช่หนึ่งงาน
    */
 
-  var PF_TABS = [['list', 'รายการ'], ['timeline', 'ไทม์ไลน์'], ['dashboard', 'สรุปผล']];
+  var PF_TABS = [['list', 'รายการ'], ['timeline', 'ไทม์ไลน์'], ['dashboard', 'สรุปผล'],
+                 ['progress', 'ความคืบหน้า'], ['messages', 'ประกาศ']];
 
   function pfProgress(pct, color) {
     return '<span class="pf-bar" title="' + pct + '%"><i style="width:' + pct +
       '%;background:' + esc(color) + '"></i></span><span class="pf-pct">' + pct + '%</span>';
   }
 
-  function portfolioView(portfolioId, tab) {
+  function portfolioView(portfolioId, tab, ui) {
     var f = S.portfolio(portfolioId);
     if (!f) return '<div class="empty"><div class="big">🗂</div>' + L('ไม่พบพอร์ตโฟลิโอนี้') + '</div>';
-    var list = S.portfolioProjects(portfolioId);
+    ui = ui || {};
+    var list = S.allProjectsUnder(portfolioId);
     var st = S.portfolioStats(portfolioId);
     tab = tab || 'list';
 
@@ -2002,62 +2058,196 @@
           { n: st.hidden }) + '</span></div>';
     }
 
-    if (!list.length) {
+    /* 4a — แท็บที่ไม่ต้องมีโปรเจกต์ก็ใช้ได้ */
+    if (tab === 'messages') return h + messagesView(f.id, ui) + '</div>';
+    if (tab === 'progress') return h + pfProgressTab(f, list) + '</div>';
+
+    var items = S.portfolioItems(portfolioId);
+    if (!items.length) {
       h += '<div class="empty"><div class="big">🗂</div>' +
         (st.hidden ? L('พอร์ตโฟลิโอนี้มีแต่โปรเจกต์ที่คุณไม่มีสิทธิ์เห็น')
                    : L('ยังไม่มีโปรเจกต์ในพอร์ตโฟลิโอนี้')) + '</div>';
       if (!st.hidden) {
         h += '<div style="text-align:center"><button class="btn btn-primary" data-act="pf-add" data-pf="' +
-          esc(f.id) + '">' + I('plus', 15) + ' ' + L('เพิ่มโปรเจกต์เข้าพอร์ตโฟลิโอ') + '</button></div>';
+          esc(f.id) + '">' + I('plus', 15) + ' ' + L('เพิ่มโปรเจกต์เข้าพอร์ตโฟลิโอ') + '</button> ' +
+          (S.can('structure') ? '<button class="btn" data-act="pf-newproj" data-pf="' + esc(f.id) + '">' + I('plus', 15) + ' ' +
+            L('สร้างโปรเจกต์ใหม่ในพอร์ต') + '</button>' : '') + '</div>';
       }
       return h + '</div>';
     }
 
-    if (tab === 'list') h += pfList(f, list);
-    else if (tab === 'timeline') h += pfTimeline(f, list);
+    if (tab === 'list') h += pfToolbar(f, ui) + pfTable(f, ui.view || S.pfView(f.id));
+    else if (tab === 'timeline') {
+      if ((f.portfolioIds || []).length) {
+        h += '<div class="pf-hidden">' + I('alert', 14) + '<span>' +
+          L('ไทม์ไลน์แสดงเฉพาะโปรเจกต์ที่อยู่ในพอร์ตโฟลิโอนี้โดยตรง พอร์ตโฟลิโอย่อยไม่แสดงในไทม์ไลน์ (แบบเดียวกับ Asana)') + '</span></div>';
+      }
+      var direct = S.portfolioProjects(f.id);
+      h += direct.length ? pfTimeline(f, direct) : '<div class="empty"><div class="big">📅</div>' + L('ยังไม่มีโปรเจกต์ในพอร์ตโฟลิโอนี้') + '</div>';
+    }
     else h += pfDashboard(f, list, st);
 
     h += '</div>';
     return h;
   }
 
-  function pfList(f, list) {
-    var h = '<div class="pf-tbl">';
-    h += '<div class="pf-head">' +
-      '<span>' + L('โปรเจกต์') + '</span>' +
-      '<span>' + L('สถานะ') + '</span>' +
-      '<span>' + L('ความคืบหน้า') + '</span>' +
-      '<span>' + L('เจ้าของ') + '</span>' +
-      '<span>' + L('กำหนดส่ง') + '</span>' +
-      '<span>' + L('เลยกำหนด') + '</span>' +
-      '<span></span></div>';
+  /* ---------- 4a — ตารางพอร์ตโฟลิโอ: ตัวกรอง เรียง จัดกลุ่ม ฟิลด์ rollup หมุดหมาย เป้าหมายที่เชื่อม ---------- */
+  var PF_COLS = [['status', 'สถานะ', '132px'], ['progress', 'ความคืบหน้า', '140px'], ['msprog', 'หมุดหมาย', '130px'],
+                 ['owner', 'เจ้าของ', '140px'], ['due', 'กำหนดส่ง', '104px'], ['overdue', 'เลยกำหนด', '78px'],
+                 ['goals', 'เป้าหมายที่เชื่อม', '170px']];
 
-    list.forEach(function (p) {
-      var s = S.projectStats(p.id);
-      var owner = S.user(p.owner);
-      var stt = p.status ? projectState(p.status.state) : null;
-      h += '<div class="pf-row" data-act="go" data-route="project" data-id="' + esc(p.id) + '">';
-      h += '<span class="pf-nm"><span class="hproj-ic" style="background:' + esc(p.color) +
-        '22">' + esc(p.icon) + '</span><span class="grow"><b>' + esc(p.name) + '</b>' +
-        (p.description ? '<em>' + esc(p.description) + '</em>' : '') + '</span></span>';
-      h += '<span>' + (stt
-        ? '<span class="status-pill" style="background:' + stt.color + '22;color:' + stt.color +
-          '"><i style="background:' + stt.color + '"></i>' + esc(L(stt.label)) + '</span>'
-        : '<span class="pf-none">' + L('ยังไม่รายงาน') + '</span>') + '</span>';
-      h += '<span class="pf-prog">' + pfProgress(s.percent, p.color) + '</span>';
-      h += '<span>' + (owner ? avatar(owner, 'sm') + '<span class="pf-owner">' + esc(owner.name) + '</span>'
-                             : '<span class="pf-none">—</span>') + '</span>';
-      h += '<span class="' + (p.dueOn ? dueClass(p.dueOn, false) : '') + '">' +
-        (p.dueOn ? fmtDate(p.dueOn) : '<span class="pf-none">—</span>') + '</span>';
-      h += '<span class="' + (s.overdue ? 'pf-bad' : 'pf-none') + '">' + (s.overdue || '—') + '</span>';
-      h += '<span><button class="icon-btn" data-act="pf-remove" data-pf="' + esc(f.id) +
-        '" data-id="' + esc(p.id) + '" title="' + L('ถอดออกจากพอร์ตโฟลิโอ') + '">' +
-        I('close', 14) + '</button></span>';
-      h += '</div>';
+  function pfToolbar(f, ui) {
+    var v = ui.view || S.pfView(f.id);
+    var nf = v.filters.length, ns = v.sorts.length, grp = v.group && v.group !== 'none';
+    var cs = S.can('structure');
+    var h = '<div class="vtb pfx-tb">';
+    h += '<button class="vtb-btn' + (nf ? ' on' : '') + '" data-act="pfv-opts" data-page="filters">' + I('filter', 14) + ' ' +
+      L('ตัวกรอง') + (nf ? ' <b class="vtb-n">' + nf + '</b>' : '') + '</button>';
+    h += '<button class="vtb-btn' + (ns ? ' on' : '') + '" data-act="pfv-opts" data-page="sorts">' + I('bars', 14) + ' ' +
+      L('เรียง') + (ns ? ' <b class="vtb-n">' + ns + '</b>' : '') + '</button>';
+    h += '<button class="vtb-btn' + (grp ? ' on' : '') + '" data-act="pfv-opts" data-page="group">' + I('grid', 14) + ' ' +
+      L('จัดกลุ่ม') + '</button>';
+    h += '<button class="vtb-btn" data-act="pfv-opts" data-page="cols">' + I('menu', 14) + ' ' + L('คอลัมน์') + '</button>';
+    if (cs) h += '<button class="vtb-btn" data-act="pff-manage" data-id="' + esc(f.id) + '">' + I('hash', 14) + ' ' + L('ฟิลด์') + '</button>';
+    h += '<span class="grow"></span>';
+    if (cs && ui.sv && ui.dirty) {
+      h += '<button class="btn btn-sm" data-act="pfv-discard">' + L('ทิ้งการเปลี่ยนแปลง') + '</button>' +
+        '<button class="btn btn-sm btn-primary" data-act="pfv-update">' + L('บันทึกมุมมอง') + '</button>';
+    } else if (cs && !ui.sv) {
+      h += '<button class="btn btn-sm btn-ghost" data-act="pfv-save">' + I('plus', 13) + ' ' + L('บันทึกเป็นแท็บ') + '</button>';
+    }
+    if (cs) h += '<button class="btn btn-sm" data-act="pf-newproj" data-pf="' + esc(f.id) + '">' + I('plus', 13) + ' ' + L('โปรเจกต์ใหม่') + '</button>';
+    return h + '</div>';
+  }
+
+  function pfCellValue(f, fd, it) {
+    var v = S.pfFieldValue(f, it, fd.id);
+    if (v === null || v === undefined || v === '') return '<span class="pf-none">—</span>';
+    if (fd.type === 'number' || fd.type === 'rollup') return esc(S.formatNumber(fd, v));
+    if (fd.type === 'date') return esc(fmtDate(v));
+    if (fd.type === 'person') { var u = S.user(v); return u ? avatar(u, 'sm') + '<span class="pf-owner">' + esc(u.name) + '</span>' : '—'; }
+    if (fd.type === 'select') {
+      var o = (fd.options || []).filter(function (x) { return x.name === v; })[0];
+      return '<span class="chip" style="' + (o && o.color ? 'background:' + esc(o.color) + '22;color:' + esc(o.color) : '') + '">' + esc(v) + '</span>';
+    }
+    return esc(v);
+  }
+
+  function pfStatePill(state) {
+    var stt = state ? projectState(state) : null;
+    return stt ? '<span class="status-pill" style="background:' + stt.color + '22;color:' + stt.color +
+      '"><i style="background:' + stt.color + '"></i>' + esc(L(stt.label)) + '</span>'
+      : '<span class="pf-none">' + L('ยังไม่รายงาน') + '</span>';
+  }
+
+  function pfTable(f, view) {
+    view = S.pfFillView(view);
+    var hide = {};
+    view.hide.forEach(function (k) { hide[k] = true; });
+    var hasGoals = typeof S.goalsOfItem === 'function';
+    var cols = PF_COLS.filter(function (c) { return !hide[c[0]] && (c[0] !== 'goals' || hasGoals); });
+    var fields = (f.fields || []).filter(function (fd) { return !hide['pff:' + fd.id]; });
+    var tpl = 'minmax(220px, 2.2fr) ' + cols.map(function (c) { return c[2]; }).join(' ') +
+      (fields.length ? ' ' + fields.map(function () { return '128px'; }).join(' ') : '') + ' 38px';
+    var cs = S.can('structure');
+    var rowStyle = ' style="grid-template-columns:' + tpl + '"';
+
+    var h = '<div class="pfx-scroll"><div class="pfx-tbl">';
+    h += '<div class="pfx-head"' + rowStyle + '><span>' + L('ชื่อ') + '</span>';
+    cols.forEach(function (c) { h += '<span>' + L(c[1]) + '</span>'; });
+    fields.forEach(function (fd) {
+      h += '<span title="' + esc(fd.type === 'rollup' ? L('รวมจากงาน ({fn})', { fn: L(rollupFnLabel(fd.fn)) }) : fd.name) + '">' +
+        (fd.type === 'rollup' ? I('bolt', 11) + ' ' : '') + esc(fd.name) + '</span>';
     });
-    h += '</div>';
-    h += '<button class="pf-add" data-act="pf-add" data-pf="' + esc(f.id) + '">' +
-      I('plus', 15) + ' ' + L('เพิ่มโปรเจกต์เข้าพอร์ตโฟลิโอ') + '</button>';
+    h += '<span></span></div>';
+
+    var groups = S.pfViewGroups(f.id, view);
+    var all = [];
+    groups.forEach(function (g) {
+      if (g.key !== '' || (view.group && view.group !== 'none')) {
+        h += '<div class="pfx-grp">' + (g.color ? '<i style="background:' + esc(g.color) + '"></i>' : '') +
+          '<b>' + esc(L(g.label)) + '</b><span>' + g.rows.length + '</span></div>';
+      }
+      g.rows.forEach(function (r) {
+        all.push(r);
+        var it = r.it, p = it.o, s = r.info, owner = S.user(s.owner);
+        h += '<div class="pfx-row" data-act="pf-open" data-kind="' + it.kind + '" data-id="' + esc(it.id) + '"' + rowStyle + '>';
+        h += '<span class="pf-nm"><span class="hproj-ic" style="background:' + esc(p.color) + '22">' + esc(p.icon) + '</span>' +
+          '<span class="grow"><b>' + esc(p.name) + '</b><em>' + (it.kind === 'portfolio'
+            ? esc(L('พอร์ตโฟลิโอ · {n} โปรเจกต์', { n: s.projects })) : esc(p.description || '')) + '</em></span></span>';
+        cols.forEach(function (c) {
+          var k = c[0];
+          if (k === 'status') h += '<span>' + pfStatePill(s.status) + '</span>';
+          else if (k === 'progress') h += '<span class="pf-prog">' + pfProgress(s.percent, p.color) + '</span>';
+          else if (k === 'msprog') h += '<span class="pf-prog">' + (s.msTotal ? pfProgress(s.msPercent, 'var(--ok)') +
+            '<span class="pf-msn">' + s.msDone + '/' + s.msTotal + '</span>' : '<span class="pf-none">' + L('ไม่มีหมุดหมาย') + '</span>') + '</span>';
+          else if (k === 'owner') h += '<span>' + (owner ? avatar(owner, 'sm') + '<span class="pf-owner">' + esc(owner.name) + '</span>' : '<span class="pf-none">—</span>') + '</span>';
+          else if (k === 'due') h += '<span class="' + (s.due ? dueClass(s.due, false) : '') + '">' + (s.due ? fmtDate(s.due) : '<span class="pf-none">—</span>') + '</span>';
+          else if (k === 'overdue') h += '<span class="' + (s.overdue ? 'pf-bad' : 'pf-none') + '">' + (s.overdue || '—') + '</span>';
+          else if (k === 'goals') {
+            var gl = S.goalsOfItem(it.id);
+            h += '<span class="pfx-goals">' + (gl.length ? gl.slice(0, 2).map(function (g) {
+              return '<button class="chip pfx-goal" data-act="go-goal" data-id="' + esc(g.id) + '" title="' + esc(g.name) + '">' + I('flag', 11) + ' ' + esc(g.name) + '</button>';
+            }).join('') + (gl.length > 2 ? '<span class="tb-more">+' + (gl.length - 2) + '</span>' : '') : '<span class="pf-none">—</span>') + '</span>';
+          }
+        });
+        fields.forEach(function (fd) {
+          var edit = cs && fd.type !== 'rollup';
+          h += '<span class="pfx-cell' + (edit ? ' ed' : '') + '"' + (edit ? ' data-act="pff-cell" data-pf="' + esc(f.id) +
+            '" data-item="' + esc(it.id) + '" data-f="' + esc(fd.id) + '"' : '') + '>' + pfCellValue(f, fd, it) + '</span>';
+        });
+        h += '<span>' + (cs ? '<button class="icon-btn" data-act="' + (it.kind === 'portfolio' ? 'pf-unnest' : 'pf-remove') +
+          '" data-pf="' + esc(f.id) + '" data-id="' + esc(it.id) + '" title="' + L('ถอดออกจากพอร์ตโฟลิโอ') + '">' + I('close', 14) + '</button>' : '') + '</span>';
+        h += '</div>';
+      });
+    });
+    if (!all.length) h += '<div class="pfx-empty">' + L('ไม่มีรายการที่ตรงกับตัวกรอง') + '</div>';
+
+    /* แถวสรุปท้ายตาราง — ฟิลด์ตัวเลขรวมยอด ความคืบหน้าเฉลี่ยถ่วงตามจำนวนงาน */
+    var tot = { total: 0, done: 0 };
+    all.forEach(function (r) { tot.total += r.info.total; tot.done += r.info.done; });
+    h += '<div class="pfx-foot"' + rowStyle + '><span>' + esc(L('{n} รายการ', { n: all.length })) + '</span>';
+    cols.forEach(function (c) {
+      if (c[0] === 'progress') h += '<span>' + (tot.total ? Math.round(tot.done * 100 / tot.total) : 0) + '%</span>';
+      else if (c[0] === 'overdue') h += '<span>' + all.reduce(function (a, r) { return a + r.info.overdue; }, 0) + '</span>';
+      else h += '<span></span>';
+    });
+    fields.forEach(function (fd) {
+      if (fd.type !== 'number' && fd.type !== 'rollup') { h += '<span></span>'; return; }
+      var sum = 0, any = false;
+      all.forEach(function (r) { var v = S.pfFieldValue(f, r.it, fd.id); if (typeof v === 'number') { sum += v; any = true; } });
+      h += '<span title="' + L('ผลรวม') + '">' + (any ? 'Σ ' + esc(S.formatNumber(fd, Math.round(sum * 100) / 100)) : '') + '</span>';
+    });
+    h += '<span></span></div>';
+    h += '</div></div>';
+    h += '<div class="pfx-adds"><button class="pf-add" data-act="pf-add" data-pf="' + esc(f.id) + '">' + I('plus', 15) + ' ' +
+      L('เพิ่มโปรเจกต์หรือพอร์ตโฟลิโอ') + '</button></div>';
+    return h;
+  }
+
+  function rollupFnLabel(fn) {
+    return ({ sum: 'ผลรวม', avg: 'ค่าเฉลี่ย', min: 'ต่ำสุด', max: 'สูงสุด', count: 'จำนวนที่มีค่า' })[fn] || fn;
+  }
+
+  /** แท็บความคืบหน้า — สถานะของพอร์ตโฟลิโอ (ประวัติ) + สถานะล่าสุดของแต่ละโปรเจกต์ข้างใน */
+  function pfProgressTab(f, list) {
+    var h = '<div class="pfp">';
+    h += '<div class="pfp-main"><div class="ovw-card"><h3>' + L('สถานะของพอร์ตโฟลิโอ') +
+      (S.can('structure') ? '<button class="as-link" data-act="pf-update" data-id="' + esc(f.id) + '">' + I('plus', 12) + ' ' +
+        L('อัปเดตสถานะ') + '</button>' : '') + '</h3>';
+    var log = (f.statusLog || []).slice().reverse();
+    if (!log.length) h += '<div class="ovw-empty">' + L('ยังไม่เคยอัปเดตสถานะ เล่าภาพรวมของทั้งพอร์ตโฟลิโอให้ทุกคนเห็นตรงกัน') + '</div>';
+    log.slice(0, 15).forEach(function (e) { h += statusEntryHtml(null, e, true); });
+    h += '</div></div>';
+    h += '<div class="pfp-side"><div class="ovw-card"><h3>' + L('สถานะล่าสุดของโปรเจกต์') + '</h3>';
+    if (!list.length) h += '<div class="ovw-empty">' + L('ยังไม่มีโปรเจกต์') + '</div>';
+    list.slice().sort(function (a, b) { return String((b.status || {}).at || '') < String((a.status || {}).at || '') ? -1 : 1; })
+      .forEach(function (p) {
+        h += '<div class="pf-risk" data-act="go" data-route="project" data-id="' + esc(p.id) + '"><span class="em">' + esc(p.icon) + '</span>' +
+          '<span class="grow"><b>' + esc(p.name) + '</b>' + (p.status && p.status.text ? '<em>' + esc(S.plainText(p.status.text)) + '</em>' : '') +
+          '<em>' + (p.status ? esc(fmtWhen(p.status.at)) : '') + '</em></span>' + pfStatePill(p.status && p.status.state) + '</div>';
+      });
+    h += '</div></div></div>';
     return h;
   }
 
@@ -2122,7 +2312,22 @@
   }
 
   function pfDashboard(f, list, st) {
+    /* 4a — กราฟจากเอนจินเดียวกับแดชบอร์ดโปรเจกต์ (3c) */
+    var stCats = [], stVals = [];
+    S.PROJECT_STATES.forEach(function (x) {
+      if (st.byStatus[x.id]) { stCats.push({ key: x.id, label: L(x.label), color: x.color }); stVals.push([st.byStatus[x.id]]); }
+    });
+    if (st.noStatus) { stCats.push({ key: '', label: L('ยังไม่รายงาน'), color: 'var(--fg-faint)' }); stVals.push([st.noStatus]); }
+    var prog = list.slice(0, 20);
     var h = '<div class="dash-cols" style="margin-top:16px">';
+    h += '<div class="panel pf-chart"><h3>' + L('สัดส่วนสถานะโปรเจกต์') + '</h3>' + global.Charts.svg({ type: 'donut', cats: stCats,
+      series: [{ key: 'v', label: L('โปรเจกต์') }], values: stVals, empty: L('ยังไม่มีข้อมูล'), h: 220 }) + '</div>';
+    h += '<div class="panel pf-chart"><h3>' + L('งานเสร็จ/ค้างต่อโปรเจกต์') + '</h3>' + global.Charts.svg({ type: 'stack',
+      cats: prog.map(function (p) { return { key: p.id, label: p.name }; }),
+      series: [{ key: 'done', label: L('เสร็จแล้ว'), color: 'var(--chart-3)' }, { key: 'open', label: L('ยังค้าง'), color: 'var(--chart-4)' }],
+      values: prog.map(function (p) { var s = S.projectStats(p.id); return [s.done, s.total - s.done]; }),
+      empty: L('ยังไม่มีข้อมูล'), h: 220 }) + '</div>';
+    h += '</div><div class="dash-cols">';
 
     h += '<div class="panel"><h3>' + L('ตามสถานะโปรเจกต์') + '</h3>';
     S.PROJECT_STATES.forEach(function (x) {
@@ -2169,6 +2374,159 @@
       h += bar(u ? u.name : L('ยังไม่ระบุ'), byOwner[uid], list.length, u ? u.color : 'var(--fg-faint)');
     });
     h += '</div></div>';
+    return h;
+  }
+
+  /* ====================== 4a — ทีม ====================== */
+  var TEAM_TABS = [['overview', 'ภาพรวม'], ['tasks', 'งานทั้งหมด'], ['messages', 'ข้อความ'], ['calendar', 'ปฏิทินทีม']];
+
+  function teamPrivacyLabel(id) {
+    var x = S.TEAM_PRIVACY.filter(function (p) { return p.id === id; })[0];
+    return x ? x.label : id;
+  }
+
+  /** หน้ารวมทีม #/teams — ทีมส่วนตัวที่ไม่ได้เป็นสมาชิกจะไม่โผล่เลย */
+  function teamsView() {
+    var all = S.visibleTeams();
+    var me = S.db.currentUserId;
+    var h = '<div class="pjx"><div class="pjx-head">' + I('users', 17) + '<b>' + L('ทีมทั้งหมด') + '</b><span class="n">' +
+      L('{n} ทีม', { n: all.length }) + '</span></div>';
+    if (!all.length) return h + '<div class="ovw-empty">' + L('ยังไม่มีทีมที่คุณเห็นได้') + '</div></div>';
+    h += '<div class="pjx-grid">';
+    all.forEach(function (t) {
+      var mine = S.isTeamMember(t.id), req = t.requests.some(function (r) { return r.u === me; });
+      h += '<div class="pjx-card tmx-card" data-act="go-team" data-id="' + esc(t.id) + '">';
+      h += '<div class="pjx-top"><span class="hproj-ic" style="background:' + esc(t.color) + '22">' + esc(t.icon) + '</span>' +
+        '<span class="grow"><b>' + esc(t.name) + '</b>' + (t.desc ? '<em>' + esc(S.plainText(t.desc)) + '</em>' : '') + '</span></div>';
+      h += '<div class="pjx-meta"><span class="chip">' + esc(L(teamPrivacyLabel(t.privacy))) + '</span><span class="pf-none">' +
+        esc(L('{n} สมาชิก', { n: t.members.length })) + '</span></div>';
+      h += '<div class="pjx-ppl">';
+      t.members.slice(0, 6).forEach(function (m) { h += avatar(S.user(m.u), 'sm'); });
+      h += '<span class="grow"></span>';
+      if (mine) h += '<span class="chip ok-chip">' + L('สมาชิก') + '</span>';
+      else if (req) h += '<span class="chip">' + L('ส่งคำขอแล้ว') + '</span>';
+      else if (t.privacy !== 'private' && S.role() !== 'guest') {
+        h += '<button class="btn btn-sm btn-primary" data-act="team-join" data-id="' + esc(t.id) + '">' +
+          (t.privacy === 'public' ? L('เข้าร่วม') : L('ขอเข้าร่วม')) + '</button>';
+      }
+      h += '</div></div>';
+    });
+    return h + '</div></div>';
+  }
+
+  function teamView(tid, tab, ui) {
+    var t = S.team(tid);
+    if (!t || !S.canSeeTeam(tid)) return '<div class="empty"><div class="big">👥</div>' + L('ไม่พบทีมนี้ หรือคุณไม่มีสิทธิ์เห็น') + '</div>';
+    ui = ui || {};
+    tab = tab || 'overview';
+    if (tab === 'messages') {
+      return '<div class="tmv">' + (S.isTeamMember(tid) || S.isAdmin() ? messagesView(tid, ui)
+        : '<div class="ovw-empty">' + L('เข้าร่วมทีมก่อนจึงจะเห็นและเขียนข้อความของทีม') + '</div>') + '</div>';
+    }
+    if (tab === 'tasks') return '<div class="tmv">' + teamTasksTab(t, ui) + '</div>';
+    if (tab === 'calendar') {
+      var pool = S.teamTasks(tid);
+      return '<div class="tmv-cal">' + calBoard({
+        scope: 'team:' + tid, mode: ui.calMode, anchor: ui.anchor, weekends: true,
+        tasks: pool.filter(function (x) { return x.dueOn || x.startOn; }),
+        unscheduled: [], sideTitle: L('ไม่มีวัน'), addable: false
+      }) + '</div>';
+    }
+    var manage = S.canManageTeam(tid), member = S.isTeamMember(tid);
+    var h = '<div class="tmv tmv-ovw"><div class="tmv-main">';
+    /* คำอธิบาย */
+    h += '<div class="ovw-card"><h3>' + L('เกี่ยวกับทีม') + (manage ? '<button class="as-link" data-act="team-edit" data-id="' + esc(tid) + '">' +
+      I('pencil', 12) + ' ' + L('แก้ไข') + '</button>' : '') + '</h3>' +
+      (t.desc ? '<div class="sth-txt">' + richText(t.desc) + '</div>' : '<div class="ovw-empty">' + L('ยังไม่มีคำอธิบาย') + '</div>') + '</div>';
+    /* ปักหมุด */
+    h += '<div class="ovw-card"><h3>' + L('ปักหมุดไว้') + (member || manage ? '<button class="as-link" data-act="team-pin-pick" data-id="' + esc(tid) + '">' +
+      I('plus', 12) + ' ' + L('ปักหมุด') + '</button>' : '') + '</h3>';
+    var pins = t.pins.map(function (x) {
+      if (/^pf_/.test(x)) { var pf = S.portfolio(x); return pf ? { id: x, o: pf, kind: 'portfolio' } : null; }
+      var pp = S.project(x); return pp && S.projectAccess(x) ? { id: x, o: pp, kind: 'project' } : null;
+    }).filter(Boolean);
+    if (!pins.length) h += '<div class="ovw-empty">' + L('ปักหมุดโปรเจกต์หรือพอร์ตโฟลิโอที่ทีมใช้บ่อยไว้ที่นี่') + '</div>';
+    pins.forEach(function (x) {
+      h += '<div class="pf-risk" data-act="' + (x.kind === 'portfolio' ? 'go' : 'go') + '" data-route="' + x.kind + '" data-id="' + esc(x.id) + '">' +
+        '<span class="em">' + esc(x.o.icon) + '</span><span class="grow"><b>' + esc(x.o.name) + '</b><em>' +
+        esc(x.kind === 'portfolio' ? L('พอร์ตโฟลิโอ') : L('โปรเจกต์')) + '</em></span>' +
+        (member || manage ? '<button class="icon-btn" data-act="team-pin" data-id="' + esc(tid) + '" data-item="' + esc(x.id) + '" title="' +
+          L('เอาหมุดออก') + '">' + I('close', 13) + '</button>' : '') + '</div>';
+    });
+    h += '</div>';
+    /* โปรเจกต์ของทีม */
+    var projs = S.teamProjects(tid);
+    h += '<div class="ovw-card"><h3>' + L('โปรเจกต์ของทีม') + '<span class="admin-count">' + projs.length + '</span></h3>';
+    if (!projs.length) h += '<div class="ovw-empty">' + L('ยังไม่มีโปรเจกต์ที่แชร์ให้ทีมนี้ แชร์ได้จากเมนูโปรเจกต์ → แชร์ให้ทีม') + '</div>';
+    projs.forEach(function (p) {
+      var s = S.projectStats(p.id), share = (p.teams || []).filter(function (x) { return x.id === tid; })[0];
+      h += '<div class="pf-risk" data-act="go" data-route="project" data-id="' + esc(p.id) + '"><span class="em">' + esc(p.icon) + '</span>' +
+        '<span class="grow"><b>' + esc(p.name) + '</b><em>' + esc(L('{n} งาน · เสร็จ {p}%', { n: s.total, p: s.percent })) + '</em></span>' +
+        '<span class="chip">' + esc(L(accessLabel(share ? share.access : ''))) + '</span></div>';
+    });
+    h += '</div>';
+    /* ทรัพยากรสำคัญ */
+    h += '<div class="ovw-card"><h3>' + L('ทรัพยากรสำคัญ') + (member || manage ? '<button class="as-link" data-act="team-res-add" data-id="' + esc(tid) + '">' +
+      I('plus', 12) + ' ' + L('เพิ่มลิงก์') + '</button>' : '') + '</h3>';
+    if (!t.resources.length) h += '<div class="ovw-empty">' + L('ลิงก์เอกสาร คู่มือ หรือไดรฟ์ที่ทีมใช้ร่วมกัน') + '</div>';
+    t.resources.forEach(function (r) {
+      h += '<div class="kr-row">' + I('link', 14) + '<a class="grow" href="' + esc(r.url) + '" target="_blank" rel="noopener noreferrer">' + esc(r.name) + '</a>' +
+        (member || manage ? '<button class="icon-btn" data-act="team-res-del" data-id="' + esc(tid) + '" data-r="' + esc(r.id) + '" title="' +
+          L('เอาออก') + '">' + I('close', 13) + '</button>' : '') + '</div>';
+    });
+    h += '</div></div>';
+    /* สมาชิก */
+    h += '<div class="tmv-side"><div class="ovw-card"><h3>' + L('สมาชิก') + '<span class="admin-count">' + t.members.length + '</span>' +
+      (manage ? '<button class="as-link" data-act="team-add-member" data-id="' + esc(tid) + '">' + I('plus', 12) + ' ' + L('เพิ่ม') + '</button>' : '') + '</h3>';
+    t.members.forEach(function (m) {
+      var u = S.user(m.u);
+      if (!u) return;
+      h += '<div class="tm-mem">' + avatar(u, 'sm') + '<span class="grow"><b>' + esc(u.name) + '</b><em>' +
+        esc(m.role === 'admin' ? L('ผู้ดูแลทีม') : L('สมาชิก')) + '</em></span>' +
+        (manage ? '<button class="icon-btn" data-act="team-role" data-id="' + esc(tid) + '" data-u="' + esc(u.id) + '" title="' +
+          L('สลับผู้ดูแลทีม/สมาชิก') + '">' + I('shield', 13) + '</button>' : '') +
+        (manage || u.id === S.db.currentUserId ? '<button class="icon-btn" data-act="team-remove" data-id="' + esc(tid) + '" data-u="' + esc(u.id) +
+          '" title="' + (u.id === S.db.currentUserId ? L('ออกจากทีม') : L('ถอดออกจากทีม')) + '">' + I('close', 13) + '</button>' : '') + '</div>';
+    });
+    if (manage && t.requests.length) {
+      h += '<div class="tm-reqh">' + L('คำขอเข้าร่วม') + '</div>';
+      t.requests.forEach(function (r) {
+        var ru = S.user(r.u);
+        if (!ru) return;
+        h += '<div class="tm-mem">' + avatar(ru, 'sm') + '<span class="grow"><b>' + esc(ru.name) + '</b><em>' + esc(fmtWhen(r.at)) + '</em></span>' +
+          '<button class="btn btn-sm btn-primary" data-act="team-req-ok" data-id="' + esc(tid) + '" data-u="' + esc(ru.id) + '">' + L('อนุมัติ') + '</button>' +
+          '<button class="btn btn-sm" data-act="team-req-no" data-id="' + esc(tid) + '" data-u="' + esc(ru.id) + '">' + L('ปฏิเสธ') + '</button></div>';
+      });
+    }
+    h += '</div></div></div>';
+    return h;
+  }
+
+  function accessLabel(id) {
+    var a = S.PROJECT_ACCESS.filter(function (x) { return x.id === id; })[0];
+    return a ? a.label : '—';
+  }
+
+  /** งานทั้งหมดของทีม จัดกลุ่มตามโปรเจกต์ ui.tdone = แสดงงานที่เสร็จแล้วด้วย */
+  function teamTasksTab(t, ui) {
+    var done = !!ui.tdone;
+    var h = '<div class="tmv-tasks-head"><button class="chip' + (!done ? ' on' : '') + '" data-act="team-tdone" data-v="0">' + L('ยังไม่เสร็จ') +
+      '</button><button class="chip' + (done ? ' on' : '') + '" data-act="team-tdone" data-v="1">' + L('ทั้งหมด') + '</button></div>';
+    var projs = S.teamProjects(t.id);
+    if (!projs.length) return h + '<div class="ovw-empty">' + L('ยังไม่มีโปรเจกต์ที่แชร์ให้ทีมนี้') + '</div>';
+    var seen = {};
+    projs.forEach(function (p) {
+      var rows = S.tasksInProject(p.id).map(function (x) { return x.task; }).filter(function (x) {
+        if (seen[x.id] || !S.canSeeTask(x.id) || (!done && x.completed)) return false;
+        seen[x.id] = true;
+        return true;
+      });
+      h += '<div class="tmv-grp"><div class="pfx-grp"><i style="background:' + esc(p.color) + '"></i><b>' + esc(p.icon + ' ' + p.name) +
+        '</b><span>' + rows.length + '</span></div>';
+      if (!rows.length) h += '<div class="ovw-empty" style="padding:8px 12px">' + L('ไม่มีงาน') + '</div>';
+      rows.slice(0, 200).forEach(function (x) { h += taskRow(x, {}); });
+      h += '</div>';
+    });
     return h;
   }
 
@@ -3155,7 +3513,8 @@
     if (!dense) h += '<span class="nrow-av">' + (actor ? avatar(actor, 'sm')
       : '<span class="nrow-sys">' + I(n.kind === 'due' || n.kind === 'overdue' ? 'calendar' : 'bell', 13) + '</span>') + '</span>';
     var ntxt = n.key ? (n.actorName ? n.actorName + ' ' : '') + L(n.key, n.params || undefined) : n.text;
-    var where = t ? t.name : (np ? np.name : (n.route === 'mytasks' ? L('งานของฉัน') : L('(งานถูกลบแล้ว)')));
+    var where = t ? t.name : (np ? np.name : (n.route === 'mytasks' ? L('งานของฉัน')
+      : (S.routeLabel(n.route) || L('(งานถูกลบแล้ว)'))));     // 4a — ทีม พอร์ตโฟลิโอ เป้าหมาย
     h += '<div class="body"><div class="txt">' + esc(ntxt) + '</div>';
     if (!dense) {
       var pj = t ? S.projectsOfTask(S.rootOf(t).id)[0] : null;
@@ -4327,7 +4686,7 @@
 
   var AUDIT_GROUP = {
     auth: 'การเข้าใช้งาน', user: 'จัดการสมาชิก', project: 'โปรเจกต์',
-    system: 'ระบบ', task: 'งาน', security: 'ความปลอดภัย', field: 'ฟิลด์', tag: 'แท็ก', template: 'เทมเพลต'
+    system: 'ระบบ', task: 'งาน', security: 'ความปลอดภัย', field: 'ฟิลด์', tag: 'แท็ก', template: 'เทมเพลต', team: 'ทีม', goal: 'เป้าหมาย', settings: 'ตั้งค่า'
   };
   function auditGroupLabel(g) { return AUDIT_GROUP[g] || g; }
 
@@ -4391,13 +4750,19 @@
     'field.lib-create': 'ได้เพิ่มฟิลด์เข้าคลังขององค์กร',
     'field.lib-delete': 'ได้เอาฟิลด์ออกจากคลังขององค์กร',
     'tag.rename': 'ได้เปลี่ยนชื่อแท็ก',
-    'tag.delete': 'ได้ลบแท็ก'
+    'tag.delete': 'ได้ลบแท็ก',
+    /* 4a */
+    'team.create': 'ได้สร้างทีม', 'team.delete': 'ได้ลบทีม', 'team.privacy': 'ได้เปลี่ยนความเป็นส่วนตัวของทีม',
+    'team.member': 'ได้เพิ่มสมาชิกทีม', 'team.member-remove': 'ได้ถอดสมาชิกออกจากทีม', 'team.join': 'ได้เข้าร่วมทีม',
+    'project.team': 'ได้แชร์โปรเจกต์ให้ทีม', 'portfolio.nest': 'ได้ใส่พอร์ตโฟลิโอย่อย',
+    'goal.create': 'ได้สร้างเป้าหมาย', 'goal.delete': 'ได้ลบเป้าหมาย', 'goal.close': 'ได้ปิดเป้าหมาย',
+    'settings.goals': 'ได้เปลี่ยนการตั้งค่าเป้าหมาย'
   };
   function auditText(a) { return AUDIT_TEXT[a] || a; }
 
   var AUDIT_ICON = {
     auth: 'signIn', user: 'users', project: 'archive',
-    system: 'settings', task: 'checkCircle', security: 'shield', field: 'hash', tag: 'flag', template: 'star'
+    system: 'settings', task: 'checkCircle', security: 'shield', field: 'hash', tag: 'flag', template: 'star', team: 'users', goal: 'flag', settings: 'settings'
   };
   function auditIcon(a) { return AUDIT_ICON[a.split('.')[0]] || 'more'; }
   /** บอกว่าคนนี้เข้าระบบด้วยวิธีไหน ผู้ดูแลจะได้รู้ว่าต้องตัดสิทธิ์ที่ไหนบ้าง */
@@ -4522,6 +4887,30 @@
       L('ตอนนี้ระดับ “ดูอย่างเดียว” ยังบังคับได้จริงก็ต่อเมื่อตั้งสิทธิ์บนไซต์ SharePoint ของคนนั้นเป็น Read ด้วย เมื่อย้ายไปฐานข้อมูลแล้ว API จะบังคับให้เอง') +
       '</span></li>';
     h += '</ul></details>';
+    h += '</section>';
+
+    /* ---- 4a ทีม ---- ผู้ดูแลระบบเห็นทุกทีม รวมทีมส่วนตัว */
+    h += '<section class="admin-sec" id="adminTeams"><h3>' + L('ทีม') + '<span class="admin-count">' +
+      L('{n} ทีม', { n: S.teams().length }) + '</span><button class="btn btn-sm btn-primary" data-act="team-new">' +
+      I('plus', 13) + ' ' + L('สร้างทีม') + '</button></h3>';
+    if (!S.teams().length) h += '<div class="ovw-empty">' + L('ยังไม่มีทีม') + '</div>';
+    else {
+      h += '<div class="admin-tbl">';
+      h += '<div class="admin-tr admin-th adm-team"><span>' + L('ทีม') + '</span><span>' + L('ความเป็นส่วนตัว') + '</span><span>' +
+        L('สมาชิก') + '</span><span></span></div>';
+      S.teams().forEach(function (tm) {
+        var ad = tm.members.filter(function (m) { return m.role === 'admin'; }).map(function (m) { return (S.user(m.u) || {}).name; }).filter(Boolean);
+        h += '<div class="admin-tr adm-team"><span class="admin-who"><span class="hproj-ic" style="background:' + esc(tm.color) + '22">' +
+          esc(tm.icon) + '</span><span><b>' + esc(tm.name) + '</b><em>' + esc(L('ผู้ดูแลทีม: {x}', { x: ad.join(', ') || '—' })) + '</em></span></span>' +
+          '<span><button class="role-pill" data-act="team-privacy" data-id="' + esc(tm.id) + '">' + esc(L(teamPrivacyLabel(tm.privacy))) + ' ' +
+          I('chevronDown', 12) + '</button></span><span>' + tm.members.length + (tm.requests.length ? ' <span class="chip">' +
+          esc(L('{n} คำขอ', { n: tm.requests.length })) + '</span>' : '') + '</span>' +
+          '<span class="admin-rm"><button class="icon-btn" data-act="go-team" data-id="' + esc(tm.id) + '" title="' + L('เปิดทีม') + '">' +
+          I('arrowRight', 15) + '</button><button class="icon-btn" data-act="team-delete" data-id="' + esc(tm.id) + '" title="' +
+          L('ลบทีม') + '">' + I('trash', 15) + '</button></span></div>';
+      });
+      h += '</div>';
+    }
     h += '</section>';
 
     /* ---- บันทึกการทำงานของระบบ ----
@@ -5008,7 +5397,9 @@
     widgetSpec: widgetSpec, messageCard: messageCard, msgComposer: msgComposer, pendingFiles: pendingFiles, attChips: attChips, fileLink: fileLink,
     overviewView: overviewView, filesView: filesView, messagesView: messagesView,
     projectsView: projectsView,
-    portfolioView: portfolioView, PF_TABS: PF_TABS,
+    portfolioView: portfolioView, PF_TABS: PF_TABS, PF_COLS: PF_COLS, rollupFnLabel: rollupFnLabel,
+    TEAM_TABS: TEAM_TABS, teamsView: teamsView, teamView: teamView, teamPrivacyLabel: teamPrivacyLabel,
+    pfStatePill: pfStatePill,
     myTasksView: myTasksView, inboxView: inboxView, trashView: trashView, approvalIcon: approvalIcon,
     MT_TABS: MT_TABS, INBOX_FLAGS: INBOX_FLAGS, calBoard: calBoard, calSpan: calSpan,
     filesList: filesList, privateChip: privateChip, newDot: newDot, fmtTime: fmtTime,

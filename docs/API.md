@@ -226,6 +226,17 @@
 | POST | `/api/projects/{id}/access-requests/{userId}` | PA / เจ้าของ / OA | `{grant, access}` เพิ่มสมาชิกแล้วปิดงานคำขอ |
 | POST | `/api/tasks/{id}/convert-to-project` | E + ST | ชื่อ → โปรเจกต์ ผู้รับผิดชอบ → เจ้าของ ผู้ติดตาม → สมาชิก งานย่อย → งาน · โปรเจกต์ปิดถ้างานต้นทางเป็นงานส่วนตัวหรืออยู่ในโปรเจกต์ปิด |
 | GET | `/api/calendar` | ทุกคน | รวมทุกโปรเจกต์ที่มองเห็น |
+| GET · POST · PATCH · DELETE | `/api/teams[/{id}]` | อ่าน: ทุกคน (ทีม `private` เฉพาะสมาชิก/OA) · สร้าง: ST · แก้/ลบ: ผู้ดูแลทีม/OA | `{name, description, icon, color, privacy}` · ลง audit `team.*` (4a) |
+| POST · PATCH · DELETE | `/api/teams/{id}/members[/{userId}]` | ผู้ดูแลทีม/OA (ออกเอง: ตัวเอง) | `{role: admin|member}` · ห้ามเหลือศูนย์ผู้ดูแลทีม `409` (4a) |
+| POST | `/api/teams/{id}/join` | ทุกคนยกเว้น guest | `public` → เป็นสมาชิกทันที · `request` → สร้างคำขอ + แจ้งผู้ดูแลทีม · `private` → `404` (4a) |
+| POST | `/api/teams/{id}/requests/{userId}` | ผู้ดูแลทีม/OA | `{approve: bool}` (4a) |
+| PUT · DELETE | `/api/teams/{id}/pins/{itemId}` · `/resources[/{rid}]` | สมาชิกทีม | ปักหมุดโปรเจกต์/พอร์ตโฟลิโอ ≤ 20 · ลิงก์ ≤ 30 (4a) |
+| PUT · DELETE | `/api/projects/{id}/teams/{teamId}` | E + ST | `{access}` แชร์โปรเจกต์ให้ทีม — สิทธิ์บวกเพิ่ม (MAX) ภายใต้เพดานบทบาทองค์กร · `fn_VisibleProjects` ต้องรวมเส้นทางนี้ (4a) |
+| GET | `/api/teams/{id}/tasks` · `/calendar` | สมาชิกทีม/ทีมที่มองเห็น | งานในโปรเจกต์ที่แชร์ให้ทีมและผู้ขอเห็นได้ (4a) |
+| PUT · DELETE | `/api/portfolios/{id}/children/{childId}` | ST | พอร์ตโฟลิโอย่อย · ตรวจวนด้วย recursive CTE → `409` (4a) |
+| GET · POST · PATCH · DELETE | `/api/portfolios/{id}/fields[/{fid}]` · `PUT …/values/{itemId}` | ST (อ่าน: ทุกคน) | ฟิลด์ number/text/select/date/person/rollup (`rollup_src` + `rollup_fn` คำนวณตอนอ่านจากงานที่ผู้ขอเห็นได้เท่านั้น) (4a) |
+| GET · POST · PATCH · DELETE | `/api/portfolios/{id}/views[/{vid}]` | ST (อ่าน: ทุกคน) | แท็บมุมมอง `{name, view: {filters, sorts, group, hide}}` · `default_view_id` (4a) |
+| POST | `/api/portfolios/{id}/status` · `/messages` | ST / C | อัปเดตสถานะพร้อมข้อความ · ประกาศของพอร์ตโฟลิโอ (ตารางประกาศเดียวกับโปรเจกต์) (4a) |
 
 `/api/home` รวมทุกอย่างไว้ในคำขอเดียวโดยตั้งใจ ถ้าแยกเป็นห้าคำขอ หน้าแรกจะเปิด
 คอนเนกชัน Azure SQL แบบ serverless พร้อมกันห้าเส้นทุกครั้งที่มีคนเปิดแอป

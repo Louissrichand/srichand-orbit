@@ -10,7 +10,7 @@
 
   var KEY = 'orbit.db.v4';
   var LEGACY_KEYS = ['orbit.db.v3', 'orbit.db.v2', 'orbit.db.v1', 'taskflow.db.v1'];   // ชื่อ/เวอร์ชันเดิม
-  var SCHEMA = 14;
+  var SCHEMA = 15;
 
   /* ---------- utilities ---------- */
 
@@ -661,6 +661,7 @@
       if (!('remindTask' in p)) p.remindTask = null;
     });
     migrate3c(d);
+    migrate4a(d);
     prunePersonal(d);
     if (!d.users.some(function (u) { return u.role === 'admin'; })) {
       var firstUser = d.users.filter(function (u) { return u.id === d.currentUserId; })[0] || d.users[0];
@@ -1045,9 +1046,14 @@
       sig: '', user: {}, project: {}, task: {},
       memByTask: {}, memByProject: {}, subsByParent: {},
       storyByTask: {}, fvByTask: {}, blockedByMe: {},
-      pmByProject: {}, access: {}, types: {}, statuses: {}
+      pmByProject: {}, access: {}, types: {}, statuses: {}, teamMem: {}
     };
     db.users.forEach(function (u) { i.user[u.id] = u; });
+    /* 4a — สมาชิกทีม { teamId: { userId: 'admin'|'member' } } ใช้คำนวณสิทธิ์ที่ได้ผ่านทีม */
+    (db.teams || []).forEach(function (tm) {
+      var mm = i.teamMem[tm.id] = {};
+      (tm.members || []).forEach(function (m) { mm[m.u] = m.role; });
+    });
     db.projects.forEach(function (p) {
       i.project[p.id] = p;
       /* 3b — ชนิดงานกำหนดเองและสถานะ รหัสไม่ซ้ำทั้งระบบ งานที่อยู่หลายโปรเจกต์จึงหาชนิดของตัวเองเจอเสมอ */
@@ -2298,13 +2304,14 @@
    * เดิมของพวกนี้ต้องไปแปะไว้ในงานสักชิ้นแบบฝืน ๆ แล้วก็หาไม่เจอในภายหลัง
    */
   function projectMessages(projectId) {
-    var p = project(projectId);
+    var p = msgHost(projectId);
     return ((p && p.messages) || []).slice().reverse();   // ใหม่สุดก่อน
   }
 
   function addProjectMessage(projectId, title, body, atts) {
-    var p = project(projectId);
+    var p = msgHost(projectId);
     if (!p || !body || !body.trim()) return null;
+    if (!canInProject(projectId, 'comment')) return null;
     snapshot('ประกาศในโปรเจกต์');
     p.messages = p.messages || [];
     var m = {
@@ -2317,15 +2324,15 @@
     p.messages.push(m);
     var men = parseMentions(m.body);
     men.forEach(function (u) { if (m.followers.indexOf(u) < 0) m.followers.push(u); });
-    if (men.length) notifyOnly(null, men, 'พูดถึงคุณในประกาศของ {p}', 'mention', { p: p.name }, false, { projectId: projectId });
+    if (men.length) notifyOnly(null, men, 'พูดถึงคุณในประกาศของ {p}', 'mention', { p: p.name }, false, msgNotifExtra(projectId));
 
     /* แจ้งเตือนสมาชิกที่ระบุตัวได้ (เปิดไว้เป็นค่าเริ่มต้น) กับคนที่เปิดรับประกาศของโปรเจกต์นี้เอง
      * โปรเจกต์ที่เปิดให้ทั้งองค์กรไม่มีรายชื่อ ถ้ายิงหาทุกคนจะกลายเป็นสแปมทั้งบริษัท
      * สมาชิกที่ปิดไว้ในการแจ้งเตือนของโปรเจกต์จะไม่ได้รับ */
-    var mem = projectWatchers(projectId, 'messages').filter(function (u) { return men.indexOf(u) < 0; });
+    var mem = hostWatchers(projectId).filter(function (u) { return men.indexOf(u) < 0; });
     if (mem.length) {
       notifyOnly(null, mem, 'ประกาศใหม่ใน {p}', 'message', { p: p.name }, false,
-        { projectId: projectId });
+        msgNotifExtra(projectId));
     }
     audit('project.message', p.name, m.title || m.body.slice(0, 40));
     commit();
@@ -2333,8 +2340,10 @@
   }
 
   function deleteProjectMessage(projectId, msgId) {
-    var p = project(projectId);
+    var p = msgHost(projectId);
     if (!p) return false;
+    var dm = (p.messages || []).filter(function (m) { return m.id === msgId; })[0];
+    if (!dm || (dm.by !== db.currentUserId && !can('manage'))) return false;
     var before = (p.messages || []).length;
     snapshot('ลบประกาศ');
     p.messages = (p.messages || []).filter(function (m) { return m.id !== msgId; });
@@ -2590,6 +2599,7 @@
 
   /** ฟิลด์ที่กรองได้ในโปรเจกต์นี้ — ของในตัวก่อน ตามด้วยฟิลด์ที่สร้างเอง  ('*' = ค้นหาขั้นสูง) */
   function filterFields(projectId) {
+    if (String(projectId || '').indexOf('pf:') === 0) return pfFilterFields(projectId.slice(3));   // 4a — แถวของพอร์ตโฟลิโอ
     if (projectId === '*') {
       var all = FILTER_BUILTIN.filter(function (x) { return x.id !== 'section'; }).concat(SEARCH_BUILTIN);
       visibleFieldDefs().forEach(function (x) {
@@ -2616,6 +2626,7 @@
 
   /** ตัวเลือกให้ติ๊กของเงื่อนไขชนิดคน/ตัวเลือก [[ค่า, ป้าย, สี]] */
   function filterChoices(projectId, fid) {
+    if (String(projectId || '').indexOf('pf:') === 0) return pfFilterChoices(projectId.slice(3), fid);
     var def = filterField(projectId, fid);
     if (String(projectId || '').indexOf('a:') === 0) projectId = projectId.slice(2);
     var p = project(projectId);
@@ -2719,7 +2730,12 @@
     if (!c || !c.f) return true;
     var kind = condKind(c.f);
     if (!kind) return true;                         // ฟิลด์ถูกลบไปแล้ว
-    var val = taskValue(t, c.f, m);
+    return matchValue(kind, taskValue(t, c.f, m), c, c.f === 'due' && t.completed);
+  }
+
+  /** ตรงเงื่อนไขไหม เมื่อรู้ชนิดและค่าแล้ว — ใช้ร่วมกับแถวของพอร์ตโฟลิโอ (4a)
+   *  doneSkipOverdue = ค่านี้เป็นกำหนดส่งของของที่เสร็จแล้ว จึงไม่นับว่าเลยกำหนด */
+  function matchValue(kind, val, c, doneSkipOverdue) {
     var empty = val === null || val === undefined || val === '' || (Array.isArray(val) && !val.length);
     var op = c.op;
     if (op === 'empty') return kind === 'bool' ? !val : empty;
@@ -2755,7 +2771,7 @@
     }
     if (kind === 'date') {
       var d = empty ? null : String(val).slice(0, 10);
-      if (op === 'overdue') return !!d && d < td && !(c.f === 'due' && t.completed);
+      if (op === 'overdue') return !!d && d < td && !doneSkipOverdue;
       if (op === 'today') return d === td;
       if (op === 'week') return !!d && d >= td && d <= addDays(td, 7);
       var N = Math.max(0, parseInt(c.v, 10) || 0);
@@ -4725,6 +4741,7 @@
       createdAt: today()
     };
     db.portfolios = db.portfolios || [];
+    normalizePortfolio(f);                    // 4a — ฟิลด์ มุมมอง ประกาศ พอร์ตโฟลิโอย่อย
     db.portfolios.push(f);
     audit('portfolio.create', f.name);
     commit();
@@ -4744,6 +4761,9 @@
     if (!f) return false;
     snapshot('ลบพอร์ตโฟลิโอ');
     db.portfolios = db.portfolios.filter(function (x) { return x.id !== id; });
+    /* 4a — ถอดออกจากพอร์ตโฟลิโอแม่ ทีมที่ปักหมุดไว้ และเป้าหมายที่ผูกไว้ด้วย */
+    db.portfolios.forEach(function (x) { x.portfolioIds = (x.portfolioIds || []).filter(function (c) { return c !== id; }); });
+    (db.teams || []).forEach(function (tm) { tm.pins = (tm.pins || []).filter(function (c) { return c !== id; }); });
     /* ลบกล่องไม่ได้ลบของข้างใน โปรเจกต์ทุกอันยังอยู่ครบ
      * ถ้าลบตามไปด้วยจะเป็นการทำลายงานจริงเพราะแค่จัดกลุ่มผิด */
     audit('portfolio.delete', f.name, 'มีโปรเจกต์อยู่ {n} โปรเจกต์ ซึ่งยังอยู่ครบ', { n: f.projectIds.length });
@@ -4756,6 +4776,7 @@
     var p = project(projectId);
     if (!f || !p) return false;
     if (f.projectIds.indexOf(projectId) >= 0) return false;
+    snapshot('เพิ่มโปรเจกต์เข้าพอร์ตโฟลิโอ');
     f.projectIds.push(projectId);
     audit('portfolio.add', f.name, p.name);
     commit();
@@ -4766,6 +4787,7 @@
     var f = portfolio(portfolioId);
     if (!f) return false;
     var p = project(projectId);
+    snapshot('ถอดออกจากพอร์ตโฟลิโอ');
     f.projectIds = f.projectIds.filter(function (x) { return x !== projectId; });
     audit('portfolio.remove', f.name, p ? p.name : projectId);
     commit();
@@ -4797,9 +4819,10 @@
 
   /** ตัวเลขรวมของทั้งพอร์ตโฟลิโอ นับเฉพาะโปรเจกต์ที่คนดูมีสิทธิ์เห็น */
   function portfolioStats(portfolioId) {
-    var list = portfolioProjects(portfolioId);
+    /* 4a — นับรวมโปรเจกต์ในพอร์ตโฟลิโอย่อยทุกชั้นด้วย (ไม่นับซ้ำ) */
+    var list = allProjectsUnder(portfolioId);
     var s = {
-      projects: list.length, hidden: portfolioHidden(portfolioId),
+      projects: list.length, hidden: hiddenUnder(portfolioId), children: (portfolio(portfolioId) || {}).portfolioIds ? portfolio(portfolioId).portfolioIds.length : 0,
       total: 0, done: 0, overdue: 0, dueWeek: 0,
       byStatus: {}, noStatus: 0, percent: 0, atRisk: 0
     };
@@ -5492,18 +5515,26 @@
 
     var byProj = i.pmByProject[projectId];
     var m = byProj && byProj[uid];
+    /* 4a — โปรเจกต์ที่แชร์ให้ทีม: สมาชิกทีมได้สิทธิ์ตามที่ตั้งไว้ บวกเพิ่มจากสิทธิ์เดิม (เอาระดับสูงสุด แบบ Asana) */
+    var ta = null;
+    (p.teams || []).forEach(function (s) {
+      var tm = i.teamMem[s.id];
+      if (tm && tm[uid] && (!ta || (ACCESS_RANK[s.access] || 0) > (ACCESS_RANK[ta] || 0))) ta = s.access;
+    });
 
     /* ด่านแรก เห็นโปรเจกต์นี้ไหม
      * โปรเจกต์ปิดต้องเป็นสมาชิกเท่านั้น ส่วนบุคคลภายนอกต้องถูกเชิญเป็นรายโปรเจกต์เสมอ
-     * แม้เป็นโปรเจกต์ที่เปิดให้ทั้งองค์กรก็ยังไม่เห็น */
-    if (!m && (p.visibility === 'private' || u.role === 'guest')) return null;
+     * แม้เป็นโปรเจกต์ที่เปิดให้ทั้งองค์กรก็ยังไม่เห็น (ถูกเชิญเข้าทีมที่ได้รับแชร์ = ถูกเชิญ) */
+    if (!m && !ta && (p.visibility === 'private' || u.role === 'guest')) return null;
 
     /* ด่านสอง เห็นแล้วทำอะไรได้
      * "ดูอย่างเดียว" เป็นเพดาน ไม่ใช่ค่าเริ่มต้น ถูกเชิญมาด้วยสิทธิ์ edit ก็ยังแก้ไม่ได้
      * ตรงกับ ROLE_CAPS ที่ can() ใช้ และกับ fn_VisibleProjects ฝั่งฐานข้อมูล */
     if (u.role === 'viewer') return 'view';
 
-    return m ? m.access : 'edit';
+    var best = m ? m.access : ((p.visibility === 'private' || u.role === 'guest') ? null : 'edit');
+    if (ta && (!best || (ACCESS_RANK[ta] || 0) > (ACCESS_RANK[best] || 0))) best = ta;
+    return best;
   }
 
   /** โปรเจกต์ที่คนนี้เห็นได้ ใช้แทน activeProjects ทุกที่ที่แสดงรายการ */
@@ -5515,6 +5546,8 @@
 
   /** มีสิทธิ์ระดับที่ต้องการในโปรเจกต์นี้ไหม */
   function canInProject(projectId, needed) {
+    /* 4a — ประกาศของพอร์ตโฟลิโอ/ทีมใช้ตัววาดเดียวกับโปรเจกต์ จึงตอบสิทธิ์ของ "เจ้าของประกาศ" ตรงนี้ */
+    if (/^(pf|tm)_/.test(String(projectId || ''))) return hostCan(projectId, needed);
     var a = projectAccess(projectId);
     if (!a) return false;
     return (ACCESS_RANK[a] || 0) >= (ACCESS_RANK[needed] || 0);
@@ -9564,11 +9597,11 @@
 
   /* ---------- ประกาศ: คำตอบ เข้าร่วม/ออก ไฟล์แนบ ---------- */
   function findMessage(pid, msgId) {
-    var p = project(pid);
+    var p = msgHost(pid);
     return p ? (p.messages || []).filter(function (m) { return m.id === msgId; })[0] || null : null;
   }
   function addMessageReply(pid, msgId, body, atts) {
-    var p = project(pid), m = findMessage(pid, msgId);
+    var p = msgHost(pid), m = findMessage(pid, msgId);
     if (!m || !String(body || '').trim() || !canInProject(pid, 'comment')) return null;
     snapshot('ตอบประกาศ');
     var r = { id: uid('pr'), by: db.currentUserId, at: new Date().toISOString(), body: String(body).trim().slice(0, 20000),
@@ -9577,9 +9610,9 @@
     if (m.followers.indexOf(db.currentUserId) < 0) m.followers.push(db.currentUserId);
     var men = parseMentions(r.body);
     men.forEach(function (u) { if (m.followers.indexOf(u) < 0) m.followers.push(u); });
-    if (men.length) notifyOnly(null, men, 'พูดถึงคุณในประกาศของ {p}', 'mention', { p: p.name }, false, { projectId: pid });
+    if (men.length) notifyOnly(null, men, 'พูดถึงคุณในประกาศของ {p}', 'mention', { p: p.name }, false, msgNotifExtra(pid));
     notifyOnly(null, m.followers.filter(function (u) { return men.indexOf(u) < 0; }), 'ตอบประกาศ “{t}” ใน {p}', 'message',
-      { t: m.title || S_short(m.body), p: p.name }, false, { projectId: pid });
+      { t: m.title || S_short(m.body), p: p.name }, false, msgNotifExtra(pid));
     commit();
     return r;
   }
@@ -10409,6 +10442,690 @@
     use: function (p, d) { p.pages = (d.pages || []).map(function (pg) { return normalizePage(clone(pg)); }); }
   };
 
+  /* ====================== 4a — ทีม พอร์ตโฟลิโอแบบซ้อน (ส่วนที่ 1) ======================
+   *   db.teams[]  { id:'tm_…', name, desc, color, icon, privacy: public|request|private,
+   *                 members: [{u, role: admin|member}], requests: [{u, at}], pins: [p_…|pf_…],
+   *                 resources: [{id, name, url, by, at}], messages: [ประกาศแบบเดียวกับโปรเจกต์], by, at }
+   *   project.teams[]  [{ id: teamId, access: admin|edit|comment|view }] — สมาชิกทีมได้สิทธิ์นี้ (บวกเพิ่ม)
+   *   portfolio.portfolioIds[]  พอร์ตโฟลิโอย่อย (ห้ามวน)   fields[] { id:'pff_…', name, type, options, format, src, fn }
+   *   portfolio.values { itemId: { fieldId: ค่า } }  views[] { id:'pv_…', name, view }  defaultTab  messages[]
+   *   personal.pfv { pfId: view }  มุมมองที่ทำงานอยู่ของแต่ละคน */
+  var TEAM_PRIVACY = [
+    { id: 'public',  label: 'สาธารณะ',        desc: 'ทุกคนในองค์กรเห็นและเข้าร่วมได้เอง' },
+    { id: 'request', label: 'ต้องขอเข้าร่วม',  desc: 'ทุกคนเห็นทีม แต่ต้องให้ผู้ดูแลทีมอนุมัติก่อน' },
+    { id: 'private', label: 'ส่วนตัว',         desc: 'เห็นเฉพาะสมาชิก เข้าได้เมื่อถูกเชิญเท่านั้น' }
+  ];
+  var TEAM_RES_MAX = 30, TEAM_PIN_MAX = 20;
+
+  function normalizeMsgs(list) {
+    return (Array.isArray(list) ? list : []).filter(function (m) { return m && m.id; }).map(function (m) {
+      m.replies = Array.isArray(m.replies) ? m.replies.filter(function (r) { return r && r.id; }) : [];
+      m.followers = Array.isArray(m.followers) ? m.followers : (m.by ? [m.by] : []);
+      m.atts = Array.isArray(m.atts) ? m.atts : [];
+      return m;
+    });
+  }
+  function normalizeTeam(t) {
+    t.name = String(t.name || 'ทีม');
+    t.desc = typeof t.desc === 'string' ? t.desc : '';
+    t.color = t.color || PALETTE[0];
+    t.icon = t.icon || '👥';
+    if (['public', 'request', 'private'].indexOf(t.privacy) < 0) t.privacy = 'public';
+    var seen = {};
+    t.members = (Array.isArray(t.members) ? t.members : []).filter(function (m) {
+      if (!m || !m.u || seen[m.u]) return false;
+      seen[m.u] = true;
+      if (m.role !== 'admin') m.role = 'member';
+      return true;
+    });
+    t.requests = (Array.isArray(t.requests) ? t.requests : []).filter(function (r) { return r && r.u && !seen[r.u]; });
+    t.pins = Array.isArray(t.pins) ? t.pins.filter(function (x) { return typeof x === 'string'; }) : [];
+    t.resources = Array.isArray(t.resources) ? t.resources.filter(function (r) { return r && r.id; }) : [];
+    t.messages = normalizeMsgs(t.messages);
+    return t;
+  }
+  function normalizePortfolio(f) {
+    f.projectIds = Array.isArray(f.projectIds) ? f.projectIds : [];
+    f.portfolioIds = Array.isArray(f.portfolioIds) ? f.portfolioIds.filter(function (x) { return x !== f.id; }) : [];
+    f.fields = Array.isArray(f.fields) ? f.fields.filter(function (x) { return x && x.id; }) : [];
+    f.fields.forEach(function (x) {
+      if (PF_FIELD_TYPES.indexOf(x.type) < 0) x.type = 'text';
+      if (x.type === 'select') x.options = normalizeOptions(x.options || []);
+      if (x.type === 'rollup' && ROLLUP_FNS.indexOf(x.fn) < 0) x.fn = 'sum';
+      if (!('format' in x)) x.format = null;
+    });
+    f.values = isObj(f.values) ? f.values : {};
+    f.views = Array.isArray(f.views) ? f.views.filter(function (v) { return v && v.id; }) : [];
+    f.views.forEach(function (v) { v.view = pfFillView(v.view); if (!v.name) v.name = 'มุมมอง'; });
+    if (!('defaultTab' in f) || (f.defaultTab && !f.views.some(function (v) { return v.id === f.defaultTab; }))) f.defaultTab = null;
+    f.messages = normalizeMsgs(f.messages);
+    if (!('status' in f)) f.status = null;
+    f.statusLog = f.statusLog || [];
+    return f;
+  }
+  function migrate4a(d) {
+    d.teams = Array.isArray(d.teams) ? d.teams.filter(function (t) { return t && t.id; }) : [];
+    d.teams.forEach(normalizeTeam);
+    var tids = {};
+    d.teams.forEach(function (t) { tids[t.id] = true; });
+    d.projects.forEach(function (p) {
+      p.teams = Array.isArray(p.teams) ? p.teams.filter(function (s) { return s && tids[s.id] && ACCESS_RANK[s.access]; }) : [];
+    });
+    var pfIds = {};
+    (d.portfolios || []).forEach(function (f) { pfIds[f.id] = true; });
+    (d.portfolios || []).forEach(function (f) {
+      normalizePortfolio(f);
+      f.portfolioIds = f.portfolioIds.filter(function (x) { return pfIds[x]; });
+    });
+    if (typeof migrate4aGoals === 'function') migrate4aGoals(d);
+  }
+
+  /* ---------- ทีม ---------- */
+  function teams() { return db.teams || []; }
+  function team(id) { return (db.teams || []).filter(function (t) { return t.id === id; })[0] || null; }
+  function teamRole(tid, userId) {
+    var mm = index().teamMem[tid];
+    return (mm && mm[userId || db.currentUserId]) || null;
+  }
+  function isTeamMember(tid, userId) { return !!teamRole(tid, userId); }
+  function canSeeTeam(tid) {
+    var t = team(tid);
+    if (!t || !isActive()) return false;
+    if (isAdmin() || isTeamMember(tid)) return true;
+    if (role() === 'guest') return false;          // บุคคลภายนอกเห็นเฉพาะทีมที่ถูกเชิญ
+    return t.privacy !== 'private';
+  }
+  function canManageTeam(tid) {
+    return !!team(tid) && isActive() && (isAdmin() || teamRole(tid) === 'admin');
+  }
+  function visibleTeams() { return teams().filter(function (t) { return canSeeTeam(t.id); }); }
+  function myTeams(userId) { return teams().filter(function (t) { return isTeamMember(t.id, userId); }); }
+  function teamsOfUser(userId) { return myTeams(userId); }
+
+  function createTeam(attrs) {
+    attrs = attrs || {};
+    if (!can('structure')) return null;
+    var name = String(attrs.name || '').trim();
+    if (!name) return null;
+    snapshot('สร้างทีม');
+    db.teams = db.teams || [];
+    var t = normalizeTeam({
+      id: uid('tm'), name: name.slice(0, 120), desc: String(attrs.desc || '').slice(0, 5000),
+      color: attrs.color || PALETTE[db.teams.length % PALETTE.length], icon: attrs.icon || '👥',
+      privacy: attrs.privacy, members: [{ u: db.currentUserId, role: 'admin' }],
+      by: db.currentUserId, at: new Date().toISOString()
+    });
+    db.teams.push(t);
+    audit('team.create', t.name);
+    commit();
+    return t;
+  }
+  function updateTeam(tid, patch) {
+    var t = team(tid);
+    if (!t || !canManageTeam(tid)) return false;
+    snapshot('แก้ทีม');
+    ['name', 'desc', 'color', 'icon', 'privacy'].forEach(function (k) {
+      if (k in patch && patch[k] !== null && patch[k] !== undefined) t[k] = patch[k];
+    });
+    normalizeTeam(t);
+    if ('privacy' in patch) audit('team.privacy', t.name, patch.privacy);
+    commit();
+    return true;
+  }
+  function deleteTeam(tid) {
+    var t = team(tid);
+    if (!t || !canManageTeam(tid)) return false;
+    snapshot('ลบทีม');
+    db.teams = db.teams.filter(function (x) { return x.id !== tid; });
+    db.projects.forEach(function (p) { p.teams = (p.teams || []).filter(function (s) { return s.id !== tid; }); });
+    (db.goals || []).forEach(function (g) { if (g.team === tid) g.team = null; });
+    audit('team.delete', t.name);
+    commit();
+    return true;
+  }
+  function teamAdminsOf(t) { return t.members.filter(function (m) { return m.role === 'admin'; }).map(function (m) { return m.u; }); }
+  function addTeamMember(tid, userId, roleId) {
+    var t = team(tid);
+    if (!t || !user(userId) || !canManageTeam(tid)) return false;
+    snapshot('เพิ่มสมาชิกทีม');
+    var m = t.members.filter(function (x) { return x.u === userId; })[0];
+    if (m) m.role = roleId === 'admin' ? 'admin' : 'member';
+    else t.members.push({ u: userId, role: roleId === 'admin' ? 'admin' : 'member' });
+    t.requests = t.requests.filter(function (r) { return r.u !== userId; });
+    notifyOnly(null, [userId], 'เพิ่มคุณเข้าทีม {p}', 'activity', { p: t.name }, false, { route: 'team:' + tid });
+    audit('team.member', t.name, (user(userId) || {}).name);
+    commit();
+    return true;
+  }
+  /** เปลี่ยนบทบาทในทีม — ต้องเหลือผู้ดูแลทีมอย่างน้อยหนึ่งคนเสมอ */
+  function setTeamRole(tid, userId, roleId) {
+    var t = team(tid);
+    if (!t || !canManageTeam(tid)) return false;
+    var m = t.members.filter(function (x) { return x.u === userId; })[0];
+    if (!m) return false;
+    if (m.role === 'admin' && roleId !== 'admin' && teamAdminsOf(t).length <= 1) return false;
+    snapshot('เปลี่ยนบทบาทในทีม');
+    m.role = roleId === 'admin' ? 'admin' : 'member';
+    commit();
+    return true;
+  }
+  function removeTeamMember(tid, userId) {
+    var t = team(tid);
+    if (!t) return false;
+    var self = userId === db.currentUserId;
+    if (!self && !canManageTeam(tid)) return false;
+    var m = t.members.filter(function (x) { return x.u === userId; })[0];
+    if (!m) return false;
+    if (m.role === 'admin' && teamAdminsOf(t).length <= 1) return false;
+    snapshot(self ? 'ออกจากทีม' : 'ถอดสมาชิกออกจากทีม');
+    t.members = t.members.filter(function (x) { return x.u !== userId; });
+    audit('team.member-remove', t.name, (user(userId) || {}).name);
+    commit();
+    return true;
+  }
+  /** เข้าร่วมทีม — สาธารณะเข้าได้เลย ต้องขอ = ส่งคำขอให้ผู้ดูแลทีม ส่วนตัว = ไม่ได้ (ต้องถูกเชิญ)
+   *  คืน 'joined' | 'requested' | null */
+  function joinTeam(tid) {
+    var t = team(tid);
+    if (!t || !isActive() || isTeamMember(tid) || role() === 'guest') return null;
+    if (t.privacy === 'public') {
+      snapshot('เข้าร่วมทีม');
+      t.members.push({ u: db.currentUserId, role: 'member' });
+      audit('team.join', t.name);
+      commit();
+      return 'joined';
+    }
+    if (t.privacy === 'request') {
+      if (t.requests.some(function (r) { return r.u === db.currentUserId; })) return 'requested';
+      snapshot('ขอเข้าร่วมทีม');
+      t.requests.push({ u: db.currentUserId, at: new Date().toISOString() });
+      notifyOnly(null, teamAdminsOf(t), 'ขอเข้าร่วมทีม {p}', 'activity', { p: t.name }, false, { route: 'team:' + tid });
+      commit();
+      return 'requested';
+    }
+    return null;
+  }
+  function answerTeamRequest(tid, userId, ok) {
+    var t = team(tid);
+    if (!t || !canManageTeam(tid)) return false;
+    if (!t.requests.some(function (r) { return r.u === userId; })) return false;
+    snapshot(ok ? 'อนุมัติเข้าทีม' : 'ปฏิเสธคำขอเข้าทีม');
+    t.requests = t.requests.filter(function (r) { return r.u !== userId; });
+    if (ok && !t.members.some(function (m) { return m.u === userId; })) t.members.push({ u: userId, role: 'member' });
+    notifyOnly(null, [userId], ok ? 'อนุมัติให้คุณเข้าทีม {p}' : 'ปฏิเสธคำขอเข้าทีม {p}', 'activity', { p: t.name }, false, { route: 'team:' + tid });
+    commit();
+    return true;
+  }
+  function toggleTeamPin(tid, itemId) {
+    var t = team(tid);
+    if (!t || !(canManageTeam(tid) || isTeamMember(tid))) return null;
+    var at = t.pins.indexOf(itemId);
+    if (at < 0 && t.pins.length >= TEAM_PIN_MAX) return null;
+    snapshot(at >= 0 ? 'เอาหมุดออกจากทีม' : 'ปักหมุดในทีม');
+    if (at >= 0) t.pins.splice(at, 1); else t.pins.push(itemId);
+    commit();
+    return at < 0;
+  }
+  function addTeamResource(tid, name, url) {
+    var t = team(tid);
+    if (!t || !isTeamMember(tid) && !canManageTeam(tid)) return null;
+    var u = String(url || '').trim();
+    if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+    if (!/^https?:\/\/[^\s]+\.[^\s]+/i.test(u) || t.resources.length >= TEAM_RES_MAX) return null;
+    snapshot('เพิ่มทรัพยากรของทีม');
+    var r = { id: uid('kr'), name: String(name || u).trim().slice(0, 200) || u, url: u.slice(0, 2000),
+      by: db.currentUserId, at: new Date().toISOString() };
+    t.resources.push(r);
+    commit();
+    return r;
+  }
+  function removeTeamResource(tid, rid) {
+    var t = team(tid);
+    if (!t || !isTeamMember(tid) && !canManageTeam(tid)) return false;
+    snapshot('ลบทรัพยากรของทีม');
+    t.resources = t.resources.filter(function (r) { return r.id !== rid; });
+    commit();
+    return true;
+  }
+  /** แชร์โปรเจกต์ให้ทีม (access = null ถอดออก) — ต้องแก้โครงสร้างโปรเจกต์นั้นได้ */
+  function shareProjectWithTeam(pid, tid, access) {
+    var p = project(pid), t = team(tid);
+    if (!p || !t || !can('structure') || !canInProject(pid, 'edit')) return false;
+    if (access && !ACCESS_RANK[access]) return false;
+    snapshot(access ? 'แชร์โปรเจกต์ให้ทีม' : 'เลิกแชร์โปรเจกต์ให้ทีม');
+    p.teams = (p.teams || []).filter(function (s) { return s.id !== tid; });
+    if (access) p.teams.push({ id: tid, access: access });
+    audit('project.team', p.name, t.name + ' → ' + (access || '—'));
+    if (access) {
+      notifyOnly(null, t.members.map(function (m) { return m.u; }), 'แชร์โปรเจกต์ {p} ให้ทีมของคุณ', 'activity',
+        { p: p.name }, false, { projectId: pid, route: 'p-overview' });
+    }
+    commit();
+    return true;
+  }
+  function teamsOfProject(pid) {
+    var p = project(pid);
+    return ((p && p.teams) || []).map(function (s) { return { team: team(s.id), access: s.access }; })
+      .filter(function (x) { return x.team; });
+  }
+  /** โปรเจกต์ที่แชร์ให้ทีมนี้และคนดูเห็นได้ */
+  function teamProjects(tid) {
+    return db.projects.filter(function (p) {
+      return !p.archived && (p.teams || []).some(function (s) { return s.id === tid; }) && projectAccess(p.id);
+    });
+  }
+  /** งานต้นทางทั้งหมดในโปรเจกต์ของทีม (ไม่ซ้ำ) */
+  function teamTasks(tid) {
+    var seen = {}, out = [];
+    teamProjects(tid).forEach(function (p) {
+      tasksInProject(p.id).forEach(function (x) {
+        if (seen[x.task.id] || !canSeeTask(x.task.id)) return;
+        seen[x.task.id] = true;
+        out.push(x.task);
+      });
+    });
+    return out;
+  }
+
+  /* ---------- ประกาศของโปรเจกต์ / พอร์ตโฟลิโอ / ทีม ---------- */
+  function msgHost(id) {
+    id = String(id || '');
+    if (/^pf_/.test(id)) return portfolio(id);
+    if (/^tm_/.test(id)) return team(id);
+    return project(id);
+  }
+  function hostCan(id, need) {
+    if (!isActive()) return false;
+    if (/^pf_/.test(id)) return !!portfolio(id) && (need === 'view' || can(need === 'comment' ? 'comment' : 'structure'));
+    if (/^tm_/.test(id)) {
+      if (!team(id) || !canSeeTeam(id)) return false;
+      if (need === 'view') return true;
+      return can('comment') && (isTeamMember(id) || isAdmin());
+    }
+    return false;
+  }
+  function hostWatchers(id) {
+    if (/^tm_/.test(id)) {
+      var t = team(id);
+      return t ? t.members.map(function (m) { return m.u; }).filter(function (u) { return u !== db.currentUserId; }) : [];
+    }
+    if (/^pf_/.test(id)) {
+      var f = portfolio(id);
+      return f && f.owner && f.owner !== db.currentUserId ? [f.owner] : [];
+    }
+    return projectWatchers(id, 'messages');
+  }
+  function msgNotifExtra(id) {
+    if (/^tm_/.test(id)) return { route: 'team:' + id + ':messages' };
+    if (/^pf_/.test(id)) return { route: 'portfolio:' + id + ':messages' };
+    return { projectId: id };
+  }
+  /** ชื่อของปลายทางในกล่องข้อความ (route ของ 4a) */
+  function routeLabel(r) {
+    var m = /^(team|portfolio|goal):([^:]+)/.exec(String(r || ''));
+    if (!m) return null;
+    var o = m[1] === 'team' ? team(m[2]) : m[1] === 'portfolio' ? portfolio(m[2]) : (typeof goal === 'function' ? goal(m[2]) : null);
+    return o ? o.name : null;
+  }
+
+  /* ---------- พอร์ตโฟลิโอซ้อน ---------- */
+  var PF_FIELD_TYPES = ['number', 'text', 'select', 'date', 'person', 'rollup'];
+  var ROLLUP_FNS = ['sum', 'avg', 'min', 'max', 'count'];
+  var PF_FIELD_MAX = 30;
+
+  /** พอร์ตโฟลิโอทั้งหมดที่อยู่ใต้ id (ทุกชั้น ไม่รวมตัวเอง) — กันวนด้วยชุดที่เคยเห็น */
+  function pfDescendants(id) {
+    var out = {}, stack = [id];
+    while (stack.length) {
+      var f = portfolio(stack.pop());
+      (f ? f.portfolioIds || [] : []).forEach(function (c) {
+        if (!out[c] && c !== id) { out[c] = true; stack.push(c); }
+      });
+    }
+    return out;
+  }
+  function canNestPortfolio(parentId, childId) {
+    if (!portfolio(parentId) || !portfolio(childId) || parentId === childId) return false;
+    return !pfDescendants(childId)[parentId];        // ลูกต้องไม่ใช่บรรพบุรุษของแม่
+  }
+  /** ใส่พอร์ตโฟลิโอย่อย — คืน 'cycle' ถ้าจะทำให้วน */
+  function addPortfolioToPortfolio(parentId, childId) {
+    var f = portfolio(parentId), c = portfolio(childId);
+    if (!f || !c || !can('structure')) return false;
+    if (!canNestPortfolio(parentId, childId)) return 'cycle';
+    if (f.portfolioIds.indexOf(childId) >= 0) return false;
+    snapshot('ใส่พอร์ตโฟลิโอย่อย');
+    f.portfolioIds.push(childId);
+    audit('portfolio.nest', f.name, c.name);
+    commit();
+    return true;
+  }
+  function removePortfolioFromPortfolio(parentId, childId) {
+    var f = portfolio(parentId);
+    if (!f || f.portfolioIds.indexOf(childId) < 0) return false;
+    snapshot('ถอดพอร์ตโฟลิโอย่อย');
+    f.portfolioIds = f.portfolioIds.filter(function (x) { return x !== childId; });
+    commit();
+    return true;
+  }
+  function parentPortfolios(id) {
+    return portfolios().filter(function (f) { return (f.portfolioIds || []).indexOf(id) >= 0; });
+  }
+  /** โปรเจกต์ที่เห็นได้ทั้งหมดใต้พอร์ตโฟลิโอนี้ ทุกชั้น ไม่ซ้ำ (4b ใช้เป็นขอบเขตของ workload/รายงาน) */
+  function allProjectsUnder(id) {
+    var ids = [id].concat(Object.keys(pfDescendants(id))), seen = {}, out = [];
+    ids.forEach(function (fid) {
+      portfolioProjects(fid).forEach(function (p) { if (!seen[p.id]) { seen[p.id] = true; out.push(p); } });
+    });
+    return out;
+  }
+  function hiddenUnder(id) {
+    var ids = [id].concat(Object.keys(pfDescendants(id))), seen = {}, n = 0;
+    ids.forEach(function (fid) {
+      var f = portfolio(fid);
+      (f ? f.projectIds : []).forEach(function (pid) {
+        if (seen[pid] || !project(pid)) return;
+        seen[pid] = true;
+        if (!projectAccess(pid)) n++;
+      });
+    });
+    return n;
+  }
+  /** แถวของพอร์ตโฟลิโอ = โปรเจกต์ที่เห็นได้ + พอร์ตโฟลิโอย่อย  [{ kind, id, o }] */
+  function portfolioItems(id) {
+    var f = portfolio(id);
+    if (!f) return [];
+    return portfolioProjects(id).map(function (p) { return { kind: 'project', id: p.id, o: p }; })
+      .concat((f.portfolioIds || []).map(portfolio).filter(Boolean).map(function (c) { return { kind: 'portfolio', id: c.id, o: c }; }));
+  }
+  /** ตัวเลขของหนึ่งแถว — พอร์ตโฟลิโอย่อยรวมจากโปรเจกต์ทุกชั้นข้างใต้ */
+  function pfItemInfo(it) {
+    var projs = it.kind === 'project' ? [it.o] : allProjectsUnder(it.id);
+    var s = { total: 0, done: 0, overdue: 0, msTotal: 0, msDone: 0, due: null, projects: projs.length };
+    projs.forEach(function (p) {
+      var st = projectStats(p.id);
+      s.total += st.total; s.done += st.done; s.overdue += st.overdue;
+      var ms = projectMilestones(p.id, true);
+      s.msTotal += ms.length;
+      s.msDone += ms.filter(function (t) { return t.completed; }).length;
+      var d = it.kind === 'project' ? p.dueOn : (p.dueOn || (projectDates(p.id) || {}).to);
+      if (d && (!s.due || d > s.due)) s.due = d;
+    });
+    s.percent = s.total ? Math.round(s.done * 100 / s.total) : 0;
+    s.msPercent = s.msTotal ? Math.round(s.msDone * 100 / s.msTotal) : 0;
+    s.status = it.o.status ? it.o.status.state : null;
+    s.owner = it.o.owner || null;
+    return s;
+  }
+
+  /* ---------- ฟิลด์ของพอร์ตโฟลิโอ + rollup ---------- */
+  function pfField(f, fid) { return (f.fields || []).filter(function (x) { return x.id === fid; })[0] || null; }
+  function savePfField(pfId, def) {
+    var f = portfolio(pfId);
+    if (!f || !can('structure') || !def || !String(def.name || '').trim()) return null;
+    if (PF_FIELD_TYPES.indexOf(def.type) < 0) return null;
+    var cur = def.id ? pfField(f, def.id) : null;
+    if (!cur && f.fields.length >= PF_FIELD_MAX) return null;
+    snapshot(cur ? 'แก้ฟิลด์พอร์ตโฟลิโอ' : 'เพิ่มฟิลด์พอร์ตโฟลิโอ');
+    var x = cur || { id: uid('pff') };
+    x.name = String(def.name).trim().slice(0, 80);
+    x.type = cur ? cur.type : def.type;
+    x.options = x.type === 'select' ? normalizeOptions(def.options || []) : [];
+    x.format = (x.type === 'number' || x.type === 'rollup') ? (def.format || null) : null;
+    if (x.type === 'rollup') { x.src = def.src || ''; x.fn = ROLLUP_FNS.indexOf(def.fn) >= 0 ? def.fn : 'sum'; }
+    if (!cur) f.fields.push(x);
+    commit();
+    return x;
+  }
+  function deletePfField(pfId, fid) {
+    var f = portfolio(pfId);
+    if (!f || !pfField(f, fid) || !can('structure')) return false;
+    snapshot('ลบฟิลด์พอร์ตโฟลิโอ');
+    f.fields = f.fields.filter(function (x) { return x.id !== fid; });
+    Object.keys(f.values).forEach(function (k) { delete f.values[k][fid]; });
+    commit();
+    return true;
+  }
+  function setPfValue(pfId, itemId, fid, v) {
+    var f = portfolio(pfId), fd = f ? pfField(f, fid) : null;
+    if (!fd || fd.type === 'rollup' || !can('structure')) return false;
+    if (fd.type === 'number') v = (v === '' || v === null || v === undefined || isNaN(+v)) ? null : +v;
+    if (v === '' || v === undefined) v = null;
+    snapshot('แก้ค่าในพอร์ตโฟลิโอ');
+    f.values[itemId] = f.values[itemId] || {};
+    if (v === null) delete f.values[itemId][fid]; else f.values[itemId][fid] = v;
+    if (!Object.keys(f.values[itemId]).length) delete f.values[itemId];
+    commit();
+    return true;
+  }
+  /** ฟิลด์ตัวเลขของงานที่ใช้เป็นต้นทางของ rollup ได้ — ฟิลด์ตัวเลข/สูตรตัวเลขในโปรเจกต์ใต้พอร์ตโฟลิโอ + คลังฟิลด์ */
+  function pfRollupSources(pfId) {
+    var out = [], seen = {};
+    var add = function (fd, where) {
+      if (seen[fd.id] || !(fd.type === 'number' || (fd.type === 'formula' && fd.out !== 'date'))) return;
+      seen[fd.id] = true;
+      out.push({ id: fd.id, name: fd.name + (where ? ' · ' + where : '') });
+    };
+    (db.fieldLib || []).forEach(function (fd) { add(fd, ''); });
+    allProjectsUnder(pfId).forEach(function (p) { (p.fields || []).forEach(function (fd) { add(fd, p.name); }); });
+    return out;
+  }
+  function rollupValue(it, fd) {
+    var projs = it.kind === 'project' ? [it.o] : allProjectsUnder(it.id);
+    var vals = [], seen = {};
+    projs.forEach(function (p) {
+      tasksInProject(p.id).forEach(function (x) {
+        if (seen[x.task.id] || !canSeeTask(x.task.id)) return;
+        seen[x.task.id] = true;
+        var v = fieldValue(x.task.id, fd.src);
+        if (typeof v === 'number' && isFinite(v)) vals.push(v);
+      });
+    });
+    if (fd.fn === 'count') return vals.length;
+    if (!vals.length) return null;
+    var sum = vals.reduce(function (a, b) { return a + b; }, 0);
+    if (fd.fn === 'avg') return Math.round(sum / vals.length * 100) / 100;
+    if (fd.fn === 'min') return Math.min.apply(null, vals);
+    if (fd.fn === 'max') return Math.max.apply(null, vals);
+    return Math.round(sum * 10000) / 10000;
+  }
+  function pfFieldValue(f, it, fid) {
+    var fd = pfField(f, fid);
+    if (!fd) return null;
+    if (fd.type === 'rollup') return rollupValue(it, fd);
+    var v = f.values[it.id] && f.values[it.id][fid];
+    return v === undefined ? null : v;
+  }
+
+  /* ---------- มุมมองของพอร์ตโฟลิโอ (ตัวกรอง เรียง จัดกลุ่ม แท็บที่บันทึก) ---------- */
+  var PF_BUILTIN = [
+    { id: 'name',     label: 'ชื่อ',              kind: 'text' },
+    { id: 'kind',     label: 'ชนิด',              kind: 'select' },
+    { id: 'status',   label: 'สถานะ',             kind: 'select' },
+    { id: 'owner',    label: 'เจ้าของ',            kind: 'person' },
+    { id: 'due',      label: 'กำหนดส่ง',           kind: 'date' },
+    { id: 'progress', label: 'ความคืบหน้า (%)',     kind: 'number' },
+    { id: 'msprog',   label: 'หมุดหมายที่เสร็จ (%)', kind: 'number' },
+    { id: 'overdue',  label: 'งานเลยกำหนด',        kind: 'number' }
+  ];
+  var PF_GROUPS = [['none', 'ไม่จัดกลุ่ม'], ['status', 'สถานะ'], ['owner', 'เจ้าของ'], ['kind', 'ชนิด']];
+  function pfDefaultView() { return { filters: [], sorts: [], group: 'none', hide: [] }; }
+  function pfFillView(v) {
+    var d = pfDefaultView();
+    v = isObj(v) ? v : {};
+    Object.keys(d).forEach(function (k) { if (!(k in v)) v[k] = clone(d[k]); });
+    v.filters = Array.isArray(v.filters) ? v.filters.filter(function (c) { return c && c.f; }) : [];
+    v.sorts = Array.isArray(v.sorts) ? v.sorts.filter(function (s) { return s && s.k; }).slice(0, 3) : [];
+    v.hide = Array.isArray(v.hide) ? v.hide : [];
+    return v;
+  }
+  function pfFilterFields(pfId) {
+    var f = portfolio(pfId);
+    var out = PF_BUILTIN.slice();
+    ((f && f.fields) || []).forEach(function (fd) {
+      var kind = fd.type === 'rollup' ? 'number' : fd.type;
+      out.push({ id: 'pff:' + fd.id, label: fd.name, kind: kind, field: fd, custom: true });
+    });
+    return out;
+  }
+  function pfFilterChoices(pfId, fid) {
+    var f = portfolio(pfId);
+    if (fid === 'status') return PROJECT_STATES.map(function (x) { return [x.id, x.label, x.color]; });
+    if (fid === 'kind') return [['project', 'โปรเจกต์', null], ['portfolio', 'พอร์ตโฟลิโอ', null]];
+    if (fid === 'owner') return [[ME, 'ฉัน', null]].concat(db.users.filter(function (u) { return u.active !== false; })
+      .map(function (u) { return [u.id, u.name, u.color]; }));
+    var fd = f && fid.indexOf('pff:') === 0 ? pfField(f, fid.slice(4)) : null;
+    if (fd && fd.type === 'person') return [[ME, 'ฉัน', null]].concat(db.users.map(function (u) { return [u.id, u.name, u.color]; }));
+    if (fd && fd.type === 'select') return fd.options.map(function (o) { return [o.name, o.name, o.color]; });
+    return [];
+  }
+  function pfItemValue(f, it, fid, info) {
+    info = info || pfItemInfo(it);
+    switch (fid) {
+      case 'name': return it.o.name;
+      case 'kind': return it.kind;
+      case 'status': return info.status;
+      case 'owner': return info.owner;
+      case 'due': return info.due;
+      case 'progress': return info.percent;
+      case 'msprog': return info.msTotal ? info.msPercent : null;
+      case 'overdue': return info.overdue;
+    }
+    if (fid.indexOf('pff:') === 0) return pfFieldValue(f, it, fid.slice(4));
+    return null;
+  }
+  /** แถวที่ผ่านตัวกรองและเรียงแล้ว [{ it, info }] */
+  function pfViewItems(pfId, view) {
+    var f = portfolio(pfId);
+    if (!f) return [];
+    view = pfFillView(view);
+    var defs = {};
+    pfFilterFields(pfId).forEach(function (d) { defs[d.id] = d; });
+    var rows = portfolioItems(pfId).map(function (it) { return { it: it, info: pfItemInfo(it) }; });
+    rows = rows.filter(function (r) {
+      return view.filters.every(function (c) {
+        var d = defs[c.f];
+        if (!d) return true;
+        var val = pfItemValue(f, r.it, c.f, r.info);
+        return matchValue(d.kind, val, c, c.f === 'due' && r.info.status && projectStateDone(r.info.status));
+      });
+    });
+    if (view.sorts.length) {
+      var rank = {};
+      PROJECT_STATES.forEach(function (x, i) { rank[x.id] = i; });
+      rows.sort(function (a, b) {
+        for (var i = 0; i < view.sorts.length; i++) {
+          var s = view.sorts[i];
+          var va = pfItemValue(f, a.it, s.k, a.info), vb = pfItemValue(f, b.it, s.k, b.info);
+          if (s.k === 'status') { va = va ? rank[va] : null; vb = vb ? rank[vb] : null; }
+          if (s.k === 'owner') { va = va ? (user(va) || {}).name : null; vb = vb ? (user(vb) || {}).name : null; }
+          var ea = va === null || va === undefined || va === '', eb = vb === null || vb === undefined || vb === '';
+          if (ea && eb) continue;
+          if (ea) return 1;                // ว่างไว้ท้ายเสมอ
+          if (eb) return -1;
+          var c = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb));
+          if (c) return s.d === 'desc' ? -c : c;
+        }
+        return 0;
+      });
+    }
+    return rows;
+  }
+  function projectStateDone(id) {
+    var s = PROJECT_STATES.filter(function (x) { return x.id === id; })[0];
+    return !!(s && s.done);
+  }
+  /** จัดกลุ่ม [{ key, label, color, rows }] */
+  function pfViewGroups(pfId, view) {
+    view = pfFillView(view);
+    var rows = pfViewItems(pfId, view), f = portfolio(pfId);
+    var g = view.group;
+    if (!g || g === 'none') return [{ key: '', label: '', rows: rows }];
+    var map = {}, order = [];
+    rows.forEach(function (r) {
+      var k = g === 'kind' ? r.it.kind : g === 'status' ? (r.info.status || '') : g === 'owner' ? (r.info.owner || '')
+        : String(pfItemValue(f, r.it, g, r.info) || '');
+      if (!map[k]) { map[k] = []; order.push(k); }
+      map[k].push(r);
+    });
+    if (g === 'status') {
+      var pos = {};
+      PROJECT_STATES.forEach(function (x, i) { pos[x.id] = i; });
+      order.sort(function (a, b) { return (a ? pos[a] : 99) - (b ? pos[b] : 99); });
+    }
+    return order.map(function (k) {
+      var label = k, color = null;
+      if (g === 'status') { var st = PROJECT_STATES.filter(function (x) { return x.id === k; })[0]; label = st ? st.label : 'ยังไม่รายงาน'; color = st ? st.color : null; }
+      else if (g === 'owner') { var u = user(k); label = u ? u.name : 'ยังไม่ระบุ'; color = u ? u.color : null; }
+      else if (g === 'kind') label = k === 'portfolio' ? 'พอร์ตโฟลิโอ' : 'โปรเจกต์';
+      else if (!k) label = 'ว่าง';
+      return { key: k, label: label, color: color, rows: map[k] };
+    });
+  }
+  function pfView(pfId) {
+    var st = personalOf();
+    return pfFillView(clone((st.pfv && st.pfv[pfId]) || {}));
+  }
+  /** มุมมองที่ทำงานอยู่ของแต่ละคน บันทึกเงียบ ๆ ไม่เป็นจุดย้อนกลับ (แบบ setProjView) */
+  function setPfView(pfId, view) {
+    if (!portfolio(pfId) || !me()) return false;
+    var st = personalOf();
+    if (!isObj(st.pfv)) st.pfv = {};
+    st.pfv[pfId] = pfFillView(clone(view));
+    persist();
+    return true;
+  }
+  function pfSavedView(pfId, vid) {
+    var f = portfolio(pfId);
+    return f ? f.views.filter(function (v) { return v.id === vid; })[0] || null : null;
+  }
+  function pfSaveView(pfId, name, view) {
+    var f = portfolio(pfId);
+    if (!f || !can('structure') || !String(name || '').trim() || f.views.length >= SV_MAX) return null;
+    snapshot('บันทึกมุมมองพอร์ตโฟลิโอ');
+    var v = { id: uid('pv'), name: String(name).trim().slice(0, 60), view: pfFillView(clone(view)) };
+    f.views.push(v);
+    commit();
+    return v;
+  }
+  function pfUpdateView(pfId, vid, patch) {
+    var v = pfSavedView(pfId, vid);
+    if (!v || !can('structure')) return false;
+    snapshot('แก้มุมมองพอร์ตโฟลิโอ');
+    if (patch.name) v.name = String(patch.name).trim().slice(0, 60);
+    if (patch.view) v.view = pfFillView(clone(patch.view));
+    commit();
+    return true;
+  }
+  function pfDeleteView(pfId, vid) {
+    var f = portfolio(pfId);
+    if (!f || !pfSavedView(pfId, vid) || !can('structure')) return false;
+    snapshot('ลบมุมมองพอร์ตโฟลิโอ');
+    f.views = f.views.filter(function (v) { return v.id !== vid; });
+    if (f.defaultTab === vid) f.defaultTab = null;
+    commit();
+    return true;
+  }
+  function pfSetDefaultTab(pfId, vid) {
+    var f = portfolio(pfId);
+    if (!f || !can('structure')) return false;
+    snapshot('ตั้งแท็บเริ่มต้นของพอร์ตโฟลิโอ');
+    f.defaultTab = vid && pfSavedView(pfId, vid) ? vid : null;
+    commit();
+    return true;
+  }
+  /** อัปเดตสถานะพอร์ตโฟลิโอพร้อมข้อความ (แท็บความคืบหน้า) */
+  function postPortfolioUpdate(pfId, state, text) {
+    if (!portfolio(pfId) || !can('structure') || !PROJECT_STATES.some(function (x) { return x.id === state; })) return false;
+    setPortfolioStatus(pfId, state, String(text || '').slice(0, 20000));
+    var f = portfolio(pfId);
+    if (f.owner && f.owner !== db.currentUserId) {
+      notifyOnly(null, [f.owner], 'อัปเดตสถานะพอร์ตโฟลิโอ {p}', 'status', { p: f.name }, false, { route: 'portfolio:' + pfId + ':progress' });
+      persist();
+    }
+    return true;
+  }
+
   db = hydrate();
 
   global.Store = {
@@ -10643,5 +11360,28 @@
     addProofPin: addProofPin, removeProofPin: removeProofPin, DASH_Y_EXTRA: DASH_Y_EXTRA
   };
   Object.keys(X3C2).forEach(function (k) { global.Store[k] = X3C2[k]; });
+  /* 4a ส่วนที่ 1 — ทีม พอร์ตโฟลิโอแบบซ้อน ฟิลด์ rollup มุมมอง ประกาศของพอร์ตโฟลิโอ/ทีม */
+  var X4A = {
+    TEAM_PRIVACY: TEAM_PRIVACY, TEAM_RES_MAX: TEAM_RES_MAX, TEAM_PIN_MAX: TEAM_PIN_MAX,
+    teams: teams, team: team, teamRole: teamRole, isTeamMember: isTeamMember, canSeeTeam: canSeeTeam,
+    canManageTeam: canManageTeam, visibleTeams: visibleTeams, myTeams: myTeams, teamsOfUser: teamsOfUser,
+    createTeam: createTeam, updateTeam: updateTeam, deleteTeam: deleteTeam, addTeamMember: addTeamMember,
+    setTeamRole: setTeamRole, removeTeamMember: removeTeamMember, joinTeam: joinTeam,
+    answerTeamRequest: answerTeamRequest, toggleTeamPin: toggleTeamPin, addTeamResource: addTeamResource,
+    removeTeamResource: removeTeamResource, shareProjectWithTeam: shareProjectWithTeam,
+    teamsOfProject: teamsOfProject, teamProjects: teamProjects, teamTasks: teamTasks,
+    msgHost: msgHost, hostCan: hostCan, routeLabel: routeLabel, matchValue: matchValue,
+    PF_FIELD_TYPES: PF_FIELD_TYPES, ROLLUP_FNS: ROLLUP_FNS, PF_FIELD_MAX: PF_FIELD_MAX, PF_GROUPS: PF_GROUPS,
+    pfDescendants: pfDescendants, canNestPortfolio: canNestPortfolio, addPortfolioToPortfolio: addPortfolioToPortfolio,
+    removePortfolioFromPortfolio: removePortfolioFromPortfolio, parentPortfolios: parentPortfolios,
+    allProjectsUnder: allProjectsUnder, portfolioItems: portfolioItems, pfItemInfo: pfItemInfo,
+    pfField: pfField, savePfField: savePfField, deletePfField: deletePfField, setPfValue: setPfValue,
+    pfRollupSources: pfRollupSources, pfFieldValue: pfFieldValue,
+    pfDefaultView: pfDefaultView, pfFillView: pfFillView, pfFilterFields: pfFilterFields, pfItemValue: pfItemValue,
+    pfViewItems: pfViewItems, pfViewGroups: pfViewGroups, pfView: pfView, setPfView: setPfView,
+    pfSavedView: pfSavedView, pfSaveView: pfSaveView, pfUpdateView: pfUpdateView, pfDeleteView: pfDeleteView,
+    pfSetDefaultTab: pfSetDefaultTab, postPortfolioUpdate: postPortfolioUpdate
+  };
+  Object.keys(X4A).forEach(function (k) { global.Store[k] = X4A[k]; });
 
 })(window);

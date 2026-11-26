@@ -607,6 +607,92 @@ CREATE TABLE dbo.portfolio_status_updates (
 );
 GO
 
+/* 4a — พอร์ตโฟลิโอซ้อน (portfolio.portfolioIds — ห้ามวน ตรวจด้วย CTE ก่อน INSERT)
+   ฟิลด์ของพอร์ตโฟลิโอ + ค่าแยกต่อแถว (project หรือ portfolio ย่อย) และ rollup (คำนวณตอนอ่าน ไม่เก็บค่า)
+   แท็บมุมมองที่บันทึก (view = JSON { filters, sorts, group, hide }) และประกาศของพอร์ตโฟลิโอ */
+ALTER TABLE dbo.portfolios ADD default_view_id UNIQUEIDENTIFIER NULL;
+CREATE TABLE dbo.portfolio_children (
+    parent_id    UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.portfolios(id),
+    child_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.portfolios(id),
+    position     DECIMAL(18,9)    NOT NULL DEFAULT 0,
+    CONSTRAINT pk_portfolio_children PRIMARY KEY (parent_id, child_id),
+    CONSTRAINT ck_portfolio_children_self CHECK (parent_id <> child_id)
+);
+CREATE TABLE dbo.portfolio_fields (
+    id           UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    portfolio_id UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.portfolios(id) ON DELETE CASCADE,
+    name         NVARCHAR(80)     NOT NULL,
+    type         VARCHAR(10)      NOT NULL CONSTRAINT ck_pff_type CHECK (type IN ('number','text','select','date','person','rollup')),
+    options_json NVARCHAR(MAX)    NULL,      -- [{name,color}] ของ select
+    format_json  NVARCHAR(400)    NULL,      -- { kind, currency, decimals } ของ number/rollup
+    rollup_src   UNIQUEIDENTIFIER NULL,      -- custom_fields.id (ฟิลด์ตัวเลขของงาน)
+    rollup_fn    VARCHAR(8)       NULL CONSTRAINT ck_pff_fn CHECK (rollup_fn IN ('sum','avg','min','max','count')),
+    position     INT              NOT NULL DEFAULT 0
+);
+CREATE TABLE dbo.portfolio_field_values (
+    field_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.portfolio_fields(id) ON DELETE CASCADE,
+    item_id      UNIQUEIDENTIFIER NOT NULL,  -- project หรือ portfolio ย่อย
+    value_json   NVARCHAR(4000)   NULL,
+    CONSTRAINT pk_portfolio_field_values PRIMARY KEY (field_id, item_id)
+);
+CREATE TABLE dbo.portfolio_views (
+    id           UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    portfolio_id UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.portfolios(id) ON DELETE CASCADE,
+    name         NVARCHAR(60)     NOT NULL,
+    view_json    NVARCHAR(MAX)    NOT NULL,
+    position     INT              NOT NULL DEFAULT 0
+);
+/* ประกาศของพอร์ตโฟลิโอ/ทีมใช้ตารางประกาศเดียวกับโปรเจกต์ โดยเพิ่ม owner_kind */
+GO
+
+/* 4a — ทีม (db.teams) privacy: public | request | private
+   สมาชิกทีม (admin|member) คำขอเข้าร่วม ปักหมุด ทรัพยากร และการแชร์โปรเจกต์ให้ทีม (project.teams)
+   สิทธิ์ที่ได้ผ่านทีม "บวกเพิ่ม" — fn_VisibleProjects ต้องรวม project_teams ⋈ team_members ด้วย
+   และระดับที่ได้ = MAX(ระดับสมาชิกโปรเจกต์, ระดับที่แชร์ให้ทีม) ภายใต้เพดานบทบาทองค์กร */
+CREATE TABLE dbo.teams (
+    id          UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    name        NVARCHAR(120)    NOT NULL,
+    description NVARCHAR(MAX)    NULL,
+    icon        NVARCHAR(16)     NULL,
+    color       CHAR(7)          NOT NULL DEFAULT '#796eff',
+    privacy     VARCHAR(8)       NOT NULL DEFAULT 'public' CONSTRAINT ck_teams_privacy CHECK (privacy IN ('public','request','private')),
+    created_by  UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    created_at  DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME()
+);
+CREATE TABLE dbo.team_members (
+    team_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.teams(id) ON DELETE CASCADE,
+    user_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.users(id),
+    role        VARCHAR(6)       NOT NULL DEFAULT 'member' CONSTRAINT ck_team_members_role CHECK (role IN ('admin','member')),
+    CONSTRAINT pk_team_members PRIMARY KEY (team_id, user_id)
+);
+CREATE TABLE dbo.team_join_requests (
+    team_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.teams(id) ON DELETE CASCADE,
+    user_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.users(id),
+    requested_at DATETIME2(0)    NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT pk_team_join_requests PRIMARY KEY (team_id, user_id)
+);
+CREATE TABLE dbo.team_pins (
+    team_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.teams(id) ON DELETE CASCADE,
+    item_id     UNIQUEIDENTIFIER NOT NULL,   -- project หรือ portfolio
+    position    INT              NOT NULL DEFAULT 0,
+    CONSTRAINT pk_team_pins PRIMARY KEY (team_id, item_id)
+);
+CREATE TABLE dbo.team_resources (
+    id          UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    team_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.teams(id) ON DELETE CASCADE,
+    name        NVARCHAR(200)    NOT NULL,
+    url         NVARCHAR(2000)   NOT NULL,
+    created_by  UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    created_at  DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME()
+);
+CREATE TABLE dbo.project_teams (
+    project_id  UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.projects(id) ON DELETE CASCADE,
+    team_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.teams(id) ON DELETE CASCADE,
+    access      VARCHAR(8)       NOT NULL CONSTRAINT ck_project_teams_access CHECK (access IN ('admin','edit','comment','view')),
+    CONSTRAINT pk_project_teams PRIMARY KEY (project_id, team_id)
+);
+GO
+
 /* =============================================================
    ด่านสิทธิ์ — ทุกคำสั่งอ่านต้องผ่านฟังก์ชันนี้
    =============================================================
