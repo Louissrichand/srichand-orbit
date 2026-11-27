@@ -189,159 +189,194 @@
 
   /* ---------- sidebar ---------- */
 
-  function sidebar(route) {
+  /* แถบซ้ายแบ่งเป็นสองชั้นแบบ Asana
+   * ชั้นนอก (rail) = ไอคอนหมวดใหญ่ งาน / กลยุทธ์ / ความรู้ / คนและทีม / เพิ่มเติม
+   * ชั้นใน (panel) = รายการของหมวดที่เลือก
+   * เดิมทุกอย่างกองอยู่ในรายการเดียวยาว ๆ คนใหม่หาไม่เจอว่าอะไรอยู่ตรงไหน
+   * หมวดที่เปิดอยู่ตามหน้าที่เปิด ถ้ากดไอคอนหมวดอื่นจะดูหมวดนั้นได้โดยยังไม่เปลี่ยนหน้า
+   * พอไปหน้าใหม่ หมวดจะกลับมาตามหน้านั้นเอง */
+  var NAV_GROUPS = [
+    { id: 'work',      icon: 'home',  label: 'งาน', en: 'Work' },   // 'งาน' ในพจนานุกรมแปลเป็น tasks ใช้ชื่อหมวดแยก
+    { id: 'strategy',  icon: 'flag',  label: 'กลยุทธ์' },
+    { id: 'knowledge', icon: 'note',  label: 'ความรู้' },
+    { id: 'people',    icon: 'users', label: 'คนและทีม' },
+    { id: 'more',      icon: 'more',  label: 'เพิ่มเติม' }
+  ];
+  var ROUTE_GROUP = {
+    goals: 'strategy', goal: 'strategy', portfolio: 'strategy', reports: 'strategy', report: 'strategy',
+    pages: 'knowledge',
+    teams: 'people', team: 'people', workload: 'people', timesheets: 'people', profile: 'people',
+    trash: 'more', admin: 'more'
+  };
+  function gLabel(g) { return g.en && global.I18N.getLang() === 'en' ? g.en : L(g.label); }
+  function routeGroup(route) { return ROUTE_GROUP[route && route.type] || 'work'; }
+  /** คีย์ของหน้าปัจจุบัน ใช้ดูว่าหมวดที่กดเลือกเองยังเป็นของหน้านี้อยู่ไหม */
+  function routeKey(route) { return route ? route.type + ':' + (route.id || '') : ''; }
+  function navGroupFor(route, pick) {
+    return pick && pick.key === routeKey(route) ? pick.g : routeGroup(route);
+  }
+
+  function sidebar(route, pick) {
     var db = S.db;
     var me = S.me();
-    var mine = S.myTasks(db.currentUserId);
-    var mineCount = mine.overdue.length + mine.today.length +
-                    mine.upcoming.length + mine.later.length + mine.nodate.length;
-    var unread = S.unreadCount(db.currentUserId);
+    var group = navGroupFor(route, pick);
 
-    var h = '';
-    h += '<div class="sb-brand">' + global.Icons.logoLockup(26) + '</div>';
-
-    h += '<div class="sb-section">';
-    h += '<button class="sb-item' + (route.type === 'home' ? ' active' : '') +
-         '" data-act="go" data-route="home">' + I('home') + '' +
-         '<span class="grow">' + L('หน้าแรก') + '</span></button>';
-    h += '<button class="sb-item' + (route.type === 'mytasks' ? ' active' : '') +
-         '" data-act="go" data-route="mytasks">' + I('checkCircle') + '' +
-         '<span class="grow">' + L('งานของฉัน') + '</span>' +
-         (mineCount ? '<span class="count">' + mineCount + '</span>' : '') + '</button>';
-    /* ห้ามรบกวน — ไม่ขึ้นตัวเลขแดง แต่บอกด้วยไอคอนพระจันทร์ว่ากำลังพักอยู่ ไม่ใช่ว่าไม่มีอะไรเข้า */
-    var dnd = S.isDnd();
-    h += '<button class="sb-item' + (route.type === 'inbox' ? ' active' : '') +
-         '" data-act="go" data-route="inbox">' + I('bell') + '' +
-         '<span class="grow">' + L('กล่องข้อความ') + '</span>' +
-         (dnd ? '<span class="sb-dnd" title="' + L('ห้ามรบกวนอยู่') + '">' + I('moon', 13) + '</span>'
-              : (unread ? '<span class="count alert">' + unread + '</span>' : '')) + '</button>';
-    h += '<button class="sb-item' + (route.type === 'calendar' ? ' active' : '') +
-         '" data-act="go" data-route="calendar">' + I('calendar') + '' +
-         '<span class="grow">' + L('ปฏิทินรวม') + '</span></button>';
-    h += '<button class="sb-item' + (route.type === 'pages' ? ' active' : '') +
-         '" data-act="go" data-route="pages">' + I('note') + '<span class="grow">' + L('หน้าเอกสาร') + '</span></button>';
-    h += '<button class="sb-item' + (route.type === 'goals' || route.type === 'goal' ? ' active' : '') +
-         '" data-act="go" data-route="goals">' + I('flag') + '<span class="grow">' + L('เป้าหมาย') + '</span></button>';
-    /* 4b — ภาระงานของทุกคน ไทม์ชีต และรายงานรวม */
-    if (global.Render && global.Render.sidebarExt) h += global.Render.sidebarExt(route);
-    h += '</div>';
-
+    function item(on, attrs, icon, label, tail) {
+      return '<button class="sb-item' + (on ? ' active' : '') + '" ' + attrs + '>' + icon +
+        '<span class="grow">' + label + '</span>' + (tail || '') + '</button>';
+    }
+    function go(type, on, icon, label, tail) {
+      return item(on, 'data-act="go" data-route="' + type + '"', I(icon), L(label), tail);
+    }
     function projectItem(p) {
       var n = S.tasksInProject(p.id).filter(function (x) { return !x.task.completed; }).length;
-      return '<button class="sb-item' +
-        (route.type === 'project' && route.id === p.id ? ' active' : '') +
-        '" data-act="go" data-route="project" data-id="' + esc(p.id) + '">' +
-        '<span class="emoji">' + esc(p.icon) + '</span>' +
-        '<span class="swatch" style="background:' + esc(p.color) + '"></span>' +
-        "<span class=\"grow\">" + esc(p.name) + "</span>" +
-        (p.visibility === "private" ? "<span class=\"lockmark\" title=\"" + L("โปรเจกต์ปิด") + "\">" + I("shield", 12) + "</span>" : "") +
-        (n ? '<span class="count">' + n + '</span>' : '') + '</button>';
+      return item(route.type === 'project' && route.id === p.id,
+        'data-act="go" data-route="project" data-id="' + esc(p.id) + '"',
+        '<span class="emoji">' + esc(p.icon) + '</span><span class="swatch" style="background:' + esc(p.color) + '"></span>',
+        esc(p.name),
+        (p.visibility === 'private' ? '<span class="lockmark" title="' + L('โปรเจกต์ปิด') + '">' + I('shield', 12) + '</span>' : '') +
+        (n ? '<span class="count">' + n + '</span>' : ''));
+    }
+    function section(label, body) {
+      return '<div class="sb-section">' + (label ? '<div class="sb-label">' + label + '</div>' : '') + body + '</div>';
     }
 
-    /* โปรเจกต์ที่ปักหมุดขึ้นก่อน เพราะพอมีหลายสิบโปรเจกต์
-     * ของที่เปิดจริงทุกวันจะจมอยู่กลางรายการยาว ๆ จนต้องเลื่อนหาทุกครั้ง
-     * ซ่อนหัวข้อนี้ทั้งก้อนถ้ายังไม่มีใครปัก ไม่งั้นแถบซ้ายจะมีหัวข้อว่างเปล่า */
-    var stars = S.starredProjects();
-    if (stars.length) {
-      h += '<div class="sb-section"><div class="sb-label">' + L('ปักหมุดไว้') + '</div>';
-      stars.forEach(function (p) { h += projectItem(p); });
-      h += '</div>';
-    }
+    /* ---- ตัวเลขที่ต้องเห็นจากชั้นนอกด้วย ไม่งั้นงานเข้าแล้วไม่รู้ถ้าเปิดหมวดอื่นค้างไว้ ---- */
+    var dnd = S.isDnd();
+    var unread = S.unreadCount(db.currentUserId);
+    var tsDue = S.tsReviewQueue ? S.tsReviewQueue().filter(function (x) { return x.status === 'submitted'; }).length : 0;
+    var dot = { work: !dnd && unread > 0, people: tsDue > 0 };
 
-    /* 2c — การค้นหาที่บันทึกไว้ของแต่ละคน ไม่มีก็ไม่มีหัวข้อ (ทางเข้าค้นหาขั้นสูงอยู่ที่ช่องค้นหาด้านบน) */
-    var saved = S.savedSearches();
-    if (saved.length) {
-      h += '<div class="sb-section"><div class="sb-label">' + L('การค้นหาที่บันทึก') + '</div>';
-      saved.forEach(function (s) {
-        h += '<button class="sb-item' + (route.type === 'search' && route.ss === s.id ? ' active' : '') +
-          '" data-act="open-ss" data-id="' + esc(s.id) + '">' + I(s.mode === 'calendar' ? 'calendar' : 'search') +
-          '<span class="grow">' + esc(s.name) + '</span></button>';
-      });
-      h += '</div>';
-    }
-
-    h += '<div class="sb-section">';
-    h += '<div class="sb-label"><button class="sb-labelbtn" data-act="go" data-route="projects" title="' +
-      L('ดูโปรเจกต์ทั้งหมด') + '">' + L('โปรเจกต์') + '</button>' +
-      '<button data-act="new-project" title="' + L('สร้างโปรเจกต์ใหม่') + '">+</button></div>';
-    S.visibleProjects().forEach(function (p) { h += projectItem(p); });
-    h += '</div>';
-
-    /* พอร์ตโฟลิโอ วางไว้ใต้โปรเจกต์เพราะเป็นกล่องที่รวมของด้านบน
-     * ซ่อนหัวข้อทั้งก้อนถ้ายังไม่มีใครสร้าง ไม่งั้นแถบซ้ายจะรกด้วยหัวข้อว่าง */
-    var pfs = S.portfolios();
-    if (pfs.length || S.can('structure')) {
-      h += '<div class="sb-section">';
-      h += '<div class="sb-label">' + L('พอร์ตโฟลิโอ') +
-        (S.can('structure')
-          ? '<button data-act="new-portfolio" title="' + L('สร้างพอร์ตโฟลิโอ') + '">+</button>' : '') +
-        '</div>';
-      pfs.forEach(function (f) {
-        var n = S.portfolioProjects(f.id).length;
-        h += '<button class="sb-item' +
-          (route.type === 'portfolio' && route.id === f.id ? ' active' : '') +
-          '" data-act="go" data-route="portfolio" data-id="' + esc(f.id) + '">' +
-          '<span class="emoji">' + esc(f.icon) + '</span>' +
-          '<span class="swatch" style="background:' + esc(f.color) + '"></span>' +
-          '<span class="grow">' + esc(f.name) + '</span>' +
-          (n ? '<span class="count">' + n + '</span>' : '') + '</button>';
-      });
-      h += '</div>';
-    }
-
-    /* 4a — ทีมที่เป็นสมาชิก หัวข้อกดได้ = หน้ารวมทีมทั้งหมด (เรียกดู/ขอเข้าร่วม) */
-    h += '<div class="sb-section"><div class="sb-label"><button class="sb-labelbtn" data-act="go" data-route="teams" title="' +
-      L('ดูทีมทั้งหมด') + '">' + L('ทีม') + '</button>' +
-      (S.can('structure') ? '<button data-act="team-new" title="' + L('สร้างทีม') + '">+</button>' : '') + '</div>';
-    S.myTeams().forEach(function (tm) {
-      h += '<button class="sb-item' + (route.type === 'team' && route.id === tm.id ? ' active' : '') +
-        '" data-act="go-team" data-id="' + esc(tm.id) + '"><span class="emoji">' + esc(tm.icon) + '</span>' +
-        '<span class="swatch" style="background:' + esc(tm.color) + '"></span><span class="grow">' + esc(tm.name) + '</span>' +
-        (tm.privacy === 'private' ? '<span class="lockmark" title="' + L('ทีมส่วนตัว') + '">' + I('shield', 12) + '</span>' : '') +
-        '</button>';
+    /* ---- ชั้นนอก ---- */
+    var h = '<nav class="sb-rail" aria-label="' + L('เมนู') + '">';
+    h += '<button class="sb-rail-brand" data-act="go" data-route="home" title="Orbit">' + global.Icons.logoMark(28) + '</button>';
+    NAV_GROUPS.forEach(function (g) {
+      h += '<button class="sb-rail-btn' + (g.id === group ? ' on' : '') + '" data-act="nav-group" data-g="' + g.id + '"' +
+        ' title="' + esc(gLabel(g)) + '" aria-pressed="' + (g.id === group) + '">' +
+        '<span class="sb-rail-ic">' + I(g.icon, 18) + (dot[g.id] ? '<span class="sb-rail-dot"></span>' : '') + '</span>' +
+        '<span class="sb-rail-lbl">' + gLabel(g) + '</span></button>';
     });
-    if (!S.myTeams().length) {
-      h += '<button class="sb-item" data-act="go" data-route="teams">' + I('users') + '<span class="grow">' + L('เรียกดูทีม') + '</span></button>';
-    }
-    h += '</div>';
+    h += '<div class="sb-rail-foot">' + railAccount(me) + '</div>';
+    h += '</nav>';
 
-    h += '<div class="sb-section">';
+    /* ---- ชั้นใน ---- */
+    var g0 = NAV_GROUPS.filter(function (g) { return g.id === group; })[0];
+    var p = '<div class="sb-panel-head"><span class="sb-panel-title">' + gLabel(g0) + '</span>' +
+      '<button class="sb-panel-hide" data-act="toggle-sidebar" title="' + esc(L('ซ่อนแถบเมนู')) + ' (Tab+O)">' + I('menu', 16) + '</button></div>';
 
-    /* คลังก็ต้องกรองตามสิทธิ์เหมือนกัน ไม่งั้นเก็บเข้าคลังแล้วโปรเจกต์ปิดโผล่ให้ทุกคนเห็น */
-    var archived = db.projects.filter(function (p) { return p.archived && S.projectAccess(p.id); });
-    if (archived.length) {
-      h += '<div class="sb-label" style="padding-top:14px">' + L('เก็บเข้าคลัง') + '</div>';
-      archived.forEach(function (p) {
-        h += '<button class="sb-item' +
-          (route.type === 'project' && route.id === p.id ? ' active' : '') +
-          '" data-act="go" data-route="project" data-id="' + esc(p.id) + '">' +
-          '' + I('archive') + '<span class="grow">' + esc(p.name) + '</span></button>';
+    if (group === 'work') {
+      var mine = S.myTasks(db.currentUserId);
+      var mineCount = mine.overdue.length + mine.today.length + mine.upcoming.length + mine.later.length + mine.nodate.length;
+      /* ห้ามรบกวน — ไม่ขึ้นตัวเลขแดง แต่บอกด้วยไอคอนพระจันทร์ว่ากำลังพักอยู่ ไม่ใช่ว่าไม่มีอะไรเข้า */
+      p += section('',
+        go('home', route.type === 'home', 'home', 'หน้าแรก') +
+        go('inbox', route.type === 'inbox', 'bell', 'กล่องข้อความ',
+          dnd ? '<span class="sb-dnd" title="' + L('ห้ามรบกวนอยู่') + '">' + I('moon', 13) + '</span>'
+              : (unread ? '<span class="count alert">' + unread + '</span>' : '')) +
+        go('mytasks', route.type === 'mytasks', 'checkCircle', 'งานของฉัน', mineCount ? '<span class="count">' + mineCount + '</span>' : '') +
+        go('calendar', route.type === 'calendar', 'calendar', 'ปฏิทินรวม'));
+
+      /* โปรเจกต์ที่ปักหมุดขึ้นก่อน เพราะพอมีหลายสิบโปรเจกต์ ของที่เปิดทุกวันจะจมอยู่กลางรายการยาว */
+      var stars = S.starredProjects();
+      if (stars.length) p += section(L('ปักหมุดไว้'), stars.map(projectItem).join(''));
+
+      /* 2c — การค้นหาที่บันทึกไว้ ไม่มีก็ไม่มีหัวข้อ */
+      var saved = S.savedSearches();
+      if (saved.length) {
+        p += section(L('การค้นหาที่บันทึก'), saved.map(function (s) {
+          return item(route.type === 'search' && route.ss === s.id, 'data-act="open-ss" data-id="' + esc(s.id) + '"',
+            I(s.mode === 'calendar' ? 'calendar' : 'search'), esc(s.name));
+        }).join(''));
+      }
+
+      p += '<div class="sb-section"><div class="sb-label"><button class="sb-labelbtn" data-act="go" data-route="projects" title="' +
+        L('ดูโปรเจกต์ทั้งหมด') + '">' + L('โปรเจกต์') + '</button>' +
+        '<button data-act="new-project" title="' + L('สร้างโปรเจกต์ใหม่') + '">+</button></div>' +
+        S.visibleProjects().map(projectItem).join('') + '</div>';
+
+      /* คลังก็ต้องกรองตามสิทธิ์เหมือนกัน ไม่งั้นเก็บเข้าคลังแล้วโปรเจกต์ปิดโผล่ให้ทุกคนเห็น */
+      var archived = db.projects.filter(function (x) { return x.archived && S.projectAccess(x.id); });
+      if (archived.length) {
+        p += section(L('เก็บเข้าคลัง'), archived.map(function (x) {
+          return item(route.type === 'project' && route.id === x.id,
+            'data-act="go" data-route="project" data-id="' + esc(x.id) + '"', I('archive'), esc(x.name));
+        }).join(''));
+      }
+    } else if (group === 'strategy') {
+      p += section('',
+        go('goals', route.type === 'goals' || route.type === 'goal', 'flag', 'เป้าหมาย') +
+        go('reports', route.type === 'reports' || route.type === 'report', 'chart', 'รายงาน'));
+      /* พอร์ตโฟลิโอ ซ่อนหัวข้อทั้งก้อนถ้ายังไม่มีและสร้างไม่ได้ ไม่งั้นมีหัวข้อว่าง */
+      var pfs = S.portfolios();
+      if (pfs.length || S.can('structure')) {
+        p += '<div class="sb-section"><div class="sb-label">' + L('พอร์ตโฟลิโอ') +
+          (S.can('structure') ? '<button data-act="new-portfolio" title="' + L('สร้างพอร์ตโฟลิโอ') + '">+</button>' : '') + '</div>' +
+          pfs.map(function (f) {
+            var n = S.portfolioProjects(f.id).length;
+            return item(route.type === 'portfolio' && route.id === f.id,
+              'data-act="go" data-route="portfolio" data-id="' + esc(f.id) + '"',
+              '<span class="emoji">' + esc(f.icon) + '</span><span class="swatch" style="background:' + esc(f.color) + '"></span>',
+              esc(f.name), n ? '<span class="count">' + n + '</span>' : '');
+          }).join('') + '</div>';
+      }
+    } else if (group === 'knowledge') {
+      var np = S.notepadPage();
+      var openPage = route.type === 'pages' ? (route.page || null) : null;
+      p += section('',
+        item(route.type === 'pages' && !openPage, 'data-act="go" data-route="pages"', I('note'), L('หน้าเอกสาร')) +
+        (np ? item(openPage === np.id, 'data-act="sb-page" data-id="' + esc(np.id) + '"', I('bookmark'), L('สมุดโน้ตส่วนตัว')) : ''));
+      var pages = S.myPages();
+      if (pages.length) {
+        p += section(L('หน้า'), pages.map(function (x) {
+          return item(openPage === x.id, 'data-act="sb-page" data-id="' + esc(x.id) + '"',
+            '<span class="emoji">' + esc(x.icon || '📄') + '</span>', esc(x.title || L('ไม่มีชื่อ')),
+            x.private ? '<span class="lockmark">' + I('lock', 11) + '</span>' : '');
+        }).join(''));
+      }
+    } else if (group === 'people') {
+      /* 4a — ทีมที่เป็นสมาชิก หัวข้อกดได้ = หน้ารวมทีมทั้งหมด (เรียกดู/ขอเข้าร่วม) */
+      p += section('',
+        go('workload', route.type === 'workload', 'gauge', 'ภาระงาน') +
+        go('timesheets', route.type === 'timesheets', 'clock', 'ไทม์ชีต',
+          tsDue ? '<span class="count alert" title="' + esc(L('ไทม์ชีตรอตรวจ')) + '">' + tsDue + '</span>' : '') +
+        (me ? item(route.type === 'profile' && route.id === me.id, 'data-act="go" data-route="profile" data-id="' + esc(me.id) + '"',
+          I('users'), L('โปรไฟล์ของฉัน')) : ''));
+      p += '<div class="sb-section"><div class="sb-label"><button class="sb-labelbtn" data-act="go" data-route="teams" title="' +
+        L('ดูทีมทั้งหมด') + '">' + L('ทีม') + '</button>' +
+        (S.can('structure') ? '<button data-act="team-new" title="' + L('สร้างทีม') + '">+</button>' : '') + '</div>';
+      S.myTeams().forEach(function (tm) {
+        p += item(route.type === 'team' && route.id === tm.id, 'data-act="go-team" data-id="' + esc(tm.id) + '"',
+          '<span class="emoji">' + esc(tm.icon) + '</span><span class="swatch" style="background:' + esc(tm.color) + '"></span>',
+          esc(tm.name), tm.privacy === 'private' ? '<span class="lockmark" title="' + L('ทีมส่วนตัว') + '">' + I('shield', 12) + '</span>' : '');
       });
+      if (!S.myTeams().length) p += go('teams', route.type === 'teams', 'users', 'เรียกดูทีม');
+      p += '</div>';
+    } else {
+      /* ชื่อเดียวกันทุกบทบาท เพราะปุ่มนี้เปิดหน้าตั้งค่าเหมือนกันหมด ต่างกันแค่ผู้ดูแลมีแท็บข้อมูลและสำรองเพิ่ม */
+      p += section('',
+        item(false, 'data-act="open-settings" data-tab="general"', I('settings'), L('ตั้งค่า')) +
+        (S.isAdmin() ? go('admin', route.type === 'admin', 'shield', 'ผู้ดูแลระบบ') : '') +
+        go('trash', route.type === 'trash', 'trash', 'ถังขยะ') +
+        item(false, 'data-act="show-shortcuts"', I('keyboard'), L('คีย์ลัด')) +
+        (global.OrbitPWA && global.OrbitPWA.canInstall() ? '<button class="sb-item sb-install" data-act="pwa-install" title="' +
+          esc(L('ติดตั้งเป็นแอปบนเครื่องนี้ เปิดได้จากหน้าจอหลัก')) + '">' + I('install') + '<span class="grow">' + L('ติดตั้ง Orbit') + '</span>' +
+          '<span class="sb-x" data-act="pwa-dismiss" title="' + esc(L('ไม่ต้องแสดงอีก')) + '">' + I('close', 11) + '</span></button>' : ''));
     }
-    h += '</div>';
 
-    h += '<div class="sb-foot">';
-    h += '<button class="sb-item" data-act="show-shortcuts">' + I('keyboard') + '' +
-         '<span class="grow">' + L('คีย์ลัด') + '</span></button>';
-    if (S.isAdmin()) {
-      h += '<button class="sb-item' + (route.type === 'admin' ? ' active' : '') +
-           '" data-act="go" data-route="admin">' + I('shield') + '' +
-           '<span class="grow">' + L('ผู้ดูแลระบบ') + '</span></button>';
-    }
-    /* ชื่อเดียวกันทุกบทบาท เพราะปุ่มนี้เปิดหน้าตั้งค่าเหมือนกันหมด
-     * ต่างกันแค่ผู้ดูแลมีแท็บข้อมูลและสำรองเพิ่มมาข้างใน
-     * เดิมตั้งชื่อตามแท็บที่เปิด ผู้ดูแลจึงเห็นคำว่า "ข้อมูลและสำรอง"
-     * ซึ่งอ่านแล้วนึกว่าเป็นคนละที่กับตั้งค่า ทั้งที่เป็นหน้าต่างเดียวกัน */
-    h += '<button class="sb-item' + (route.type === 'trash' ? ' active' : '') +
-         '" data-act="go" data-route="trash">' + I('trash') +
-         '<span class="grow">' + L('ถังขยะ') + '</span></button>';
-    h += '<button class="sb-item" data-act="open-settings" data-tab="general">' +
-         I('settings') + '' +
-         '<span class="grow">' + L('ตั้งค่า') + '</span></button>';
-    h += accountBlock(me);
-    h += '</div>';
+    // ตั้งค่าโหมดทีมไว้แล้วแต่ยังไม่ได้ล็อกอิน — ต้องมีทางกลับเข้าไปทุกหมวด
+    var signIn = !(global.OrbitSync && global.OrbitSync.state.mode === 'team') && teamReady()
+      ? '<div class="sb-foot"><button class="sb-item sb-signin" data-act="show-gate">' + I('signIn') +
+        '<span class="grow">' + L('เข้าสู่ระบบด้วยบัญชีบริษัท') + '</span></button></div>' : '';
 
-    return h;
+    return h + '<div class="sb-panel">' + p + signIn + '</div>';
+  }
+
+  /** รูปตัวเองท้ายชั้นนอก กดแล้วเปิดเมนูบัญชีเหมือนแถวบัญชีเดิม */
+  function railAccount(me) {
+    var team = global.OrbitSync && global.OrbitSync.state.mode === 'team';
+    return '<button class="sb-rail-me" data-act="account-menu" title="' +
+      esc((me ? me.name : '-') + (me && me.email ? ' · ' + me.email : '') + (team ? ' · ' + L('บัญชีบริษัท') : '')) + '">' +
+      avatar(me, 'lg') + '</button>';
   }
 
   /* ---------- topbar ---------- */
@@ -5771,7 +5806,7 @@
     TAB_IDS: TAB_IDS, projectTabs: projectTabs, ZOOMS: ZOOMS, ROW_H: ROW_H,
 
     checkbox: checkbox, dueClass: dueClass, badges: badges, depTypeHint: depTypeHint,
-    sidebar: sidebar, topbar: topbar, viewToolbar: viewToolbar, filterCount: filterCount, bulkbar: bulkbar,
+    sidebar: sidebar, routeKey: routeKey, topbar: topbar, viewToolbar: viewToolbar, filterCount: filterCount, bulkbar: bulkbar,
     VIEWS_WITH_TOOLBAR: VIEWS_WITH_TOOLBAR,
     listView: listView, boardView: boardView, timelineView: timelineView,
     homeView: homeView, dashboardView: dashBuilderView, profileView: profileView,

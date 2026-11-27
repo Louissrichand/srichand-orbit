@@ -29,20 +29,6 @@
   }
 
   /* ====================== แถบซ้าย / แถบบน ====================== */
-  function sidebarExt(route) {
-    var item = function (type, icon, label, on) {
-      return '<button class="sb-item' + (on ? ' active' : '') + '" data-act="go" data-route="' + type + '">' + I(icon) +
-        '<span class="grow">' + L(label) + '</span></button>';
-    };
-    var due = S.tsReviewQueue ? S.tsReviewQueue().filter(function (x) { return x.status === 'submitted'; }).length : 0;
-    return item('workload', 'gauge', 'ภาระงาน', route.type === 'workload') +
-      '<button class="sb-item' + (route.type === 'timesheets' ? ' active' : '') + '" data-act="go" data-route="timesheets">' + I('clock') +
-      '<span class="grow">' + L('ไทม์ชีต') + '</span>' + (due ? '<span class="count alert" title="' + esc(L('ไทม์ชีตรอตรวจ')) + '">' + due + '</span>' : '') + '</button>' +
-      item('reports', 'chart', 'รายงาน', route.type === 'reports' || route.type === 'report') +
-      (global.OrbitPWA && global.OrbitPWA.canInstall() ? '<button class="sb-item sb-install" data-act="pwa-install" title="' +
-        esc(L('ติดตั้งเป็นแอปบนเครื่องนี้ เปิดได้จากหน้าจอหลัก')) + '">' + I('install') + '<span class="grow">' + L('ติดตั้ง Orbit') + '</span>' +
-        '<span class="sb-x" data-act="pwa-dismiss" title="' + esc(L('ไม่ต้องแสดงอีก')) + '">' + I('close', 11) + '</span></button>' : '');
-  }
   function topbarExt(route) {
     if (route.type === 'workload') return '<div class="tb-title">' + I('gauge', 20) + ' ' + L('ภาระงาน') + '</div>';
     if (route.type === 'timesheets') return '<div class="tb-title">' + I('clock', 20) + ' ' + L('ไทม์ชีต') + '</div>';
@@ -558,7 +544,7 @@
 
   var X = {
     embedView: embedView, adminExt2: adminExt2, attStateHtml: attStateHtml, fmtBytes4b: fmtBytes,
-    sidebarExt: sidebarExt, topbarExt: topbarExt, topbarActsExt: topbarActsExt, adminExt: adminExt,
+    topbarExt: topbarExt, topbarActsExt: topbarActsExt, adminExt: adminExt,
     workloadView: workloadView, awayModal: awayModal, timesheetsView: timesheetsView,
     reportsView: reportsView, reportView: reportView, rpSpec: rpSpec, rpXOptions: rpXOptions, rpYOptions: rpYOptions,
     tsGridHtml: tsGridHtml, wlSeg: seg, wlSel: sel, pill: pill
