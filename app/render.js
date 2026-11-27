@@ -38,11 +38,13 @@
       (away ? ' · ' + esc(L('ไม่อยู่ถึง {d}', { d: fmtDate(aw.until) })) +
               (aw.note ? ' · ' + esc(aw.note) : '') : '');
     /* มีรูปก็ใช้รูป ไม่มีก็ตัวย่อบนวงกลมสีเหมือนเดิม
+     * รูปที่อัปเองใน Orbit มาก่อน ไม่มีค่อยใช้รูปจาก Microsoft 365 (ตรงกับ Teams)
      * สีพื้นยังใส่ไว้ใต้รูป ระหว่างที่รูปยังไม่ขึ้นจะได้ไม่เป็นช่องโหว่ */
+    var photo = u.photo || (global.OrbitPhotos ? global.OrbitPhotos.url(u) : null);
     return '<span class="' + cls + (away ? ' is-away' : '') +
-      (u.photo ? ' has-photo' : '') + '" style="background:' + esc(u.color) +
+      (photo ? ' has-photo' : '') + '" data-uid="' + esc(u.id) + '" style="background:' + esc(u.color) +
       '" title="' + tip + '">' +
-      (u.photo ? '<img src="' + esc(u.photo) + '" alt="">' : esc(initials(u.name))) +
+      (photo ? '<img src="' + esc(photo) + '" alt="">' : esc(initials(u.name))) +
       '</span>';
   }
 

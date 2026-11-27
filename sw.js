@@ -4,10 +4,10 @@
  * จึงไม่มีทางเสิร์ฟโค้ดเก่าหลังอัปเดต — ออนไลน์อยู่ได้ของใหม่จากเซิร์ฟเวอร์ทุกครั้ง
  * เปลี่ยน VERSION เมื่อเปลี่ยนรายการไฟล์ แคชเก่าจะถูกลบตอน activate
  * ไม่แตะคำขอข้ามโดเมน (Microsoft Graph, MSAL, Office) และไม่แตะคำขอที่ไม่ใช่ GET */
-var VERSION = 'orbit-shell-v1';
+var VERSION = 'orbit-shell-v2';
 var SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'assets/styles.css',
-  'app/config.js', 'app/i18n.js', 'app/icons.js', 'app/auth.js', 'app/store.js', 'app/files.js', 'app/cloud.js', 'app/sync.js',
+  'app/config.js', 'app/i18n.js', 'app/icons.js', 'app/auth.js', 'app/msphotos.js', 'app/store.js', 'app/files.js', 'app/cloud.js', 'app/sync.js',
   'app/richtext.js', 'app/charts.js', 'app/render.js', 'app/render4b.js', 'app/gantt.js', 'app/touch.js', 'app/pwa.js',
   'app/ui4b.js', 'app/ui4b2.js', 'app/main.js', 'assets/icons/icon-192.png', 'assets/icons/icon-512.png'
 ];

@@ -10944,6 +10944,7 @@
         var leave = function () {
           if (global.OrbitSync) global.OrbitSync.stop();
           S.wipeLocal();
+          if (global.OrbitPhotos) global.OrbitPhotos.clear();
           setLocalOnly(false);
           renderAll();
           global.OrbitAuth.signOut();
@@ -12669,6 +12670,24 @@
       var box = document.createElement('div');
       box.innerHTML = html;
       if (box.firstChild) chip.parentNode.replaceChild(box.firstChild, chip);
+    });
+  }
+
+  /* รูปจาก Microsoft 365 มาถึงทีหลัง — ใส่รูปลงวงกลมที่วาดไว้แล้วตรง ๆ
+   * ไม่วาดใหม่ทั้งหน้า คนที่กำลังพิมพ์ความเห็นอยู่จะได้ไม่โดนล้าง */
+  if (global.OrbitPhotos) {
+    global.OrbitPhotos.onChange(function () {
+      document.querySelectorAll('.avatar[data-uid]:not(.has-photo)').forEach(function (el) {
+        var u = S.user(el.getAttribute('data-uid'));
+        var src = u && global.OrbitPhotos.url(u);
+        if (!src) return;
+        var img = document.createElement('img');
+        img.src = src;
+        img.alt = '';
+        el.textContent = '';
+        el.appendChild(img);
+        el.classList.add('has-photo');
+      });
     });
   }
 
