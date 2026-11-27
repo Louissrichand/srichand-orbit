@@ -85,6 +85,7 @@ CREATE TABLE dbo.projects (
     deleted_by    UNIQUEIDENTIFIER NULL,
     created_by    UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
     created_at    DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME(),
+    start_on      DATE             NULL,     -- Sprint 1C — วันเริ่มโปรเจกต์ (project.startOn)
     due_on        DATE             NULL,
     /* ตั้งค่าการเลื่อนงานที่รออยู่ (depShift) และวันทำงาน (workDays) ของ Gantt */
     dep_shift_json NVARCHAR(200)   NULL,

@@ -1928,6 +1928,30 @@ ul.audit em { display: block; font-style: normal; font-size: 12px; color: var(--
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
+/* ---------- Sprint 1C — วันที่ สำเนาโปรเจกต์ ตัวเลขที่ต้องตรงกัน ---------- */
+.hproj-late { color: var(--danger); font-weight: 600; }
+/* หน้าต่างคัดลอกโปรเจกต์ */
+.dup-opts { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 12px; }
+.dup-opts .chk { display: flex; align-items: flex-start; gap: 8px; font-size: 13.5px; }
+.dup-opts .chk em { display: block; font-style: normal; font-size: 12px; color: var(--fg-soft); margin-top: 1px; }
+.dup-sub { margin: 0 0 0 26px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dup-sub input[type=date] { width: 180px; max-width: 100%; }
+.dup-sub.off { opacity: .5; pointer-events: none; }
+/* ตั้งค่าโปรเจกต์ — แจ้งว่ามีรายละเอียดที่ยังไม่บันทึกค้างอยู่ในแท็บแรก */
+.ps-draft { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; padding: 8px 10px;
+  border-radius: var(--radius); background: var(--warn-bg); color: var(--warn-fg); font-size: 13px; }
+.ps-draft .grow { flex: 1; min-width: 160px; }
+/* หน้าเอกสาร → สร้างงานทีละบรรทัด */
+.pgt-list { display: flex; flex-direction: column; gap: 4px; max-height: 40vh; overflow: auto; margin: 6px 0 4px;
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 6px; }
+.pgt-row { display: flex; align-items: center; gap: 8px; font-size: 13.5px; padding: 3px 4px; }
+.pgt-row .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pgt-row .avatar { flex: none; }
+/* ภาระงาน — งานค้างเลยกำหนด */
+.wl-late { flex: none; font-size: 11px; font-weight: 600; color: var(--danger); background: var(--danger-bg);
+  border-radius: 999px; padding: 1px 7px; white-space: nowrap; }
+.wl-tbar.late { outline: 2px solid var(--danger); outline-offset: -2px; }
+
 /* --- กิจกรรม --- */
 .hact {
   display: flex; align-items: flex-start; gap: 10px;
@@ -4175,7 +4199,9 @@ button.chip.tag:hover { filter: brightness(.94); text-decoration: underline; }
 .dw.full { grid-column: 1 / -1; }
 .dw header { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
 .dw header b { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dw-flt { font-size: 11px; color: var(--fg-faint); display: inline-flex; align-items: center; gap: 2px; }
+/* Sprint 1C — ป้ายตั้งค่า (กรอบเส้นประ ตัวจาง มีคำกำกับ) ไม่ให้อ่านเป็นตัวเลขผลลัพธ์ */
+.dw-flt { font-size: 11px; font-weight: 400; color: var(--fg-faint); display: inline-flex; align-items: center; gap: 3px;
+  border: 1px dashed var(--line-strong); border-radius: 999px; padding: 0 7px; line-height: 18px; white-space: nowrap; flex: none; }
 .dw-text { font-size: 13.5px; }
 .dash-tasks { max-height: 60vh; overflow: auto; }
 .dwe { display: flex; flex-direction: column; gap: 10px; }
