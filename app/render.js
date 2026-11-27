@@ -4282,7 +4282,8 @@
     return '<span class="dep-when' + dueClass(t.dueOn, t.completed) + '">' + esc(txt) + '</span>';
   }
 
-  function reactionRow(s) {
+  /** @param ro ดูอย่างเดียว — เห็นอีโมจิที่คนอื่นกดไว้ แต่กดเพิ่ม/กดซ้ำไม่ได้ (react อยู่ระดับแสดงความเห็นได้) */
+  function reactionRow(s, ro) {
     var rx = s.reactions || {};
     var meId = S.db.currentUserId;
     var h = '<div class="rx">';
@@ -4294,11 +4295,13 @@
         var x = S.user(u); return x ? x.name : '?';
       }).join(', ');
       h += '<button class="rx-chip' + (mine ? ' on' : '') + '" data-act="react" data-story="' +
-        esc(s.id) + '" data-emoji="' + esc(em) + '" title="' + esc(names) + '">' +
+        esc(s.id) + '" data-emoji="' + esc(em) + '" title="' + esc(names) + '"' + (ro ? ' disabled' : '') + '>' +
         em + '<span>' + who.length + '</span></button>';
     });
-    h += '<button class="rx-add" data-act="react-menu" data-story="' + esc(s.id) +
-      '" title="' + L('ตอบรับด้วยอีโมจิ') + '">' + I('heart', 13) + '</button>';
+    if (!ro) {
+      h += '<button class="rx-add" data-act="react-menu" data-story="' + esc(s.id) +
+        '" title="' + L('ตอบรับด้วยอีโมจิ') + '">' + I('heart', 13) + '</button>';
+    }
     return h + '</div>';
   }
 
@@ -4330,18 +4333,22 @@
     var blocks = S.blocking(t.id);
     var liked = t.likes.indexOf(S.db.currentUserId) >= 0;
     var following = t.followers.indexOf(S.db.currentUserId) >= 0;
+    /* ด่านเดียวกับที่ทำให้ชื่องานอ่านอย่างเดียว (ท้ายฟังก์ชัน) — ใช้ตัดสินว่าปุ่มเพิ่ม/เอาออกตัวไหนควรโผล่
+     * canW = แก้งานนี้ได้ · canC = แสดงความเห็นได้ (ผู้ติดตาม ถูกใจ ลงเวลา อยู่ระดับนี้ตาม NEEDS)
+     * เดิมคนที่แสดงความเห็นได้/ดูอย่างเดียวเห็นปุ่ม + แท็ก + โปรเจกต์ + ลำดับก่อนหลัง ครบ กดแล้วโดนปฏิเสธ */
+    var canW = S.can('write', t.id), canC = S.can('comment', t.id);
 
     var h = '';
-    h += '<div class="dw-head">' + checkbox(t) +
+    h += '<div class="dw-head">' + (canW ? checkbox(t) : checkbox(t).replace('<button ', '<button disabled ')) +
       '<span style="font-size:13px;color:var(--fg-soft)">' +
       (t.completed ? L('ทำเสร็จแล้ว') : L('ทำเครื่องหมายว่าเสร็จ')) + '</span>' +
       '<div style="flex:1"></div>' +
       '<button class="btn btn-sm btn-ghost" data-act="toggle-like" data-id="' + esc(t.id) +
-      '" title="' + L('ถูกใจ') + '" style="' + (liked ? 'color:var(--danger)' : '') + '">' + I('heart') + ' ' +
+      '" title="' + L('ถูกใจ') + '" style="' + (liked ? 'color:var(--danger)' : '') + '"' + (canC ? '' : ' disabled') + '>' + I('heart') + ' ' +
       (t.likes.length || '') + '</button>' +
-      '<button class="btn btn-sm btn-ghost" data-act="toggle-follow" data-id="' + esc(t.id) +
+      (canC ? '<button class="btn btn-sm btn-ghost" data-act="toggle-follow" data-id="' + esc(t.id) +
       '" title="' + (following ? L('เลิกติดตาม') : L('ติดตาม')) + '">' +
-      I('bell') + '</button>' +
+      I('bell') + '</button>' : '') +
       /* ขยายเต็มจอ สำหรับงานที่มีรายละเอียดยาวหรือคุยกันหลายสิบความเห็น
        * แผงข้างกว้างคงที่ อ่านสรุปประชุมที่มีหัวข้อย่อยสามชั้นแล้วตัดบรรทัดถี่มาก */
       '<button class="btn btn-sm btn-ghost" data-act="toggle-wide" title="' +
@@ -4513,7 +4520,7 @@
           var dd = (di + ws) % 7;
           var onD = (rc.days || []).indexOf(dd) >= 0;
           h += '<button class="recur-day' + (onD ? ' on' : '') + '" data-act="recur-day" data-d="' + dd +
-            '" aria-pressed="' + onD + '">' + esc(dn[dd]) + '</button>';
+            '" aria-pressed="' + onD + '"' + (canW ? '' : ' disabled') + '>' + esc(dn[dd]) + '</button>';
         }
         h += '</div>';
       }
@@ -4523,8 +4530,8 @@
           (rc.freq === 'after'
             ? L('ทำเสร็จแล้วจะสร้างรอบใหม่ ครบกำหนดอีก {n} วันนับจากวันที่ทำเสร็จ', { n: rc.interval || 1 })
             : L('รอบถัดไปครบกำหนด {d}', { d: fmtDate(nx) })) +
-          '<button class="as-link" data-act="stop-recur" data-id="' + esc(t.id) + '">' +
-          L('หยุดทำซ้ำ') + '</button></div>';
+          (canW ? '<button class="as-link" data-act="stop-recur" data-id="' + esc(t.id) + '">' +
+          L('หยุดทำซ้ำ') + '</button>' : '') + '</div>';
       }
       h += '</div></div>';
     }
@@ -4541,8 +4548,8 @@
     if (priv && !t.parentId) {
       h += '<div class="dw-private">' + privateChip() + '<span>' +
         L('เห็นเฉพาะคนสร้าง ผู้รับผิดชอบ และผู้ติดตาม') + '</span></div>' +
-        '<button class="btn btn-sm" data-act="make-public" data-id="' + esc(t.id) + '">' +
-        I('users', 13) + ' ' + L('ทำให้เป็นสาธารณะ…') + '</button></div></div>';
+        (canW ? '<button class="btn btn-sm" data-act="make-public" data-id="' + esc(t.id) + '">' +
+        I('users', 13) + ' ' + L('ทำให้เป็นสาธารณะ…') + '</button>' : '') + '</div></div>';
     } else if (priv) {
       h += '<div class="dw-private">' + privateChip() + '<span>' +
         L('ส่วนตัวตามงานหลัก') + '</span></div></div></div>';
@@ -4551,29 +4558,33 @@
       var sec = S.section(x.project.id, x.membership.sectionId);
       h += '<span class="chip" style="margin:0 5px 5px 0"><span class="swatch" style="background:' +
         esc(x.project.color) + '"></span>' + esc(x.project.name) +
-        /* 3a — กดชื่อคอลัมน์เพื่อย้าย (ผ่าน S.moveTask อัตโนมัติ "ย้ายเข้าคอลัมน์" จึงทำงาน) */
-        (sec ? ' · <button class="chip-sec" data-act="dw-sec" data-id="' + esc(t.id) + '" data-project="' +
+        /* 3a — กดชื่อคอลัมน์เพื่อย้าย (ผ่าน S.moveTask อัตโนมัติ "ย้ายเข้าคอลัมน์" จึงทำงาน)
+         * แก้งานไม่ได้ = ชื่อคอลัมน์เป็นข้อความเฉย ๆ (ย้ายคอลัมน์ก็คือแก้งาน) */
+        (sec ? ' · ' + (canW ? '<button class="chip-sec" data-act="dw-sec" data-id="' + esc(t.id) + '" data-project="' +
           esc(x.project.id) + '" title="' + esc(L('ย้ายไปคอลัมน์อื่น')) + '">' + esc(sec.name) + ' ' +
-          I('chevronDown', 10) + '</button>' : '') +
-        (homes.length > 1 ? '<button data-act="unhome" data-id="' + esc(t.id) +
+          I('chevronDown', 10) + '</button>' : '<span class="chip-sec ro">' + esc(sec.name) + '</span>') : '') +
+        (homes.length > 1 && canW ? '<button data-act="unhome" data-id="' + esc(t.id) +
           '" data-project="' + esc(x.project.id) + '" title="' +
           L('เอางานออกจากโปรเจกต์นี้') + '">' + I('close', 13) + '</button>' : '') + '</span>';
     });
     if (!priv) {
-      h += '<button class="btn btn-sm btn-ghost" data-act="add-home" data-id="' + esc(t.id) +
-        '">+ ' + L('เพิ่มโปรเจกต์') + '</button></div></div>';
+      h += (canW ? '<button class="btn btn-sm btn-ghost" data-act="add-home" data-id="' + esc(t.id) +
+        '">+ ' + L('เพิ่มโปรเจกต์') + '</button>' : '') + '</div></div>';
     }
 
     // แท็ก
-    h += '<div class="fld"><label>' + L('แท็ก') + '</label><div class="val" style="padding-top:5px">';
-    t.tags.forEach(function (tg) {
-      h += '<span class="chip tag" style="margin:0 5px 5px 0"><button class="tag-go" data-act="go-tag" data-tag="' +
-        esc(tg) + '" title="' + L('ดูงานทั้งหมดที่มีแท็กนี้') + '">' + esc(tg) + '</button>' +
-        '<button data-act="remove-tag" data-id="' + esc(t.id) + '" data-tag="' + esc(tg) +
-        '" title="' + L('เอาแท็กออก') + '">' + I('close', 13) + '</button></span>';
-    });
-    h += '<button class="btn btn-sm btn-ghost" data-act="add-tag" data-id="' + esc(t.id) +
-      '">+ ' + L('แท็ก') + '</button></div></div>';
+    /* แก้งานไม่ได้และไม่มีแท็ก = ไม่ต้องมีแถวว่างที่มีแต่หัวข้อ */
+    if (canW || t.tags.length) {
+      h += '<div class="fld"><label>' + L('แท็ก') + '</label><div class="val" style="padding-top:5px">';
+      t.tags.forEach(function (tg) {
+        h += '<span class="chip tag" style="margin:0 5px 5px 0"><button class="tag-go" data-act="go-tag" data-tag="' +
+          esc(tg) + '" title="' + L('ดูงานทั้งหมดที่มีแท็กนี้') + '">' + esc(tg) + '</button>' +
+          (canW ? '<button data-act="remove-tag" data-id="' + esc(t.id) + '" data-tag="' + esc(tg) +
+          '" title="' + L('เอาแท็กออก') + '">' + I('close', 13) + '</button>' : '') + '</span>';
+      });
+      h += (canW ? '<button class="btn btn-sm btn-ghost" data-act="add-tag" data-id="' + esc(t.id) +
+        '">+ ' + L('แท็ก') + '</button>' : '') + '</div></div>';
+    }
 
     /* ---- ฟิลด์กำหนดเอง แยกกลุ่มตามโปรเจกต์ ----
      *
@@ -4614,7 +4625,7 @@
          * ทำเป็นป้ายสีแบบเดียวกับในตาราง กดแล้วเปิดเมนูติ๊กเลือกได้หลายอัน */
         var chosen = [].concat(v || []);
         s += '<button class="fld-multi" data-act="dw-field-multi" data-id="' + esc(t.id) +
-          '" data-field="' + esc(f.id) + '">';
+          '" data-field="' + esc(f.id) + '"' + (canW ? '' : ' disabled') + '>';
         f.options.forEach(function (o) {
           if (chosen.indexOf(o.name) < 0) return;
           s += '<span class="opt-pill" style="background:' + esc(o.color) + '22;color:' +
@@ -4711,8 +4722,8 @@
 
     // ลำดับก่อนหลัง
     h += '<div class="dw-sec-title">' + L('ลำดับก่อนหลัง') +
-      '<button class="btn btn-sm btn-ghost" data-act="add-dependency" data-id="' + esc(t.id) +
-      '">+ ' + L('เพิ่ม') + '</button></div>';
+      (canW ? '<button class="btn btn-sm btn-ghost" data-act="add-dependency" data-id="' + esc(t.id) +
+      '">+ ' + L('เพิ่ม') + '</button>' : '') + '</div>';
     if (!blockedBy.length && !blocks.length) {
       h += '<div style="font-size:13px;color:var(--fg-faint)">' + L('ยังไม่มีความสัมพันธ์กับงานอื่น') + '</div>';
     }
@@ -4724,14 +4735,14 @@
         '<span class="nm" data-act="open-task" data-id="' + esc(b.id) +
         '" style="cursor:pointer">' + esc(b.name) + '</span>' + depWhen(b) +
         '<select class="dep-sel" data-act="edit-dep-type" data-id="' + esc(t.id) +
-        '" data-blocker="' + esc(b.id) + '">' +
+        '" data-blocker="' + esc(b.id) + '"' + (canW ? '' : ' disabled') + '>' +
         S.DEP_TYPES.map(function (d) {
           return '<option value="' + d.id + '"' + (d.id === x.type ? ' selected' : '') +
             '>' + esc(L(d.label)) + '</option>';
         }).join('') + '</select>' +
-        '<button class="btn btn-sm btn-ghost" data-act="remove-dependency" data-id="' + esc(t.id) +
+        (canW ? '<button class="btn btn-sm btn-ghost" data-act="remove-dependency" data-id="' + esc(t.id) +
         '" data-blocker="' + esc(b.id) + '" title="' + L('เอาลำดับก่อนหลังนี้ออก') +
-        '">' + I('close', 13) + '</button></div>';
+        '">' + I('close', 13) + '</button>' : '') + '</div>';
     });
     blocks.forEach(function (b) {
       h += '<div class="dep-row"><span class="dot" style="background:var(--fg-faint)"></span>' +
@@ -4742,8 +4753,8 @@
 
     // ไฟล์แนบ
     h += '<div class="dw-sec-title">' + L('ไฟล์แนบ') +
-      '<button class="btn btn-sm btn-ghost" data-act="add-attachment" data-id="' + esc(t.id) +
-      '">+ ' + L('เพิ่ม') + '</button></div>';
+      (canW ? '<button class="btn btn-sm btn-ghost" data-act="add-attachment" data-id="' + esc(t.id) +
+      '">+ ' + L('เพิ่ม') + '</button>' : '') + '</div>';
     if (!t.attachments.length) {
       h += '<div style="font-size:13px;color:var(--fg-faint)">' + L('ยังไม่มีไฟล์แนบ') + '</div>';
     }
@@ -4767,9 +4778,9 @@
         (S.isImageAtt(a) && a.url ? '<button class="btn btn-sm btn-ghost" data-act="proof-open" data-id="' + esc(t.id) + '" data-att="' + esc(a.id) +
           '" title="' + esc(L('ตรวจรูป ปักหมุดความเห็นบนรูป')) + '">📍<span class="hide-sm"> ' + L('ตรวจรูป') + '</span>' +
           ((a.pins || []).length ? ' ' + a.pins.length : '') + '</button>' : '') +
-        '<button class="btn btn-sm btn-ghost" data-act="remove-attachment" data-id="' + esc(t.id) +
+        (canW ? '<button class="btn btn-sm btn-ghost" data-act="remove-attachment" data-id="' + esc(t.id) +
         '" data-att="' + esc(a.id) + '" title="' + L('เอาไฟล์แนบนี้ออก') + '">' +
-        I('close', 13) + '</button></div>';
+        I('close', 13) + '</button>' : '') + '</div>';
     });
 
     h += timeSection(t);              // 3c — เวลาประมาณ จับเวลา รายการเวลา
@@ -4777,17 +4788,18 @@
     /* ผู้ติดตาม — ทุกงานมีคนสร้างเป็นผู้ติดตามอัตโนมัติอยู่แล้ว
      * ถ้ามีแค่คนเดียวก็ยังไม่มีอะไรให้ดู โผล่เมื่อมีคนอื่นเข้ามาแล้วเท่านั้น */
     if (more || t.followers.length > 1) {
+      /* ผู้ติดตามอยู่ระดับ "แสดงความเห็นได้" (NEEDS) คนที่แสดงความเห็นได้ยังเพิ่ม/เอาออกได้ ดูอย่างเดียวไม่ได้ */
       h += '<div class="dw-sec-title">' + L('ผู้ติดตาม') +
-        '<button class="btn btn-sm btn-ghost" data-act="pick-follower" data-id="' + esc(t.id) +
-        '">+ ' + L('เพิ่ม') + '</button></div>';
+        (canC ? '<button class="btn btn-sm btn-ghost" data-act="pick-follower" data-id="' + esc(t.id) +
+        '">+ ' + L('เพิ่ม') + '</button>' : '') + '</div>';
       h += '<div class="picker"><div class="fld-inline">';
       t.followers.forEach(function (fid) {
         var fu = S.user(fid);
         if (!fu) return;
         h += '<span class="chip">' + avatar(fu, 'sm') + esc(fu.name) +
-          '<button data-act="remove-follower" data-id="' + esc(t.id) + '" data-user="' +
+          (canC ? '<button data-act="remove-follower" data-id="' + esc(t.id) + '" data-user="' +
           esc(fid) + '" title="' + L('เอาผู้ติดตามคนนี้ออก') + '">' +
-          I('close', 13) + '</button></span>';
+          I('close', 13) + '</button>' : '') + '</span>';
       });
       if (!t.followers.length) h += '<span style="font-size:13px;color:var(--fg-faint)">' + L('ยังไม่มี') + '</span>';
       h += '</div></div>';
@@ -4846,27 +4858,38 @@
      * ถ้าบังคับให้เปิดเข้าไปทีละอัน การแตกงานสิบชิ้นจะกลายเป็นการเปิดปิดสิบรอบ */
     subs.forEach(function (s) {
       var when = s.dueOn || s.startOn;
-      h += '<div class="sub-row' + (s.completed ? ' done' : '') + '">' + checkbox(s) +
+      /* สิทธิ์ของงานย่อยตามงานต้นทาง แต่คนที่ถูกมอบงานย่อยโดยตรงแก้งานย่อยของตัวเองได้ จึงตรวจรายแถว
+       * แก้ไม่ได้ = วัน/ผู้รับผิดชอบเป็นป้ายเฉย ๆ ไม่มีปุ่มลบ (เดิมกดได้แล้วโดนปฏิเสธ หรือแย่กว่านั้นคือแก้ได้จริง) */
+      var canWS = S.can('write', s.id);
+      var whenHtml = I('calendar', 13) + (when ? '<span>' + esc(fmtDate(when)) + '</span>' : '');
+      var whoTip = s.assigneeId ? esc((S.user(s.assigneeId) || {}).name || '') : L('มอบหมายงานย่อยนี้');
+      h += '<div class="sub-row' + (s.completed ? ' done' : '') + '">' +
+        (canWS ? checkbox(s) : checkbox(s).replace('<button ', '<button disabled ')) +
         '<span class="nm" data-act="open-task" data-id="' + esc(s.id) +
         '" style="cursor:pointer">' + esc(s.name) + '</span>' + approvalIcon(s) +
         (outsideIds[s.id] ? '<span class="sub-out" title="' + L('อยู่นอกช่วงวันของงานหลัก') + '">' +
           I('alert', 13) + '</span>' : '') +
-        '<button class="sub-date' + (when ? ' on' : '') + dueClass(s.dueOn, s.completed) +
-        '" data-act="sub-dates" data-id="' + esc(s.id) + '" title="' +
-        L('ตั้งวันเริ่มและกำหนดส่ง') + '">' + I('calendar', 13) +
-        (when ? '<span>' + esc(fmtDate(when)) + '</span>' : '') + '</button>' +
-        '<button class="sub-who" data-act="sub-assign" data-id="' + esc(s.id) + '" title="' +
-        (s.assigneeId ? esc((S.user(s.assigneeId) || {}).name || '') : L('มอบหมายงานย่อยนี้')) +
-        '">' + avatar(S.user(s.assigneeId), 'sm') + '</button>' +
-        '<button class="x" data-act="delete-task" data-id="' + esc(s.id) +
-        '" title="' + L('ลบงานย่อยนี้') + '">' + I('close', 13) + '</button></div>';
+        (canWS
+          ? '<button class="sub-date' + (when ? ' on' : '') + dueClass(s.dueOn, s.completed) +
+            '" data-act="sub-dates" data-id="' + esc(s.id) + '" title="' +
+            L('ตั้งวันเริ่มและกำหนดส่ง') + '">' + whenHtml + '</button>' +
+            '<button class="sub-who" data-act="sub-assign" data-id="' + esc(s.id) + '" title="' + whoTip +
+            '">' + avatar(S.user(s.assigneeId), 'sm') + '</button>' +
+            '<button class="x" data-act="delete-task" data-id="' + esc(s.id) +
+            '" title="' + L('ลบงานย่อยนี้') + '">' + I('close', 13) + '</button>'
+          : (when ? '<span class="sub-date on ro' + dueClass(s.dueOn, s.completed) + '">' + whenHtml + '</span>' : '') +
+            (s.assigneeId ? '<span class="sub-who ro" title="' + whoTip + '">' + avatar(S.user(s.assigneeId), 'sm') + '</span>' : '')) +
+        '</div>';
     });
     /* พิมพ์ชื่อแล้วกด Enter ได้เลย ไม่ต้องผ่านกล่อง prompt ของเบราว์เซอร์
      * ซึ่งบังคับให้หยุดทุกอย่างและพิมพ์ได้ทีละหนึ่งงาน
-     * ช่องนี้ไม่ล้างโฟกัสหลังเพิ่ม จึงพิมพ์รายการยาว ๆ รวดเดียวได้ */
-    h += '<div class="sub-add">' + I('plus', 14) +
-      '<input id="subAdd" data-act="sub-add" data-id="' + esc(t.id) +
-      '" placeholder="' + L('พิมพ์ชื่องานย่อยแล้วกด Enter') + '"></div>';
+     * ช่องนี้ไม่ล้างโฟกัสหลังเพิ่ม จึงพิมพ์รายการยาว ๆ รวดเดียวได้
+     * เพิ่มงานย่อยได้เฉพาะคนที่แก้งานนี้ได้ (ด่านสร้างงาน canCreateTask ใช้กติกาเดียวกัน) */
+    if (S.canCreateTask(null, t.id)) {
+      h += '<div class="sub-add">' + I('plus', 14) +
+        '<input id="subAdd" data-act="sub-add" data-id="' + esc(t.id) +
+        '" placeholder="' + L('พิมพ์ชื่องานย่อยแล้วกด Enter') + '"></div>';
+    }
 
     /* ---- ความเห็นและความเคลื่อนไหว ----
      *
@@ -4986,7 +5009,7 @@
         } else {
           c += '<div class="txt">' + richText(s.text) + '</div>';
         }
-        c += '<div class="cmt-foot">' + reactionRow(s) +
+        c += '<div class="cmt-foot">' + reactionRow(s, !canComment) +
           (!reply && canComment ? '<button class="cmt-reply" data-act="comment-reply" data-story="' +
             esc(s.id) + '">' + L('ตอบกลับ') + '</button>' : '') + '</div>';
       }
@@ -5059,10 +5082,12 @@
     /* Sprint 1B — คนที่แก้งานนี้ไม่ได้ (แสดงความเห็นได้/ดูอย่างเดียว) เห็นช่องต่าง ๆ เป็นแบบอ่านอย่างเดียว
      * เดิมพิมพ์ชื่องานหรือเลือกวันได้ก่อน แล้วค่อยโดนปฏิเสธตอนบันทึก ทำเป็นขั้นสุดท้ายของการวาด
      * จับเฉพาะช่องแก้ค่าของงานด้วย data-act จึงไม่ไปแตะช่องความเห็นที่ยังใช้ได้ */
-    if (!S.can('write', t.id)) {
+    if (!canW) {
       h = h.replace('data-act="edit-title"', 'data-act="edit-title" readonly')
         .replace(/(<(?:input|select)\b[^>]*data-act="(?:edit-(?:type|cstatus|start|starttime|due|duetime|recur|recur-n|field)|dw-sec-pick)"[^>]*)>/g, '$1 disabled>')
-        .replace(/(<button class="picker-btn" data-act="pick-assignee")/, '$1 disabled');
+        /* ปุ่มเปิดตัวเลือกผู้รับผิดชอบ/ความสำคัญ — ส่วนปุ่มเพิ่ม/เอาออกอื่น ๆ (แท็ก โปรเจกต์ ลำดับก่อนหลัง ไฟล์แนบ
+         * งานย่อย) ไม่วาดตั้งแต่ต้นแล้วด้วย canW/canC ข้างบน */
+        .replace(/(<button class="picker-btn" data-act="pick-(?:assignee|priority)")/g, '$1 disabled');
     }
     return h;
   }
@@ -5902,7 +5927,9 @@
   /* ---------- เวลา ---------- */
   function timeSection(t) {
     var r = S.timeRollup(t), run = S.runningTimer(), mine = run && run.taskId === t.id;
-    var canW = S.can('write', t.id), canC = S.isActive();
+    /* จับเวลา/บันทึกเวลาอยู่ระดับ "แสดงความเห็นได้" ใน NEEDS (tt-add timer-start) — เดิมเช็กแค่บัญชียังใช้งานได้
+     * คนดูอย่างเดียวจึงเห็นปุ่มที่กดแล้วโดนปฏิเสธ */
+    var canW = S.can('write', t.id), canC = S.can('comment', t.id);
     var subs = r.est !== r.ownEst || r.act !== r.ownAct;
     var h = '<div class="dw-sec-title">' + L('เวลา') + '</div><div class="tt">';
     h += '<div class="tt-row"><label>' + L('ประมาณ') + '</label>' +
@@ -5912,12 +5939,12 @@
       (t.estimate ? '<span class="tt-bar"><i style="width:' + Math.min(100, Math.round(r.ownAct * 100 / t.estimate)) + '%"' +
         (r.ownAct > t.estimate ? ' class="over"' : '') + '></i></span>' : '') + '</div>';
     if (subs) h += '<div class="tt-roll">' + esc(L('รวมงานย่อย: ประมาณ {e} · ใช้ไป {a}', { e: S.fmtMinutes(r.est) || '—', a: S.fmtMinutes(r.act) || '0m' })) + '</div>';
-    if (canC) {
+    if (canC || mine) {
       h += '<div class="tt-row">' + (mine
         ? '<button class="btn btn-sm btn-primary" data-act="timer-stop">' + I('close', 12) + ' ' + L('หยุดจับเวลา') + ' <span class="tt-live" data-start="' +
           esc(run.start) + '"></span></button>'
         : '<button class="btn btn-sm" data-act="timer-start" data-id="' + esc(t.id) + '">▶ ' + L('เริ่มจับเวลา') + '</button>') +
-        '<button class="btn btn-sm btn-ghost" data-act="tt-add" data-id="' + esc(t.id) + '">+ ' + L('บันทึกเวลาเอง') + '</button></div>';
+        (canC ? '<button class="btn btn-sm btn-ghost" data-act="tt-add" data-id="' + esc(t.id) + '">+ ' + L('บันทึกเวลาเอง') + '</button>' : '') + '</div>';
     }
     if (t.time && t.time.length) {
       h += '<div class="tt-list">';

@@ -2352,6 +2352,16 @@
     'ให้เห็นเฉพาะงานนี้': 'Share this task only',
     'ให้คนนอกโปรเจกต์เห็นงาน': 'Share a task outside the project',
     'ให้ {who} เห็นงานนี้ (ไม่ได้เป็นสมาชิกโปรเจกต์)': 'shared this task with {who} (not a project member)',
+    /* Sprint 1 (ส่วนที่ค้าง) — ถามก่อนสร้างงานให้คนนอก เตือนในฟอร์ม/อัตโนมัติ ผู้ดูแลโปรเจกต์จัดการสมาชิก */
+    'ถ้าต้องการให้เป็นสมาชิกโปรเจกต์ ขอให้ผู้ดูแลโปรเจกต์หรือผู้ดูแลระบบเพิ่มให้': 'To make them a project member, ask a project admin or an admin to add them',
+    '{what}จะมอบงานในโปรเจกต์นี้ให้ {who} ทุกงานที่เกิดขึ้น {who} จะเห็นทั้งงาน รวมถึงความเห็นและไฟล์แนบ (แม้โปรเจกต์จะเป็นโปรเจกต์ปิด)':
+      '{what} will assign tasks in this project to {who}. {who} will see each of those tasks in full, including comments and attachments (even though the project is private)',
+    'บันทึกต่อ (ให้เห็นเฉพาะงานที่ได้รับ)': 'Save anyway (they see only the tasks they get)',
+    'ฟอร์มนี้': 'This form',
+    'อัตโนมัตินี้': 'This rule',
+    'เฉพาะผู้ดูแลโปรเจกต์หรือผู้ดูแลระบบเท่านั้นที่เพิ่มหรือถอดสมาชิกได้': 'Only project admins or admins can add or remove members',
+    '{who} ไม่ได้เป็นสมาชิกของโปรเจกต์ปิดนี้ แต่จะเห็นทุกงานที่ฟอร์มสร้าง (รวมความเห็นและไฟล์แนบ)':
+      '{who} isn’t a member of this private project but will see every task this form creates (including comments and attachments)',
     /* โอนงาน เปลี่ยนบทบาท และเพิ่มสมาชิก */
     'เปลี่ยนบทบาทและโอนงานต่อ': 'Change role and hand over tasks',
     'มีงานที่ยังไม่เสร็จอยู่ {n} งาน บทบาทดูอย่างเดียวติ๊กเสร็จหรือแก้งานของตัวเองไม่ได้ งานจะค้างอยู่กับเขา': '[n|{n} open task|{n} open tasks] left. View-only people can’t complete or edit their own tasks, so these would get stuck',

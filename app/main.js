@@ -1586,6 +1586,7 @@
 
   function openModal(html, wide) {
     closeSidebar();
+    askBack = null;           // หน้าต่างใหม่มาแทนหน้าต่างถาม — ทางกลับเดิมไม่ใช้แล้ว
     $modal.className = 'modal' + (wide ? ' wide' : '');
     $modal.innerHTML = html;
     $mdBack.classList.add('open');
@@ -1627,7 +1628,15 @@
     var ok = primary();
     if (ok) ok.click();
   });
-  function closeModal() { $mdBack.classList.remove('open'); $modal.innerHTML = ''; }
+  function closeModal() {
+    $mdBack.classList.remove('open');
+    $modal.innerHTML = '';
+    /* หน้าต่างถามที่เปิดทับหน้าต่างแก้ไข (ฟอร์ม อัตโนมัติ) — ยกเลิกแล้วต้องกลับไปที่หน้าต่างเดิม
+     * ไม่ใช่หายไปทั้งคู่พร้อมสิ่งที่แก้ค้างไว้ (askChoice opts.back) */
+    var back = askBack;
+    askBack = null;
+    if (back) back();
+  }
 
   /* ---------- ถามผู้ใช้ด้วยหน้าต่างของแอปเอง ----------
    *
@@ -1642,6 +1651,7 @@
    */
   var pendingAsk = null;
   var askChoiceFns = [];
+  var askBack = null;       // askChoice ที่ยกเลิกแล้วต้องกลับไปหน้าต่างเดิม (ดู closeModal)
 
   var askPasteCtx = null;   // ช่องถามนี้เป็นช่องเพิ่มงานไหม (วางหลายบรรทัด = หลายงาน)
 
@@ -1669,10 +1679,12 @@
       '" data-act="ask-ok">' + R.esc(opts.ok || L('ยืนยัน')) + '</button></div>');
   }
 
-  /** ถามแบบหลายทางเลือก ใช้ตอนที่ "ยกเลิก" ไม่ใช่คำตอบตรงข้ามของ "ตกลง" */
-  function askChoice(title, body, choices) {
+  /** ถามแบบหลายทางเลือก ใช้ตอนที่ "ยกเลิก" ไม่ใช่คำตอบตรงข้ามของ "ตกลง"
+   *  opts.back — ยกเลิก (ปุ่ม Esc คลิกนอกหน้าต่าง) แล้วเรียกตัวนี้ เช่นเปิดหน้าต่างแก้ไขเดิมกลับมา */
+  function askChoice(title, body, choices, opts) {
     pendingAsk = null;
     askChoiceFns = [];
+    askBack = null;
     var h = '<h2>' + R.esc(title) + '</h2>' +
       (body ? '<p class="ask-body">' + R.esc(body) + '</p>' : '') +
       '<div class="ask-choices">';
@@ -1684,6 +1696,7 @@
     h += '</div><div class="modal-acts"><button class="btn" data-act="close-modal">' +
       L('ยกเลิก') + '</button></div>';
     openModal(h);
+    askBack = (opts && opts.back) || null;
   }
 
   /* ---------- Sprint 1B: ถามก่อนให้คนนอกโปรเจกต์เห็นงาน ----------
@@ -1695,25 +1708,71 @@
   function confirmReveal(taskIds, userIds, run) {
     var r = S.revealOutsiders(taskIds, userIds);
     if (!r.users.length) { run(); return; }
-    var names = r.users.map(function (u) { return u.name; }).join(', ');
     var ids = r.users.map(function (u) { return u.id; });
-    var p = r.projects[0];
-    function go(access) {
+    askReveal(r, function (access) {
       S.batch('ให้คนนอกโปรเจกต์เห็นงาน', null, function () {
         S.revealTo(taskIds, ids, access);
         run();
       });
-    }
+    });
+  }
+
+  /* ถามแบบเดียวกันแต่ "งานยังไม่เกิด" (สร้างจากภาระงาน หน้าเอกสาร เทมเพลต)
+   * งานยังไม่มี revealOutsiders จึงหาคนนอกไม่ได้ ใช้รายชื่อสมาชิกของโปรเจกต์ปลายทางแทน (S.outsidersOf)
+   * run() สร้างงานแล้วคืนงานที่สร้าง (อาร์เรย์หรือชิ้นเดียว) — ทำตามที่เลือกหลังสร้างในจุดย้อนกลับเดียวกัน
+   * ยกเลิก = ไม่มีอะไรถูกสร้าง ไม่มีใครถูกเพิ่ม · ไม่มีคนนอก = ทำเลยไม่ถาม (ไม่มีจุดย้อนกลับเกินมา)
+   * back — ถามทับหน้าต่างอื่นอยู่ (นำเข้า CSV) ยกเลิกแล้วเปิดหน้าต่างเดิมกลับมา */
+  function confirmRevealNew(projectId, userIds, run, back) {
+    var r = S.outsidersOf(projectId, userIds);
+    if (!r.users.length) { run(); return; }
+    var ids = r.users.map(function (u) { return u.id; });
+    askReveal(r, function (access) {
+      S.batch('ให้คนนอกโปรเจกต์เห็นงาน', null, function () {
+        /* เพิ่มสมาชิกก่อนสร้าง งานใหม่จะได้แจ้งและคิดสิทธิ์ตามสมาชิกชุดใหม่ */
+        if (access) S.revealTo([], ids, access, projectId);
+        var made = [].concat(run() || []).filter(Boolean);
+        if (!access && made.length) S.revealTo(made.map(function (t) { return t.id; }), ids, null, projectId);
+      });
+    }, { back: back });
+  }
+
+  /* ค่าที่จะ "มอบงานในอนาคต" (ผู้รับผิดชอบเริ่มต้นของฟอร์ม คนที่อัตโนมัติจะมอบ/เพิ่มเป็นผู้ติดตาม)
+   * ยังไม่มีงานให้ใครเห็นตอนบันทึก แต่ทุกงานที่เกิดทีหลังจะเปิดให้คนนั้นเห็น เตือนตอนบันทึก
+   * ให้เลือกเพิ่มเป็นสมาชิก บันทึกต่อทั้งอย่างนั้น หรือยกเลิกกลับไปแก้ (ไม่บันทึก) */
+  function confirmFutureReveal(projectId, userIds, what, run, back) {
+    var r = S.outsidersOf(projectId, userIds);
+    if (!r.users.length) { run(); return; }
+    var ids = r.users.map(function (u) { return u.id; });
+    askReveal(r, function (access) {
+      if (!access) { run(); return; }          // บันทึกต่อเฉย ๆ ไม่มีอะไรต้องรวมจุดย้อนกลับ
+      S.batch('ให้คนนอกโปรเจกต์เห็นงาน', null, function () {
+        S.revealTo([], ids, access, projectId);
+        run();
+      });
+    }, {
+      body: L('{what}จะมอบงานในโปรเจกต์นี้ให้ {who} ทุกงานที่เกิดขึ้น {who} จะเห็นทั้งงาน รวมถึงความเห็นและไฟล์แนบ (แม้โปรเจกต์จะเป็นโปรเจกต์ปิด)',
+        { what: what, who: r.users.map(function (u) { return u.name; }).join(', ') }),
+      only: L('บันทึกต่อ (ให้เห็นเฉพาะงานที่ได้รับ)'),
+      back: back
+    });
+  }
+
+  /** หน้าต่างถามชุดเดียวกันของทั้งสามทางข้างบน — go(access) ทำตามที่เลือก */
+  function askReveal(r, go, o) {
+    o = o || {};
+    var names = r.users.map(function (u) { return u.name; }).join(', ');
+    var p = r.projects[0];
+    var canAdd = !!p && S.canAddMembers(p.id);
     var choices = [];
-    if (p && S.canAddMembers(p.id)) {
+    if (canAdd) {
       choices.push({ label: L('เพิ่มเป็นสมาชิกโปรเจกต์ (แสดงความเห็นได้)'), primary: true, run: function () { go('comment'); } });
       choices.push({ label: L('เพิ่มเป็นสมาชิกโปรเจกต์ (แก้ไขได้)'), run: function () { go('edit'); } });
     }
-    choices.push({ label: L('ให้เห็นเฉพาะงานนี้'), primary: !choices.length, run: function () { go(null); } });
+    choices.push({ label: o.only || L('ให้เห็นเฉพาะงานนี้'), primary: !choices.length, run: function () { go(null); } });
     askChoice(L('{who} ไม่ได้เป็นสมาชิกของ “{p}”', { who: names, p: p ? p.name : '' }),
-      L('ถ้าทำต่อ {who} จะเห็นงานนี้ รวมถึงความเห็นและไฟล์แนบทั้งหมดในงาน (แม้โปรเจกต์จะเป็นโปรเจกต์ปิด)', { who: names }) +
-      (p && !S.canAddMembers(p.id) ? ' ' + L('ถ้าต้องการให้เป็นสมาชิกโปรเจกต์ ขอให้ผู้ดูแลระบบเพิ่มให้') : ''),
-      choices);
+      (o.body || L('ถ้าทำต่อ {who} จะเห็นงานนี้ รวมถึงความเห็นและไฟล์แนบทั้งหมดในงาน (แม้โปรเจกต์จะเป็นโปรเจกต์ปิด)', { who: names })) +
+      (p && !canAdd ? ' ' + L('ถ้าต้องการให้เป็นสมาชิกโปรเจกต์ ขอให้ผู้ดูแลโปรเจกต์หรือผู้ดูแลระบบเพิ่มให้') : ''),
+      choices, { back: o.back });
   }
 
   /* ---------- popover ---------- */
@@ -1971,7 +2030,9 @@
     if (!p) return '';
     var priv = p.visibility === 'private';
     var members = S.projectMembers(projectId);
-    var canManage = S.canInProject(projectId, 'admin') || S.isAdmin();
+    /* ด่านเดียวกับ NEEDS 'members' และชั้นข้อมูล — ผู้ดูแลระบบ หรือผู้ดูแลโปรเจกต์ (ที่ไม่ได้ล็อกรายชื่อ)
+     * เดิมหน้าต่างคิดเองอีกแบบ (รวมบทบาทดูอย่างเดียวที่บังเอิญเป็นผู้ดูแลโปรเจกต์) ปุ่มจึงโผล่แต่กดไม่ได้ */
+    var canManage = S.canAddMembers(projectId);
     var lockedByAdmin = p.locked && !S.isAdmin();
 
     var h = '<h2>' + L('ใครเข้าถึงโปรเจกต์นี้ได้') + '</h2>';
@@ -2049,6 +2110,10 @@
         h += '</select></div>';
         h += '<button class="btn btn-primary" style="width:100%" data-act="add-project-member" ' +
           'data-id="' + R.esc(projectId) + '">' + L('เพิ่มเข้าโปรเจกต์') + '</button>';
+      } else {
+        /* สมาชิกทั่วไปเห็นรายชื่อได้ แต่ต้องรู้ว่าถ้าจะเพิ่มคนต้องไปขอใคร */
+        h += '<div class="pa-note">' + I('shield', 14) + '<span>' +
+          L('เฉพาะผู้ดูแลโปรเจกต์หรือผู้ดูแลระบบเท่านั้นที่เพิ่มหรือถอดสมาชิกได้') + '</span></div>';
       }
     }
 
@@ -2543,20 +2608,23 @@
     function item(act, icon, label) {
       return '<button class="btn" data-act="' + act + '" data-id="' + q + '">' + I(icon, 14) + ' ' + label + '</button>';
     }
+    /* เมนูเดียวกับแผงงาน ใช้ด่านเดียวกัน (แก้งานนี้ได้ไหม) — คนที่แสดงความเห็นได้/ดูอย่างเดียวเห็นเฉพาะสิ่งที่ทำได้จริง
+     * (สร้างงานติดตามผลของตัวเอง คัดลอก คัดลอกลิงก์ รันอัตโนมัติ) เดิมเห็น "ลบงาน" และกดลบได้จริงด้วย */
+    var canW = S.can('write', taskId);
     var h = '<h2>' + R.esc(t.name) + '</h2>';
     h += '<div class="task-menu">' +
       item('followup', 'plus', L('สร้างงานติดตามผล') + ' <kbd>Shift+Tab+F</kbd>') +
       item('dup-task', 'copy', L('คัดลอกงาน…')) +
-      item('merge-task', 'checkCircle', L('รวมเป็นงานซ้ำของ…')) +
-      (t.parentId
+      (canW ? item('merge-task', 'checkCircle', L('รวมเป็นงานซ้ำของ…')) : '') +
+      (!canW ? '' : t.parentId
         ? item('promote-task', 'arrowUp', L('ย้ายออกเป็นงานหลัก'))
         : item('make-subtask', 'subtask', L('แปลงเป็นงานย่อยของ…'))) +
-      (t.recur ? item('stop-recur', 'repeat', L('หยุดทำซ้ำ')) : '') +
-      item('save-template', 'star', L('บันทึกเป็นเทมเพลต')) +
-      (!t.parentId ? item('to-project', 'grid', L('แปลงเป็นโปรเจกต์…')) : '') +
+      (t.recur && canW ? item('stop-recur', 'repeat', L('หยุดทำซ้ำ')) : '') +
+      (canW ? item('save-template', 'star', L('บันทึกเป็นเทมเพลต')) : '') +
+      (!t.parentId && canW ? item('to-project', 'grid', L('แปลงเป็นโปรเจกต์…')) : '') +
       item('copy-link', 'link', L('คัดลอกลิงก์ของงานนี้')) +
       (S.manualAutomationsFor(taskId).length ? item('auto-run-pick', 'bolt', L('รันอัตโนมัติ…')) : '') +
-      '<button class="btn btn-danger" data-act="delete-task" data-id="' + q + '">' + I('trash', 14) + ' ' + L('ลบงาน') + '</button>' +
+      (canW ? '<button class="btn btn-danger" data-act="delete-task" data-id="' + q + '">' + I('trash', 14) + ' ' + L('ลบงาน') + '</button>' : '') +
       '</div>';
     h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
     return h;
@@ -3463,6 +3531,11 @@
       auSel('fe-set', [['', L('คำถามที่ผูกกับ “ชื่องาน” (หรือชื่อฟอร์ม + คนส่ง)')]].concat(textQs.map(function (it) { return [it.id, it.label || '?']; })), f.titleQ, ' data-k="titleQ"') +
       '<label class="opt-lbl">' + L('ผู้รับผิดชอบเริ่มต้น') + '</label>' +
       auSel('fe-set', [['', L('ยังไม่มอบหมาย')]].concat(auUsers()), f.assignee, ' data-k="assignee"') +
+      /* เตือนตั้งแต่เลือก ไม่ต้องรอกดบันทึก — ผู้รับผิดชอบเริ่มต้นที่ไม่ได้เป็นสมาชิกโปรเจกต์ปิดจะเห็นทุกงานจากฟอร์ม */
+      (f.assignee && S.outsidersOf(p.id, [f.assignee]).users.length
+        ? '<p class="opt-note fe-warn">' + I('alert', 12) + ' ' +
+          esc(L('{who} ไม่ได้เป็นสมาชิกของโปรเจกต์ปิดนี้ แต่จะเห็นทุกงานที่ฟอร์มสร้าง (รวมความเห็นและไฟล์แนบ)',
+            { who: (S.user(f.assignee) || {}).name || '' })) + '</p>' : '') +
       '<label class="chk"><input type="checkbox" data-act="fe-set" data-k="copy" data-t="check"' + (f.copy ? ' checked' : '') + '> ' +
         L('คัดลอกคำตอบลงรายละเอียดงาน') + '</label>' +
       '<label class="chk"><input type="checkbox" data-act="fe-set" data-k="follow" data-t="check"' + (f.follow ? ' checked' : '') + '> ' +
@@ -4017,6 +4090,26 @@
     if (!st || !st.pid) return '';
     if (st.pid === '@me') return mtAutoModal();
     return st.edit ? autoEditModal() : autoListModal();
+  }
+
+  /** คนที่อัตโนมัตินี้จะมอบงาน สร้างงานให้ หรือเพิ่มเป็นผู้ติดตาม แบบระบุชื่อตายตัว (รวมรายการหมุนเวียน)
+   *  ใช้เตือนตอนบันทึกถ้าคนเหล่านั้นไม่ได้เป็นสมาชิกโปรเจกต์ปิด — ตัวแปร (คนสร้างงาน ฯลฯ) รู้ตอนรันเท่านั้น */
+  function autoPeople(a) {
+    var out = [], acts = [];
+    function spec(s) {
+      if (!s) return;
+      var m = s.mode || 'user';
+      if (m === 'user' && s.user) out.push(s.user);
+      else if (m === 'rr') out = out.concat(s.list || []);
+    }
+    (a.paths || []).forEach(function (pt) { acts = acts.concat(pt.acts || []); });
+    acts.concat(a.els || []).forEach(function (x) {
+      if (!x) return;
+      if (x.type === 'assign') spec(x);
+      else if (x.type === 'create') spec(x.assign);
+      else if (x.type === 'followers') out = out.concat(x.users || []);
+    });
+    return out.filter(Boolean);
   }
 
   /** วาดหน้าต่างอัตโนมัติใหม่โดยไม่เลื่อนกลับขึ้นบนและไม่ย้ายโฟกัส */
@@ -6715,6 +6808,25 @@
     renderAll();
   }
 
+  /** หลังสร้างงานจากหน้าเอกสาร — แทนบรรทัดด้วยลิงก์งาน แล้วบอกผล
+   *  แยกออกมาจาก pg-task-go เพราะตอนนี้อาจต้องรอหน้าต่างถามก่อนให้คนนอกโปรเจกต์ปิดเห็นงาน */
+  function pgTaskDone(id, pk, made, repl) {
+    if (!made.length) { toast(L('สร้างงานไม่ได้ในหน้านี้')); return; }
+    /* แทนแต่ละบรรทัดด้วยป้ายอ้างถึงงานของบรรทัดนั้น (ครั้งแรกที่เจอในเนื้อหา) แล้วบันทึกหน้าครั้งเดียว */
+    var pl2 = S.pageLoc(id);
+    if (repl && pl2 && S.canEditPage(id)) {
+      var nb = pl2.page.body;
+      made.forEach(function (nt, i) {
+        var src = pk.items[i] && pk.items[i].src, at2 = src ? nb.indexOf(src) : -1;
+        if (at2 >= 0) nb = nb.slice(0, at2) + '@[' + nt.name.replace(/[\[\]\n]/g, ' ') + '](' + nt.id + ')' + nb.slice(at2 + src.length);
+      });
+      if (nb !== pl2.page.body) S.savePage(id, { body: nb });
+    }
+    state.pageSel = null;
+    if (made.length === 1) toast(L('สร้างงาน “{t}” แล้ว', { t: made[0].name }), L('เปิดงาน'), 'open-task" data-id="' + made[0].id);
+    else toast(L('สร้าง {n} งานแล้ว', { n: made.length }));
+  }
+
   /** คำสั่งคลิกของ 3c ส่วนที่ 2 */
   function act3c2(act, el, e) {
     var id = el.dataset.id;
@@ -6780,23 +6892,18 @@
         if (!pk || pk.id !== id) { closeModal(); return true; }
         var tgt = ((document.getElementById('pgtTarget') || {}).value || '').split('|');
         var repl = (document.getElementById('pgtReplace') || {}).checked;
-        var made = S.tasksFromPage(id, pk.items, tgt[0] || null, tgt[1] || null);
         closeModal();
         state.pgTask = null;
-        if (!made.length) { toast(L('สร้างงานไม่ได้ในหน้านี้')); return true; }
-        /* แทนแต่ละบรรทัดด้วยป้ายอ้างถึงงานของบรรทัดนั้น (ครั้งแรกที่เจอในเนื้อหา) แล้วบันทึกหน้าครั้งเดียว */
-        var pl2 = S.pageLoc(id);
-        if (repl && pl2 && S.canEditPage(id)) {
-          var nb = pl2.page.body;
-          made.forEach(function (nt, i) {
-            var src = pk.items[i] && pk.items[i].src, at2 = src ? nb.indexOf(src) : -1;
-            if (at2 >= 0) nb = nb.slice(0, at2) + '@[' + nt.name.replace(/[\[\]\n]/g, ' ') + '](' + nt.id + ')' + nb.slice(at2 + src.length);
-          });
-          if (nb !== pl2.page.body) S.savePage(id, { body: nb });
-        }
-        state.pageSel = null;
-        if (made.length === 1) toast(L('สร้างงาน “{t}” แล้ว', { t: made[0].name }), L('เปิดงาน'), 'open-task" data-id="' + made[0].id);
-        else toast(L('สร้าง {n} งานแล้ว', { n: made.length }));
+        /* บรรทัดที่มี @ชื่อ = มอบงานให้คนนั้น ถ้าปลายทางเป็นโปรเจกต์ปิดที่เขาไม่ได้เป็นสมาชิก ถามก่อนสร้าง
+         * งานยังไม่เกิดจึงถามจากสมาชิกของโปรเจกต์ปลายทาง (confirmRevealNew) ยกเลิก = ไม่สร้างสักงาน
+         * ถ้าสร้างไม่ได้อยู่แล้ว (สิทธิ์) ไม่ต้องถาม ให้ tasksFromPage ปฏิเสธเหมือนเดิม */
+        var pgWho = pk.items.map(function (x) { return x.assigneeId; }).filter(Boolean);
+        var pgPid = tgt[0] && S.canCreateTask(tgt[0]) ? tgt[0] : null;
+        confirmRevealNew(pgPid, pgWho, function () {
+          var made = S.tasksFromPage(id, pk.items, tgt[0] || null, tgt[1] || null);
+          pgTaskDone(id, pk, made, repl);
+          return made;
+        });
         return true;
       }
       case 'pg-reply': {
@@ -7996,7 +8103,7 @@
 
     put('manage', [
       'manage-members', 'add-user', 'do-add-user', 'pick-person', 'remove-user', 'pick-role', 'set-role',
-      'set-visibility', 'toggle-lock', 'add-project-member', 'pick-access', 'set-access', 'drop-member',
+      'toggle-lock',
       'disable-user', 'enable-user', 'handover', 'do-handover', 'ho-guests',
       'delete-project', 'reset', 'import', 'paste-backup', 'do-paste-import',
       /* การสำรองข้อมูลคือการดึงฐานข้อมูลทั้งก้อนออกไปเป็นไฟล์
@@ -8150,6 +8257,17 @@
       'goal-reopen', 'goal-delete', 'goal-rel', 'goal-rel-pick', 'goal-fv', 'goal-remind', 'goal-cdel']);
     put('comment', ['goal-comment']);
     put('manage', ['goal-mission', 'goal-fy', 'goal-field-add', 'goal-field-del']);
+    /* หน้าต่าง "ใครเข้าถึงโปรเจกต์นี้ได้" — เดิมอยู่ใน manage (ผู้ดูแลระบบเท่านั้น) ทั้งที่หน้าต่างโชว์ปุ่มให้
+     * ผู้ดูแลโปรเจกต์ด้วย กดแล้วโดนปฏิเสธ ตอนนี้ใช้ S.canAddMembers ตัวเดียวกับหน้าต่าง ตัวเลือก
+     * "เพิ่มเป็นสมาชิก" ตอนมอบงานให้คนนอก และชั้นข้อมูล (ผู้ดูแลระบบ หรือผู้ดูแลโปรเจกต์ที่ไม่ได้ล็อก)
+     * ล็อกรายชื่อยังเป็นของผู้ดูแลระบบ (manage) ตามคำอธิบายของปุ่มล็อก */
+    put('members', ['set-visibility', 'add-project-member', 'pick-access', 'set-access', 'drop-member']);
+    /* งานย่อยในแผงงาน — เดิมเป็น comment คนที่แสดงความเห็นได้จึงตั้งวัน/มอบงานย่อยได้ทั้งที่แก้งานไม่ได้
+     * ปุ่มที่เปิดเมนู (sub-dates/sub-assign) ซ่อนในแผงงานแล้ว ตัวที่แก้ค่าจริงต้องแก้งานย่อยนั้นได้ */
+    put('write:task', ['set-sub-assignee', 'sub-start', 'sub-due', 'sub-clear-dates']);
+    /* ลบงาน — เดิมเป็น write (ตรวจแค่บทบาทองค์กร) คนที่แสดงความเห็นได้ในโปรเจกต์ปิดจึงลบงานจากเมนูงานได้จริง
+     * ต้องแก้งานชิ้นนั้นได้ (data-id = รหัสงาน) store ตรวจซ้ำอีกชั้น */
+    put('write:task', ['delete-task']);
     return map;
   })();
 
@@ -8212,6 +8330,9 @@
       ok = cPid ? S.canCreateTask(cPid) : S.can("write");
     }
     else if (need === "self") ok = S.isActive();
+    else if (need === "members") {
+      ok = S.canAddMembers(el.dataset.id || (state.route.type === "project" ? state.route.id : null));
+    }
     else if (need === "structure") {
       /* การแก้โครงสร้างเกิดขึ้นในบริบทของโปรเจกต์ที่เปิดอยู่
        * จึงต้องผ่านสิทธิ์ของโปรเจกต์นั้นด้วย ไม่ใช่แค่บทบาทระดับองค์กร */
@@ -9332,6 +9453,7 @@
       case 'ask-choice': {
         var cf = askChoiceFns[+el.dataset.i];
         askChoiceFns = [];
+        askBack = null;                 // เลือกทางแล้ว ไม่ใช่การยกเลิก ไม่ต้องกลับหน้าต่างเดิม
         closeModal();
         if (cf) cf();
         break;
@@ -9642,7 +9764,8 @@
         if (!cs) break;
         var mineC = cs.actorId === S.db.currentUserId;
         var mh = '';
-        if (!cs.parentId) {
+        /* ปักหมุดอยู่ระดับแสดงความเห็นได้ (NEEDS) — คนดูอย่างเดียวเห็นแค่คัดลอกลิงก์ ไม่ต้องเห็นปุ่มที่กดแล้วโดนปฏิเสธ */
+        if (!cs.parentId && S.can('comment', cs.taskId)) {
           mh += '<button data-act="comment-pin" data-story="' + R.esc(cs.id) + '">' + I('flag', 14) +
             (cs.pinned ? L('เลิกปักหมุด') : L('ปักหมุดไว้บนสุด')) + '</button>';
         }
@@ -10040,20 +10163,29 @@
       case 'do-csv-import': {
         var cv = state.csv;
         if (!cv) break;
-        try {
-          var cres = S.importTasksCsvMapped(cv.pid, cv.text, cv.map);
-          closeModal();
-          state.csv = null;
-          renderAll();
-          var bits = [L('นำเข้า {n} งานแล้ว', { n: cres.tasks })];
-          if (cres.sections) bits.push(L('คอลัมน์ใหม่ {n}', { n: cres.sections }));
-          if (cres.fields) bits.push(L('ฟิลด์ใหม่ {n}', { n: cres.fields }));
-          if (cres.subtasks) bits.push(L('งานย่อย {n}', { n: cres.subtasks }));
-          if (cres.deps) bits.push(L('ลำดับก่อนหลัง {n}', { n: cres.deps }));
-          toast(bits.join(' · '), L('ย้อนกลับ'), 'undo');
-        } catch (err) {
-          toast(L('นำเข้าไม่สำเร็จ:') + ' ' + L(err.message));
-        }
+        var csvRun = function () {
+          try {
+            var cres = S.importTasksCsvMapped(cv.pid, cv.text, cv.map);
+            closeModal();
+            state.csv = null;
+            renderAll();
+            var bits = [L('นำเข้า {n} งานแล้ว', { n: cres.tasks })];
+            if (cres.sections) bits.push(L('คอลัมน์ใหม่ {n}', { n: cres.sections }));
+            if (cres.fields) bits.push(L('ฟิลด์ใหม่ {n}', { n: cres.fields }));
+            if (cres.subtasks) bits.push(L('งานย่อย {n}', { n: cres.subtasks }));
+            if (cres.deps) bits.push(L('ลำดับก่อนหลัง {n}', { n: cres.deps }));
+            toast(bits.join(' · '), L('ย้อนกลับ'), 'undo');
+            return (cres.ids || []).map(S.task);
+          } catch (err) {
+            toast(L('นำเข้าไม่สำเร็จ:') + ' ' + L(err.message));
+            return [];
+          }
+        };
+        /* ไฟล์ที่มีคอลัมน์ผู้รับผิดชอบ/ผู้ร่วมงาน = มอบงานให้คนในไฟล์ ถ้าเขาไม่ได้เป็นสมาชิกโปรเจกต์ปิดนี้ ถามก่อนนำเข้า
+         * (ทางเดียวกับมอบงานทีละงาน) ยกเลิก = กลับไปหน้าต่างนำเข้าเดิม ไม่มีงานเกิดขึ้น */
+        confirmRevealNew(S.canCreateTask(cv.pid) ? cv.pid : null, S.csvPeople(cv.text, cv.map), csvRun, function () {
+          if (state.csv === cv) openModal(csvMapModal(), true);
+        });
         break;
       }
 
@@ -10875,12 +11007,21 @@
         var hasAct = es.a.paths.some(function (pt) { return pt.acts.length; }) || (es.a.els && es.a.els.length);
         if (!hasAct) { toast(L('ใส่การกระทำอย่างน้อยหนึ่งอย่าง')); break; }
         if (es.a.trigger.type === 'field' && !es.a.trigger.field) { toast(L('เลือกฟิลด์ของทริกเกอร์ก่อน')); break; }
-        var saved = S.saveAutomation(es.pid, es.a);
-        if (!saved) { denyToast(); break; }
-        state.auto.edit = null;
-        state.auto.tab = 'list';
-        refreshAuto();
-        toast(es.isNew ? L('สร้างอัตโนมัติแล้ว') : L('บันทึกอัตโนมัติแล้ว'), L('ย้อนกลับ'), 'undo');
+        var aeSave = function () {
+          var saved = S.saveAutomation(es.pid, es.a);
+          if (!saved) { denyToast(); if (!$mdBack.classList.contains('open')) openModal(autoModalHtml(), true); return; }
+          state.auto.edit = null;
+          state.auto.tab = 'list';
+          if (!$mdBack.classList.contains('open')) openModal(autoModalHtml(), true);
+          else refreshAuto();
+          toast(es.isNew ? L('สร้างอัตโนมัติแล้ว') : L('บันทึกอัตโนมัติแล้ว'), L('ย้อนกลับ'), 'undo');
+        };
+        /* อัตโนมัติที่มอบงาน/เพิ่มผู้ติดตาม/สร้างงานให้คนที่ระบุชื่อไว้ ในโปรเจกต์ปิดที่คนนั้นไม่ได้เป็นสมาชิก
+         * = เขาจะเห็นทุกงานที่อัตโนมัติไปแตะ เตือนตอนบันทึก (ยกเลิก = กลับไปหน้าแก้อัตโนมัติ ไม่บันทึก)
+         * คนจากตัวแปร (คนสร้างงาน คนที่ทำให้ทำงาน) รู้ตอนรันเท่านั้น ตรวจล่วงหน้าไม่ได้ */
+        confirmFutureReveal(es.pid, autoPeople(es.a), L('อัตโนมัตินี้'), aeSave, function () {
+          if (state.auto.edit === es) openModal(autoModalHtml(), true);
+        });
         break;
       }
       case 'ae-path-add':
@@ -11010,12 +11151,24 @@
         if (!up) break;
         if (!S.canInProject(up.id, 'edit')) { denyToast(); break; }
         var useSec = sectionId || state.ttSec;
-        var made = S.applyTaskTemplate(id, up.id, S.section(up.id, useSec) ? useSec : up.sections[0].id);
+        var useId = id;
         closeModal();
-        if (made) {
-          openTask(made.id);
-          toast(L('สร้างงานจากเทมเพลตแล้ว'), L('ย้อนกลับ'), 'undo');
+        /* เทมเพลตระบุคนไว้ล่วงหน้า (ผู้รับผิดชอบ ผู้ติดตาม คนรับงานย่อย) ใช้ในโปรเจกต์ปิดแล้วคนเหล่านั้น
+         * ที่ไม่ได้เป็นสมาชิกจะเห็นงานทันที ถามก่อนสร้างแบบเดียวกับมอบงาน (ยกเลิก = ไม่สร้าง) */
+        var useTpl = S.findTaskTemplate(useId), useWho = [];
+        if (useTpl && useTpl.tpl.t) {
+          var utt = useTpl.tpl.t;
+          if (utt.assignee && utt.assignee.mode === 'user') useWho.push(utt.assignee.user);
+          useWho = useWho.concat(utt.followers || [], (utt.subs || []).map(function (s) { return s.assignee; }));
         }
+        confirmRevealNew(S.canCreateTask(up.id) ? up.id : null, useWho.filter(Boolean), function () {
+          var made = S.applyTaskTemplate(useId, up.id, S.section(up.id, useSec) ? useSec : up.sections[0].id);
+          if (made) {
+            openTask(made.id);
+            toast(L('สร้างงานจากเทมเพลตแล้ว'), L('ย้อนกลับ'), 'undo');
+          }
+          return made;
+        });
         break;
       }
       case 'delete-template': {
@@ -11159,12 +11312,25 @@
         if (fbad) { toast(L('คำถามข้อ {n} ยังไม่มีข้อความ', { n: fes.f.items.indexOf(fbad) + 1 })); break; }
         var fopt = fes.f.items.filter(function (it) { return (it.kind === 'select' || it.kind === 'multi') && !it.opts.length; })[0];
         if (fopt) { toast(L('คำถามข้อ {n} ยังไม่มีตัวเลือก', { n: fes.f.items.indexOf(fopt) + 1 })); break; }
-        var fsv = S.saveForm(fes.pid, fes.f);
-        if (!fsv) { toast(L('บันทึกไม่ได้ (สิทธิ์ไม่พอ หรือครบ {n} ฟอร์มแล้ว)', { n: S.FORM_MAX })); break; }
-        state.fe = null;
-        if (state.route.type === 'form') { closeModal(); renderAll(); }
-        else openForms(fes.pid);
-        toast(fes.isNew ? L('สร้างฟอร์มแล้ว') : L('บันทึกฟอร์มแล้ว'), L('ย้อนกลับ'), 'undo');
+        var feSave = function () {
+          var fsv = S.saveForm(fes.pid, fes.f);
+          if (!fsv) {
+            toast(L('บันทึกไม่ได้ (สิทธิ์ไม่พอ หรือครบ {n} ฟอร์มแล้ว)', { n: S.FORM_MAX }));
+            if (!$mdBack.classList.contains('open')) openModal(formEditModal(), true);   // กลับไปแก้ต่อได้
+            return;
+          }
+          state.fe = null;
+          if (state.route.type === 'form') { closeModal(); renderAll(); }
+          else openForms(fes.pid);
+          toast(fes.isNew ? L('สร้างฟอร์มแล้ว') : L('บันทึกฟอร์มแล้ว'), L('ย้อนกลับ'), 'undo');
+        };
+        /* ผู้รับผิดชอบเริ่มต้นของฟอร์ม = ทุกเรื่องที่ส่งเข้ามาจะถูกมอบให้คนนี้ ถ้าเป็นโปรเจกต์ปิดที่เขาไม่ได้เป็นสมาชิก
+         * เขาจะเห็นทุกงานที่ฟอร์มสร้าง เตือนตอนบันทึก (การส่งฟอร์มเปิดให้คนนอกโดยตั้งใจ จึงไม่ถามตอนส่ง)
+         * ยกเลิก = ไม่บันทึก หน้าต่างแก้ฟอร์มกลับมาให้แก้ต่อ */
+        var feWho = fes.f.assignee && S.user(fes.f.assignee) ? [fes.f.assignee] : [];
+        confirmFutureReveal(fes.pid, feWho, L('ฟอร์มนี้'), feSave, function () {
+          if (state.fe === fes) openModal(formEditModal(), true);
+        });
         break;
       }
       case 'fe-q-del': state.fe.f.items.splice(+el.dataset.i, 1); refresh3b(formEditModal(), true); break;
@@ -12662,8 +12828,9 @@
 
     if ((e.key === 'Delete' || e.key === 'Backspace') && !typing && selCount()) {
       e.preventDefault();
-      if (!S.can('write')) { denyToast(); return; }
       var ids2 = selectedIds();
+      /* ทุกงานที่เลือกต้องแก้ได้ (เดิมตรวจแค่บทบาท กด Delete ลบงานในโปรเจกต์ที่แสดงความเห็นได้อย่างเดียวได้) */
+      if (!ids2.every(function (x) { return S.can('write', x); })) { denyToast(); return; }
       askConfirm(L('ลบ {n} งาน?', { n: ids2.length }), '', function () {
         S.deleteTasks(ids2);
         clearSel();
@@ -13065,11 +13232,20 @@
       S.moveTask(movingId, pid, sets[0].key, beforeId);
       return;
     }
-    if (S.dropToGroups(ids, pid, sets, beforeId !== movingId ? beforeId : null) && ids.length > 1) {
-      clearSel();
-      renderAll();
-      toast(L('ย้าย {n} งานแล้ว', { n: ids.length }), L('ย้อนกลับ'), 'undo');
-    }
+    var dropNow = function () {
+      if (S.dropToGroups(ids, pid, sets, beforeId !== movingId ? beforeId : null) && ids.length > 1) {
+        clearSel();
+        renderAll();
+        toast(L('ย้าย {n} งานแล้ว', { n: ids.length }), L('ย้อนกลับ'), 'undo');
+      }
+    };
+    /* ลากลงคอลัมน์/แถวของผู้รับผิดชอบ (บอร์ดจัดกลุ่มตามผู้รับผิดชอบ) = มอบงานให้คนนั้น
+     * เดิมมอบเงียบ ๆ แม้เขาไม่ได้เป็นสมาชิกโปรเจกต์ปิด ตอนนี้ถามก่อนแบบเดียวกับเลือกผู้รับผิดชอบในแผงงาน
+     * การ์ดยังไม่ได้ขยับจริงจนกว่าข้อมูลเปลี่ยน กดยกเลิก = การ์ดอยู่ที่เดิม
+     * ลากไม่ได้อยู่แล้ว (สิทธิ์ไม่พอ) ไม่ต้องถาม ให้ dropToGroups ปฏิเสธพร้อมเหตุผลเหมือนเดิม */
+    var toUsers = sets.filter(function (s) { return s.by === 'assignee' && s.key; }).map(function (s) { return s.key; });
+    if (toUsers.length && S.canArrangeIn(pid)) confirmReveal(ids, toUsers, dropNow);
+    else dropNow();
   });
 
 
@@ -13385,6 +13561,7 @@
     openModal: openModal, closeModal: closeModal, toast: toast,
     askText: askText, askConfirm: askConfirm, askChoice: askChoice, openPop: openPop, closePops: closePops,
     denyToast: denyToast, downloadText: downloadText, safeFileName: safeFileName,
+    confirmReveal: confirmReveal, confirmRevealNew: confirmRevealNew,     // ถามก่อนให้คนนอกโปรเจกต์ปิดเห็นงาน
     openTask: openTask, goProject: goProject, clearSel: clearSel, syncHash: syncHash, closeSidebar: closeSidebar,
     settingsModal: settingsModal, readFiles: readFiles, skippedToast: skippedToast,
     markDragEnd: function () { lastDragEnd = Date.now(); },

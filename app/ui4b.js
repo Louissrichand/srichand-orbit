@@ -94,12 +94,18 @@
       var scope = wlScope(), u = S.user(uid);
       if (!u) return;
       var go = function (pid) {
+        var p = pid ? S.project(pid) : null;
+        /* ด่านสร้างงานตัวเดียวกับทุกทาง (Sprint 1B) ตรวจก่อนให้พิมพ์ชื่อ ไม่ใช่พิมพ์เสร็จแล้วค่อยโดนปฏิเสธ */
+        if (!S.canCreateTask(p ? p.id : null)) { api.denyToast(); return; }
         api.askText(L('งานใหม่ของ {n} · {d}', { n: u.name, d: R.fmtDate(date) }), '', function (name) {
           if (!name) return;
-          var p = pid ? S.project(pid) : null;
-          if (p && !S.canInProject(pid, 'edit')) { api.denyToast(); return; }
-          var t = S.createTask({ name: name, assigneeId: uid, dueOn: date }, p ? p.id : null, p ? p.sections[0].id : null);
-          if (t) toast(L('สร้างงานแล้ว'), L('ย้อนกลับ'), 'undo');
+          /* สร้างงานให้คนที่ไม่ได้เป็นสมาชิกโปรเจกต์ปิด = เขาจะเห็นงานนี้ทั้งงาน (ความเห็น ไฟล์แนบ)
+           * เดิมสร้างเงียบ ๆ ตอนนี้ถามก่อนแบบเดียวกับมอบงานในแผงงาน ยกเลิก = ไม่มีงานเกิดขึ้น */
+          api.confirmRevealNew(p ? p.id : null, [uid], function () {
+            var t = S.createTask({ name: name, assigneeId: uid, dueOn: date }, p ? p.id : null, p ? p.sections[0].id : null);
+            if (t) toast(L('สร้างงานแล้ว'), L('ย้อนกลับ'), 'undo');
+            return t;
+          });
         }, { placeholder: L('ชื่องาน') });
       };
       if (scope.kind === 'project') { go(scope.id); return; }
@@ -163,11 +169,21 @@
       var t = S.task(d.id), tu = to ? S.user(to) : null;
       /* Sprint 1C — งานค้างแสดงที่วันนี้ เลื่อน N วันจากตรงนั้น = กำหนดส่งใหม่คือวันนี้ + N */
       if (d.delta && d.bar.dataset.wlLate) d.delta += parseInt(d.bar.dataset.wlLate, 10) || 0;
-      if (S.wlMove(d.id, d.delta, to)) {
-        var msg = tu && d.delta ? L('ย้าย “{t}” ให้ {u} และเลื่อน {n} วัน', { t: t.name, u: tu.name, n: d.delta })
-          : tu ? L('มอบ “{t}” ให้ {u} แล้ว', { t: t.name, u: tu.name }) : L('เลื่อน “{t}” {n} วัน', { t: t.name, n: d.delta });
-        toast(msg, L('ย้อนกลับ'), 'undo');
-      } else { api.denyToast(); api.renderViewBody(); }
+      var delta = d.delta;
+      if (!t || !S.can('write', d.id)) { api.denyToast(); api.renderViewBody(); return; }
+      var move = function () {
+        if (S.wlMove(d.id, delta, to)) {
+          var msg = tu && delta ? L('ย้าย “{t}” ให้ {u} และเลื่อน {n} วัน', { t: t.name, u: tu.name, n: delta })
+            : tu ? L('มอบ “{t}” ให้ {u} แล้ว', { t: t.name, u: tu.name }) : L('เลื่อน “{t}” {n} วัน', { t: t.name, n: delta });
+          toast(msg, L('ย้อนกลับ'), 'undo');
+        } else { api.denyToast(); api.renderViewBody(); }
+      };
+      if (!to) { move(); return; }
+      /* ลากไปแถวของอีกคน = มอบงานให้เขา ถ้างานอยู่ในโปรเจกต์ปิดที่เขาไม่ได้เป็นสมาชิก ถามก่อน
+       * (เดิมมอบเงียบ ๆ) คืนแถบกลับที่เดิมก่อนถาม — กดยกเลิกแล้วแถบต้องไม่ค้างอยู่ตรงที่ลากไปวาง */
+      d.bar.style.transform = '';
+      d.bar.classList.remove('dragging');
+      api.confirmReveal(d.id, [to], move);
     }
     document.addEventListener('pointerup', function (e) { wlEnd(e, false); });
     document.addEventListener('pointercancel', function (e) { wlEnd(e, true); });
