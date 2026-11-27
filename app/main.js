@@ -99,7 +99,14 @@
 
   /** เมนูข้างบนมือถือ — เลื่อนเข้ามาทับ พร้อมฉากทึบให้แตะปิด */
   function setSidebar(open) {
-    document.getElementById('sidebar').classList.toggle('open', !!open);
+    var sb = document.getElementById('sidebar');
+    /* Sprint 1A — ปิดเมนูมือถือแล้วลืมหมวดที่แตะดูค้างไว้ เปิดใหม่ต้องเห็นหมวดของหน้าที่อยู่จริง
+     * เดิมแตะดู "กลยุทธ์" แล้วปิดเมนูไปทำงานต่อ เปิดเมนูอีกครั้งยังค้างที่กลยุทธ์ หาเมนูของหน้าปัจจุบันไม่เจอ */
+    if (!open && sb.classList.contains('open') && state.navPick) {
+      state.navPick = null;
+      $sidebar.innerHTML = R.sidebar(state.route, null);
+    }
+    sb.classList.toggle('open', !!open);
     if ($scrim) $scrim.classList.toggle('open', !!open);
   }
   function closeSidebar() { setSidebar(false); }
@@ -135,29 +142,52 @@
 
   /** ล้างการเลือกแล้วเก็บกวาดหน้าจอโดยไม่ต้อง re-render ทั้งหน้า */
   function clearSelUI() {
-    var ids = Object.keys(state.sel);
     state.sel = {};
-    ids.forEach(function (i) {
-      var nodes = $view.querySelectorAll('.row[data-id="' + i + '"], .card[data-id="' + i + '"], .tr[data-id="' + i + '"]');
-      Array.prototype.forEach.call(nodes, function (n) {
-        n.classList.remove('sel');
-        var box = n.querySelector('.selbox');
-        if (box) box.classList.remove('on');
-      });
-    });
+    syncSelDom();
     updateSelectionUI(null);
+  }
+
+  /** Sprint 1A — ทำไฮไลต์ทุกแถวบนจอให้ตรงกับ state.sel
+   *  เดิมล้างเฉพาะแถวที่อยู่ใน state.sel ถ้าสถานะถูกล้างไปก่อน (เช่นหลังมอบหมายหลายงาน) แถวยังติดไฮไลต์
+   *  จอบอกว่าเลือก 3 งาน แต่คำสั่งถัดไปเห็นว่าไม่ได้เลือกอะไร — ไล่ทุกแถวแทน จอกับสถานะจึงตรงกันเสมอ */
+  function syncSelDom() {
+    Array.prototype.forEach.call($view.querySelectorAll('.row[data-id], .card[data-id], .tr[data-id]'), function (n) {
+      var on = !!state.sel[n.dataset.id];
+      n.classList.toggle('sel', on);
+      var box = n.querySelector('.selbox');
+      if (box) box.classList.toggle('on', on);
+    });
   }
 
   /* ---------- toast ---------- */
 
   var toastTimer = null;
-  function toast(msg, actionLabel, actionAttr) {
-    $toast.innerHTML = R.esc(msg) +
-      (actionLabel ? ' <button data-act="' + actionAttr + '">' + R.esc(actionLabel) + '</button>' : '');
-    $toast.classList.add('show');
+  /* Sprint 1A — ข้อความแจ้งที่มีปุ่ม (ย้อนกลับ) ค้างไว้ 9 วินาที เอาเมาส์ชี้แล้วหยุดนับ
+   * เดิมหายใน 3.6 วินาที คนอ่านไม่ทันก็กดไม่ทัน และกล่องยังปล่อยคลิกทะลุไปโดนแถวข้างใต้ (CSS)
+   * บอก Ctrl+Z ไว้ข้างปุ่มด้วย (เฉพาะเครื่องที่มีเมาส์/คีย์บอร์ด) คนที่พลาดปุ่มจะรู้ว่ายังย้อนได้ */
+  var toastLeft = 0, toastStart = 0;
+  function armToast(ms) {
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { $toast.classList.remove('show'); }, 3600);
+    toastLeft = ms;
+    toastStart = Date.now();
+    toastTimer = setTimeout(function () { $toast.classList.remove('show'); }, ms);
   }
+  function toast(msg, actionLabel, actionAttr) {
+    var kbd = actionAttr === 'undo' && !isTouch() ? ' <span class="toast-kbd">Ctrl+Z</span>' : '';
+    $toast.innerHTML = '<span class="toast-msg">' + R.esc(msg) + '</span>' +
+      (actionLabel ? ' <button data-act="' + actionAttr + '">' + R.esc(actionLabel) + '</button>' + kbd : '');
+    $toast.classList.toggle('has-act', !!actionLabel);
+    $toast.classList.add('show');
+    armToast(actionLabel ? 9000 : 4500);
+  }
+  $toast.addEventListener('mouseenter', function () {
+    if (!$toast.classList.contains('show')) return;
+    clearTimeout(toastTimer);
+    toastLeft = Math.max(2000, toastLeft - (Date.now() - toastStart));
+  });
+  $toast.addEventListener('mouseleave', function () {
+    if ($toast.classList.contains('show')) armToast(toastLeft);
+  });
 
   /* ---------- theme ---------- */
 
@@ -1093,6 +1123,8 @@
     applyTheme();
     /* 3c — สมุดโน้ตส่วนตัวเป็นหน้าเอกสาร สร้างให้ครั้งแรกที่เปิดแอป (commit แล้ววาดใหม่เอง) */
     if (S.me() && !S.notepadPage() && S.ensureNotepadPage()) return;
+    /* Sprint 1A — ไปหน้าอื่นแล้วล้างหมวดที่แตะดูไว้ทิ้ง (เดิมแค่ไม่ใช้ แต่ยังค้างในสถานะ) */
+    if (state.navPick && state.navPick.key !== R.routeKey(state.route)) state.navPick = null;
     $sidebar.innerHTML = R.sidebar(state.route, state.navPick);
     renderTopbar();
     renderViewBody();
@@ -1168,13 +1200,32 @@
      * ถ้ายังไม่ล้าง ข้อความที่เพิ่งส่งไปจะเด้งกลับมาอยู่ในช่องอีกรอบ */
     ed.innerHTML = '';
     setDraft(key, '');
-    if (kind === 'c') S.addComment(ref, md);
-    else if (kind === 'r') { state.openThreads[ref] = true; S.addComment(ed.dataset.id, md, ref); }
+    var sent = null;
+    if (kind === 'c') sent = S.addComment(ref, md);
+    else if (kind === 'r') { state.openThreads[ref] = true; sent = S.addComment(ed.dataset.id, md, ref); }
     else {
       state.editStory = null;
       if (!S.editComment(ref, md)) renderDrawer();   // ไม่ได้แก้อะไร ก็แค่ปิดโหมดแก้
     }
+    /* Sprint 1A — บอกให้เห็นว่าส่งไปแล้ว: เลื่อนไปหาความเห็นใหม่แล้วไฮไลต์ + ข้อความ "ส่งแล้ว"
+     * เดิมส่งแล้วเงียบ ความเห็นใหม่อาจอยู่นอกจอ คนเลยกดซ้ำหรือคิดว่ายังไม่ส่ง */
+    if (sent && state.openTaskId) {
+      state.flashStory = sent.id;
+      renderDrawer();
+      toast(L('ส่งแล้ว'));
+    }
   }
+
+  /* Sprint 1A — กดปุ่มส่งแล้วไม่ให้ช่องพิมพ์เสียโฟกัส
+   * ถ้าช่องเสียโฟกัสตอนกดเมาส์ลง แถบเครื่องมือหุบ กล่องเตี้ยลง ปุ่มเลื่อนหนีจากใต้เมาส์/นิ้วก่อนปล่อย
+   * คลิกแรกจึงหาย (มือถือแป้นพิมพ์ยังหุบด้วย ยิ่งเลื่อนมาก) ห้ามการย้ายโฟกัสไว้ คลิกจึงถึงปุ่มเสมอ */
+  var SEND_ACTS = ['send-comment', 'send-reply', 'comment-save', 'post-message', 'msg-reply'];
+  document.addEventListener('mousedown', function (e) {
+    var b = e.target.closest && e.target.closest('[data-act]');
+    if (!b || SEND_ACTS.indexOf(b.dataset.act) < 0) return;
+    var ae = document.activeElement;
+    if (ae && ae.classList && ae.classList.contains('rte')) e.preventDefault();
+  }, true);
 
   /** เปิดงานใหม่ เริ่มแผงจากสภาพตั้งต้นเสมอ */
   function resetDrawerState() {
@@ -1452,8 +1503,43 @@
     $modal.innerHTML = html;
     $mdBack.classList.add('open');
     var first = $modal.querySelector('input, select, textarea');
-    if (first) setTimeout(function () { first.focus(); if (first.select) first.select(); }, 40);
+    /* Sprint 1A — select() ใช้กับช่องวันที่/ตัวเลขไม่ได้ (โยน error) ครอบไว้
+     * หน้าต่างที่ไม่มีช่องกรอก (askConfirm/askChoice) ย้ายโฟกัสมาที่หน้าต่าง
+     * ไม่งั้นปุ่มเดิมที่เปิดหน้าต่างยังโฟกัสอยู่ กด Enter แล้วกลายเป็นกดปุ่มนั้นซ้ำแทนการตอบตกลง */
+    if (first) setTimeout(function () { first.focus(); try { if (first.select) first.select(); } catch (er) { /* ช่องชนิดนี้เลือกข้อความไม่ได้ */ } }, 40);
+    else {
+      $modal.setAttribute('tabindex', '-1');
+      try { $modal.focus({ preventScroll: true }); } catch (er) { $modal.focus(); }
+    }
   }
+
+  /* Sprint 1A — Enter ในหน้าต่างถาม = ปุ่มหลัก (ตกลง / บันทึก / สร้าง) · Esc = ยกเลิก (ตัวจัดการคีย์หลัก)
+   * เดิมมีแค่ช่อง askText ที่ Enter ใช้ได้ หน้าต่างเพิ่มฟิลด์ สร้างแท็ก ยืนยัน/เลือกทาง กด Enter แล้วไม่เกิดอะไร
+   * ผูกที่ window ให้ทำงานหลังตัวจัดการอื่นทุกตัว ถ้ามีใครจัดการ Enter ไปแล้ว (preventDefault) จะไม่ซ้ำ
+   * ไม่แตะ textarea / ตัวแก้ไขข้อความ (Enter = ขึ้นบรรทัดใหม่) ปุ่ม/ลิงก์ (Enter = กดตัวมันเอง) และ select
+   * หน้าต่างที่ปุ่มหลักคือ "ปิด" (เช่นตั้งค่า) ไม่ปิดให้ — แก้ค่าในช่องแล้วกด Enter ไม่ควรพาหน้าต่างหายไป */
+  global.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' || e.defaultPrevented || e.isComposing) return;
+    if (e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!$mdBack.classList.contains('open')) return;
+    var t = e.target;
+    if (!t || (t !== $modal && t !== document.body && !$modal.contains(t))) return;
+    var tag = t.tagName;
+    if (tag === 'TEXTAREA' || tag === 'BUTTON' || tag === 'A' || tag === 'SELECT' || t.isContentEditable) return;
+    if (tag === 'INPUT' && /^(file|button|submit|reset|color|range)$/i.test(t.type)) return;
+    var primary = function () {
+      var b = $modal.querySelector('[data-act="ask-ok"]') ||
+        $modal.querySelector('.ask-choices .btn-primary') ||
+        $modal.querySelector('.modal-acts .btn-primary');
+      return b && !b.disabled && b.dataset.act !== 'close-modal' ? b : null;
+    };
+    if (!primary()) return;
+    e.preventDefault();
+    /* ให้ change ของช่องนี้เกิดก่อนกดปุ่ม (บางหน้าต่างวาดใหม่ตอน change จึงหาปุ่มใหม่อีกรอบ) */
+    if (tag === 'INPUT' && t.blur) t.blur();
+    var ok = primary();
+    if (ok) ok.click();
+  });
   function closeModal() { $mdBack.classList.remove('open'); $modal.innerHTML = ''; }
 
   /* ---------- ถามผู้ใช้ด้วยหน้าต่างของแอปเอง ----------
@@ -1590,6 +1676,7 @@
 
   function openTask(id) {
     if (!S.task(id) || !S.canSeeTask(id)) return;
+    outsideClose = null;        // Sprint 1A — คลิกนอกแผงที่เปิดงานอื่น = สลับงาน ไม่ต้องปิดแผง
     flushEditor();
     if (state.openTaskId !== id) resetDrawerState();
     state.openTaskId = id;
@@ -1714,7 +1801,7 @@
     h += formulaFieldsHtml(state.route.id, '', ft.id !== 'formula');      // 3c — สูตรและอ้างอิง
     h += '<div class="field" id="nfRefWrap"' + (ft.id === 'ref' ? '' : ' hidden') + '><label>' + L('อ้างอิงถึง') + '</label>' +
       S.REF_KINDS.map(function (k) { return '<label class="chk"><input type="checkbox" class="nf-refkind" value="' + k[0] + '" checked> ' + L(k[1]) + '</label>'; }).join('') +
-      '<div class="fld-hint">' + L('เป้าหมายจะเพิ่มได้เมื่อมีหน้าเป้าหมาย (ชิ้นงาน 4a)') + '</div></div>';
+      '</div>';    // Sprint 1A — เอาข้อความ "เป้าหมายจะเพิ่มได้เมื่อมีหน้าเป้าหมาย" ออก หน้าเป้าหมายมีแล้วและอ้างอิงเป้าหมายได้จริง
     h += '<div id="nfNumWrap"' + (ft.id === 'number' || ft.id === 'formula' ? '' : ' hidden') + '>' + numberFormatFields(null) + '</div>';
 
     if (!forLib) {
@@ -1849,7 +1936,7 @@
     }
 
     h += '<div class="modal-note" style="margin-top:16px">' +
-      L('ในเวอร์ชันนี้การกันสิทธิ์ทำที่หน้าจอ เมื่อย้ายไปฐานข้อมูลแล้วจะบังคับที่เซิร์ฟเวอร์จริง') +
+      L('สิทธิ์ในโปรเจกต์กำหนดว่าแต่ละคนเห็นและแก้อะไรได้ใน Orbit') +     // Sprint 1A — ภาษาคนใช้ ไม่พูดถึงฐานข้อมูล/เซิร์ฟเวอร์
       '</div>';
     h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
     return h;
@@ -3061,7 +3148,8 @@
     return h;
   }
 
-  var FORM_PUBLIC_NOTE = 'ลิงก์ฟอร์มเปิดได้เฉพาะสมาชิกที่เข้าระบบ Orbit (หรือในโหมดเครื่องเดียว) ฟอร์มสาธารณะสำหรับคนนอกองค์กรต้องมีเซิร์ฟเวอร์ จะมาในเฟส 5';
+  /* Sprint 1A — เขียนเป็นภาษาคนใช้ (เดิมพูดถึงเซิร์ฟเวอร์และ "เฟส 5" ของทีมพัฒนา) */
+  var FORM_PUBLIC_NOTE = 'ลิงก์ฟอร์มใช้ได้เฉพาะพนักงานที่ล็อกอิน Orbit แล้ว คนนอกองค์กรยังเปิดฟอร์มนี้ไม่ได้';
 
   function feNewItem(kind) {
     var opts = (kind === 'select' || kind === 'multi') ? [L('ตัวเลือก 1'), L('ตัวเลือก 2')] : [];
@@ -3701,7 +3789,8 @@
     $modal.scrollTop = top;
   }
 
-  var AU_TIME_NOTE = 'อัตโนมัติตามเวลา (ใกล้ครบกำหนด เลยกำหนด ตามกำหนดเวลา) ไม่มีเซิร์ฟเวอร์คอยปลุก จะทำงานเมื่อมีสมาชิกเปิดแอปอยู่ ตรวจทุก 5 นาที รอบที่พลาดไปจะทำตามหลังเมื่อมีคนเปิด และแต่ละรอบทำครั้งเดียวแม้หลายคนเปิดพร้อมกัน';
+  /* Sprint 1A — เขียนเป็นภาษาคนใช้ (เดิม "ไม่มีเซิร์ฟเวอร์คอยปลุก") */
+  var AU_TIME_NOTE = 'อัตโนมัติตามเวลา (ใกล้ครบกำหนด เลยกำหนด ตามกำหนดเวลา) ทำงานเมื่อมีคนเปิด Orbit อยู่ ตรวจทุก 5 นาที ถ้าช่วงนั้นไม่มีใครเปิด จะทำตามหลังทันทีที่มีคนเปิด และแต่ละรอบทำครั้งเดียวแม้หลายคนเปิดพร้อมกัน';
 
   function autoListModal() {
     var st = state.auto, pid = st.pid, p = S.project(pid);
@@ -4410,8 +4499,8 @@
       ['/', L('ไปที่ช่องค้นหา')],
       ['Esc', L('ปิดหน้าต่าง / แผงรายละเอียด')],
       ['Ctrl + Z', L('ย้อนกลับการกระทำล่าสุด')],
-      ['Ctrl + Enter', L('ส่งความเห็น')],
-      ['Ctrl + /', L('เปิดหน้าคีย์ลัดนี้')],
+      ['Ctrl + Enter', L('ส่งความเห็น / ประกาศ (เมื่อเคอร์เซอร์อยู่ในช่องพิมพ์)')],
+      ['? / Ctrl + /', L('เปิดหน้าคีย์ลัดนี้')],
       ['Tab + H', L('ไปหน้าแรก')],
       ['Tab + Z', L('ไปงานของฉัน')],
       ['Tab + I', L('ไปกล่องข้อความ')],
@@ -4419,7 +4508,7 @@
       ['Tab + O', L('ซ่อน/แสดงแถบซ้าย')],
       ['Tab + Enter', L('เปิดรายละเอียดของงานที่เลือก')],
       ['↑ / ↓', L('เลือกงานก่อนหน้า / ถัดไป')],
-      ['Ctrl + Enter', L('ทำเครื่องหมายว่าเสร็จ (งานที่เลือก) / ส่งความเห็น')],
+      ['Tab + Y', L('ทำเครื่องหมายว่าเสร็จ / เปิดใหม่ (งานที่เปิดหรือเลือกอยู่)')],
       ['Tab + D', L('ตั้งกำหนดส่ง')],
       ['Tab + A', L('มอบหมายงาน')],
       ['Tab + M', L('มอบหมายงานที่เปิดอยู่ให้ตัวเอง')],
@@ -4575,6 +4664,19 @@
     if (state.cursor && S.task(state.cursor)) return state.cursor;
     var ids = selectedIds();
     return ids.length === 1 ? ids[0] : null;
+  }
+
+  /** Sprint 1A — ติ๊กเสร็จ/เปิดใหม่ทางเดียวกันทุกที่ (ช่องติ๊กในรายการ งานของฉัน หัวแผงงาน Tab+Y)
+   *  เดิมเฉพาะ Ctrl+Enter ที่ขึ้น "ทำเสร็จแล้ว · ย้อนกลับ" กดช่องติ๊กแล้วงานหายจากรายการเงียบ ๆ ไม่รู้จะเอาคืนยังไง */
+  function toggleDone(id) {
+    var t = S.task(id);
+    if (!t) return;
+    var was = t.completed;
+    S.updateTask(id, { completed: !was });
+    var now = S.task(id);
+    if (now && now.completed !== was) {
+      toast(now.completed ? L('ทำเสร็จแล้ว') : L('เปิดงานใหม่แล้ว'), L('ย้อนกลับ'), 'undo');
+    }
   }
 
   /** เปิดแผงงาน (ถ้ายังไม่เปิด) แล้วทำต่อกับปุ่ม/ช่องในแผง */
@@ -5287,7 +5389,7 @@
       }
       if (EXT.hooks.settingsNotify) h += EXT.hooks.settingsNotify();     // 4b — แจ้งเตือนของเบราว์เซอร์
       h += '<div class="prj-warn">' + I('alert', 15) + '<span>' +
-        L('การแจ้งเตือนทางอีเมลยังไม่เปิด จะทำได้เมื่อเชื่อมต่อระบบส่วนกลางแล้ว ตอนนี้ทุกอย่างอยู่ในกล่องข้อความของแอป') +
+        L('ยังไม่มีการแจ้งเตือนทางอีเมล ทุกอย่างจะเข้ากล่องข้อความใน Orbit') +      // Sprint 1A — ไม่พูดถึงระบบหลังบ้าน
         '</span></div>';
       h += '<div class="modal-acts"><button class="btn btn-primary" data-act="close-modal">' + L('ปิด') + '</button></div>';
     }
@@ -5310,7 +5412,7 @@
         L('ผู้ดูแลระบบเท่านั้นที่เปลี่ยนได้') + '</em></div>';
 
       h += '<div class="prj-warn">' + I('alert', 15) + '<span>' +
-        L('การเปลี่ยนรหัสผ่านและการยืนยันสองชั้น จะทำได้เมื่อเชื่อมต่อระบบส่วนกลางแล้ว ตอนนี้เข้าระบบด้วยบัญชี Microsoft ของบริษัทเป็นหลัก') +
+        L('เข้าระบบด้วยบัญชี Microsoft ของบริษัท เปลี่ยนรหัสผ่านหรือตั้งการยืนยันสองชั้นได้ที่บัญชี Microsoft ของคุณ') +   // Sprint 1A
         '</span></div>';
 
       if (team) {
@@ -6013,12 +6115,18 @@
         var mt = document.getElementById('msgTitle');
         var md = mb ? global.RichText.fromNode(mb) : '';
         if (!md.trim()) { toast(L('เขียนเนื้อหาก่อน')); return true; }
+        /* Sprint 1A — ล้างช่องและร่างก่อนบันทึก ช่องพิมพ์ยังโฟกัสอยู่ (ปุ่มส่งไม่แย่งโฟกัสแล้ว)
+         * การวาดใหม่จะคืนเนื้อหาของช่องที่โฟกัสอยู่/ร่างกลับมา ถ้ายังไม่ล้าง ข้อความที่โพสต์แล้วจะค้างในช่อง */
+        if (mb) mb.innerHTML = '';
+        setDraft('mn:' + id, '');
         if (S.addProjectMessage(id, mt ? mt.value : '', md, state.msgFiles['new'] || [])) {
-          setDraft('mn:' + id, '');
           state.msgFiles['new'] = [];
           state.msgTitle = '';
           renderAll();
           toast(L('ประกาศแล้ว'), L('ย้อนกลับ'), 'undo');
+        } else {
+          setDraft('mn:' + id, md);
+          if (mb) mb.innerHTML = global.RichText.toHtml(md, { editable: true });
         }
         return true;
       }
@@ -6027,11 +6135,15 @@
         var rb = $view.querySelector('.rte-msg[data-key="mr:' + msg + '"]');
         var rmd = rb ? global.RichText.fromNode(rb) : '';
         if (!rmd.trim()) { toast(L('พิมพ์ข้อความก่อน')); return true; }
+        if (rb) rb.innerHTML = '';           // Sprint 1A — ล้างก่อนบันทึก (เหตุผลเดียวกับโพสต์ด้านบน)
+        setDraft('mr:' + msg, '');
         if (S.addMessageReply(id, msg, rmd, state.msgFiles['r:' + msg] || [])) {
-          setDraft('mr:' + msg, '');
           state.msgFiles['r:' + msg] = [];
-          if (rb) rb.innerHTML = '';
           renderAll();
+          toast(L('ส่งแล้ว'));      // Sprint 1A — บอกให้รู้ว่าคำตอบส่งไปแล้ว
+        } else {
+          setDraft('mr:' + msg, rmd);
+          if (rb) rb.innerHTML = global.RichText.toHtml(rmd, { editable: true });
         }
         return true;
       }
@@ -7764,6 +7876,29 @@
   // (เช่นปล่อยเมาส์นอกตัวแท่ง) ธงจะค้างแล้วไปกลืนคลิกครั้งถัดไป
   var lastDragEnd = 0;
 
+  /* Sprint 1A — คลิกนอกแผงงาน = ปิดแผง "และ" ทำสิ่งที่คลิกด้วย
+   * เดิมฉากหลังรับคลิกแรกไว้ปิดแผงอย่างเดียว (กดอวาตาร์ เมนู รายการถัดไปในกล่องข้อความ แล้วไม่เกิดอะไร)
+   * ตอนนี้ฉากหลังปล่อยคลิกทะลุ (CSS) ตรงนี้จำไว้ว่าคลิกมาจากนอกแผง แล้วปิดแผงหลังคำสั่งของคลิกนั้นทำงานเสร็จ
+   * ถ้าคลิกนั้นเปิดงานอื่น (แถวงาน รายการในกล่องข้อความ) openTask จะล้างธงนี้ แผงแค่สลับไปงานใหม่ ไม่ปิด
+   * ไม่นับ: กล่องแจ้งเตือน (ปุ่มย้อนกลับ) หน้าต่าง/เมนูลอยที่เปิดจากในแผง รายการ @ และการลากเลือกข้อความที่เริ่มในแผง */
+  var outsideClose = null, downInDrawer = false;
+  document.addEventListener('pointerdown', function (e) {
+    downInDrawer = !!(e.target && e.target.closest && e.target.closest('#drawer'));
+  }, true);
+  document.addEventListener('click', function (e) {
+    if (!state.openTaskId || !$drawer.classList.contains('open')) return;
+    var t = e.target;
+    if (!t || !t.closest || downInDrawer || $drawer.contains(t)) return;
+    if (Date.now() - lastDragEnd < 250) return;
+    if (t.closest('#toast, #modalBackdrop, .pop, .rte-mention, #optPanel, #optBackdrop, #gate')) return;
+    if (!document.body.contains(t)) return;          // ปุ่มในเมนูที่เพิ่งถูกลบไป ไม่ใช่คลิกนอกแผง
+    var was = outsideClose = state.openTaskId;
+    setTimeout(function () {
+      if (outsideClose === was && state.openTaskId === was) closeDrawer();
+      outsideClose = null;
+    }, 0);
+  }, true);
+
   document.addEventListener('click', function (e) {
     if (Date.now() - lastDragEnd < 250) {
       e.stopPropagation();
@@ -7823,6 +7958,7 @@
 
       case 'go': {
         closeSidebar();
+        state.navPick = null;     // Sprint 1A — เลือกหน้าแล้ว แถบซ้ายกลับไปตามหมวดของหน้านั้น (แม้เป็นหน้าเดิม)
         var rt = el.dataset.route;
         if (rt === 'project') { goProject(id); break; }
         if (rt === 'portfolio') { goPortfolio(id); break; }
@@ -8649,11 +8785,7 @@
       }
 
       /* --- task basics --- */
-      case 'toggle': {
-        var tk1 = S.task(id);
-        if (tk1) S.updateTask(id, { completed: !tk1.completed });
-        break;
-      }
+      case 'toggle': toggleDone(id); break;
       case 'open-task': {
         /* Shift+คลิก = เลือกช่วงจากแถวที่เลือกล่าสุด  Ctrl/⌘+คลิก = เลือกทีละแถว (ไม่เปิดแผงงาน) */
         var rowEl = el.closest('.tr, .card, .row');
@@ -9189,8 +9321,14 @@
         break;
 
       /* --- bulk --- */
-      case 'bulk-complete': S.bulkUpdate(selectedIds(), { completed: true }); clearSel(); break;
-      case 'bulk-reopen': S.bulkUpdate(selectedIds(), { completed: false }); clearSel(); break;
+      /* Sprint 1A — ล้างการเลือกทั้งสถานะและหน้าจอพร้อมกัน (clearSelUI) เดิม clearSel() ล้างแค่สถานะ
+       * หลังบันทึกวาดจอไปแล้ว แถวจึงค้างไฮไลต์ทั้งที่ไม่ได้เลือกอะไร คำสั่งถัดไปเลยทำกับจำนวนที่ไม่ตรงกับจอ */
+      case 'bulk-complete':
+        S.bulkUpdate(selectedIds(), { completed: true });
+        clearSelUI();
+        toast(L('ทำเสร็จแล้ว'), L('ย้อนกลับ'), 'undo');
+        break;
+      case 'bulk-reopen': S.bulkUpdate(selectedIds(), { completed: false }); clearSelUI(); break;
       case 'bulk-due': {
         var bulkIds = selectedIds();
         askText(L('กำหนดส่งใหม่'), S.today(), function (v) {
@@ -11530,14 +11668,15 @@
     }
 
     // แก้หลายงานพร้อมกัน
+    /* Sprint 1A — clearSelUI ไม่ใช่ clearSel: บันทึกวาดจอไปแล้วตอนยังเลือกอยู่ ต้องล้างไฮไลต์บนจอด้วย */
     if (act === 'bulk-assignee' && el.value) {
       S.bulkUpdate(selectedIds(), { assigneeId: el.value });
-      clearSel();
+      clearSelUI();
       return;
     }
     if (act === 'bulk-priority' && el.value) {
       S.bulkUpdate(selectedIds(), { priority: el.value });
-      clearSel();
+      clearSelUI();
       return;
     }
 
@@ -11782,6 +11921,21 @@
       return;
     }
 
+    /* Sprint 1A — Enter ในช่องค้น/สร้างแท็ก: ตรงกับแท็กที่มีเป๊ะก็ใช้อันนั้น ไม่งั้นเอาตัวเลือกแรกในรายการ
+     * (ไม่มีแท็กที่ใกล้เคียงเลย ตัวเลือกแรกคือ "สร้างแท็ก …") เดิมกด Enter แล้วไม่เกิดอะไร */
+    if (e.key === 'Enter' && e.target.id === 'tagQ') {
+      e.preventDefault();
+      var tq = e.target.value.trim().toLowerCase();
+      var tpop = e.target.closest('.pop');
+      if (!tq || !tpop) return;
+      var tbtns = Array.prototype.slice.call(tpop.querySelectorAll('[data-act="pick-tag"]'));
+      var tpick = tbtns.filter(function (b) {
+        return b.querySelector('.chip') && (b.dataset.tag || '').toLowerCase() === tq;   // .chip = แท็กที่มีอยู่แล้ว
+      })[0] || tbtns[0];
+      if (tpick) tpick.click();
+      return;
+    }
+
     if (e.key === 'Enter' && e.target.id === 'subAdd') {
       e.preventDefault();
       var sname = e.target.value.trim();
@@ -11805,22 +11959,26 @@
 
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       var box = e.target.closest && e.target.closest('.rte-compose');
+      var mbox = !box && e.target.closest && e.target.closest('.rte-msg');
       if (box) {
         e.preventDefault();
         submitComposer(box);
+      } else if (mbox) {
+        /* Sprint 1A — ช่องเขียนประกาศ/ตอบประกาศ ก็ส่งด้วย Ctrl+Enter ได้เหมือนช่องความเห็น */
+        e.preventDefault();
+        var mhost = mbox.closest('.msg-new, .msg-replybox');
+        var mbtn = mhost && mhost.querySelector('[data-act="post-message"], [data-act="msg-reply"]');
+        if (mbtn) mbtn.click();
       } else if (e.target.dataset && e.target.dataset.save === 'notes') {
         e.preventDefault();
         e.target.blur();          // Ctrl+Enter ในรายละเอียด = บันทึกแล้วออกจากช่อง
-      } else if (!typing && !$mdBack.classList.contains('open')) {
-        /* 2c — Ctrl+Enter นอกช่องพิมพ์ = ทำเครื่องหมายว่าเสร็จ (งานที่เปิดอยู่หรือแถวที่เลือก) */
-        var ceId = focusTaskId();
-        if (ceId) {
-          e.preventDefault();
-          if (!S.can('write', ceId)) { denyToast(); return; }
-          var ceT = S.task(ceId);
-          S.updateTask(ceId, { completed: !ceT.completed });
-          toast(ceT.completed ? L('ทำเสร็จแล้ว') : L('เปิดงานนี้อีกครั้ง'), L('ย้อนกลับ'), 'undo');
-        }
+      } else if (!typing && !$mdBack.classList.contains('open') && focusTaskId()) {
+        /* Sprint 1A — Ctrl+Enter นอกช่องพิมพ์ไม่ทำเครื่องหมายเสร็จอีกแล้ว
+         * ผู้ทดสอบตั้งใจส่งความเห็นแต่ช่องไม่ได้โฟกัสอยู่ กดแล้วงาน (ที่รออนุมัติ) กลายเป็นเสร็จโดยไม่รู้ตัว
+         * ทำเครื่องหมายเสร็จย้ายไป Tab+Y — ตรงนี้แค่บอกว่าต้องทำยังไง */
+        e.preventDefault();
+        toast(state.openTaskId ? L('คลิกช่องความเห็นก่อน แล้วกด Ctrl+Enter เพื่อส่ง · ทำเครื่องหมายว่าเสร็จใช้ Tab+Y')
+                               : L('ทำเครื่องหมายว่าเสร็จใช้ Tab+Y'));
       }
       return;
     }
@@ -11834,6 +11992,14 @@
       return;
     }
     if (e.ctrlKey && (e.key === '/' || kc === '/')) {
+      e.preventDefault();
+      openModal(shortcutsModal(), true);
+      return;
+    }
+    /* Sprint 1A — "?" (Shift+/) เปิดหน้าคีย์ลัดเหมือนแอปทั่วไป เฉพาะตอนไม่ได้พิมพ์อยู่
+     * ดูตำแหน่งปุ่มด้วย แป้นไทย Shift+/ ไม่ได้ตัว "?" */
+    if ((e.key === '?' || (kc === '/' && e.shiftKey)) && !typing && !e.ctrlKey && !e.metaKey && !e.altKey &&
+        !tabHeld && !$mdBack.classList.contains('open')) {
       e.preventDefault();
       openModal(shortcutsModal(), true);
       return;
@@ -11934,6 +12100,12 @@
           var rn = $drawer.querySelector('.rte[data-save="notes"]');
           if (rn) { rn.scrollIntoView({ block: 'center' }); global.RichText.focusEnd(rn); }
         });
+      }
+      else if (k === 'y') {
+        /* Sprint 1A — Tab+Y ทำเครื่องหมายว่าเสร็จ/เปิดใหม่ (แทน Ctrl+Enter นอกช่องพิมพ์ ที่ชนกับการส่งความเห็น) */
+        if (!ft) toast(L('เลือกงานก่อน (คลิกแถว หรือใช้ลูกศรขึ้นลง)'));
+        else if (!S.can('write', ft)) { denyToast(); return; }
+        else toggleDone(ft);
       }
       else if (k === 'z') { state.route = { type: 'mytasks' }; clearSel(); renderAll(); }
       else if (k === 'i') { state.route = { type: 'inbox' }; clearSel(); renderAll(); }

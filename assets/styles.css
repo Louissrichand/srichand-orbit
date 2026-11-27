@@ -707,6 +707,14 @@ a { color: var(--accent); }
   opacity: 0; pointer-events: none; transition: opacity .16s; z-index: 40;
 }
 .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
+/* Sprint 1A — จอกว้าง: แผงงานไม่บังหน้าหลัง คลิกข้างนอกทะลุไปทำงานได้เลย (main.js ปิดแผงให้เอง)
+ * เดิมฉากทึบรับคลิกแรกไว้ปิดแผงอย่างเดียว ปุ่ม/เมนู/รายการในกล่องข้อความที่กดจึงไม่ทำงาน ต้องกดซ้ำ
+ * และไม่หรี่หน้าหลังแล้ว เพราะหน้าหลังยังใช้งานได้ (แบบแผงงานของ Asana)
+ * จอแคบแผงกินเกือบทั้งจอ เหลือขอบซ้ายนิดเดียว — ยังให้ฉากทึบรับแตะไว้ปิดแผงอย่างเดียวเหมือนเดิม
+ * ไม่งั้นแตะขอบเพื่อปิดแผงแล้วไปโดนแถวงานข้างใต้ */
+@media (min-width: 861px) {
+  #drawerBackdrop.open { pointer-events: none; background: transparent; }
+}
 
 .drawer {
   position: fixed; top: 0; right: 0; bottom: 0; width: var(--drawer-w);
@@ -832,6 +840,7 @@ select.inp, input.inp { background: var(--bg-sunk); }
   transform: translateY(6px); transition: transform .14s;
   border: 1px solid var(--line);
 }
+.modal:focus { outline: none; }   /* Sprint 1A — รับโฟกัสไว้ให้ Enter = ตกลง ไม่ต้องมีกรอบ */
 .modal.wide { max-width: 720px; }
 .modal-backdrop.open .modal { transform: none; }
 .modal h2 { margin: 0 0 16px; font-size: 17px; }
@@ -878,10 +887,18 @@ kbd {
   opacity: 0; pointer-events: none; transition: all .18s; z-index: 100;
   display: flex; align-items: center; gap: 12px; max-width: calc(100vw - 40px);
 }
+/* Sprint 1A — กล่องที่มีปุ่ม (ย้อนกลับ) ต้องรับคลิกเอง เดิม pointer-events: none ทั้งกล่อง
+ * กด "ย้อนกลับ" แล้วคลิกทะลุไปโดนฉากหลังแผงงาน (แผงปิด) หรือแถวงานข้างใต้แทน
+ * กล่องที่เป็นแค่ข้อความยังปล่อยคลิกทะลุ ไม่บังช่องความเห็น/ปุ่มส่งบนมือถือ */
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast.show.has-act { pointer-events: auto; }
 .toast button {
   color: var(--sidebar-on); font-weight: 700; text-decoration: underline;
   white-space: nowrap;
+}
+.toast-kbd {
+  font-size: 11px; opacity: .7; white-space: nowrap;
+  border: 1px solid currentColor; border-radius: 4px; padding: 0 4px; line-height: 16px;
 }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -3069,6 +3086,11 @@ button.prof-away:hover { color: var(--accent); }
   border-radius: var(--radius) var(--radius) 0 0; background: var(--bg-sunk);
 }
 .rte-wrap:focus-within > .rte-bar { display: flex; }
+/* Sprint 1A — rte-on (richtext.js) ค้างแถบไว้จนคลิกที่เริ่มตอนออกจากช่องจบก่อน
+ * ไม่งั้นแถบหุบตอนกดเมาส์ลง ปุ่มส่ง/โพสต์ด้านล่างเลื่อนหนี คลิกแรกหาย */
+.rte-wrap.rte-on > .rte-bar { display: flex; }
+.rte-notes-wrap.rte-on .rte-notes,
+.rte-mini.rte-on > .rte-compose { border-top-left-radius: 0; border-top-right-radius: 0; }
 .rte-b {
   min-width: 28px; height: 26px; padding: 0 6px; border-radius: 5px;
   font-size: 13px; color: var(--fg-soft); display: inline-flex;

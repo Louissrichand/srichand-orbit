@@ -1035,6 +1035,38 @@
     }, 120);
   });
 
+  /* Sprint 1A — แถบเครื่องมือไม่หุบกลางคลิก
+   * เดิมแถบโผล่ด้วย :focus-within อย่างเดียว กดเมาส์ลงบนปุ่ม "ส่ง"/"โพสต์" ช่องพิมพ์เสียโฟกัสทันที
+   * แถบหาย กล่องเตี้ยลง 5–45px ปุ่มเลื่อนหนีจากใต้เมาส์/นิ้วก่อนปล่อย คลิกแรกหาย ข้อความยังค้างในช่อง
+   * จึงติดคลาส rte-on ไว้ตอนเข้าช่อง และตอนออกจากช่องค่อยเอาออกหลังปล่อยเมาส์/นิ้วแล้วสักครู่
+   * (บนมือถือ การแตะย้ายโฟกัสหลังยกนิ้วแล้ว จึงต้องรอเป็นเวลา ไม่ใช่แค่รอ pointerup)
+   * ย้ายโฟกัสไปอยู่ในกล่องเดียวกัน (เช่นปุ่มในแถบ) ไม่นับว่าออก */
+  var ptrDown = false;
+  document.addEventListener('pointerdown', function () { ptrDown = true; }, true);
+  document.addEventListener('pointerup', function () { ptrDown = false; }, true);
+  document.addEventListener('pointercancel', function () { ptrDown = false; }, true);
+
+  function barWrap(el) {
+    var wrap = el && el.closest && el.closest('.rte-wrap');
+    return wrap && wrap.querySelector('.rte-bar') ? wrap : null;
+  }
+  document.addEventListener('focusin', function (e) {
+    var ed = editorOf(e.target);
+    var wrap = ed && barWrap(ed);
+    if (wrap) wrap.classList.add('rte-on');
+  });
+  document.addEventListener('focusout', function (e) {
+    var wrap = barWrap(e.target);
+    if (!wrap || !wrap.classList.contains('rte-on')) return;
+    if (e.relatedTarget && wrap.contains(e.relatedTarget)) return;
+    (function later() {
+      setTimeout(function () {
+        if (ptrDown) { later(); return; }          // ยังกดค้างอยู่ รอจนปล่อย
+        if (!wrap.contains(document.activeElement)) wrap.classList.remove('rte-on');
+      }, 350);
+    })();
+  });
+
   document.addEventListener('selectionchange', function () {
     var ed = editorOf(selNode());
     if (ed) syncBar(ed);
