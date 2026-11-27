@@ -965,11 +965,13 @@ CREATE TABLE dbo.project_roles (
     role_text   NVARCHAR(60)     NOT NULL,
     CONSTRAINT pk_project_roles PRIMARY KEY (project_id, user_id)
 );
-/* คำขอเข้าโปรเจกต์ปิด — ตรงกับ project.accessRequests งานคำขอมอบให้เจ้าของโปรเจกต์ */
+/* คำขอเข้าโปรเจกต์ปิด — ตรงกับ project.accessRequests
+   Sprint 1B: แจ้งเจ้าของทางกล่องข้อความ (ชนิด access) ไม่สร้างงานแล้ว task_id มีเฉพาะคำขอแบบเก่า */
 CREATE TABLE dbo.project_access_requests (
     project_id  UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.projects(id) ON DELETE CASCADE,
     user_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.users(id),
     task_id     UNIQUEIDENTIFIER NULL REFERENCES dbo.tasks(id),
+    note        NVARCHAR(1000)   NULL,
     requested_at DATETIME2(0)    NOT NULL DEFAULT SYSUTCDATETIME(),
     CONSTRAINT pk_access_requests PRIMARY KEY (project_id, user_id)
 );
