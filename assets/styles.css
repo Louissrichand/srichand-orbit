@@ -4680,3 +4680,61 @@ body.touch-dragging { user-select: none; -webkit-user-select: none; }
 @media (max-width: 620px) {
   .emb { padding: 10px; height: calc(100vh - 150px); }
 }
+
+/* ---------- แถบซ้ายสองชั้นแบบ Asana ----------
+ * ชั้นนอก (rail) ไอคอนหมวดใหญ่ · ชั้นใน (panel) รายการของหมวดที่เลือก
+ * ซ่อนแถบ (Tab+O) บนจอกว้างเหลือชั้นนอกไว้ กดไอคอนหมวดไหนก็กางกลับมา */
+:root { --rail-w: 68px; }
+.sidebar {
+  width: calc(var(--rail-w) + var(--sidebar-w)); flex: 0 0 calc(var(--rail-w) + var(--sidebar-w));
+  flex-direction: row; overflow: hidden; padding-bottom: 0;
+}
+.sb-rail {
+  width: var(--rail-w); flex: 0 0 var(--rail-w);
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 12px 0; border-right: 1px solid var(--sidebar-line); overflow-y: auto;
+}
+.sb-rail::-webkit-scrollbar { width: 0; }
+.sb-rail-brand { margin-bottom: 12px; padding: 4px; border-radius: 9px; line-height: 0; }
+.sb-rail-brand:hover { background: var(--sidebar-hl); }
+.sb-rail-btn {
+  width: 62px; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 4px 0 6px; color: var(--sidebar-dim); font-size: 10.5px; line-height: 1.2;
+}
+.sb-rail-ic {
+  position: relative; width: 38px; height: 32px; border-radius: 9px;
+  display: grid; place-items: center; transition: background .12s;
+}
+.sb-rail-btn:hover { color: var(--sidebar-on); }
+.sb-rail-btn:hover .sb-rail-ic { background: var(--sidebar-hl); }
+.sb-rail-btn.on { color: var(--sidebar-on); font-weight: 600; }
+.sb-rail-btn.on .sb-rail-ic { background: var(--sidebar-hl); box-shadow: inset 0 0 0 1px var(--sidebar-line); }
+.sb-rail-lbl { max-width: 62px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-rail-dot {
+  position: absolute; top: 4px; right: 6px; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--danger); box-shadow: 0 0 0 2px var(--sidebar);
+}
+.sb-rail-foot { margin-top: auto; padding-top: 10px; display: flex; flex-direction: column; align-items: center; }
+.sb-rail-me { border-radius: 50%; padding: 3px; line-height: 0; }
+.sb-rail-me:hover { background: var(--sidebar-hl); }
+
+.sb-panel { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow-y: auto; padding-bottom: 8px; }
+.sb-panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 10px 4px 18px;
+}
+.sb-panel-title { color: var(--sidebar-on); font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+.sb-panel-hide {
+  width: 28px; height: 28px; border-radius: 6px; display: grid; place-items: center; color: var(--sidebar-dim);
+}
+.sb-panel-hide:hover { background: var(--sidebar-hl); color: var(--sidebar-on); }
+.sb-panel .sb-foot { margin-top: auto; }
+
+@media (min-width: 861px) {
+  body.sb-collapsed .sidebar { display: flex; width: var(--rail-w); flex-basis: var(--rail-w); }
+  body.sb-collapsed .sb-panel { display: none; }
+  body.sb-collapsed .sb-rail { border-right: 0; }
+}
+@media (max-width: 860px) {
+  .sidebar { max-width: calc(100vw - 40px); }
+}

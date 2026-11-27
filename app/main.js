@@ -1093,7 +1093,7 @@
     applyTheme();
     /* 3c — สมุดโน้ตส่วนตัวเป็นหน้าเอกสาร สร้างให้ครั้งแรกที่เปิดแอป (commit แล้ววาดใหม่เอง) */
     if (S.me() && !S.notepadPage() && S.ensureNotepadPage()) return;
-    $sidebar.innerHTML = R.sidebar(state.route);
+    $sidebar.innerHTML = R.sidebar(state.route, state.navPick);
     renderTopbar();
     renderViewBody();
     renderDrawer();
@@ -4552,7 +4552,7 @@
 
   /** วาดหน้าค้นหาใหม่โดยไม่เสียโฟกัสช่องค้นหาด้านบน */
   function refreshSearch() {
-    $sidebar.innerHTML = R.sidebar(state.route);
+    $sidebar.innerHTML = R.sidebar(state.route, state.navPick);
     renderViewBody();
     syncHash();
   }
@@ -7803,8 +7803,22 @@
 
       /* --- navigation --- */
       case 'toggle-sidebar':
-        if (global.innerWidth > 860 && document.body.classList.contains('sb-collapsed')) { toggleSidebarCollapse(false); break; }
+        /* จอกว้าง: ซ่อน/แสดงชั้นในของแถบซ้าย (ชั้นไอคอนยังอยู่) · จอแคบ: เลื่อนแถบเข้าออก */
+        if (global.innerWidth > 860) { toggleSidebarCollapse(); break; }
         setSidebar(!document.getElementById('sidebar').classList.contains('open'));
+        break;
+
+      /* กดไอคอนหมวดที่ชั้นนอก — ดูรายการของหมวดนั้นโดยยังไม่เปลี่ยนหน้า
+       * จำไว้คู่กับหน้าปัจจุบัน พอไปหน้าอื่นหมวดจะกลับไปตามหน้านั้นเอง */
+      case 'nav-group':
+        state.navPick = { g: el.dataset.g, key: R.routeKey(state.route) };
+        if (global.innerWidth > 860 && document.body.classList.contains('sb-collapsed')) toggleSidebarCollapse(false);
+        $sidebar.innerHTML = R.sidebar(state.route, state.navPick);
+        break;
+
+      case 'sb-page':
+        closeSidebar();
+        pageRoute('', id);
         break;
 
       case 'go': {
