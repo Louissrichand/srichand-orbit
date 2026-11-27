@@ -84,7 +84,7 @@ function shell(title, bodyHtml) {
   return `<!doctype html><html lang="th"><body style="margin:0;padding:24px;background:#f7f5f6;
 font-family:'Segoe UI',Tahoma,sans-serif;color:#17161a;line-height:1.7">
 <div style="max-width:520px;margin:0 auto;background:#fff;border:1px solid #e2dee1;border-radius:10px;padding:32px">
-<div style="font-size:20px;font-weight:700;color:#ee0b3f;margin-bottom:4px">Orbit</div>
+<div style="font-size:20px;font-weight:700;color:#B32240;margin-bottom:4px">Orbit</div>
 <div style="font-size:12px;color:#97949c;margin-bottom:24px">ระบบจัดการงานภายในของศรีจันทร์</div>
 <h1 style="font-size:19px;margin:0 0 14px">${title}</h1>
 ${bodyHtml}
@@ -96,7 +96,7 @@ ${bodyHtml}
 
 function button(url, label) {
   return `<p style="margin:22px 0"><a href="${url}"
-style="display:inline-block;background:#ee0b3f;color:#fff;text-decoration:none;
+style="display:inline-block;background:#B32240;color:#fff;text-decoration:none;
 padding:12px 22px;border-radius:8px;font-weight:600">${label}</a></p>
 <p style="font-size:12px;color:#6d6a74;word-break:break-all">
 ถ้าปุ่มกดไม่ได้ ให้คัดลอกลิงก์นี้ไปวางในเบราว์เซอร์<br>${url}</p>`;
