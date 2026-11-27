@@ -201,7 +201,16 @@
     return '#/' + parts.join('/');
   }
 
+  /* กลับจากหน้าล็อกอิน Microsoft ผลจะมาใน hash (#code=...&state=...)
+   * ต้องปล่อยไว้ให้ MSAL อ่านก่อน ถ้าเขียนทับเป็น #/home การล็อกอินจะหายเงียบ
+   * MSAL ล้าง hash เองเมื่ออ่านเสร็จ จากนั้นค่อยกลับมาตั้งเส้นทางตามปกติ */
+  function authResponseInHash() {
+    var h = global.location.hash || '';
+    return /^#\/?(?:.*&)?(?:code|error)=/.test(h) && h.indexOf('state=') !== -1;
+  }
+
   function syncHash() {
+    if (authResponseInHash()) return;
     var want = buildHash();
     if (global.location.hash === want) return;
     state.suppressHash = true;
@@ -213,6 +222,7 @@
    * เดิม #/task/... อ่านได้เฉพาะตอนเปิดแอปครั้งแรก คนที่เปิดแอปค้างไว้แล้ววางลิงก์ลงช่องที่อยู่
    * จะไม่เกิดอะไรขึ้นเลย เพราะตัวรับ hashchange ไม่รู้จักรูปแบบนี้ */
   function readHash() {
+    if (authResponseInHash()) return null;
     var raw = (global.location.hash || '').replace(/^#\/?/, '');
     if (!raw) return null;
     var seg = raw.split('/').filter(function (s) { return s !== ''; });
@@ -12619,6 +12629,10 @@
 
     global.OrbitAuth.init().then(function (signedIn) {
       gate.checking = false;
+      // MSAL อ่านแล้วแต่ไม่ได้ล้าง (เช่น state ไม่ตรง) ล้างเองไม่ให้ค้างจนเปลี่ยนหน้าไม่ได้
+      if (authResponseInHash()) {
+        global.history.replaceState(null, '', global.location.pathname + global.location.search);
+      }
 
       if (!signedIn) {
         if (localOnly()) hideGate();
