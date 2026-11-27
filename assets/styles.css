@@ -4684,7 +4684,7 @@ body.touch-dragging { user-select: none; -webkit-user-select: none; }
 /* ---------- แถบซ้ายสองชั้นแบบ Asana ----------
  * ชั้นนอก (rail) ไอคอนหมวดใหญ่ · ชั้นใน (panel) รายการของหมวดที่เลือก
  * ซ่อนแถบ (Tab+O) บนจอกว้างเหลือชั้นนอกไว้ กดไอคอนหมวดไหนก็กางกลับมา */
-:root { --rail-w: 68px; }
+:root { --rail-w: 76px; }   /* กว้างพอให้ "Knowledge" ไม่ถูกตัดแม้ตั้งตัวอักษรขั้นต่ำในเบราว์เซอร์ไว้ใหญ่ */
 .sidebar {
   width: calc(var(--rail-w) + var(--sidebar-w)); flex: 0 0 calc(var(--rail-w) + var(--sidebar-w));
   flex-direction: row; overflow: hidden; padding-bottom: 0;
@@ -4698,7 +4698,7 @@ body.touch-dragging { user-select: none; -webkit-user-select: none; }
 .sb-rail-brand { margin-bottom: 12px; padding: 4px; border-radius: 9px; line-height: 0; }
 .sb-rail-brand:hover { background: var(--sidebar-hl); }
 .sb-rail-btn {
-  width: 62px; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  width: 72px; display: flex; flex-direction: column; align-items: center; gap: 3px;
   padding: 4px 0 6px; color: var(--sidebar-dim); font-size: 10.5px; line-height: 1.2;
 }
 .sb-rail-ic {
@@ -4709,7 +4709,7 @@ body.touch-dragging { user-select: none; -webkit-user-select: none; }
 .sb-rail-btn:hover .sb-rail-ic { background: var(--sidebar-hl); }
 .sb-rail-btn.on { color: var(--sidebar-on); font-weight: 600; }
 .sb-rail-btn.on .sb-rail-ic { background: var(--sidebar-hl); box-shadow: inset 0 0 0 1px var(--sidebar-line); }
-.sb-rail-lbl { max-width: 62px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-rail-lbl { max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sb-rail-dot {
   position: absolute; top: 4px; right: 6px; width: 8px; height: 8px; border-radius: 50%;
   background: var(--danger); box-shadow: 0 0 0 2px var(--sidebar);
@@ -4753,3 +4753,45 @@ body.touch-dragging { user-select: none; -webkit-user-select: none; }
 .upd-go:disabled { opacity: .7; }
 .upd-x { color: var(--sidebar-dim); width: 26px; height: 26px; border-radius: 50%; font-size: 16px; line-height: 1; }
 .upd-x:hover { background: var(--sidebar-hl); color: var(--sidebar-on); }
+
+/* ---------- หน้าโปรเจกต์ทั้งหมด: สลับการ์ด/รายการ ---------- */
+.pjx-layout { margin-left: auto; }
+.pjx-layout button { display: inline-flex; align-items: center; gap: 4px; }
+.pjx-layout + .btn { margin-left: 4px; }
+.pjx-table {
+  border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--bg-raise); overflow: hidden;
+}
+.pjx-tr {
+  display: grid; align-items: center; gap: 14px; width: 100%; text-align: left;
+  grid-template-columns: minmax(220px, 2.4fr) minmax(150px, 1.3fr) minmax(130px, 1.1fr) 92px minmax(120px, 1fr) 96px;
+  padding: 10px 16px; border-top: 1px solid var(--line); font-size: 13px; color: var(--fg);
+}
+.pjx-tr:first-child { border-top: 0; }
+button.pjx-tr:hover { background: var(--bg-sunk); }
+.pjx-th {
+  font-size: 11.5px; font-weight: 600; color: var(--fg-soft); padding-top: 8px; padding-bottom: 8px;
+  background: var(--bg-sunk); text-transform: none;
+}
+.pjx-tr > span { min-width: 0; }
+.pjx-tr .c-name { display: flex; align-items: center; gap: 10px; }
+.pjx-tr .c-name .lockmark { color: var(--fg-faint); }
+.pjx-tr .nm { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+.pjx-tr .nm b, .pjx-tr .nm em { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pjx-tr .nm b { font-weight: 600; font-size: 13.5px; }
+.pjx-tr .nm em { font-style: normal; font-size: 12px; color: var(--fg-soft); margin-top: 1px; }
+.pjx-tr .c-st { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pjx-tr .c-due { font-variant-numeric: tabular-nums; color: var(--fg-soft); }
+.pjx-tr .c-due.late { color: var(--danger); font-weight: 600; }
+.pjx-tr .c-owner { display: flex; align-items: center; gap: 7px; }
+.pjx-tr .c-owner .on { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 1100px) {
+  .pjx-tr { grid-template-columns: minmax(200px, 2fr) minmax(140px, 1.2fr) minmax(120px, 1fr) 96px; }
+  .pjx-tr .c-due, .pjx-tr .c-owner { display: none; }
+}
+@media (max-width: 700px) {
+  .pjx-tr { grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 10px 12px; }
+  .pjx-tr .c-prog, .pjx-tr .c-ppl, .pjx-tr .c-due, .pjx-tr .c-owner { display: none; }
+  .pjx-tr .c-st { justify-content: flex-end; }
+  .pjx-head b { white-space: nowrap; }
+  .pjx-head .n { display: none; }
+}

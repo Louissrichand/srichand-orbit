@@ -1941,9 +1941,19 @@
    */
   function projectsView() {
     var all = S.visibleProjects();
+    /* การ์ดดูภาพรวมสวย แต่พอโปรเจกต์เยอะจะต้องเลื่อนยาว
+     * แบบรายการอ่านเทียบกันได้ทีละแถว เหมือนหน้า Browse projects ของ Asana
+     * จำแบบที่เลือกไว้กับผู้ใช้แต่ละคน */
+    var layout = S.pref('projectsLayout') === 'list' ? 'list' : 'grid';
     var h = '<div class="pjx">';
     h += '<div class="pjx-head">' + I('grid', 17) + '<b>' + L('โปรเจกต์ทั้งหมด') + '</b>' +
       '<span class="n">' + L('{n} โปรเจกต์', { n: all.length }) + '</span>' +
+      '<span class="segmented sm pjx-layout" role="group" aria-label="' + esc(L('มุมมอง')) + '">' +
+        '<button data-act="pjx-layout" data-v="grid" class="' + (layout === 'grid' ? 'on' : '') + '" title="' +
+          esc(L('แสดงเป็นการ์ด')) + '" aria-pressed="' + (layout === 'grid') + '">' + I('grid', 13) + '<span class="hide-sm"> ' + L('การ์ด') + '</span></button>' +
+        '<button data-act="pjx-layout" data-v="list" class="' + (layout === 'list' ? 'on' : '') + '" title="' +
+          esc(L('แสดงเป็นรายการ')) + '" aria-pressed="' + (layout === 'list') + '">' + I('rows', 13) + '<span class="hide-sm"> ' + L('รายการ') + '</span></button>' +
+      '</span>' +
       (S.can('structure') ? '<button class="btn btn-sm btn-primary" data-act="new-project">' +
         I('plus', 13) + ' ' + L('สร้างโปรเจกต์ใหม่') + '</button>' : '') + '</div>';
 
@@ -1952,32 +1962,69 @@
       return h + '</div>';
     }
 
+    function statusPill(p) {
+      var st = p.status ? projectState(p.status.state) : null;
+      return st ? '<span class="status-pill" style="background:' + st.color + '22;color:' + st.color +
+        '"><i style="background:' + st.color + '"></i>' + esc(L(st.label)) + '</span>'
+        : '<span class="pf-none">' + L('ยังไม่รายงาน') + '</span>';
+    }
+    function progress(p, s) {
+      return '<div class="pjx-prog"><span class="track"><span class="fill" style="width:' +
+        (s.total ? Math.round(s.done / s.total * 100) : 0) + '%;background:' + esc(p.color) +
+        '"></span></span><span class="v">' + s.done + '/' + s.total + '</span></div>';
+    }
+    function people(ppl, max) {
+      if (!ppl.length) return '';
+      var out = '<div class="pjx-ppl">';
+      ppl.slice(0, max).forEach(function (m) { out += avatar(m.user, 'sm'); });
+      if (ppl.length > max) out += '<span class="tb-more">+' + (ppl.length - max) + '</span>';
+      return out + '</div>';
+    }
+    function star(p) {
+      return S.isStarred(p.id) ? '<span class="pjx-star">' + global.Icons.iconFilled('star', 14) + '</span>' : '';
+    }
+
+    if (layout === 'list') {
+      h += '<div class="pjx-table" role="table">';
+      h += '<div class="pjx-tr pjx-th" role="row">' +
+        '<span role="columnheader">' + L('ชื่อ') + '</span>' +
+        '<span role="columnheader">' + L('สถานะ') + '</span>' +
+        '<span role="columnheader" class="c-prog">' + L('ความคืบหน้า') + '</span>' +
+        '<span role="columnheader" class="c-due">' + L('กำหนดส่ง') + '</span>' +
+        '<span role="columnheader" class="c-owner">' + L('เจ้าของ') + '</span>' +
+        '<span role="columnheader" class="c-ppl">' + L('สมาชิก') + '</span></div>';
+      var td = S.today();
+      all.forEach(function (p) {
+        var s = S.projectStats(p.id);
+        var owner = p.owner ? S.user(p.owner) : null;
+        var late = p.dueOn && p.dueOn < td && s.done < s.total;
+        h += '<button class="pjx-tr" role="row" data-act="go" data-route="project" data-id="' + esc(p.id) + '">' +
+          '<span class="c-name" role="cell"><span class="hproj-ic" style="background:' + esc(p.color) + '22">' + esc(p.icon) + '</span>' +
+            '<span class="nm"><b>' + esc(p.name) + '</b>' + (p.description ? '<em>' + esc(p.description) + '</em>' : '') + '</span>' +
+            (p.visibility === 'private' ? '<span class="lockmark" title="' + L('โปรเจกต์ปิด') + '">' + I('shield', 12) + '</span>' : '') +
+            star(p) + '</span>' +
+          '<span role="cell" class="c-st">' + statusPill(p) +
+            (s.overdue ? '<span class="chip due-over">' + esc(L('{n} งานเลยกำหนด', { n: s.overdue })) + '</span>' : '') + '</span>' +
+          '<span role="cell" class="c-prog">' + progress(p, s) + '</span>' +
+          '<span role="cell" class="c-due' + (late ? ' late' : '') + '">' + (p.dueOn ? esc(fmtDate(p.dueOn)) : '<span class="pf-none">—</span>') + '</span>' +
+          '<span role="cell" class="c-owner">' + (owner ? avatar(owner, 'sm') + '<span class="on">' + esc(owner.name) + '</span>' : '<span class="pf-none">—</span>') + '</span>' +
+          '<span role="cell" class="c-ppl">' + people(projectPeople(p.id), 4) + '</span>' +
+          '</button>';
+      });
+      return h + '</div></div>';
+    }
+
     h += '<div class="pjx-grid">';
     all.forEach(function (p) {
       var s = S.projectStats(p.id);
-      var st = p.status ? projectState(p.status.state) : null;
-      var ppl = projectPeople(p.id);
       h += '<button class="pjx-card" data-act="go" data-route="project" data-id="' + esc(p.id) + '">';
       h += '<div class="pjx-top"><span class="hproj-ic" style="background:' + esc(p.color) +
         '22">' + esc(p.icon) + '</span><span class="grow"><b>' + esc(p.name) + '</b>' +
-        (p.description ? '<em>' + esc(p.description) + '</em>' : '') + '</span>' +
-        (S.isStarred(p.id) ? '<span class="pjx-star">' +
-          global.Icons.iconFilled('star', 14) + '</span>' : '') + '</div>';
-      h += '<div class="pjx-meta">' +
-        (st ? '<span class="status-pill" style="background:' + st.color + '22;color:' + st.color +
-          '"><i style="background:' + st.color + '"></i>' + esc(L(st.label)) + '</span>'
-            : '<span class="pf-none">' + L('ยังไม่รายงาน') + '</span>') +
+        (p.description ? '<em>' + esc(p.description) + '</em>' : '') + '</span>' + star(p) + '</div>';
+      h += '<div class="pjx-meta">' + statusPill(p) +
         (s.overdue ? '<span class="chip due-over">' +
           esc(L('{n} งานเลยกำหนด', { n: s.overdue })) + '</span>' : '') + '</div>';
-      h += '<div class="pjx-prog"><span class="track"><span class="fill" style="width:' +
-        (s.total ? Math.round(s.done / s.total * 100) : 0) + '%;background:' + esc(p.color) +
-        '"></span></span><span class="v">' + s.done + '/' + s.total + '</span></div>';
-      if (ppl.length) {
-        h += '<div class="pjx-ppl">';
-        ppl.slice(0, 5).forEach(function (m) { h += avatar(m.user, 'sm'); });
-        if (ppl.length > 5) h += '<span class="tb-more">+' + (ppl.length - 5) + '</span>';
-        h += '</div>';
-      }
+      h += progress(p, s) + people(projectPeople(p.id), 5);
       h += '</button>';
     });
     return h + '</div></div>';
