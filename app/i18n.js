@@ -12,6 +12,9 @@
     /* --- ทั่วไป --- */
     /* แถบซ้ายสองชั้น — ชื่อหมวด */
     'กลยุทธ์': 'Strategy', 'ความรู้': 'Knowledge', 'คนและทีม': 'People', 'ซ่อนแถบเมนู': 'Hide sidebar',
+    /* แจ้งเวอร์ชันใหม่ */
+    'มี Orbit เวอร์ชันใหม่': 'A new version of Orbit is available', 'รีเฟรช': 'Refresh', 'ไว้ทีหลัง': 'Later',
+    'ยังบันทึกงานไม่สำเร็จ ลองใหม่อีกครั้ง': 'Your changes aren’t saved yet. Try again.',
     'ฉัน': 'Me', 'บันทึก': 'Save', 'ยกเลิก': 'Cancel', 'ปิด': 'Close',
     'ลบ': 'Delete', 'เพิ่ม': 'Add', 'ใช้': 'Use', 'ส่ง': 'Send',
     'สร้าง': 'Create', 'ย้อนกลับ': 'Undo', 'ทั้งหมด': 'All', 'ทุกคน': 'Everyone',
