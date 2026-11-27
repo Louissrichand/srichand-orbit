@@ -12,8 +12,8 @@ $base = Split-Path -Parent $MyInvocation.MyCommand.Path
 function ReadUtf8($p) { [System.IO.File]::ReadAllText($p, [System.Text.Encoding]::UTF8) }
 
 # ลำดับต้องตรงกับ index.html — ตัวหลังเรียกใช้ตัวหน้า
-$files = @('config.js', 'i18n.js', 'icons.js', 'auth.js', 'store.js',
-           'cloud.js', 'sync.js', 'render.js', 'gantt.js', 'main.js')
+$files = @('config.js', 'i18n.js', 'icons.js', 'auth.js', 'store.js', 'files.js',
+           'cloud.js', 'sync.js', 'richtext.js', 'charts.js', 'render.js', 'render4b.js', 'gantt.js', 'touch.js', 'pwa.js', 'ui4b.js', 'ui4b2.js', 'main.js')
 
 # ฝังไฟล์ฟอนต์ลงใน CSS เลย เพราะไฟล์เดียวจบต้องใช้ได้โดยไม่ต้องแนบโฟลเดอร์ fonts ไปด้วย
 function InlineFonts($css, $base) {
@@ -39,6 +39,14 @@ $css  = InlineFonts $css $base
 $html = $html.Replace(
   '<link rel="stylesheet" href="assets/styles.css">',
   "<style>`n$css`n</style>")
+
+# 4b — ไฟล์เดียวจบไม่มี manifest / sw.js / ไอคอนข้าง ๆ: ตัดลิงก์ออก และบอก pwa.js ว่าเป็นไฟล์รวม (ไม่ลงทะเบียน service worker)
+foreach ($l in @('<link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials">',
+                 '<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">')) {
+  if ($html.IndexOf($l) -lt 0) { throw "ไม่พบ $l ใน index.html" }
+  $html = $html.Replace($l, '')
+}
+$html = $html.Replace('<script src="app/config.js"></script>', "<script>window.ORBIT_BUILD = 'standalone';</script>`n<script src=`"app/config.js`"></script>")
 
 foreach ($f in $files) {
   $src = ReadUtf8 (Join-Path $base "app/$f")

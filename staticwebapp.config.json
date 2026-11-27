@@ -30,6 +30,9 @@
     { "route": "/api/roles", "allowedRoles": ["anonymous"], "methods": ["POST"] },
     { "route": "/api/admin/*", "allowedRoles": ["orbit-admin"] },
     { "route": "/api/*", "allowedRoles": ["authenticated"] },
+    { "route": "/sw.js", "allowedRoles": ["authenticated"], "headers": { "Cache-Control": "no-cache, no-store, must-revalidate", "Service-Worker-Allowed": "/" } },
+    { "route": "/manifest.webmanifest", "allowedRoles": ["authenticated"], "headers": { "Cache-Control": "no-cache" } },
+    { "route": "/app/*", "allowedRoles": ["authenticated"], "headers": { "Cache-Control": "no-cache" } },
     { "route": "/*", "allowedRoles": ["authenticated"] }
   ],
 
@@ -40,7 +43,7 @@
 
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/app/*", "/assets/*", "/db/*", "/docs/*", "*.{png,jpg,svg,ico,css,js,json,md,sql,ps1}"]
+    "exclude": ["/app/*", "/assets/*", "/db/*", "/docs/*", "/dev/*", "/sw.js", "/manifest.webmanifest", "*.{png,jpg,svg,ico,css,js,json,md,sql,ps1,webmanifest}"]
   },
 
   "globalHeaders": {
@@ -48,6 +51,8 @@
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "strict-origin-when-cross-origin"
   },
+
+  "mimeTypes": { ".webmanifest": "application/manifest+json" },
 
   "platform": { "apiRuntime": "node:20" }
 }

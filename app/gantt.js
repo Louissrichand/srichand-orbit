@@ -157,6 +157,7 @@
     var cols = view.gCols;
     var colorBy = view.gColorBy || 'theme';
     var showBase = !!view.gShowBaseline && !!(p && p.baseline);
+    var crit = view.critical ? S.criticalPath(projectId) : null;     // 3c — เส้นทางวิกฤต
     var groups = S.viewGroups(projectId, view);
     collapsed = collapsed || {};
 
@@ -372,13 +373,13 @@
       }
 
       if (t.type === 'milestone') {
-        h += '<div class="g-ms' + dim + '" data-act="open-task" data-id="' + esc(t.id) +
+        h += '<div class="g-ms' + dim + (crit && crit.ids[t.id] ? ' crit' : '') + '" data-act="open-task" data-id="' + esc(t.id) +
           '" data-tid="' + esc(t.id) + '" data-role="move" title="' + esc(t.name) +
           '" style="left:' + (xAt(s[1]) + W / 2 - 8) + 'px;top:' + (top + 9) +
           'px;background:' + color + '"></div>';
       } else {
         var bx = xAt(s[0]), bw = Math.max(xEnd(s[1]) - bx, 6);
-        h += '<div class="g-bar' + (t.completed ? ' done' : '') + (blocked ? ' blocked' : '') + dim +
+        h += '<div class="g-bar' + (t.completed ? ' done' : '') + (blocked ? ' blocked' : '') + dim + (crit && crit.ids[t.id] ? ' crit' : '') +
           '" data-act="open-task" data-id="' + esc(t.id) + '" data-tid="' + esc(t.id) +
           '" data-role="move" title="' + esc(t.name) +
           '" style="left:' + bx + 'px;width:' + bw + 'px;top:' + (top + 8) +
@@ -439,7 +440,8 @@
         if (x1 === null || x2 === null) return;
         var y1 = rowOf[b.id] * G_ROW + G_ROW / 2;
         var d = elbow(x1, y1, x2, ys, x2 < x1);
-        paths += '<path d="' + d + '" class="g-dep-line" marker-end="url(#gArrow)"/>';
+        var ce = crit && crit.edges[b.id + '>' + t.id];
+        paths += '<path d="' + d + '" class="g-dep-line' + (ce ? ' crit' : '') + '" marker-end="url(#' + (ce ? 'gArrowC' : 'gArrow') + ')"/>';
         hits += '<path d="' + d + '" class="g-dep-hit" data-act="g-del-dep" data-id="' +
           esc(t.id) + '" data-blocker="' + esc(b.id) + '"><title>' +
           esc(b.name + ' → ' + t.name + ' (' + type + L(') — คลิกเพื่อลบ')) + '</title></path>';
@@ -448,7 +450,8 @@
 
     h += '<svg class="g-dep" width="' + chartW + '" height="' + (rows.length * G_ROW) + '">' +
       '<defs><marker id="gArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" ' +
-      'orient="auto"><path d="M0 0.5 L8 4 L0 7.5 z" fill="var(--fg-soft)"/></marker></defs>' +
+      'orient="auto"><path d="M0 0.5 L8 4 L0 7.5 z" fill="var(--fg-soft)"/></marker>' +
+      '<marker id="gArrowC" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0.5 L8 4 L0 7.5 z" fill="var(--crit)"/></marker></defs>' +
       paths + hits + '</svg>';
 
     var tx = xAt(td) + W / 2;
