@@ -65,6 +65,8 @@
 
   function fmtDate(isoStr) {
     if (!isoStr) return '';
+    /* Sprint 1C — ได้เวลาเต็ม (2026-11-27T03:10:00Z) มาก็ใช้แค่ส่วนวันที่ ไม่งั้นเทียบ "วันนี้" ไม่ติด */
+    if (/^\d{4}-\d\d-\d\dT/.test(String(isoStr))) isoStr = String(isoStr).slice(0, 10);
     var p = String(isoStr).split('-');
     if (p.length !== 3) return String(isoStr);
     var t = S.today();
@@ -72,8 +74,42 @@
     if (isoStr === S.addDays(t, 1)) return L('พรุ่งนี้');
     if (isoStr === S.addDays(t, -1)) return L('เมื่อวาน');
     var s = parseInt(p[2], 10) + ' ' + MON()[parseInt(p[1], 10) - 1];
-    if (p[0] !== t.split('-')[0]) s += ' ' + global.I18N.yearShort(parseInt(p[0], 10));
+    if (p[0] !== t.split('-')[0]) s += ' ' + yearTag(parseInt(p[0], 10));
     return s;
+  }
+
+  /* Sprint 1C — ปีต่อท้ายวันที่ใช้รูปเดียวทั้งแอป
+   * ไทย: พ.ศ. สองหลัก "4 ธ.ค. 69" ตามที่คนไทยเขียนกันจริง (แบบเต็ม "4 ธันวาคม 2569" อยู่ใน fmtExact)
+   * อังกฤษ: ปีเต็ม "30 Jun 2027" เพราะ "30 Jun 27" อ่านเป็นวันที่ 27 ได้
+   * ปีที่ห่างจากปีนี้เกิน 50 ปี (ข้อมูลที่พิมพ์ผิดมาก่อน เช่นปี ค.ศ. 2569) แสดงเต็ม
+   * ไม่งั้น พ.ศ. 3112 จะถูกตัดเหลือ "12" แล้วดูเหมือนวันที่ปกติจนไม่มีใครเห็นว่าผิด */
+  function yearTag(y) {
+    if (global.I18N.getLang() === 'en') return String(y);
+    var cy = new Date().getFullYear();
+    return Math.abs(y - cy) <= 50 ? global.I18N.yearShort(y) : String(global.I18N.year(y));
+  }
+
+  /* Sprint 1C — วันที่ดิบ 2026-11-28 ในข้อความที่คนอ่าน (กล่องข้อความ บันทึก) แปลงตามภาษาคนอ่าน
+   * ค่าแทนที่เก็บเป็นรูปมาตรฐานเพื่อเทียบได้ จัดรูปตอนแสดงเท่านั้น (สลับภาษาแล้วเปลี่ยนตาม) */
+  function dateParams(p) {
+    if (!p) return p;
+    var out = {};
+    Object.keys(p).forEach(function (k) {
+      var v = p[k];
+      out[k] = (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) ? fmtDate(v) : v;
+    });
+    return out;
+  }
+  /** ข้อความสำเร็จรูปรุ่นเก่า (ไม่มีคีย์) ที่มีวันที่ดิบฝังอยู่ */
+  function localizeIso(s) {
+    return String(s == null ? '' : s).replace(/(^|[^\d-])(\d{4}-\d{2}-\d{2})(?![\dT])/g, function (m, pre, d) {
+      return pre + fmtDate(d);
+    });
+  }
+  /** ข้อความของการแจ้งเตือน (กล่องข้อความ และแจ้งเตือนของเบราว์เซอร์) วันที่ตามภาษาคนอ่าน */
+  function notifText(n) {
+    return n.key ? (n.actorName ? n.actorName + ' ' : '') + L(n.key, dateParams(n.params) || undefined)
+                 : localizeIso(n.text);
   }
 
   function dueClass(isoStr, completed) {
@@ -97,6 +133,9 @@
    * ซึ่งเป็นสิ่งที่คนย้อนอ่านเธรดต้องการรู้จริง ๆ
    */
   function fmtWhen(isoTs) {
+    /* Sprint 1C — ค่าที่มีแต่วันที่ (สถานะโปรเจกต์รุ่นเก่า) อย่าคิดเป็น "5 ชม.ที่แล้ว"
+     * new Date('2026-11-27') คือเที่ยงคืนตามเวลา UTC = 07:00 ที่ไทย ตัวเลขชั่วโมงจึงมั่วทุกครั้ง */
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(isoTs || ''))) return fmtDate(isoTs);
     var d = new Date(isoTs);
     if (isNaN(d.getTime())) return '';
     var mins = Math.round((Date.now() - d.getTime()) / 60000);
@@ -108,10 +147,12 @@
 
   /** วันและเวลาแบบเต็มไม่กำกวม ใช้เป็น tooltip ของเวลาแบบย่อ */
   function fmtExact(isoTs) {
-    var d = new Date(isoTs);
+    /* Sprint 1C — มีแต่วันที่ = ไม่มีเวลาให้บอก (อย่าเดาเป็น 07:00 จากเที่ยงคืน UTC) */
+    var dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(String(isoTs || ''));
+    var d = new Date(dateOnly ? isoTs + 'T00:00:00' : isoTs);
     if (isNaN(d.getTime())) return '';
     return d.getDate() + ' ' + MONF()[d.getMonth()] + ' ' +
-           global.I18N.year(d.getFullYear()) + ' ' + fmtTime(d);
+           global.I18N.year(d.getFullYear()) + (dateOnly ? '' : ' ' + fmtTime(d));
   }
 
   /** ข้อความบันทึกความเคลื่อนไหว แปลตอนแสดง
@@ -120,16 +161,8 @@
    * แต่คนอ่านต้องการ "3 ก.ย." จึงจัดรูปตอนแสดง ไม่ใช่ตอนเก็บ
    * ถ้าจัดรูปตอนเก็บ พอสลับภาษาแล้วบันทึกเก่าจะยังเป็นภาษาที่เขียนไว้ตอนนั้น */
   function storyText(s) {
-    var p = s.params;
-    if (p) {
-      var out = {};
-      Object.keys(p).forEach(function (k) {
-        var v = p[k];
-        out[k] = (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) ? fmtDate(v) : v;
-      });
-      p = out;
-    }
-    return L(s.text, p || undefined);
+    var p = dateParams(s.params);
+    return p ? L(s.text, p) : localizeIso(L(s.text));
   }
 
   /** ขนาดไฟล์แบบอ่านง่าย */
@@ -1220,7 +1253,14 @@
 
     h += '</div>';
 
-    if (!total) {
+    if (!total && !S.tasksInProject(projectId).length) {
+      /* Sprint 1C — โปรเจกต์ใหม่ที่ยังไม่มีงานสักชิ้น ไม่ใช่ "ไม่มีงานตรงกับตัวกรอง"
+       * ทั้งที่ไม่ได้ตั้งตัวกรองอะไรเลย คนเปิดมาครั้งแรกจะนึกว่างานหายหรือมีอะไรซ่อนอยู่ */
+      h += '<div class="empty"><div class="big">' + I('checkCircle', 32) + '</div>' +
+        L('ยังไม่มีงาน — เริ่มเพิ่มงานได้เลย') +
+        (S.can('write') && S.canInProject(projectId, 'edit') ? '<div style="margin-top:12px"><button class="btn btn-primary" data-act="quick-add">' +
+        L('+ เพิ่มงาน') + '</button></div>' : '') + '</div>';
+    } else if (!total) {
       h += '<div class="empty"><div class="big">' + I('search', 32) + '</div>' +
         L('ไม่มีงานที่ตรงกับตัวกรอง') +
         (S.filterCount(view) ? '<div style="margin-top:12px"><button class="btn" data-act="flt-clear">' +
@@ -1650,6 +1690,9 @@
       L('เลยกำหนด') + '</em></div>' +
       '</div>';
     h += bar(L('ความคืบหน้า'), s.done, s.total || 1, p.color);
+    if (p.startOn) {        // Sprint 1C — วันเริ่มโปรเจกต์ (เช่นวันที่เลือกตอนสร้างจากเทมเพลต)
+      h += '<div class="ovw-kv"><span>' + L('วันเริ่มโปรเจกต์') + '</span><b>' + esc(fmtDate(p.startOn)) + '</b></div>';
+    }
     if (p.dueOn) {
       h += '<div class="ovw-kv"><span>' + L('กำหนดส่งของโปรเจกต์') + '</span><b>' +
         esc(fmtDate(p.dueOn)) + '</b></div>';
@@ -2045,7 +2088,7 @@
         '"></span><div><div style="font-weight:600;color:' + st.color + '">' + esc(L(st.label)) +
         '</div><div style="margin-top:4px">' + esc(p.status.text) + '</div>' +
         '<div style="font-size:12px;color:var(--fg-faint);margin-top:6px">' +
-        esc(by ? by.name : '?') + ' · ' + fmtDate(p.status.at) + '</div></div></div>';
+        esc(by ? by.name : '?') + ' · ' + esc(fmtWhen(S.statusAt(p))) + '</div></div></div>';
 
       /* ประวัติย้อนหลัง ตอบคำถามที่ถามกันบ่อยที่สุดคือ "เปลี่ยนเป็นสีแดงตั้งแต่เมื่อไร"
        * ตัดรายการล่าสุดออกเพราะแสดงเต็ม ๆ อยู่ข้างบนแล้ว */
@@ -2146,8 +2189,8 @@
     h += '<div class="pf-kpis">';
     h += '<div class="stat"><div class="k">' + L('โปรเจกต์') + '</div><div class="v">' + st.projects + '</div></div>';
     h += '<div class="stat"><div class="k">' + L('ความคืบหน้ารวม') + '</div><div class="v">' + st.percent + '%</div></div>';
-    h += '<div class="stat' + (st.atRisk ? ' warn' : '') + '"><div class="k">' + L('ต้องจับตา') +
-      '</div><div class="v">' + st.atRisk + '</div></div>';
+    h += '<div class="stat' + (st.atRisk ? ' warn' : '') + '" title="' + esc(L('โปรเจกต์ที่สถานะเสี่ยง/ไม่ตามแผน หรือมีงานเลยกำหนด')) +
+      '"><div class="k">' + L('ต้องจับตา') + '</div><div class="v">' + st.atRisk + '</div></div>';
     h += '<div class="stat' + (st.overdue ? ' bad' : '') + '"><div class="k">' + L('งานเลยกำหนด') +
       '</div><div class="v">' + st.overdue + '</div></div>';
     h += '<div class="stat"><div class="k">' + L('งานทั้งหมด') + '</div><div class="v">' + st.total + '</div></div>';
@@ -2342,11 +2385,14 @@
     h += '</div></div>';
     h += '<div class="pfp-side"><div class="ovw-card"><h3>' + L('สถานะล่าสุดของโปรเจกต์') + '</h3>';
     if (!list.length) h += '<div class="ovw-empty">' + L('ยังไม่มีโปรเจกต์') + '</div>';
-    list.slice().sort(function (a, b) { return String((b.status || {}).at || '') < String((a.status || {}).at || '') ? -1 : 1; })
+    /* Sprint 1C — เวลาจากรายการล่าสุดในประวัติ (เวลาเต็ม) ไม่ใช่ status.at รุ่นเก่าที่เก็บแค่วันที่
+     * ซึ่งทำให้รายงานเมื่อ 10 นาทีก่อนขึ้นว่า "5 ชม.ที่แล้ว" ขณะที่หน้าแรกบอก "4 นาทีที่แล้ว" */
+    list.slice().sort(function (a, b) { return String(S.statusAt(b) || '') < String(S.statusAt(a) || '') ? -1 : 1; })
       .forEach(function (p) {
+        var sAt = p.status ? S.statusAt(p) : null;
         h += '<div class="pf-risk" data-act="go" data-route="project" data-id="' + esc(p.id) + '"><span class="em">' + esc(p.icon) + '</span>' +
           '<span class="grow"><b>' + esc(p.name) + '</b>' + (p.status && p.status.text ? '<em>' + esc(S.plainText(p.status.text)) + '</em>' : '') +
-          '<em>' + (p.status ? esc(fmtWhen(p.status.at)) : '') + '</em></span>' + pfStatePill(p.status && p.status.state) + '</div>';
+          '<em' + (sAt ? ' title="' + esc(fmtExact(sAt)) + '"' : '') + '>' + (sAt ? esc(fmtWhen(sAt)) : '') + '</em></span>' + pfStatePill(p.status && p.status.state) + '</div>';
       });
     h += '</div></div></div>';
     return h;
@@ -2448,10 +2494,8 @@
     h += '<div class="bar-note">' + L('แท่ง = สัดส่วนงานที่เสร็จ เรียงจากช้าที่สุดขึ้นก่อน') + '</div></div>';
 
     h += '<div class="panel"><h3>' + L('ต้องจับตา') + '</h3>';
-    var risky = list.filter(function (p) {
-      var s = S.projectStats(p.id);
-      return (p.status && (p.status.state === 'at_risk' || p.status.state === 'off_track')) || s.overdue > 0;
-    });
+    /* Sprint 1C — นิยามเดียวกับตัวเลข "ต้องจับตา" บนแถบสรุป (S.needsWatch) */
+    var risky = list.filter(function (p) { return S.needsWatch(p); });
     if (!risky.length) h += '<div class="pf-none">' + L('ยังไม่มีโปรเจกต์ที่น่าห่วง') + '</div>';
     risky.forEach(function (p) {
       var s = S.projectStats(p.id);
@@ -3294,6 +3338,11 @@
     }
     (showAll ? projs : projs.slice(0, 7)).forEach(function (p) {
       var dn = S.dueSoonCount(p.id);
+      /* Sprint 1C — เลยกำหนดแยกจากใกล้ครบกำหนด (สีแดง) เดิมนับรวมกันว่า "ใกล้ครบกำหนด" ทั้งที่เลยไปแล้ว */
+      var dov = S.overdueCount(p.id);
+      var dueTxt = [];
+      if (dov) dueTxt.push('<span class="hproj-late">' + esc(L('เลยกำหนด {n}', { n: dov })) + '</span>');
+      if (dn) dueTxt.push(esc(L('ใกล้ครบกำหนด {n}', { n: dn })));
       var ps = p.status ? projectState(p.status.state) : null;
       pb += '<button class="hproj" data-act="go" data-route="project" data-id="' + esc(p.id) + '">' +
         '<span class="hproj-ic" style="background:' + esc(p.color) + '22">' + esc(p.icon) + '</span>' +
@@ -3302,7 +3351,7 @@
           ? '<span class="lockmark" title="' + L('โปรเจกต์ปิด') + '">' + I('shield', 11) + '</span>' : '') +
         '</span><span class="hproj-sub">' +
         (ps ? '<i class="st-dot" style="background:' + esc(ps.color) + '" title="' + esc(L(ps.label)) + '"></i>' : '') +
-        (dn ? esc(L('งานใกล้ครบกำหนด {n} งาน', { n: dn })) : L('ไม่มีงานใกล้ครบกำหนด')) +
+        (dueTxt.length ? dueTxt.join(' · ') : L('ไม่มีงานใกล้ครบกำหนด')) +
         '</span></span></button>';
     });
     pb += '</div>';
@@ -3960,7 +4009,7 @@
     h += n.read ? '<span class="nrow-dot"></span>' : '<span class="unread-dot"></span>';
     if (!dense) h += '<span class="nrow-av">' + (actor ? avatar(actor, 'sm')
       : '<span class="nrow-sys">' + I(n.kind === 'due' || n.kind === 'overdue' ? 'calendar' : 'bell', 13) + '</span>') + '</span>';
-    var ntxt = n.key ? (n.actorName ? n.actorName + ' ' : '') + L(n.key, n.params || undefined) : n.text;
+    var ntxt = notifText(n);
     var where = t ? t.name : (np ? np.name : (n.route === 'mytasks' ? L('งานของฉัน')
       : (S.routeLabel(n.route) || L('(งานถูกลบแล้ว)'))));     // 4a — ทีม พอร์ตโฟลิโอ เป้าหมาย
     h += '<div class="body"><div class="txt">' + esc(ntxt) + '</div>';
@@ -5404,7 +5453,7 @@
           I(auditIcon(r.action), 14) + '</span><div>' +
           '<b>' + esc(who ? who.name : '—') + '</b> ' + esc(L(auditText(r.action))) +
           (r.target ? ' <u>' + esc(r.target) + '</u>' : '') +
-          (r.detail ? '<span class="d">' + esc(L(r.detail, r.detailParams || undefined)) + '</span>' : '') +
+          (r.detail ? '<span class="d">' + esc(r.detailParams ? L(r.detail, dateParams(r.detailParams)) : localizeIso(L(r.detail))) + '</span>' : '') +
           '<em title="' + esc(fmtExact(r.at)) + '">' + esc(fmtWhen(r.at)) + '</em></div></li>';
       });
       h += '</ul>';
@@ -5572,7 +5621,10 @@
     var title = w.title ? L(w.title) : L(def ? def[1] : '');
     var h = '<section class="dw' + (w.full ? ' full' : '') + (w.kind === 'number' ? ' num' : '') + '" data-w="' + esc(w.id) + '">' +
       '<header><b class="grow">' + esc(title) + '</b>' +
-      (w.filters.length ? '<span class="dw-flt" title="' + L('มีตัวกรอง') + '">' + I('filter', 12) + w.filters.length + '</span>' : '');
+      /* Sprint 1C — ป้ายตัวกรองเดิมเป็น "▽2" ติดชื่อวิดเจ็ต อ่านแล้วเหมือน "เลยกำหนด 2" ทั้งที่ค่าเป็น 0
+       * เขียนคำว่าตัวกรองกำกับไว้ในกรอบเส้นประจาง ๆ ให้ดูเป็นป้ายตั้งค่า ไม่ใช่ตัวเลขผลลัพธ์ */
+      (w.filters.length ? '<span class="dw-flt" title="' + esc(L('วิดเจ็ตนี้กรองด้วย {n} เงื่อนไข', { n: w.filters.length })) + '">' +
+        I('filter', 11) + '<span>' + esc(L('ตัวกรอง {n}', { n: w.filters.length })) + '</span></span>' : '');
     h += '<button class="btn btn-sm btn-ghost" data-act="dash-menu" data-w="' + esc(w.id) + '" title="' + L('ตัวเลือก') + '">' +
       I('more', 14) + '</button></header>';
     if (w.kind === 'text') {
@@ -5847,6 +5899,7 @@
     accountBlock: accountBlock, accountMenu: accountMenu, gateScreen: gateScreen,
     esc: esc, avatar: avatar, initials: initials,
     fmtDate: fmtDate, fmtWhen: fmtWhen, fmtExact: fmtExact, whenTag: whenTag,
+    yearTag: yearTag, dateParams: dateParams, localizeIso: localizeIso, notifText: notifText,   // Sprint 1C
     prio: prio, taskType: taskType, approvalState: approvalState,
     projectState: projectState, recurLabel: recurLabel,
     MON: MON, MONF: MONF, DOW: DOW, DOWR: DOWR, weekStart: weekStart, YR: YR, ICON: ICON,

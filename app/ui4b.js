@@ -161,6 +161,8 @@
       var to = d.to && d.to !== d.uid ? d.to : null;
       if (cancel || (!d.delta && !to)) { d.bar.style.transform = ''; d.bar.classList.remove('dragging'); return; }
       var t = S.task(d.id), tu = to ? S.user(to) : null;
+      /* Sprint 1C — งานค้างแสดงที่วันนี้ เลื่อน N วันจากตรงนั้น = กำหนดส่งใหม่คือวันนี้ + N */
+      if (d.delta && d.bar.dataset.wlLate) d.delta += parseInt(d.bar.dataset.wlLate, 10) || 0;
       if (S.wlMove(d.id, d.delta, to)) {
         var msg = tu && d.delta ? L('ย้าย “{t}” ให้ {u} และเลื่อน {n} วัน', { t: t.name, u: tu.name, n: d.delta })
           : tu ? L('มอบ “{t}” ให้ {u} แล้ว', { t: t.name, u: tu.name }) : L('เลื่อน “{t}” {n} วัน', { t: t.name, n: d.delta });

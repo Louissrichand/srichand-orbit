@@ -70,7 +70,7 @@
     }
     if (zoom === 'month') {
       var p = c.from.split('-');
-      return '<b>' + esc(R.MON()[parseInt(p[1], 10) - 1]) + '</b><span>' + esc(global.I18N.yearShort(+p[0])) + '</span>';
+      return '<b>' + esc(R.MON()[parseInt(p[1], 10) - 1]) + '</b><span>' + esc(R.yearTag(+p[0])) + '</span>';   // Sprint 1C — ปีรูปเดียวกับทั้งแอป
     }
     return '<b>' + esc(dShort(c.from)) + '</b><span>' + esc(L('สัปดาห์')) + '</span>';
   }
@@ -118,6 +118,7 @@
     if (cfg.measure === 'effort' && cfg.unit !== 'pct') note.push(L('ค่าแรงงานกระจายเท่า ๆ กันบนวันทำงานในช่วงของงาน'));
     if (cfg.measure === 'effort' && cfg.unit === 'pct') note.push(L('ค่า % คือสัดส่วนของวันที่งานนี้ใช้ ทุกวันในช่วงของงาน'));
     h += '<div class="wl-legend"><span><i class="lg-over"></i>' + L('เกินความจุ') + '</span><span><i class="lg-away"></i>' + L('ไม่อยู่') + '</span>' +
+      '<span><b class="wl-late">' + esc(L('ค้าง')) + '</b> ' + esc(L('งานเลยกำหนด นับรวมไว้ในวันนี้')) + '</span>' +     // Sprint 1C
       '<span class="wl-hint">' + L('คลิกชื่อเพื่อดูงาน · ลากแถบงานเพื่อเลื่อนวันหรือมอบให้คนอื่น · คลิกช่องว่างเพื่อสร้างงาน') + '</span></div>';
     if (note.length) h += '<div class="wl-note">' + note.map(esc).join('<br>') + '</div>';
 
@@ -140,6 +141,9 @@
         I(open ? 'chevronDown' : 'chevronRight', 12) + avatar(u, 'sm') + '<span class="grow"><b>' + esc(u.name) + '</b><em>' +
         esc(L('ความจุ {n} {u}', { n: row.cap, u: L(CAP_LABEL[key]) })) + '</em></span>' +
         (row.warn.length ? '<span class="wl-warn" title="' + esc(L('มี {n} งานตรงกับช่วงที่ไม่อยู่', { n: row.warn.length })) + '">' + I('alert', 13) + '</span>' : '') +
+        /* Sprint 1C — งานค้างเลยกำหนดเห็นได้ทันทีที่ชื่อคน (นับรวมไว้ในช่องของวันนี้แล้ว) */
+        (row.late ? '<span class="wl-late" title="' + esc(L('งานเลยกำหนดที่ยังไม่เสร็จ {n} งาน — นับรวมไว้ในวันนี้', { n: row.late })) + '">' +
+          esc(L('ค้าง {n}', { n: row.late })) + '</span>' : '') +
         '</button>';
       row.cells.forEach(function (c, i) {
         var col = d.cols[i];
@@ -183,9 +187,12 @@
         (warn ? '<span class="wl-warn">' + I('alert', 12) + '</span>' : '') + esc(t.name) + '</button>' +
         '<div class="wl-track" data-act="wl-track" data-uid="' + esc(row.uid) + '">' + stripes;
       if (sp) {
-        h += '<div class="wl-tbar' + (warn ? ' warn' : '') + (x.v === null ? ' noval' : '') + (sp.cutL ? ' cut-l' : '') + (sp.cutR ? ' cut-r' : '') +
-          '" data-wl-task="' + esc(t.id) + '" data-uid="' + esc(row.uid) + '" data-act="open-task" data-id="' + esc(t.id) + '" style="left:' + sp.left.toFixed(3) +
-          '%;width:' + sp.width.toFixed(3) + '%;--c:' + esc(wlColor(t)) + '" title="' + esc(t.name + ' · ' + fmtDate(x.s) + (x.e !== x.s ? ' – ' + fmtDate(x.e) : '') +
+        h += '<div class="wl-tbar' + (warn ? ' warn' : '') + (x.late ? ' late' : '') + (x.v === null ? ' noval' : '') + (sp.cutL ? ' cut-l' : '') + (sp.cutR ? ' cut-r' : '') +
+          '" data-wl-task="' + esc(t.id) + '" data-uid="' + esc(row.uid) + '" data-act="open-task" data-id="' + esc(t.id) + '"' +
+          /* Sprint 1C — แถบงานค้างวาดไว้ที่วันนี้ ลากแล้วต้องนับจากวันนี้ ไม่ใช่จากกำหนดส่งเดิม */
+          (x.late ? ' data-wl-late="' + S.daysBetween(t.dueOn, S.today()) + '"' : '') + ' style="left:' + sp.left.toFixed(3) +
+          '%;width:' + sp.width.toFixed(3) + '%;--c:' + esc(wlColor(t)) + '" title="' + esc(t.name + ' · ' +
+          (x.late ? L('เลยกำหนด {d} ยังไม่เสร็จ', { d: fmtDate(t.dueOn) }) : fmtDate(x.s) + (x.e !== x.s ? ' – ' + fmtDate(x.e) : '')) +
           (warn ? ' · ' + L('ตรงกับช่วงที่ไม่อยู่') : '')) + '"><span>' + esc(t.name) + '</span>' + (effTxt ? '<em>' + esc(effTxt) + '</em>' : '') + '</div>';
       }
       h += '</div></div>';

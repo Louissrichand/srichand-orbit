@@ -17,6 +17,43 @@
     'ยังบันทึกงานไม่สำเร็จ ลองใหม่อีกครั้ง': 'Your changes aren’t saved yet. Try again.',
     /* หน้าโปรเจกต์ทั้งหมด — สลับการ์ด/รายการ */
     'การ์ด': 'Cards', 'แสดงเป็นการ์ด': 'Show as cards', 'แสดงเป็นรายการ': 'Show as list',
+    /* Sprint 1C */
+    'แปลงปี พ.ศ. {b} เป็น ค.ศ. {g} ให้แล้ว': 'Converted Buddhist year {b} to {g}',
+    'ปี {y} ไม่ถูกต้อง ใช้ปี ค.ศ. {a}–{z} (หรือ พ.ศ.) — ยังไม่ได้บันทึกวันที่นี้':
+      'Year {y} isn’t valid. Use a year from {a} to {z} (Buddhist years are converted). This date wasn’t saved.',
+    'ตั้งกำหนดส่งรอบแรกเป็น {d} ให้แล้ว': 'First due date set to {d}',
+    'ยังไม่ได้บันทึกรายละเอียดโปรเจกต์': 'Project details not saved',
+    'ค่าที่พิมพ์ไว้ในแท็บรายละเอียดโปรเจกต์ยังไม่ได้บันทึก': 'What you typed on the Project details tab hasn’t been saved yet.',
+    'กลับไปแก้ต่อ': 'Keep editing', 'ทิ้งการแก้ไข': 'Discard changes', 'กลับไปดู': 'Go back',
+    'วันเริ่มโปรเจกต์': 'Project start date',
+    'วันเริ่มโปรเจกต์ต้องไม่หลังกำหนดส่ง': 'The project start date can’t be after its due date',
+    'มีรายละเอียดโปรเจกต์ที่แก้ไว้แต่ยังไม่ได้บันทึก': 'You have unsaved changes to the project details',
+    'ชื่อโปรเจกต์ใหม่': 'New project name', '{name} (สำเนา)': '{name} (copy)',
+    'รวมงานย่อยทุกชั้น ลำดับก่อนหลัง วันเริ่ม/กำหนดส่ง และค่าฟิลด์ (งานที่เสร็จแล้วกลับเป็นยังไม่เสร็จ)':
+      'Includes all subtasks, dependencies, start/due dates and field values (completed tasks are reopened)',
+    'เฉพาะงานที่ยังไม่เสร็จ': 'Only incomplete tasks',
+    'ยกเรื่องที่ยังค้างไปประชุมหรือรอบถัดไป': 'Carry open items over to the next meeting or cycle',
+    'เลื่อนวันทั้งหมด': 'Shift all dates',
+    'วันแรกสุดของโปรเจกต์นี้คือ {d} จะถูกเลื่อนไปเป็นวันเริ่มใหม่ วันอื่นเลื่อนตามเท่ากัน':
+      'The earliest date in this project ({d}) moves to the new start date; every other date shifts by the same amount',
+    'โปรเจกต์นี้ยังไม่มีวันที่ วันเริ่มใหม่จะเป็นวันเริ่มของโปรเจกต์สำเนา':
+      'This project has no dates yet. The new start date becomes the copy’s start date',
+    'วันเริ่มใหม่': 'New start date', 'เลือกวันเริ่มใหม่ก่อน': 'Choose a new start date first',
+    'คอลัมน์ ฟิลด์ มุมมองที่บันทึกไว้ คอลัมน์ที่เปิดอยู่ อัตโนมัติ ฟอร์ม และชนิดงานไปด้วยเสมอ ความเห็นและประวัติไม่ไปด้วย':
+      'Sections, fields, saved views, visible columns, rules, forms and task types are always copied. Comments and history are not.',
+    'สร้างงานจากหน้าเอกสาร': 'Create tasks from page',
+    'หนึ่งบรรทัดเป็นหนึ่งงาน · {n} งาน': 'One task per line · [n|1 task|{n} tasks]',
+    'สร้างไว้ที่': 'Create in', 'งานของฉัน (ส่วนตัว)': 'My Tasks (private)',
+    'แทนแต่ละบรรทัดในหน้าด้วยลิงก์ไปงานที่สร้าง': 'Replace each line on the page with a link to its new task',
+    'ใกล้ครบกำหนด {n}': '{n} due soon',
+    'โปรเจกต์ที่สถานะเสี่ยง/ไม่ตามแผน หรือมีงานเลยกำหนด': 'Projects that are at risk or off track, or have overdue tasks',
+    'วิดเจ็ตนี้กรองด้วย {n} เงื่อนไข': 'This widget is filtered by [n|1 condition|{n} conditions]',
+    'ตัวกรอง {n}': '[n|1 filter|{n} filters]',
+    'ยังไม่มีงาน — เริ่มเพิ่มงานได้เลย': 'No tasks yet — add your first task',
+    'งานเลยกำหนดที่ยังไม่เสร็จ {n} งาน — นับรวมไว้ในวันนี้': '[n|1 overdue task|{n} overdue tasks] not done yet — counted in today',
+    'ค้าง {n}': '{n} overdue', 'ค้าง': 'Overdue',
+    'งานเลยกำหนด นับรวมไว้ในวันนี้': 'overdue tasks, counted in today',
+    'เลยกำหนด {d} ยังไม่เสร็จ': 'Overdue since {d}, not done',
     'ฉัน': 'Me', 'บันทึก': 'Save', 'ยกเลิก': 'Cancel', 'ปิด': 'Close',
     'ลบ': 'Delete', 'เพิ่ม': 'Add', 'ใช้': 'Use', 'ส่ง': 'Send',
     'สร้าง': 'Create', 'ย้อนกลับ': 'Undo', 'ทั้งหมด': 'All', 'ทุกคน': 'Everyone',

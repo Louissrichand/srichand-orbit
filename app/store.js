@@ -277,8 +277,12 @@
       status: {
         state: 'on_track',
         text: L('งานเตรียมเปิดตัวเดินตามแผน รอผลตรวจข้อความโฆษณารอบสุดท้าย'),
-        by: 'u_me', at: t
+        by: 'u_me', at: new Date().toISOString()       // Sprint 1C — เวลาจริง ไม่ใช่แค่วันที่
       },
+      /* Sprint 1C — ป้ายสถานะบนหัวกับประวัติในหน้าภาพรวมต้องพูดตรงกัน */
+      statusLog: [{ id: 'ps_seed_launch', state: 'on_track', title: '',
+        text: L('งานเตรียมเปิดตัวเดินตามแผน รอผลตรวจข้อความโฆษณารอบสุดท้าย'),
+        by: 'u_me', at: new Date().toISOString() }],
       /* ย้ายเข้า "เสร็จแล้ว" = ทำเครื่องหมายเสร็จ (เดิมเป็นกฎแบบเก่า ตอนนี้เป็นอัตโนมัติ 3a) */
       automations: [
         { id: 'au_done', name: '', on: true, chain: false, by: 'u_me', at: t,
@@ -497,7 +501,16 @@
       if (!p.depShift) p.depShift = { mode: 'consume', scope: 'downstream' };
       if (!p.workDays) p.workDays = 'all';
       if (!('views' in p)) p.views = null;   // null = เปิดครบทุกมุมมอง
+      if (!('startOn' in p)) p.startOn = null;   // Sprint 1C — วันเริ่มโปรเจกต์ (ไม่ต้องเพิ่มเลขรุ่น เติมทุกครั้งที่โหลด)
       p.statusLog = p.statusLog || [];
+      /* Sprint 1C — มีสถานะ (ป้ายบนหัวขึ้น "ตามแผน") แต่ไม่มีประวัติเลย
+       * หน้าภาพรวมกับวิดเจ็ตหน้าแรกอ่านจากประวัติ จึงบอกว่า "ยังไม่เคยรายงาน" ขัดกับป้ายบนหัว
+       * ผู้บริหารเห็นสองที่พูดไม่ตรงกันแล้วเลิกเชื่อตัวเลขทั้งหน้า
+       * เติมรายการแรกของประวัติจากสถานะที่ตั้งไว้ รหัสคงที่ สองเครื่องโหลดพร้อมกันจะได้ไม่ซ้ำกัน */
+      if (p.status && p.status.state && !p.statusLog.length) {
+        p.statusLog.push({ id: 'ps_mig_' + p.id, state: p.status.state, title: p.status.title || '',
+          text: p.status.text || '', by: p.status.by || null, at: p.status.at || null });
+      }
       p.messages = p.messages || [];         // ประกาศของโปรเจกต์ ไม่ผูกกับงานชิ้นไหน
       (p.savedViews || []).forEach(function (v) { v.view = fillView(v.view); });
     });
@@ -1465,11 +1478,20 @@
       .slice(0, limit || 12);
   }
 
-  /** จำนวนงานที่ยังไม่เสร็จและใกล้ครบกำหนดในโปรเจกต์ ใช้บนการ์ดหน้าแรก */
-  function dueSoonCount(projectId) {
-    var lim = addDays(today(), 7), n = 0;
+  /** จำนวนงานที่ยังไม่เสร็จและใกล้ครบกำหนด (วันนี้ถึง 7 วันข้างหน้า) ในโปรเจกต์ ใช้บนการ์ดหน้าแรก
+   *  Sprint 1C — ไม่นับงานเลยกำหนดแล้ว เดิมรวมกันจนโปรเจกต์ที่เลยกำหนด 6 จาก 7 งานขึ้นว่า "ใกล้ครบกำหนด 7"
+   *  งานเลยกำหนดนับแยกที่ overdueCount */
+  function overdueCount(projectId) {
+    var td = today(), n = 0;
     tasksInProject(projectId).forEach(function (x) {
-      if (!x.task.completed && x.task.dueOn && x.task.dueOn <= lim) n++;
+      if (!x.task.completed && x.task.dueOn && x.task.dueOn < td) n++;
+    });
+    return n;
+  }
+  function dueSoonCount(projectId) {
+    var lim = addDays(today(), 7), td = today(), n = 0;
+    tasksInProject(projectId).forEach(function (x) {
+      if (!x.task.completed && x.task.dueOn && x.task.dueOn >= td && x.task.dueOn <= lim) n++;
     });
     return n;
   }
@@ -3679,6 +3701,20 @@
     return nextRecurDate(t.recur, t.dueOn || t.startOn || today());
   }
 
+  /** Sprint 1C — วันครบกำหนดของรอบแรก ใช้ตอนตั้งทำซ้ำให้งานที่ยังไม่มีกำหนดส่ง
+   *  เดิมแผงงานบอก "รอบถัดไปครบกำหนด 4 ธ.ค." แต่ช่องกำหนดส่งในรายการ/ปฏิทินยังเป็น "—"
+   *  งานทำซ้ำจึงไม่โผล่ในปฏิทินเลยจนกว่าจะมีคนไปตั้งวันเอง
+   *  รายสัปดาห์ = วันแรกที่ตรงวันในสัปดาห์ที่เลือก (นับวันนี้ด้วย) แบบอื่น = วันนี้ (หรือวันเริ่มถ้าเริ่มทีหลัง) */
+  function firstRecurDate(r, startOn) {
+    var from = startOn && startOn > today() ? startOn : today();
+    var days = r && r.freq === 'weekly' ? (r.days || []).map(Number).filter(function (x) { return x >= 0 && x <= 6; }) : [];
+    for (var i = 0; days.length && i < 7; i++) {
+      var d = addDays(from, i);
+      if (days.indexOf(new Date(d + 'T00:00:00').getDay()) >= 0) return d;
+    }
+    return from;
+  }
+
   /** ตัวเลือกการคัดลอก — ไม่ส่งอะไรมา = คัดลอกทุกอย่าง (ตรงกับพฤติกรรมเดิม) */
   var DUP_KEYS = ['assignee', 'notes', 'subtasks', 'attachments', 'tags', 'followers',
                   'projects', 'deps', 'dates', 'fields'];
@@ -4850,13 +4886,28 @@
       s.overdue += st.overdue;
       s.dueWeek += st.dueWeek;
       var key = p.status ? p.status.state : null;
-      if (key) {
-        s.byStatus[key] = (s.byStatus[key] || 0) + 1;
-        if (key === 'at_risk' || key === 'off_track') s.atRisk++;
-      } else s.noStatus++;
+      if (key) s.byStatus[key] = (s.byStatus[key] || 0) + 1;
+      else s.noStatus++;
+      if (needsWatch(p, st)) s.atRisk++;          // Sprint 1C — นิยามเดียวกับรายการ "ต้องจับตา"
     });
     s.percent = s.total ? Math.round(s.done * 100 / s.total) : 0;
     return s;
+  }
+
+  /* Sprint 1C — "ต้องจับตา" มีนิยามเดียวทั้งแอป: สถานะเสี่ยง/ไม่ตามแผน หรือมีงานเลยกำหนด
+   * เดิมตัวเลขบนแถบสรุปนับแค่สถานะ แต่รายการในแท็บสรุปผลนับงานเลยกำหนดด้วย
+   * ผู้บริหารเห็น "ต้องจับตา 2" แล้วเลื่อนลงไปเจอ 3 โปรเจกต์ เลยไม่เชื่อตัวเลขไหนเลย */
+  function needsWatch(p, st) {
+    if (!p) return false;
+    if (p.status && (p.status.state === 'at_risk' || p.status.state === 'off_track')) return true;
+    return (st || projectStats(p.id)).overdue > 0;
+  }
+
+  /** เวลาที่รายงานสถานะล่าสุดจริง ๆ (ประวัติเก็บเวลาเต็ม สถานะรุ่นเก่าเก็บแค่วันที่) */
+  function statusAt(p) {
+    var log = (p && p.statusLog) || [];
+    var last = log[log.length - 1];
+    return (last && last.at) || (p && p.status && p.status.at) || null;
   }
 
   /** ตั้งสถานะของพอร์ตโฟลิโอ กติกาเดียวกับสถานะโปรเจกต์ */
@@ -4868,7 +4919,7 @@
     f.status = {
       state: state,
       text: keep ? ((f.status && f.status.text) || '') : text,
-      by: db.currentUserId, at: today()
+      by: db.currentUserId, at: new Date().toISOString()   // Sprint 1C — เวลาจริง (เดิมแค่วันที่ → "5 ชม.ที่แล้ว")
     };
     f.statusLog = f.statusLog || [];
     f.statusLog.push({
@@ -4902,6 +4953,7 @@
       sections: (attrs.sections || ['ค้างอยู่', 'กำลังทำ', 'เสร็จแล้ว'])
         .map(function (n) { return { id: uid('s'), name: n }; }),
       owner: attrs.owner || db.currentUserId,
+      startOn: attrs.startOn || null,          // Sprint 1C — วันเริ่มโปรเจกต์
       dueOn: attrs.dueOn || null,
       depShift: { mode: 'consume', scope: 'downstream' },
       workDays: 'all',
@@ -4946,7 +4998,7 @@
       state: state,
       text: keep ? ((p.status && p.status.text) || '') : text,
       by: db.currentUserId,
-      at: today()
+      at: new Date().toISOString()     // Sprint 1C — เวลาจริง เดิมเก็บแค่วันที่ พอร์ตโฟลิโอจึงขึ้น "5 ชม.ที่แล้ว" ทั้งที่เพิ่งรายงาน
     };
     p.statusLog = p.statusLog || [];
     p.statusLog.push({
@@ -4977,15 +5029,45 @@
     commit();
   }
 
-  /** คัดลอกทั้งโปรเจกต์ (ใช้เป็นเทมเพลตได้) */
-  function duplicateProject(id, withTasks) {
+  /** Sprint 1C — วันแรกสุดของโปรเจกต์: วันเริ่มโปรเจกต์ หรือวันเริ่ม/กำหนดส่งที่เร็วที่สุดของงานทุกชั้น
+   *  ใช้เป็นจุดตั้งต้นตอนคัดลอกแล้วเลื่อนวัน (openOnly = ไม่นับงานที่เสร็จแล้ว) */
+  function projectFirstDate(id, openOnly) {
+    var p = project(id);
+    if (!p) return null;
+    var first = p.startOn || null;
+    var look = function (t, g) {
+      if (openOnly && t.completed) return;
+      [t.startOn, t.dueOn].forEach(function (d) { if (d && (!first || d < first)) first = d; });
+      if (g < 8) subtasks(t.id).forEach(function (s) { look(s, g + 1); });
+    };
+    tasksInProject(id).forEach(function (x) { look(x.task, 0); });
+    return first;
+  }
+
+  /**
+   * คัดลอกทั้งโปรเจกต์ (ใช้เป็นเทมเพลตได้)
+   *
+   * opts = true/false (รุ่นเก่า: เอางานไปด้วยไหม) หรือ { tasks, openOnly, name, shiftTo }
+   *   tasks     เอางานไปด้วย
+   *   openOnly  เฉพาะงานที่ยังไม่เสร็จ — คนจัดประชุมใช้ยกเรื่องค้างไปประชุมครั้งหน้า
+   *   name      ชื่อโปรเจกต์ใหม่ (ไม่ใส่ = "<ชื่อเดิม> (สำเนา)")
+   *   shiftTo   วันเริ่มใหม่ ISO — เลื่อนทุกวันในสำเนาเท่ากันหมด ให้วันแรกสุดของโปรเจกต์ตรงวันนี้
+   *
+   * Sprint 1C — รุ่นก่อนเอาไปแค่งานชั้นบนสุด งานย่อยหาย (0/3 กลายเป็น 0/0) ลำดับก่อนหลังถูกล้างทิ้ง
+   * และคอลัมน์ที่เปิดไว้ (วันเริ่ม ความสำคัญ) กลับเป็นค่าเริ่มต้น คนเปิดสำเนาแล้วนึกว่าข้อมูลหาย
+   * ตอนนี้งานย่อยไปครบทุกชั้น ลำดับก่อนหลังชี้ไปงานในสำเนา ค่าฟิลด์ วันเริ่ม/กำหนดส่ง
+   * มุมมองที่บันทึกไว้ และมุมมองที่คนกดคัดลอกใช้อยู่ ไปด้วยทั้งหมด (รหัสคอลัมน์/ฟิลด์ชี้ไปของในสำเนา)
+   */
+  function duplicateProject(id, opts) {
+    if (!opts || typeof opts !== 'object') opts = { tasks: !!opts };
     var src = project(id);
     if (!src) return null;
     snapshot('คัดลอกโปรเจกต์');
     var p = clone(src);
     p.id = uid('p');
-    p.name = src.name + ' (สำเนา)';
+    p.name = String(opts.name || '').trim().slice(0, 200) || (src.name + ' (สำเนา)');
     p.status = null;
+    p.statusLog = [];              // ประวัติสถานะเป็นของโปรเจกต์เดิม สำเนาเริ่มนับใหม่
     p.archived = false;
 
     var sectionMap = {};
@@ -4994,13 +5076,14 @@
       s.id = uid('s');
       sectionMap[old] = s.id;
     });
-    var fieldMap = {};
+    var fieldMap = {}, fieldType = {};
     p.fields.forEach(function (f) {
       var old = f.id;
       /* ฟิลด์จากคลังใช้รหัสเดิม (ฟิลด์เดียวกันทั้งองค์กร) รหัสงานเริ่มนับใหม่ในโปรเจกต์สำเนา */
       if (!f.lib) f.id = uid('f');
       if (f.type === 'id') { f.next = 1; return; }
       fieldMap[old] = f.id;
+      fieldType[f.id] = f.type;
     });
     p.roles = {};
     p.accessRequests = [];
@@ -5013,42 +5096,87 @@
     remapStruct(p, idMap);
     p.automations = (p.automations || []).map(function (a) { return remapAuto(a, idMap); });
     p.autoRuns = [];
-    p.savedViews = [];
+    /* Sprint 1C — มุมมองที่บันทึกไว้เป็นแท็บไปด้วย (รหัสใหม่ ตัวกรอง/คอลัมน์ชี้ฟิลด์ในสำเนา) */
+    p.defaultTab = null;
+    p.savedViews = (src.savedViews || []).map(function (v) {
+      var c = remapJson(v, idMap);
+      c.id = uid('v');
+      if (src.defaultTab === v.id) p.defaultTab = c.id;
+      return c;
+    });
+    p.colWidths = remapJson(src.colWidths || {}, idMap);
     p.remindKey = null;
     p.remindTask = null;
+
+    /* เลื่อนวัน: วันแรกสุดของโปรเจกต์เดิม (วันเริ่มโปรเจกต์ หรือวันแรกของงานทุกชิ้น) → วันเริ่มใหม่ */
+    var srcTop = opts.tasks ? tasksInProject(id) : [];
+    var keep = function (t) { return !(opts.openOnly && t.completed); };
+    var delta = 0;
+    if (opts.shiftTo && ISO_RE.test(opts.shiftTo)) {
+      var first = projectFirstDate(id, false);
+      delta = first ? daysBetween(first, opts.shiftTo) : 0;
+      p.startOn = opts.shiftTo;
+    }
+    var mv = function (d) { return d && delta ? addDays(d, delta) : d; };
+    if (delta) p.dueOn = mv(p.dueOn);
+    if (!('startOn' in p)) p.startOn = null;
+
     db.projects.push(p);
     dropIndex();
     audit("project.duplicate", p.name, "คัดลอกจากโปรเจกต์เดิม");
 
-    if (withTasks) {
-      tasksInProject(id).forEach(function (x) {
-        var copy = blankTask(clone(x.task));
-        copy.id = uid('t');
-        copy.completed = false;
-        copy.completedAt = null;
-        copy.likes = [];
-        copy.dependsOn = [];
-        if (copy.ctype && idMap[copy.ctype]) {
-          var cty = typeDef(idMap[copy.ctype]);
-          var cst = cty && cty.statuses.filter(function (s) { return s.id === idMap[x.task.cstatus]; })[0];
-          copy.ctype = cty ? cty.id : null;
-          copy.cstatus = cst && !cst.done ? cst.id : ((cty && firstStatus(cty, false)) || {}).id || null;
-        }
-        db.tasks.push(copy);
-        db.memberships.push({
-          id: uid('m'), taskId: copy.id, projectId: p.id,
-          sectionId: sectionMap[x.membership.sectionId] || p.sections[0].id,
-          position: x.membership.position
+    var taskMap = {}, pairs = [];
+    var copyTask = function (t, parentNew, g) {
+      if (!keep(t)) return;
+      var copy = blankTask(clone(t));
+      copy.id = uid('t');
+      taskMap[t.id] = copy.id;
+      copy.parentId = parentNew || null;
+      copy.completed = false;
+      copy.completedAt = null;
+      copy.likes = [];
+      copy.dependsOn = [];
+      copy.startOn = mv(copy.startOn);
+      copy.dueOn = mv(copy.dueOn);
+      copy.createdBy = db.currentUserId;
+      copy.createdAt = today();
+      if (copy.ctype && idMap[copy.ctype]) {
+        var cty = typeDef(idMap[copy.ctype]);
+        var cst = cty && cty.statuses.filter(function (s) { return s.id === idMap[t.cstatus]; })[0];
+        copy.ctype = cty ? cty.id : null;
+        copy.cstatus = cst && !cst.done ? cst.id : ((cty && firstStatus(cty, false)) || {}).id || null;
+      }
+      db.tasks.push(copy);
+      pairs.push([t, copy]);
+      db.fieldValues.filter(function (v) { return v.taskId === t.id; })
+        .forEach(function (v) {
+          if (!fieldMap[v.fieldId]) return;
+          var nf = fieldMap[v.fieldId];
+          var val = fieldType[nf] === 'date' && typeof v.value === 'string' && ISO_RE.test(v.value) ? mv(v.value) : clone(v.value);
+          db.fieldValues.push({ taskId: copy.id, fieldId: nf, value: val });
         });
-        db.fieldValues.filter(function (v) { return v.taskId === x.task.id; })
-          .forEach(function (v) {
-            if (!fieldMap[v.fieldId]) return;
-            db.fieldValues.push({
-              taskId: copy.id, fieldId: fieldMap[v.fieldId], value: v.value
-            });
-          });
+      if (g < 8) subtasks(t.id).forEach(function (s) { copyTask(s, copy.id, g + 1); });
+      return copy;
+    };
+    srcTop.forEach(function (x) {
+      var copy = copyTask(x.task, null, 0);
+      if (!copy) return;
+      db.memberships.push({
+        id: uid('m'), taskId: copy.id, projectId: p.id,
+        sectionId: sectionMap[x.membership.sectionId] || p.sections[0].id,
+        position: x.membership.position
       });
-    }
+    });
+    /* ลำดับก่อนหลังชี้ไปงานในสำเนา — งานต้นทางที่ไม่ได้มาด้วย (นอกโปรเจกต์ หรือเสร็จแล้วตอนเลือกเฉพาะที่ค้าง) ตัดทิ้ง */
+    pairs.forEach(function (pr) {
+      pr[1].dependsOn = normalizeDeps(pr[0].dependsOn).filter(function (d) { return taskMap[d.id]; })
+        .map(function (d) { var c = clone(d); c.id = taskMap[d.id]; return c; });
+    });
+
+    /* คอลัมน์และมุมมองที่คนกดคัดลอกใช้อยู่ — เปิดสำเนาแล้วหน้าตาเหมือนต้นฉบับ */
+    var st = personalOf();
+    if (st && st.pv && st.pv[id]) st.pv[p.id] = remapJson(st.pv[id], idMap);
+    dropIndex();
     commit();
     return p;
   }
@@ -8871,7 +8999,8 @@
       var secs = (d.sections && d.sections.length ? d.sections : [{ id: '_s', name: 'ค้างอยู่' }]);
       var p = createProjectRaw({ name: String(o.name || tpl.name).trim().slice(0, 120) || tpl.name,
         color: o.color || tpl.color, icon: o.icon || tpl.icon, description: d.description || tpl.desc || '',
-        defaultView: d.defaultView, sections: secs.map(function (s) { return s.name; }) });
+        defaultView: d.defaultView, sections: secs.map(function (s) { return s.name; }),
+        startOn: start });     // Sprint 1C — วันเริ่มที่เลือกตอนใช้เทมเพลตเห็นได้ในตั้งค่าโปรเจกต์ภายหลัง
       var idMap = {};
       secs.forEach(function (s, i) { idMap[s.id] = p.sections[i].id; });
       (d.fields || []).forEach(function (f) {
@@ -9038,7 +9167,7 @@
     var entry = { id: uid('ps'), state: o.state, title: String(o.title || '').trim().slice(0, 120), text: summary,
       blocks: blocks, hl: statusHighlights(pid, hl, period), period: period,
       by: db.currentUserId, at: new Date().toISOString() };
-    p.status = { state: o.state, text: summary, title: entry.title, by: db.currentUserId, at: today() };
+    p.status = { state: o.state, text: summary, title: entry.title, by: db.currentUserId, at: entry.at };   // Sprint 1C — เวลาเดียวกับรายการในประวัติ
     p.statusLog = p.statusLog || [];
     p.statusLog.push(entry);
     if (p.statusLog.length > 30) p.statusLog = p.statusLog.slice(-30);
@@ -9521,7 +9650,17 @@
       cur = w.unit === 'day' ? addDays(cur, -1) : w.unit === 'month' ? addMonths(cur, -1) : addDays(cur, -7);
       list.unshift(cur);
     }
-    return list.map(function (s) { return { key: s, label: s.slice(5).replace('-', '/'), end: periodNext(s, w.unit) }; });
+    return list.map(function (s) { return { key: s, label: periodLabelOf(s, w.unit), end: periodNext(s, w.unit) }; });
+  }
+  /* Sprint 1C — ป้ายแกนของกราฟตามช่วงเวลา เดิมเป็น "10/05" (เดือน/วัน) ซึ่งคนไทยอ่านเป็นวันที่ 10 พ.ค.
+   * ใช้ วัน + ชื่อเดือนย่อตามภาษา ("5 ต.ค." / "5 Oct") ช่วงรายเดือนใช้ เดือน + ปี ("ต.ค. 69" / "Oct 2026") */
+  function periodLabelOf(s, unit) {
+    var p = s.split('-'), mon = global.I18N.monthsShort()[parseInt(p[1], 10) - 1];
+    if (unit === 'month') {
+      var y = parseInt(p[0], 10);
+      return mon + ' ' + (global.I18N.getLang() === 'en' ? y : global.I18N.yearShort(y));
+    }
+    return parseInt(p[2], 10) + ' ' + mon;
   }
   function dateOfTask(t, which) {
     if (which === 'created') return t.createdAt ? String(t.createdAt).slice(0, 10) : null;
@@ -10034,6 +10173,55 @@
     }
     if (!can('write')) return null;
     return createTask({ name: name, notes: notes, assigneeId: db.currentUserId }, null, null);
+  }
+
+  /* Sprint 1C — เลือกหลายบรรทัดในหน้าเอกสารแล้วกด "สร้างงาน"
+   * เดิมรวมทุกบรรทัดเป็นชื่องานเดียว (action item 3 ข้อกลายเป็นงานเดียวยาวเหยียด) แถมเป็นงานส่วนตัวในงานของฉัน
+   * ตอนนี้หนึ่งบรรทัดหนึ่งงาน ตัดสัญลักษณ์หัวข้อ/เลขข้อ/ช่องติ๊กออก
+   * และถ้าบรรทัดมี @ชื่อ ที่ตรงกับคนในระบบ มอบงานนั้นให้คนนั้นเลย (เอา @ชื่อ ออกจากชื่องาน) */
+  var PG_BULLET = /^(?:[-*•·▪◦‣–—+]\s+|\d{1,3}[.)]\s+|\[[ xX✓]?\]\s*|[☐☑✅]\s*)+/;
+  function pageTaskLines(raw) {
+    var people = db.users.filter(function (u) { return u.active !== false && u.name; })
+      .sort(function (a, b) { return b.name.length - a.name.length; });     // ชื่อยาวก่อน "@มานี" ไม่โดน "@มา" แย่ง
+    return String(raw || '').split(/\r?\n/).map(function (line) {
+      var src = line.trim();
+      var s = src.replace(PG_BULLET, ''), who = null;
+      people.some(function (u) {
+        var tag = '@' + u.name, at = s.indexOf(tag);
+        if (at < 0) return false;
+        who = u.id;
+        s = s.slice(0, at) + s.slice(at + tag.length);
+        return true;
+      });
+      return { name: s.replace(/\s+/g, ' ').trim().slice(0, 300), assigneeId: who, src: src };
+    }).filter(function (x) { return x.name; }).slice(0, 100);
+  }
+  /** สร้างงานหลายชิ้นจากหน้าเอกสารในครั้งเดียว (ย้อนกลับได้ทีเดียว) — projectId ว่าง = งานส่วนตัวในงานของฉัน
+   *  คืนอาร์เรย์งานเรียงตาม items */
+  function tasksFromPage(id, items, projectId, sectionId) {
+    var l = pageLoc(id);
+    if (!l || !canSeePage(id) || !can('write')) return [];
+    var p = projectId ? project(projectId) : null;
+    if (projectId && (!p || !canInProject(projectId, 'edit'))) return [];
+    var sec = p ? (section(projectId, sectionId) || p.sections[0]) : null;
+    if (p && !sec) return [];
+    var list = (items || []).filter(function (x) { return x && String(x.name || '').trim(); }).slice(0, 100);
+    if (!list.length) return [];
+    var url = (global.location ? global.location.origin + global.location.pathname : '') + '#/page/' + id;
+    var notes = L('จากหน้า') + ' [' + (l.page.title || L('ไม่มีชื่อ')).replace(/[\[\]]/g, '') + '](' + url + ')';
+    snapshot('สร้าง {n} งาน', { n: list.length });
+    var out = list.map(function (x) {
+      /* งานในโปรเจกต์ที่ไม่มี @ชื่อ ปล่อยว่างไว้ให้ทีมรับ งานส่วนตัวต้องเป็นของเรา ไม่งั้นหาไม่เจอในงานของฉัน */
+      var who = x.assigneeId && user(x.assigneeId) ? x.assigneeId : (p ? null : db.currentUserId);
+      /* ใส่ผู้รับผิดชอบเป็นผู้ติดตามหลังสร้าง ไม่งั้นเขาได้ทั้ง "สร้างงานนี้" และ "มอบหมายให้คุณ" ซ้ำสองข้อความ */
+      var t = createTaskRaw({ name: String(x.name).trim().slice(0, 300), notes: notes, assigneeId: who, followers: [] },
+        p ? p.id : null, sec ? sec.id : null);
+      if (who && t.followers.indexOf(who) < 0) t.followers.push(who);
+      if (who && who !== db.currentUserId) notifyOnly(t.id, [who], 'มอบหมายงาน “{t}” ให้คุณ', 'assigned', { t: t.name });
+      return t;
+    });
+    commit();
+    return out;
   }
 
   /* ---------- เวลา ----------
@@ -11640,6 +11828,7 @@
     canSeeTask: canSeeTask, visibleTasks: visibleTasks, isTaskParticipant: isTaskParticipant,
     assignedByMe: assignedByMe, myCompleted: myCompleted,
     dueSoonCount: dueSoonCount, homeStats: homeStats,
+    overdueCount: overdueCount, needsWatch: needsWatch, statusAt: statusAt,          // Sprint 1C
     inbox: inbox, unreadCount: unreadCount,
     defaultView: defaultView, fillView: fillView,
     viewGroups: viewGroups, matchesFilter: matchesFilter,
@@ -11652,7 +11841,7 @@
     DUP_KEYS: DUP_KEYS, assignCopies: assignCopies, mergeDuplicate: mergeDuplicate,
     createFollowUp: createFollowUp, setParent: setParent, promoteSubtask: promoteSubtask,
     fitParentDates: fitParentDates, subtasksOutside: subtasksOutside,
-    nextOccurrence: nextOccurrence, canApprove: canApprove,
+    nextOccurrence: nextOccurrence, canApprove: canApprove, firstRecurDate: firstRecurDate,
     TRASH_DAYS: TRASH_DAYS, trashItems: trashItems, trashExpires: trashExpires,
     restoreTrash: restoreTrash, purgeTrash: purgeTrash,
     checkDueReminders: checkDueReminders,
@@ -11698,7 +11887,7 @@
     setPortfolioStatus: setPortfolioStatus, projectDates: projectDates,
 
     createProject: createProject, updateProject: updateProject,
-    deleteProject: deleteProject, duplicateProject: duplicateProject,
+    deleteProject: deleteProject, duplicateProject: duplicateProject, projectFirstDate: projectFirstDate,
     setProjectStatus: setProjectStatus, statusLog: statusLog, archiveProject: archiveProject,
     addSection: addSection, renameSection: renameSection,
     deleteSection: deleteSection, moveSection: moveSection,
@@ -11829,6 +12018,7 @@
     setPagePrivate: setPagePrivate, addPageImage: addPageImage, pageImgMap: pageImgMap,
     addPageComment: addPageComment, replyPageComment: replyPageComment, resolvePageComment: resolvePageComment,
     deletePageComment: deletePageComment, taskFromPage: taskFromPage,
+    pageTaskLines: pageTaskLines, tasksFromPage: tasksFromPage,          // Sprint 1C
     parseDuration: parseDuration, fmtMinutes: fmtMinutes, timeRollup: timeRollup, setEstimate: setEstimate,
     addTimeEntry: addTimeEntry, deleteTimeEntry: deleteTimeEntry, runningTimer: runningTimer,
     startTimer: startTimer, stopTimer: stopTimer, discardTimer: discardTimer, projectTimeCsv: projectTimeCsv,
@@ -12139,14 +12329,27 @@
     var people = wlPeople(scope, tasks);
     var capKey = cfg.measure === 'effort' ? cfg.unit : 'count';
     var noEffort = 0;
+    /* Sprint 1C — งานเลยกำหนดที่ยังไม่เสร็จเดิมหลุดจากตารางเพราะวันของมันอยู่ก่อนช่วงที่แสดง
+     * คนที่ค้าง 6 งานจึงดูว่างอยู่ (5/15) และไม่มีใครเกินความจุ ทั้งที่งานค้างยังต้องทำอยู่ดี
+     * นับงานค้างไว้ที่ "วันนี้" (เมื่อวันนี้อยู่ในช่วงที่แสดง) และนับจำนวนค้างของแต่ละคนไว้ขึ้นป้ายเตือน */
+    var td = today(), nowIn = td >= from && td <= to;
     var rows = people.map(function (u) {
       var cap = capacityOf(u)[capKey], away = awayDays(u, from, to);
-      var daily = {}, list = [], warn = [];
+      var daily = {}, list = [], warn = [], lateN = 0;
       tasks.forEach(function (t) {
         if (t.assigneeId !== u) return;
         var days = taskDays(t);
+        var late = !!(t.dueOn && t.dueOn < td);
+        if (late) { lateN++; if (nowIn) days = [td]; }
         if (!days.length || days[days.length - 1] < from || days[0] > to) return;
         var e = effortOf(t, cfg);
+        if (late && nowIn) {
+          if (e === null) { noEffort++; list.push({ t: t, s: td, e: td, v: null, late: true }); return; }
+          daily[td] = (daily[td] || 0) + e;
+          list.push({ t: t, s: td, e: td, v: e, late: true });
+          if (away[td]) warn.push(t.id);
+          return;
+        }
         if (e === null) { noEffort++; list.push({ t: t, s: t.startOn || t.dueOn, e: t.dueOn || t.startOn, v: null }); return; }
         var per = cfg.measure === 'effort' && cfg.unit !== 'pct' ? e / days.length : e;
         var hitAway = false;
@@ -12172,7 +12375,7 @@
         return { v: v, cap: Math.round(capC * 100) / 100, away: awayN, days: n, over: v > capC + 1e-9 && v > 0 };
       });
       list.sort(function (a, b) { return a.s < b.s ? -1 : a.s > b.s ? 1 : 0; });
-      return { uid: u, cells: cells, tasks: list, warn: warn, cap: cap,
+      return { uid: u, cells: cells, tasks: list, warn: warn, cap: cap, late: lateN,
         over: cells.some(function (c) { return c.over; }) };
     });
     return { cols: cols, rows: rows, from: from, to: to, cfg: cfg, capKey: capKey, noEffort: noEffort };
