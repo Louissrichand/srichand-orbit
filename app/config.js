@@ -14,11 +14,11 @@ window.OrbitConfig = {
   /* ---- Microsoft Entra ID ---- */
 
   // Directory (tenant) ID จากหน้า App registration
-  tenantId: '',
+  tenantId: 'b5af7bf9-3490-448d-ac86-56fd1a5d5fe9',
 
   // Application (client) ID จากหน้าเดียวกัน
   // เว้นว่าง = ปิดโหมดทีม ใช้งานแบบเครื่องเดียวเหมือนเดิม
-  clientId: '',
+  clientId: '2465b722-4b8e-4462-a9f9-6508cb372b96',
 
   /* ---- ที่เก็บข้อมูลกลาง (SharePoint ของบริษัท) ---- */
 
