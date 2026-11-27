@@ -9,6 +9,25 @@
   'use strict';
 
   var EN = {
+    /* Sprint 1A */
+    'ส่งแล้ว': 'Sent', 'โพสต์': 'Post', 'เปิดงานใหม่แล้ว': 'Task reopened',
+    'คลิกช่องความเห็นก่อน แล้วกด Ctrl+Enter เพื่อส่ง · ทำเครื่องหมายว่าเสร็จใช้ Tab+Y':
+      'Click into the comment box first, then press Ctrl+Enter to send · Mark complete with Tab+Y',
+    'ทำเครื่องหมายว่าเสร็จใช้ Tab+Y': 'Mark complete with Tab+Y',
+    'ส่งความเห็น / ประกาศ (เมื่อเคอร์เซอร์อยู่ในช่องพิมพ์)': 'Send a comment / message (while typing in the box)',
+    'ทำเครื่องหมายว่าเสร็จ / เปิดใหม่ (งานที่เปิดหรือเลือกอยู่)': 'Mark complete / reopen (the open or selected task)',
+    'สิทธิ์ในโปรเจกต์กำหนดว่าแต่ละคนเห็นและแก้อะไรได้ใน Orbit': 'Project access decides what each person can see and change in Orbit.',
+    'ลิงก์ฟอร์มใช้ได้เฉพาะพนักงานที่ล็อกอิน Orbit แล้ว คนนอกองค์กรยังเปิดฟอร์มนี้ไม่ได้':
+      'Form links work only for staff signed in to Orbit. People outside the organisation can’t open this form yet.',
+    'ฟอร์มนี้ใช้ได้เฉพาะพนักงานที่ล็อกอิน Orbit แล้ว': 'This form is only for staff signed in to Orbit.',
+    'อัตโนมัติตามเวลา (ใกล้ครบกำหนด เลยกำหนด ตามกำหนดเวลา) ทำงานเมื่อมีคนเปิด Orbit อยู่ ตรวจทุก 5 นาที ถ้าช่วงนั้นไม่มีใครเปิด จะทำตามหลังทันทีที่มีคนเปิด และแต่ละรอบทำครั้งเดียวแม้หลายคนเปิดพร้อมกัน':
+      'Time-based automations (due date approaching, overdue, scheduled) run while someone has Orbit open, checked every 5 minutes. If nobody has it open, they run as soon as someone opens it, and each run happens only once even if several people have Orbit open.',
+    'ยังไม่มีการแจ้งเตือนทางอีเมล ทุกอย่างจะเข้ากล่องข้อความใน Orbit': 'Email notifications aren’t available yet. Everything arrives in your Orbit inbox.',
+    'เข้าระบบด้วยบัญชี Microsoft ของบริษัท เปลี่ยนรหัสผ่านหรือตั้งการยืนยันสองชั้นได้ที่บัญชี Microsoft ของคุณ':
+      'You sign in with your company Microsoft account. Change your password or two-step verification in your Microsoft account.',
+    'ถ้าต้องการให้คนระดับ “ดูอย่างเดียว” แก้ข้อมูลไม่ได้จริง ให้ตั้งสิทธิ์ของคนนั้นบนไซต์ SharePoint เป็น Read ด้วย':
+      'To make sure a “View only” person really can’t change data, also set their SharePoint site permission to Read.',
+
     /* --- ทั่วไป --- */
     /* แถบซ้ายสองชั้น — ชื่อหมวด */
     'กลยุทธ์': 'Strategy', 'ความรู้': 'Knowledge', 'คนและทีม': 'People', 'ซ่อนแถบเมนู': 'Hide sidebar',
@@ -2282,7 +2301,9 @@
    *
    * คีย์ที่ไม่มีวงเล็บเหลี่ยมทำงานเหมือนเดิมทุกประการ ไม่ต้องไล่แก้ทั้งพจนานุกรม
    */
-  var PLURAL = /\[(\w+)\|([^\]|]*)\|([^\]]*)\]/g;
+  /* Sprint 1A — รับ [{n}|…|…] ด้วย (ใส่ปีกการอบชื่อตัวแปรเผลอกันได้ง่าย มีอยู่แล้วหลายข้อความ)
+   * เดิมรูปนี้ไม่ตรงแบบ คนใช้เห็นข้อความดิบ "[2|Added 2 dependency|Added 2 dependencies]" */
+  var PLURAL = /\[\{?(\w+)\}?\|([^\]|]*)\|([^\]]*)\]/g;
 
   function pickPlural(s, p) {
     if (s.indexOf('[') < 0) return s;

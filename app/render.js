@@ -1750,8 +1750,9 @@
         '<button class="btn btn-sm btn-ghost" data-act="msg-file" data-k="new">' + I('paperclip', 13) + ' ' + L('แนบไฟล์') + '</button>' +
         '<input type="file" id="msgFile" data-act="msg-file-pick" hidden multiple>' +
         '<span class="grow"></span>' +
+        /* Sprint 1A — ปุ่มเป็นคำกริยา "โพสต์" (เดิม "ประกาศ" ซึ่งภาษาอังกฤษแปลเป็นชื่อแท็บ "Messages") */
         '<button class="btn btn-primary btn-sm" data-act="post-message" data-id="' +
-        esc(projectId) + '">' + L('ประกาศ') + '</button></div></div>';
+        esc(projectId) + '">' + L('โพสต์') + '</button></div></div>';
     }
 
     /* 3b — รายงานสถานะขึ้นในฟีดเดียวกับประกาศ เรียงตามเวลา */
@@ -1930,7 +1931,7 @@
         '<button class="btn btn-primary" data-act="ff-submit" data-id="' + esc(f.id) + '">' + L('ส่งฟอร์ม') + '</button></div>';
     }
     h += '</div><p class="ffp-note">' + I('lock', 12) + ' ' +
-      L('ส่งได้เฉพาะสมาชิกที่เข้าระบบ Orbit แล้ว ฟอร์มสาธารณะสำหรับคนนอกองค์กรต้องมีเซิร์ฟเวอร์ จะมาในเฟส 5') + '</p></div>';
+      L('ฟอร์มนี้ใช้ได้เฉพาะพนักงานที่ล็อกอิน Orbit แล้ว') + '</p></div>';   // Sprint 1A — ไม่พูดถึงเซิร์ฟเวอร์/เฟสของทีมพัฒนา
     return h;
   }
 
@@ -5339,7 +5340,8 @@
       h += '<li><b>' + L(r.label) + '</b><span>' + L(r.desc) + '</span></li>';
     });
     h += '<li class="hint">' + I('shield', 14) + '<span>' +
-      L('ตอนนี้ระดับ “ดูอย่างเดียว” ยังบังคับได้จริงก็ต่อเมื่อตั้งสิทธิ์บนไซต์ SharePoint ของคนนั้นเป็น Read ด้วย เมื่อย้ายไปฐานข้อมูลแล้ว API จะบังคับให้เอง') +
+      /* Sprint 1A — บอกสิ่งที่ผู้ดูแลต้องทำ ไม่พูดถึงฐานข้อมูล/API ที่ยังไม่มี */
+      L('ถ้าต้องการให้คนระดับ “ดูอย่างเดียว” แก้ข้อมูลไม่ได้จริง ให้ตั้งสิทธิ์ของคนนั้นบนไซต์ SharePoint เป็น Read ด้วย') +
       '</span></li>';
     h += '</ul></details>';
     h += '</section>';
