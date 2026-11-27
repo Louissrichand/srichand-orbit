@@ -1736,6 +1736,27 @@
     }, { back: back });
   }
 
+  /* เอางานที่มีอยู่แล้วเข้าโปรเจกต์ปิดอีกโปรเจกต์ (เพิ่มเข้าโปรเจกต์ ทำให้เป็นสาธารณะ แก้หลายงาน)
+   * คู่กรณีของงานที่ไม่ได้เป็นสมาชิกโปรเจกต์ปลายทางจะเห็นทุกอย่างที่คุยกันในงานนั้นต่อ ถามก่อน (S.joinOutsiders)
+   * run() เอางานเข้าโปรเจกต์แล้วคืนค่าจริงถ้าสำเร็จ · ยกเลิก = ไม่มีอะไรเปลี่ยน
+   * ทำไม่ได้อยู่แล้ว (สิทธิ์ปลายทาง) ไม่ต้องถาม ให้ run ไปโดนด่านสร้างงานปฏิเสธพร้อมเหตุผลเหมือนเดิม */
+  function confirmJoin(projectId, taskIds, run) {
+    var r = S.canCreateTask(projectId) ? S.joinOutsiders(taskIds, projectId) : { users: [] };
+    if (!r.users.length) { run(); return; }
+    var ids = r.users.map(function (u) { return u.id; });
+    var p = r.projects[0];
+    askReveal(r, function (access) {
+      S.batch('ให้คนนอกโปรเจกต์เห็นงาน', null, function () {
+        if (access) S.revealTo([], ids, access, projectId);
+        var ok = run();
+        if (!access && ok) S.revealTo(taskIds, ids, null, projectId);
+      });
+    }, {
+      body: L('{who} เป็นผู้รับผิดชอบหรือผู้ติดตามของงานนี้ ถ้าเพิ่มเข้า “{p}” เขาจะเห็นทุกอย่างที่คุยกันในงานนี้ต่อจากนี้ รวมถึงความเห็นและไฟล์แนบ (แม้โปรเจกต์จะเป็นโปรเจกต์ปิด)',
+        { who: r.users.map(function (u) { return u.name; }).join(', '), p: p ? p.name : '' })
+    });
+  }
+
   /* ค่าที่จะ "มอบงานในอนาคต" (ผู้รับผิดชอบเริ่มต้นของฟอร์ม คนที่อัตโนมัติจะมอบ/เพิ่มเป็นผู้ติดตาม)
    * ยังไม่มีงานให้ใครเห็นตอนบันทึก แต่ทุกงานที่เกิดทีหลังจะเปิดให้คนนั้นเห็น เตือนตอนบันทึก
    * ให้เลือกเพิ่มเป็นสมาชิก บันทึกต่อทั้งอย่างนั้น หรือยกเลิกกลับไปแก้ (ไม่บันทึก) */
@@ -5255,7 +5276,8 @@
     });
     h += '</div>';
     h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
-      '<button class="btn btn-primary" data-act="do-csv-import">' + L('นำเข้า {n} งาน', { n: pv.total }) + '</button></div>';
+      /* คีย์ของปุ่มแยกจาก "นำเข้า {n} งาน" ที่ใช้ในบันทึกการทำงาน (ภาษาอังกฤษเป็นอดีตกาล "imported …") */
+      '<button class="btn btn-primary" data-act="do-csv-import">' + L('นำเข้างาน {n} งาน', { n: pv.total }) + '</button></div>';
     return h;
   }
 
@@ -9664,11 +9686,18 @@
 
       /* --- multi-homing --- */
       case 'add-home': openModal(addHomeModal(id)); break;
-      case 'do-add-home':
+      case 'do-add-home': {
         closeModal();
-        /* Sprint 1B — ด่านสร้างงานของโปรเจกต์ปลายทางอาจปฏิเสธ (ขึ้นเหตุผลเองแล้ว) อย่าบอกว่าสำเร็จ */
-        if (S.addTaskToProject(id, projectId, null)) toast(L('เพิ่มเข้าโปรเจกต์แล้ว'));
+        var ahId = id, ahP = projectId;
+        /* ผู้รับผิดชอบ/ผู้ติดตามที่ไม่ได้เป็นสมาชิกโปรเจกต์ปลายทาง (ปิด) — ถามก่อนเพิ่ม (confirmJoin) */
+        confirmJoin(ahP, [ahId], function () {
+          /* Sprint 1B — ด่านสร้างงานของโปรเจกต์ปลายทางอาจปฏิเสธ (ขึ้นเหตุผลเองแล้ว) อย่าบอกว่าสำเร็จ */
+          var ok = S.addTaskToProject(ahId, ahP, null);
+          if (ok) toast(L('เพิ่มเข้าโปรเจกต์แล้ว'), L('ย้อนกลับ'), 'undo');
+          return !!ok;
+        });
         break;
+      }
       case 'unhome':
         if (!S.removeTaskFromProject(id, projectId)) toast(L('งานต้องอยู่อย่างน้อย 1 โปรเจกต์'));
         break;
@@ -9893,9 +9922,14 @@
         var bpp = (document.getElementById('mpProject') || {}).value;
         var bps = (document.getElementById('mpSection') || {}).value;
         if (!bpp || !S.canInProject(bpp, 'edit')) { denyToast(); break; }
-        var bpn = S.bulkAddToProject(selectedIds(), bpp, bps);
+        var bpIds = selectedIds();
         closeModal();
-        toast(L('เพิ่ม {n} งานเข้าโปรเจกต์แล้ว', { n: bpn }), L('ย้อนกลับ'), 'undo');
+        /* แก้หลายงาน → เพิ่มเข้าโปรเจกต์ปิด ถามก่อนแบบเดียวกับทีละงาน ยกเลิก = ไม่มีงานไหนถูกเพิ่ม */
+        confirmJoin(bpp, bpIds, function () {
+          var bpn = S.bulkAddToProject(bpIds, bpp, bps);
+          if (bpn) toast(L('เพิ่ม {n} งานเข้าโปรเจกต์แล้ว', { n: bpn }), L('ย้อนกลับ'), 'undo');
+          return bpn > 0;
+        });
         break;
       }
       case 'bulk-field': openModal(bulkFieldModal()); break;
@@ -10345,9 +10379,14 @@
         if (!mpP || !S.project(mpP)) { toast(L('เลือกโปรเจกต์ก่อน')); break; }
         if (!S.canInProject(mpP, 'edit')) { denyToast(); break; }
         closeModal();
-        S.addTaskToProject(id, mpP, mpS || null);
-        toast(L('งานนี้อยู่ใน {p} แล้ว ทุกคนที่เห็นโปรเจกต์เห็นงานนี้ด้วย', { p: S.project(mpP).name }),
-          L('ย้อนกลับ'), 'undo');
+        var mpId = id;
+        /* งานส่วนตัวเข้าโปรเจกต์ปิด — คู่กรณีที่ไม่ได้เป็นสมาชิกจะเห็นสิ่งที่คุยกันในงานต่อ ถามก่อน (confirmJoin) */
+        confirmJoin(mpP, [mpId], function () {
+          var ok = S.addTaskToProject(mpId, mpP, mpS || null);
+          if (ok) toast(L('งานนี้อยู่ใน {p} แล้ว ทุกคนที่เห็นโปรเจกต์เห็นงานนี้ด้วย', { p: S.project(mpP).name }),
+            L('ย้อนกลับ'), 'undo');
+          return !!ok;
+        });
         break;
       }
 
@@ -10725,7 +10764,8 @@
         pickCsvFile(id);
         break;
       /* --- สิทธิ์รายโปรเจกต์ --- */
-      case 'project-access': openModal(projectAccessModal(id || state.route.id)); break;
+      /* ปิดเมนูโปรเจกต์ก่อน ไม่งั้นเมนูลอยค้างอยู่หลังหน้าต่าง (แบบเดียวกับฟอร์ม/เทมเพลตที่เปิดจากเมนูเดียวกัน) */
+      case 'project-access': closePops(); openModal(projectAccessModal(id || state.route.id)); break;
       case 'set-visibility':
         S.setProjectVisibility(id, el.dataset.v);
         openModal(projectAccessModal(id));
@@ -10921,7 +10961,7 @@
       }
 
       /* --- fields --- */
-      case 'manage-fields': openModal(fieldsModal(id)); break;
+      case 'manage-fields': closePops(); openModal(fieldsModal(id)); break;     // เปิดจากเมนูโปรเจกต์ — ปิดเมนูก่อน
       case 'reset-cols':
         S.resetColWidths(id);
         closeModal();
@@ -11606,11 +11646,21 @@
         var withProj = !!(document.getElementById('hoProjects') || {}).checked;
         var hoFrom = id;
         var toU = to ? S.user(to) : null;
-        var doHo = function () {
+        /* โปรเจกต์ปิดที่มีงานที่จะโอน แต่คนรับไม่ได้เป็นสมาชิก — เขาจะเห็นงานเหล่านั้นทั้งงานเพราะกลายเป็นผู้รับผิดชอบ */
+        var hoOut = toU ? S.handoverOutsiders(hoFrom, to, withProj) : [];
+        var doHo = function (access) {
           var moved = 0, projN = 0, failed = false;
-          /* Sprint 1B — โอนงาน โอนบทบาทในโปรเจกต์ และปิดบัญชี/เปลี่ยนบทบาท อยู่ในจุดย้อนกลับเดียว */
+          /* Sprint 1B — โอนงาน โอนบทบาทในโปรเจกต์ และปิดบัญชี/เปลี่ยนบทบาท อยู่ในจุดย้อนกลับเดียว
+           * (รวมการเพิ่มคนรับเป็นสมาชิกโปรเจกต์ปิด หรือบันทึก "ให้ … เห็นงานนี้" ตามที่เลือก) */
           S.batch('โอนงานต่อ', null, function () {
+            if (access) hoOut.forEach(function (x) { S.revealTo([], [to], access, x.project.id); });
             moved = S.handoverTasks(hoFrom, to || null);
+            var hoLogged = {};             // งานที่อยู่หลายโปรเจกต์ปิด ลงประวัติครั้งเดียวพอ
+            if (!access) hoOut.forEach(function (x) {
+              var fresh = x.taskIds.filter(function (tid) { return !hoLogged[tid]; });
+              fresh.forEach(function (tid) { hoLogged[tid] = true; });
+              if (fresh.length) S.revealTo(fresh, [to], null, x.project.id);
+            });
             if (withProj && to) projN = S.handoverProjects(hoFrom, to);
             if (alsoOff && !S.setActive(hoFrom, false)) failed = true;
             if (newRole && !S.setRole(hoFrom, newRole)) failed = true;
@@ -11624,8 +11674,34 @@
           if (projN) msg += ' · ' + L('โอนผู้ดูแล {n} โปรเจกต์', { n: projN });
           toast(msg, L('ย้อนกลับ'), 'undo');
         };
-        /* เลือกบุคคลภายนอกต้องยืนยันอีกชั้น เพราะเขาจะเห็นงานภายในทั้งหมดที่โอนไป */
-        if (toU && toU.role === 'guest') {
+        /* คนรับไม่ได้เป็นสมาชิกโปรเจกต์ปิดที่มีงานที่จะโอน — เดิมโอนเงียบ ๆ ตอนนี้ให้เลือก
+         * เพิ่มเป็นสมาชิกโปรเจกต์เหล่านั้น / โอนโดยให้เห็นเฉพาะงานที่โอน (ลงประวัติในงาน) / ยกเลิก (กลับไปหน้าต่างโอนงาน)
+         * บุคคลภายนอกใช้หน้าต่างนี้แทนคำยืนยันเดิม (มีคำเตือนเรื่องบุคคลภายนอกต่อท้าย) */
+        if (hoOut.length) {
+          var hoNames = hoOut.map(function (x) { return x.project.name; });
+          var hoTasks = {};
+          hoOut.forEach(function (x) { x.taskIds.forEach(function (tid) { hoTasks[tid] = true; }); });
+          var hoCanAdd = hoOut.every(function (x) { return S.canAddMembers(x.project.id); });
+          var hoChoices = [];
+          if (hoCanAdd) {
+            hoChoices.push({ label: L('โอนและเพิ่มเป็นสมาชิกโปรเจกต์ (แสดงความเห็นได้)'), primary: true, run: function () { doHo('comment'); } });
+            hoChoices.push({ label: L('โอนและเพิ่มเป็นสมาชิกโปรเจกต์ (แก้ไขได้)'), run: function () { doHo('edit'); } });
+          }
+          hoChoices.push({ label: L('โอนโดยให้เห็นเฉพาะงานที่โอน'), primary: !hoChoices.length, run: function () { doHo(null); } });
+          var hoBack = function () {
+            openModal(handoverModal(hoFrom, alsoOff, { role: newRole || null }));
+            var sel = document.getElementById('hoTo');
+            if (sel) sel.value = to;
+            var hp = document.getElementById('hoProjects');
+            if (hp) hp.checked = withProj;
+          };
+          askChoice(L('{who} ไม่ได้เป็นสมาชิกของ {n} โปรเจกต์ปิดที่มีงานที่จะโอน', { who: toU.name, n: hoNames.length }),
+            L('งาน {t} งานอยู่ใน {p} ถ้าโอนต่อ {who} จะเห็นงานเหล่านั้นทั้งงาน รวมถึงความเห็นและไฟล์แนบ แม้จะไม่ได้เป็นสมาชิกโปรเจกต์',
+              { t: Object.keys(hoTasks).length, p: hoNames.slice(0, 4).join(', ') + (hoNames.length > 4 ? '…' : ''), who: toU.name }) +
+            (toU.role === 'guest' ? ' ' + L('{name} เป็นบุคคลภายนอก ควรเพิ่มเป็นสมาชิกเฉพาะโปรเจกต์ที่ตั้งใจเชิญเท่านั้น', { name: toU.name }) : ''),
+            hoChoices, { back: hoBack });
+        } else if (toU && toU.role === 'guest') {
+          /* เลือกบุคคลภายนอกต้องยืนยันอีกชั้น เพราะเขาจะเห็นงานภายในทั้งหมดที่โอนไป */
           askConfirm(L('โอนงานให้บุคคลภายนอก “{name}”?', { name: toU.name }),
             L('{name} เป็นบุคคลภายนอก จะเห็นงานทั้ง {n} งาน รวมความเห็นและไฟล์แนบ แม้งานจะอยู่ในโปรเจกต์ที่เขาไม่ได้ถูกเชิญ',
               { name: toU.name, n: S.openTasksOf(hoFrom).length }), doHo, { ok: L('โอนให้บุคคลภายนอก') });

@@ -2362,6 +2362,21 @@
     'เฉพาะผู้ดูแลโปรเจกต์หรือผู้ดูแลระบบเท่านั้นที่เพิ่มหรือถอดสมาชิกได้': 'Only project admins or admins can add or remove members',
     '{who} ไม่ได้เป็นสมาชิกของโปรเจกต์ปิดนี้ แต่จะเห็นทุกงานที่ฟอร์มสร้าง (รวมความเห็นและไฟล์แนบ)':
       '{who} isn’t a member of this private project but will see every task this form creates (including comments and attachments)',
+    /* เอางานเดิมเข้าโปรเจกต์ปิด โอนงาน อัตโนมัติที่มอบให้ตัวแปร ปุ่มนำเข้า CSV */
+    '{who} เป็นผู้รับผิดชอบหรือผู้ติดตามของงานนี้ ถ้าเพิ่มเข้า “{p}” เขาจะเห็นทุกอย่างที่คุยกันในงานนี้ต่อจากนี้ รวมถึงความเห็นและไฟล์แนบ (แม้โปรเจกต์จะเป็นโปรเจกต์ปิด)':
+      '{who} is assigned to or following this task. If you add it to “{p}”, they will see everything discussed on it from now on, including comments and attachments (even though the project is private)',
+    '{who} ไม่ได้เป็นสมาชิกของ {n} โปรเจกต์ปิดที่มีงานที่จะโอน': '{who} isn’t a member of [n|{n} private project|{n} private projects] these tasks live in',
+    'งาน {t} งานอยู่ใน {p} ถ้าโอนต่อ {who} จะเห็นงานเหล่านั้นทั้งงาน รวมถึงความเห็นและไฟล์แนบ แม้จะไม่ได้เป็นสมาชิกโปรเจกต์':
+      '[t|{t} task is|{t} tasks are] in {p}. If you hand them over, {who} will see those tasks in full, including comments and attachments, without being a project member',
+    '{name} เป็นบุคคลภายนอก ควรเพิ่มเป็นสมาชิกเฉพาะโปรเจกต์ที่ตั้งใจเชิญเท่านั้น': '{name} is an external guest — only add them to projects you mean to invite them to.',
+    'โอนและเพิ่มเป็นสมาชิกโปรเจกต์ (แสดงความเห็นได้)': 'Hand over and add as project member (can comment)',
+    'โอนและเพิ่มเป็นสมาชิกโปรเจกต์ (แก้ไขได้)': 'Hand over and add as project member (can edit)',
+    'โอนโดยให้เห็นเฉพาะงานที่โอน': 'Hand over — share only these tasks',
+    'ข้ามการมอบงาน: {who} ไม่ได้เป็นสมาชิกของ “{p}” จึงไม่เปิดให้เห็นงานนี้': 'Skipped assigning: {who} isn’t a member of “{p}”, so the task wasn’t shared with them',
+    'ไม่ได้เพิ่ม {who} เป็นผู้ติดตาม: ไม่ได้เป็นสมาชิกของ “{p}”': 'Didn’t add {who} as a follower: not a member of “{p}”',
+    'สร้างงานแล้วแต่ไม่ได้มอบให้ {who}: ไม่ได้เป็นสมาชิกของ “{p}”': 'Created the task but didn’t assign {who}: not a member of “{p}”',
+    'ไม่ได้เพิ่มเข้า “{p}”: {who} (ผู้รับผิดชอบ/ผู้ติดตามของงาน) ไม่ได้เป็นสมาชิกของโปรเจกต์นี้': 'Didn’t add to “{p}”: {who} (assignee/follower of the task) isn’t a member of that project',
+    'นำเข้างาน {n} งาน': 'Import [n|{n} task|{n} tasks]',
     /* โอนงาน เปลี่ยนบทบาท และเพิ่มสมาชิก */
     'เปลี่ยนบทบาทและโอนงานต่อ': 'Change role and hand over tasks',
     'มีงานที่ยังไม่เสร็จอยู่ {n} งาน บทบาทดูอย่างเดียวติ๊กเสร็จหรือแก้งานของตัวเองไม่ได้ งานจะค้างอยู่กับเขา': '[n|{n} open task|{n} open tasks] left. View-only people can’t complete or edit their own tasks, so these would get stuck',
