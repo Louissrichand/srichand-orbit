@@ -4795,3 +4795,32 @@ button.pjx-tr:hover { background: var(--bg-sunk); }
   .pjx-head b { white-space: nowrap; }
   .pjx-head .n { display: none; }
 }
+
+/* ---------- Sprint 1B — สิทธิ์ การอนุมัติ และความปลอดภัยของข้อมูล ---------- */
+/* ป้าย "สิทธิ์ของคุณ" ข้างชื่อโปรเจกต์ (เฉพาะคนที่แก้ไม่ได้) */
+.access-chip { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; white-space: nowrap;
+  color: var(--fg-soft); }
+.access-chip svg { flex: none; }
+/* จอไม่กว้าง ชื่อโปรเจกต์สำคัญกว่า เหลือแค่ไอคอนแม่กุญแจ (ข้อความเต็มอยู่ใน title) */
+@media (max-width: 1100px) { .access-chip .ac-t { display: none; } .access-chip { padding-left: 7px; padding-right: 7px; } }
+/* แผงงานของคนที่แก้งานไม่ได้ */
+.dw-ro-note { display: flex; align-items: center; gap: 7px; margin: 2px 0 12px; padding: 7px 10px;
+  border-radius: var(--radius); background: var(--bg-sunk); color: var(--fg-soft); font-size: 12.5px; line-height: 1.45; }
+.dw-ro-note svg { flex: none; }
+.dw-ro-foot { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--fg-faint); }
+.dw-title[readonly] { cursor: default; }
+.picker-btn[disabled] { cursor: default; opacity: .75; }
+/* คำขอสิทธิ์ในกล่องข้อความ — ตอบได้ในแถว */
+.nrow-note { font-size: 12.5px; color: var(--fg-soft); margin-top: 3px; line-height: 1.45; word-break: break-word; }
+.nrow-access { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+.nrow-access .inp { width: auto; min-width: 130px; height: 30px; padding: 0 8px; }
+/* หน้าต่างโอนงาน */
+.ho-guests { display: flex; align-items: flex-start; gap: 7px; font-size: 12.5px; color: var(--fg-soft);
+  margin: -4px 0 12px; line-height: 1.45; cursor: pointer; }
+.ho-guests input { margin-top: 2px; flex: none; }
+/* หน้าต่างถาม/ข้อความที่เปิดจากหน้ากั้น (บัญชีถูกปิด) ต้องอยู่เหนือหน้ากั้น */
+body.gated .modal-backdrop.open { z-index: 310; }
+body.gated .toast { z-index: 320; }
+@media (max-width: 620px) {
+  .nrow-access .inp { min-width: 0; flex: 1 1 120px; }
+}

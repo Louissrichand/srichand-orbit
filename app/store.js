@@ -10,7 +10,7 @@
 
   var KEY = 'orbit.db.v4';
   var LEGACY_KEYS = ['orbit.db.v3', 'orbit.db.v2', 'orbit.db.v1', 'taskflow.db.v1'];   // ชื่อ/เวอร์ชันเดิม
-  var SCHEMA = 17;
+  var SCHEMA = 18;      // Sprint 1B — ถังขยะของความเห็น คำขอสิทธิ์แบบไม่สร้างงาน
 
   /* 4b — ค่าคงที่ที่ migrate() ใช้ (ต้องประกาศก่อน hydrate() ทำงาน) */
   var TIME_CATS_DEFAULT = ['งานลูกค้า', 'งานภายใน', 'ประชุม', 'อบรม'];
@@ -675,6 +675,15 @@
     migrate3c(d);
     migrate4a(d);
     migrate4b(d);
+    /* Sprint 1B (SCHEMA 18) — ถังขยะมีชนิด comment เพิ่ม และคำขอสิทธิ์เข้าโปรเจกต์ไม่ผูกกับงานแล้ว
+     * ({ userId, at, note } — คำขอแบบเก่าที่มี taskId ยังใช้ได้เหมือนเดิม) */
+    d.trash = (d.trash || []).filter(function (x) {
+      return !!x && (x.kind !== 'comment' || !!(x.data && x.data.story && x.data.taskId));
+    });
+    d.projects.forEach(function (p) {
+      p.accessRequests = (Array.isArray(p.accessRequests) ? p.accessRequests : []).filter(function (r) { return r && r.userId; });
+      p.accessRequests.forEach(function (r) { if (!('note' in r)) r.note = null; });
+    });
     prunePersonal(d);
     if (!d.users.some(function (u) { return u.role === 'admin'; })) {
       var firstUser = d.users.filter(function (u) { return u.id === d.currentUserId; })[0] || d.users[0];
@@ -1912,6 +1921,7 @@
   function mtCreateTasks(names, secId, extra) {
     var list = [].concat(names || []).map(function (s) { return String(s).trim(); }).filter(Boolean);
     if (!list.length) return [];
+    if (!canCreateTask(null, extra && extra.parentId)) { denied('create'); return []; }   // Sprint 1B
     snapshot(list.length > 1 ? 'สร้าง {n} งาน' : 'สร้างงาน', { n: list.length });
     var st = personalOf();
     var sid = st.mt.secs.some(function (s) { return s.id === secId; }) ? secId : MT_RECENT;
@@ -2099,7 +2109,7 @@
     return out;
   }
 
-  var INBOX_RANK = { mention: 50, assigned: 45, approval: 40, unblock: 35, overdue: 30, due: 28,
+  var INBOX_RANK = { mention: 50, assigned: 45, access: 45, approval: 40, unblock: 35, overdue: 30, due: 28,
                      comment: 20, message: 15, status: 15, newtask: 10, activity: 0 };
 
   /**
@@ -3187,6 +3197,10 @@
     ids = (ids || []).filter(function (id) { return !!task(id); });
     sets = (sets || []).filter(function (s) { return s && s.by; });
     if (!ids.length || !sets.length) return false;
+    /* Sprint 1B — ลากลงกลุ่มคือการแก้งาน (คอลัมน์ ผู้รับผิดชอบ ความสำคัญ ฟิลด์) ต้องแก้ได้ทุกงานที่ลาก */
+    if (!canArrangeIn(projectId) || !ids.every(function (id) { return can('write', id); })) {
+      denied('write'); return false;
+    }
     /* batch — ค่าที่ต้องผ่าน updateTask (ผู้รับผิดชอบ ความสำคัญ สถานะ) ไม่บันทึกกลางทาง */
     batch(ids.length > 1 ? 'ย้าย {n} งาน' : 'ย้ายงาน', { n: ids.length }, function () {
       ids.forEach(function (id) {
@@ -3632,6 +3646,8 @@
   }
 
   function createTask(attrs, projectId, sectionId) {
+    /* Sprint 1B — ด่านกลาง (canCreateTask) ไม่ผ่าน = ไม่สร้าง คืน null ให้ผู้เรียกเช็ก */
+    if (!canCreateTask(projectId, attrs && attrs.parentId)) return denied('create');
     snapshot('สร้างงาน');
     var t = createTaskRaw(attrs, projectId, sectionId);
     commit();
@@ -3643,6 +3659,7 @@
     var list = (names || []).map(function (s) { return String(s).trim(); })
       .filter(Boolean);
     if (!list.length) return [];
+    if (!canCreateTask(projectId, parentId)) { denied('create'); return []; }
     snapshot('สร้าง {n} งาน', { n: list.length });
     var out = list.map(function (n) {
       return createTaskRaw({ name: n, parentId: parentId || null }, projectId, sectionId);
@@ -3774,6 +3791,32 @@
   function updateTask(id, patch, opts) {
     var t = task(id);
     if (!t) return null;
+
+    /* Sprint 1B — งานขออนุมัติ ผลอนุมัติเป็นตัวเปิด/ปิดงาน แบบเดียวกับ Asana
+     *   อนุมัติ / ปฏิเสธ  = ตัดสินแล้ว งานเสร็จเอง (เดิมอนุมัติแล้วงานยังค้าง นับเป็นงานไม่เสร็จ)
+     *   ขอแก้ไข / รออนุมัติ = งานยังเปิด รอคนขอแก้แล้วส่งใหม่
+     * คนขอติ๊กเสร็จเองไม่ได้ (เดิมติ๊กปิดงานที่ยังไม่มีใครอนุมัติได้) ปุ่มอนุมัติคือทางปิดงานทางเดียว
+     * ผู้อนุมัติเปิดงานที่ตัดสินแล้วกลับมาได้ = ถอนผลแล้วกลับไปรออนุมัติ
+     * ระบบอัตโนมัติก็อยู่ใต้กติกานี้ แต่ไม่เด้งข้อความ (ไม่มีคนกดให้บอก) */
+    if (t.type === 'approval' && !('type' in patch && patch.type !== 'approval')) {
+      if ('approval' in patch && patch.approval !== t.approval) {
+        if (!autoCtx && !canApprove(id)) {
+          delete patch.approval;
+          denied('approval');
+        } else if (approvalDecided(patch.approval) !== !!t.completed) {
+          patch.completed = approvalDecided(patch.approval);
+        }
+      } else if ('completed' in patch && !!patch.completed !== !!t.completed) {
+        if (patch.completed && !approvalDecided(t.approval)) {
+          delete patch.completed;
+          if (!autoCtx) denied('approval');
+        } else if (!patch.completed && approvalDecided(t.approval)) {
+          if (autoCtx || canApprove(id)) patch.approval = 'pending';
+          else { delete patch.completed; denied('approval'); }
+        }
+      }
+      if (!Object.keys(patch).length) return t;      // ไม่เหลืออะไรให้แก้ ไม่ต้องมีจุดย้อนกลับเปล่า ๆ
+    }
     if (!opts || !opts.quiet) snapshot('แก้ไขงาน');
 
     /* 3b — เปลี่ยนเป็นชนิดในตัวแล้ว ชนิดกำหนดเองหลุดออก (ยกเว้นตอน setTypeRaw ตั้งชนิดพื้นฐานให้เอง) */
@@ -3814,10 +3857,13 @@
       patch.assignedAt = patch.assigneeId ? new Date().toISOString() : null;
       patch.assignedBy = patch.assigneeId ? db.currentUserId : null;
       var u = user(patch.assigneeId);
+      /* Sprint 1B — งานขออนุมัติ ผู้รับผิดชอบคือผู้อนุมัติ ข้อความต้องบอกว่า "ขออนุมัติจากคุณ"
+       * ไม่ใช่ "มอบหมายงาน" เฉย ๆ ไม่งั้นผู้อนุมัติไม่รู้ว่ามีเรื่องรอให้ตัดสิน */
+      var asAppr = ('type' in patch ? patch.type : t.type) === 'approval';
       /* คนที่เพิ่งได้รับงานไม่ต้องได้บรรทัด "มอบหมายให้ X" ซ้ำอีก
        * เพราะจะได้บรรทัดเจาะจงว่า "มอบหมายงาน … ให้คุณ" อยู่แล้ว
        * ถ้าไม่กัน คนที่เคยติดตามงานนี้อยู่แล้วจะเห็นสองบรรทัดสำหรับเรื่องเดียวกัน */
-      log(id, u ? 'มอบหมายให้ {who}' : 'ยกเลิกผู้รับผิดชอบ', u ? { who: u.name } : null,
+      log(id, u ? (asAppr ? 'ขออนุมัติจาก {who}' : 'มอบหมายให้ {who}') : 'ยกเลิกผู้รับผิดชอบ', u ? { who: u.name } : null,
         patch.assigneeId ? [patch.assigneeId] : null);
       if (patch.assigneeId && t.followers.indexOf(patch.assigneeId) < 0) {
         t.followers.push(patch.assigneeId);
@@ -3825,10 +3871,13 @@
       /* แจ้งคนที่เพิ่งได้รับงานเป็นการเฉพาะ แยกจากความเคลื่อนไหวทั่วไป
        * เพราะ "มีงานเข้า" เป็นเรื่องที่คนอยากรู้ทันที ต่างจาก "มีคนเปลี่ยนวัน" */
       if (patch.assigneeId) {
-        notifyOnly(id, [patch.assigneeId],
-          'มอบหมายงาน “{t}” ให้คุณ', 'assigned', { t: t.name });
+        notifyOnly(id, [patch.assigneeId], assignKey(asAppr), 'assigned', { t: t.name });
       }
       autoFire('assignee', id, { user: patch.assigneeId || null, old: t.assigneeId || null });
+    } else if ('type' in patch && patch.type === 'approval' && t.type !== 'approval' &&
+               t.assigneeId && t.assigneeId !== db.currentUserId) {
+      /* Sprint 1B — เปลี่ยนงานที่มีผู้รับผิดชอบอยู่แล้วเป็นงานขออนุมัติ = ขอให้คนนั้นอนุมัติ ต้องบอกเขา */
+      notifyOnly(id, [t.assigneeId], assignKey(true), 'assigned', { t: t.name });
     }
     /* ---- บันทึกการเปลี่ยนแปลงให้ครบทุกช่อง ----
      *
@@ -4106,6 +4155,24 @@
       });
       audit('project.restore', it.data.project.name, 'กู้คืนจากถังขยะ');
       out.projectId = pid;
+    } else if (it.kind === 'comment') {
+      /* Sprint 1B — ความเห็นกลับไปที่งานเดิม ถ้าตอนลบเหลือป้าย "ถูกลบแล้ว" (มีคนตอบอยู่) ก็เติมข้อความกลับ
+       * ถ้าความเห็นแม่หายไปแล้วทั้งก้อน คำตอบกลับมาเป็นความเห็นปกติ ไม่ลอยอยู่ใต้แม่ที่ไม่มีตัว */
+      var cs = it.data.story;
+      if (!task(it.data.taskId)) return { ok: false, reason: 'งานของความเห็นนี้ถูกลบไปแล้ว กู้งานคืนก่อน' };
+      var curS = story(cs.id);
+      if (curS && !curS.deleted) return { ok: false, reason: 'ความเห็นนี้กลับมาอยู่แล้ว' };
+      snapshot('กู้คืนจากถังขยะ');
+      if (curS) {
+        Object.keys(cs).forEach(function (k) { curS[k] = cs[k]; });
+      } else {
+        if (it.data.parent && !story(it.data.parent.id)) db.stories.push(it.data.parent);
+        if (cs.parentId && !story(cs.parentId)) cs.parentId = null;
+        db.stories.push(cs);
+      }
+      dropIndex();
+      log(it.data.taskId, 'กู้คืนความเห็นจากถังขยะ');
+      out.taskId = it.data.taskId;
     } else {
       snapshot('กู้คืนจากถังขยะ');
       var back = pasteTasks(it.data);
@@ -4140,11 +4207,23 @@
    *             projects, deps, dates, fields } — ไม่ส่ง = คัดลอกทุกอย่าง
    *           assigneeId บังคับผู้รับผิดชอบของสำเนา, quiet ไม่ snapshot/commit
    */
+  /** Sprint 1B — สำเนาจะไปเกิดที่ไหน ต้องสร้างงานที่นั่นได้ทุกที่
+   *  งานย่อย = แก้งานแม่ได้ · เอาโปรเจกต์ไปด้วย = แก้ทุกโปรเจกต์ของงานนั้นได้ · ไม่เอา = งานส่วนตัว */
+  function canCopyTask(t, opt) {
+    if (t.parentId) return canCreateTask(null, t.parentId);
+    if (opt.projects) {
+      var ms = index().memByTask[t.id] || [];
+      if (ms.length) return ms.every(function (m) { return canCreateTask(m.projectId); });
+    }
+    return canCreateTask(null);
+  }
+
   function duplicateTask(id, o) {
     var t = task(id);
     if (!t) return null;
     var raw = o || {};
     var opt = dupOpts(raw);
+    if (!canCopyTask(t, opt)) return denied('create');
     if (!raw.quiet) snapshot('คัดลอกงาน');
     var copy = copyTaskTree(t, opt, t.parentId, 0);
     copy.name = raw.name || (t.name + ' ' + L('(สำเนา)'));
@@ -4173,6 +4252,8 @@
     var t = task(taskId);
     var people = (userIds || []).filter(function (u, i, a) { return user(u) && a.indexOf(u) === i; });
     if (!t || !people.length) return [];
+    /* Sprint 1B — แก้งานต้นฉบับ (ผู้รับผิดชอบ) และสร้างสำเนาในที่เดียวกัน ต้องผ่านทั้งสองอย่าง */
+    if (!can('write', taskId) || !canCopyTask(t, dupOpts(null))) { denied('create'); return []; }
     snapshot('มอบสำเนาให้ {n} คน', { n: people.length });
     var made = [];
     if (!t.assigneeId) {
@@ -4181,12 +4262,13 @@
       stampAssign(t);
       if (t.followers.indexOf(first) < 0) t.followers.push(first);
       log(taskId, 'มอบหมายให้ {who}', { who: user(first).name }, [first]);
-      notifyOnly(taskId, [first], 'มอบหมายงาน “{t}” ให้คุณ', 'assigned', { t: t.name });
+      notifyOnly(taskId, [first], assignKey(t.type === 'approval'), 'assigned', { t: t.name });
     }
     people.forEach(function (u) {
       if (u === t.assigneeId) return;
       var c = duplicateTask(taskId, { quiet: true, name: t.name, assigneeId: u });
-      notifyOnly(c.id, [u], 'มอบหมายงาน “{t}” ให้คุณ', 'assigned', { t: c.name });
+      if (!c) return;
+      notifyOnly(c.id, [u], assignKey(c.type === 'approval'), 'assigned', { t: c.name });
       made.push(c);
     });
     commit();
@@ -4201,6 +4283,7 @@
   function mergeDuplicate(dupId, masterId) {
     var d = task(dupId), m = task(masterId);
     if (!d || !m || dupId === masterId) return false;
+    if (!can('write', dupId) || !can('write', masterId)) { denied('write'); return false; }   // Sprint 1B
     if (treeIds(dupId)[masterId]) return false;   // รวมเข้ากับงานย่อยของตัวเองไม่ได้
     snapshot('รวมงานซ้ำ');
     function union(a, b) {
@@ -4243,6 +4326,7 @@
   function createFollowUp(srcId, name, dueOn) {
     var src = task(srcId);
     if (!src) return null;
+    if (!canCreateTask(null) || !canSeeTask(srcId)) return denied('create');
     snapshot('สร้างงานติดตามผล');
     var t = createTaskRaw({
       name: name || (L('ติดตาม:') + ' ' + src.name),
@@ -4250,7 +4334,15 @@
       dueOn: dueOn || null,
       notes: L('ติดตามผลจาก') + ' @[' + refLabel(src.name) + '](' + src.id + ')'
     }, null, null);
-    copyMemberships(srcId, t.id);
+    /* Sprint 1B — ตามไปอยู่เฉพาะโปรเจกต์ที่เราสร้างงานได้
+     * คนที่แสดงความเห็นได้อย่างเดียวยังสร้างงานติดตามผลของตัวเองได้ แต่งานจะอยู่ในงานของฉัน (ส่วนตัว)
+     * ไม่ไปโผล่ในโปรเจกต์ที่เขาไม่มีสิทธิ์เพิ่มงาน */
+    db.memberships.filter(function (m) { return m.taskId === srcId && canCreateTask(m.projectId); })
+      .forEach(function (m) {
+        db.memberships.push({ id: uid('m'), taskId: t.id, projectId: m.projectId, sectionId: m.sectionId,
+          position: nextPosition(m.projectId, m.sectionId) });
+        notifyNewTask(t, m.projectId);
+      });
     log(srcId, 'สร้างงานติดตามผล “{t}”', { t: t.name });
     commit();
     return t;
@@ -4264,6 +4356,7 @@
     if (!t || !p || taskId === parentId) return false;
     if (treeIds(taskId)[parentId]) return false;     // แม่เป็นลูกหลานของมันเองไม่ได้
     if (t.parentId === parentId) return false;
+    if (!can('write', taskId) || !canCreateTask(null, parentId)) { denied('write'); return false; }   // Sprint 1B
     snapshot('แปลงเป็นงานย่อย');
     t.parentId = parentId;
     db.memberships = db.memberships.filter(function (m) { return m.taskId !== taskId; });
@@ -4278,9 +4371,14 @@
     var t = task(taskId);
     if (!t || !t.parentId) return false;
     var p = task(t.parentId);
-    snapshot('ย้ายออกเป็นงานหลัก');
     var root = p, d = 0;
     while (root && root.parentId && d++ < 20) root = task(root.parentId);
+    /* Sprint 1B — ออกมาเป็นงานหลักในโปรเจกต์ของงานต้นทาง = สร้างงานในโปรเจกต์นั้น */
+    var rootMs = root ? (index().memByTask[root.id] || []) : [];
+    if (!can('write', taskId) || !rootMs.every(function (m) { return canCreateTask(m.projectId); })) {
+      denied('create'); return false;
+    }
+    snapshot('ย้ายออกเป็นงานหลัก');
     t.parentId = null;
     if (root) copyMemberships(root.id, taskId);
     log(taskId, 'ย้ายออกจาก “{t}” เป็นงานหลัก', { t: p ? p.name : '?' });
@@ -4333,6 +4431,7 @@
       return x.taskId === taskId && x.projectId === projectId;
     })[0];
     if (!m) return;
+    if (!canArrangeIn(projectId)) { denied('write'); return; }   // Sprint 1B — ลากย้ายในโปรเจกต์ที่แก้ไม่ได้
     snapshot('ย้ายงาน');
 
     var list = tasksInSection(projectId, toSectionId)
@@ -4374,6 +4473,9 @@
       return m.taskId === taskId && m.projectId === projectId;
     })[0];
     if (exists) return exists;
+    /* Sprint 1B — เอางานเข้าโปรเจกต์ = สร้างงานในโปรเจกต์ปลายทาง และต้องเห็นงานนั้นอยู่แล้ว
+     * ยกเว้นตอนระบบอัตโนมัติทำ (กฎที่คนแก้โปรเจกต์ตั้งไว้ ไม่ใช่การกดของคนที่บังเอิญปลุกกฎ) */
+    if (!autoCtx && (!canCreateTask(projectId) || !canSeeTask(taskId))) return denied('create');
     snapshot('เพิ่มเข้าโปรเจกต์');
     var p = project(projectId);
     var sid = sectionId || (p.sections[0] && p.sections[0].id);
@@ -4620,6 +4722,22 @@
     if (!s || s.type !== 'comment' || s.deleted) return false;
     if (s.actorId !== db.currentUserId) return false;
     snapshot('ลบความเห็น');
+    /* Sprint 1B — ความเห็นที่ลบไปพักในถังขยะ 30 วันเหมือนงานและโปรเจกต์
+     * เดิมมีแค่ปุ่มย้อนกลับไม่กี่วินาที พ้นจากนั้นข้อความ (ซึ่งมักเป็นข้อตกลงหรือตัวเลข) หายถาวร
+     * เก็บสำเนาก่อนแก้ไว้ทั้งก้อน รวมป้าย "ถูกลบแล้ว" ของความเห็นแม่ที่จะหายตามไปด้วย */
+    var tk = task(s.taskId);
+    var home = tk ? (index().memByTask[rootOf(tk).id] || [])[0] : null;
+    var tparent = s.parentId ? story(s.parentId) : null;
+    var dropsParent = !!(tparent && tparent.deleted && !repliesOf(s.id).length &&
+      repliesOf(tparent.id).length === 1);
+    trashPush('comment', plainText(s.text).replace(/\s+/g, ' ').slice(0, 80), home ? home.projectId : null, {
+      taskId: s.taskId, story: clone(s), parent: dropsParent ? clone(tparent) : null
+    });
+    /* ลงประวัติของงานโดยไม่เด้งแจ้งผู้ติดตาม (ไม่ใช่ข่าวที่ทุกคนต้องรู้) และลงบันทึกการทำงานของผู้ดูแล
+     * บันทึกการทำงานไม่เก็บเนื้อความ — คนลบอาจลบเพราะพิมพ์ข้อมูลลับ ของในถังหมดอายุใน 30 วัน
+     * แต่บันทึกการทำงานอยู่นานกว่านั้น ถ้าเก็บเนื้อความไว้ก็เท่ากับลบไม่ออก */
+    log(s.taskId, 'ลบความเห็นหนึ่งรายการ', null, tk ? (tk.followers || []).slice() : null);
+    audit('comment.delete', tk ? tk.name : s.taskId, 'ลบความเห็นในงานนี้ (กู้คืนได้จากถังขยะ)');
     if (repliesOf(s.id).length) {
       s.deleted = true;
       s.text = '';
@@ -4670,6 +4788,7 @@
   /** ย้ายหลายงานไปคอลัมน์เดียวกัน — ผ่าน setSectionRaw เหมือนการลาก อัตโนมัติ "ย้ายเข้าคอลัมน์" จึงทำงาน */
   function bulkMove(ids, projectId, sectionId) {
     if (!section(projectId, sectionId)) return;
+    if (!canArrangeIn(projectId)) { denied('write'); return; }   // Sprint 1B
     snapshot('ย้าย {n} งาน', { n: ids.length });
     ids.forEach(function (id) {
       var m = db.memberships.filter(function (x) {
@@ -5140,6 +5259,7 @@
     var toPid = o.toProject && project(o.toProject) ? o.toProject : projectId;
     var dest = project(toPid);
     if (!src || !dest) return null;
+    if (!canCreateTask(toPid) || !canInProject(projectId, 'edit')) return denied('create');   // Sprint 1B
     var keep = {};
     SEC_DUP_KEYS.forEach(function (k) { keep[k] = !o.keep || !(k in o.keep) ? true : !!o.keep[k]; });
     if (toPid !== projectId) keep.fields = false;
@@ -5197,6 +5317,7 @@
     var m = db.memberships.filter(function (x) { return x.taskId === refId && x.projectId === projectId; })[0];
     var p = project(projectId);
     if (!p) return null;
+    if (!canCreateTask(projectId, attrs && attrs.parentId)) return denied('create');   // Sprint 1B — Enter / Shift+Enter
     var secId = m ? m.sectionId : p.sections[0].id;
     var list = tasksInSection(projectId, secId);
     var i = -1;
@@ -5414,10 +5535,26 @@
    *  ถ้าส่ง id มาด้วย (ได้จากสมุดรายชื่อ Microsoft) รายการนี้จะเชื่อมกับ
    *  ตอนเจ้าตัวล็อกอินจริงโดยอัตโนมัติ ไม่เกิดรายการซ้ำ
    *  หมายเหตุ: การเพิ่มที่นี่ไม่ได้ให้สิทธิ์เข้าถึงข้อมูล ต้องเพิ่มเข้าไซต์ SharePoint ด้วย */
+  /* Sprint 1B — อีเมลคือตัวที่ใช้จับคู่ตอนเจ้าตัวล็อกอินจริง ซ้ำกันเมื่อไหร่จะได้สองรายการของคนเดียว
+   * งานกระจายไปคนละรายการ และไม่รู้ว่ารายการไหนคือตัวจริง จึงต้องไม่ซ้ำ (ไม่สนตัวพิมพ์เล็กใหญ่) */
+  var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  /** ปัญหาของอีเมลนี้ คืน null ถ้าใช้ได้ หรือ { key, params } ให้หน้าจอแปลเอง (ว่าง = ไม่บังคับ) */
+  function emailProblem(email, exceptId) {
+    var e = String(email || '').trim().toLowerCase();
+    if (!e) return null;
+    if (!EMAIL_RE.test(e)) return { key: 'รูปแบบอีเมลไม่ถูกต้อง', params: null };
+    var dup = db.users.filter(function (u) {
+      return u.id !== exceptId && String(u.email || '').trim().toLowerCase() === e;
+    })[0];
+    return dup ? { key: 'อีเมลนี้มีอยู่แล้วในรายชื่อ ({name})', params: { name: dup.name } } : null;
+  }
+
   function addUser(attrs) {
     var id = attrs.id || uid('u');
     var existing = user(id);
     if (existing) return existing;          // เลือกคนเดิมซ้ำ ไม่ต้องเพิ่มอีก
+    if (emailProblem(attrs.email, id)) return null;   // Sprint 1B — ด่านสุดท้าย หน้าจอเตือนก่อนแล้ว
+    attrs.email = String(attrs.email || '').trim();
     var u = {
       id: id, name: attrs.name, email: attrs.email || '',
       color: PALETTE[db.users.length % PALETTE.length],
@@ -5711,17 +5848,143 @@
 
   /** กดอนุมัติ/ขอแก้/ปฏิเสธได้ไหม
    *
-   * ผู้อนุมัติคือผู้รับผิดชอบงาน แบบเดียวกับ Asana — คนอื่นกดแทนไม่ได้
-   * ยกเว้นคนที่แก้โปรเจกต์ของงานนั้นได้ (หัวหน้าทีมปิดเรื่องค้างแทนคนที่ลาไปได้)
-   * งานที่ไม่อยู่โปรเจกต์ไหนและยังไม่มีผู้อนุมัติ ให้คนสร้างตั้งสถานะเองได้ */
+   * Sprint 1B — ผู้อนุมัติคือผู้รับผิดชอบงานคนเดียวเท่านั้น แบบเดียวกับ Asana
+   * เดิมให้ทุกคนที่แก้โปรเจกต์ได้กดแทนได้ ผลคือสมาชิกธรรมดากด "อนุมัติ" งานที่ขอให้คนอื่นอนุมัติ
+   * โดยไม่มีอะไรเตือน การอนุมัติจึงไม่มีความหมาย ถ้าผู้อนุมัติไม่อยู่ ให้เปลี่ยนผู้อนุมัติ (ผู้รับผิดชอบ)
+   * ซึ่งทิ้งร่องรอยในประวัติ แทนการกดแทนกันเงียบ ๆ
+   * ยังไม่มีผู้อนุมัติ = ยังไม่มีใครกดได้ ต้องเลือกผู้อนุมัติก่อน (กันคนขออนุมัติให้ตัวเอง) */
   function canApprove(taskId) {
     var t = task(taskId);
     if (!t || t.type !== 'approval') return false;
     if (!can('write')) return false;                   // ดูอย่างเดียว/ปิดบัญชี กดอะไรไม่ได้เลย
-    if (t.assigneeId === db.currentUserId) return true;
-    var homes = (index().memByTask[taskId] || []);
-    if (!homes.length) return !t.assigneeId && t.createdBy === db.currentUserId;
-    return homes.some(function (m) { return canInProject(m.projectId, 'edit'); });
+    return !!t.assigneeId && t.assigneeId === db.currentUserId;
+  }
+
+  /** ข้อความแจ้งคนที่เพิ่งได้รับงาน — งานขออนุมัติบอกว่า "ขออนุมัติจากคุณ" */
+  function assignKey(isApproval) {
+    return isApproval ? 'ขออนุมัติ “{t}” จากคุณ' : 'มอบหมายงาน “{t}” ให้คุณ';
+  }
+
+  /** ผลอนุมัติที่ถือว่า "ตัดสินแล้ว" — งานปิดเองเหมือน Asana (ขอแก้ไขยังเปิดอยู่ รอส่งใหม่) */
+  function approvalDecided(v) { return v === 'approved' || v === 'rejected'; }
+
+  /** ส่งขออนุมัติอีกครั้งได้ไหม — คนขอ (คนสร้างงาน) หรือคนที่แก้งานนี้ได้ แต่ไม่ใช่ผู้อนุมัติเอง
+   *  ใช้หลังผู้อนุมัติ "ขอแก้ไข" เดิมคนขอไม่มีทางส่งกลับไปให้ดูใหม่เลย ต้องไปตามกันนอกระบบ */
+  function canResubmit(taskId) {
+    var t = task(taskId);
+    if (!t || t.type !== 'approval' || t.approval !== 'changes') return false;
+    if (!can('write')) return false;
+    if (t.assigneeId === db.currentUserId) return false;
+    return t.createdBy === db.currentUserId || can('write', taskId);
+  }
+
+  function resubmitApproval(taskId) {
+    if (!canResubmit(taskId)) return denied('approval');
+    var t = task(taskId);
+    snapshot('ส่งขออนุมัติอีกครั้ง');
+    /* ไม่ผ่าน updateTask เพราะข้อความแจ้งต้องถึงผู้อนุมัติ ("ขออนุมัติจากคุณ")
+     * ไม่ใช่ถึงคนขอแบบผลอนุมัติทั่วไป */
+    t.approval = 'pending';
+    if (t.completed) { t.completed = false; t.completedAt = null; }
+    log(taskId, 'ส่งงานนี้ขออนุมัติอีกครั้ง', null, t.assigneeId ? [t.assigneeId] : null);
+    if (t.assigneeId) notifyOnly(taskId, [t.assigneeId], 'ส่ง “{t}” ขออนุมัติจากคุณอีกครั้ง', 'assigned', { t: t.name });
+    autoFire('approval', taskId, { v: 'pending' });
+    commit();
+    return t;
+  }
+
+  /* ---------- ด่านสร้างงาน (Sprint 1B) ----------
+   *
+   * เดิมแต่ละปุ่มตรวจสิทธิ์เอง และหลายทางลืมตรวจสิทธิ์รายโปรเจกต์ (ตรวจแค่บทบาทองค์กร)
+   * คนที่มีสิทธิ์ "แสดงความเห็นได้" จึงพิมพ์ในช่อง + เพิ่มงาน แล้วกด Enter สร้างงานในโปรเจกต์ปิดได้
+   * ย้ายมาตรวจที่ชั้นข้อมูลจุดเดียว ทุกทางที่ทำให้เกิดงานใหม่หรือเอางานเข้าโปรเจกต์
+   * (เพิ่มในแถว Enter/วางหลายบรรทัด เพิ่มด่วน นำเข้า CSV สำเนา เทมเพลต ย้าย/เพิ่มเข้าโปรเจกต์)
+   * ผ่านด่านนี้หมด ทางใหม่ที่เพิ่มทีหลังก็ใช้ฟังก์ชันเดียวกัน
+   *
+   * ยกเว้นโดยตั้งใจ: ส่งฟอร์ม (ฟอร์มเปิดให้คนนอกโปรเจกต์ส่งเรื่องเข้ามา) และระบบอัตโนมัติ
+   * (กฎที่คนแก้โปรเจกต์ได้ตั้งไว้เอง) */
+  function canCreateTask(projectId, parentId) {
+    if (!can('write')) return false;
+    if (parentId) return !!task(parentId) && can('write', parentId);
+    if (projectId) return !!project(projectId) && canInProject(projectId, 'edit');
+    return true;                                       // งานส่วนตัวในงานของฉัน
+  }
+
+  /** แก้ลำดับ/คอลัมน์ของงานในโปรเจกต์นี้ได้ไหม (ลากย้าย ย้ายหลายงาน) */
+  function canArrangeIn(projectId) {
+    return can('write') && canInProject(projectId, 'edit');
+  }
+
+  /* ---------- คนนอกโปรเจกต์ที่จะได้เห็นงาน (Sprint 1B) ----------
+   *
+   * คู่กรณีของงาน (ผู้รับผิดชอบ ผู้ติดตาม คนที่ถูก @ชื่อ ซึ่งกลายเป็นผู้ติดตาม) เห็นงานได้เสมอ
+   * แม้ไม่ได้เป็นสมาชิกโปรเจกต์ (ดู canSeeTask) — เป็นกติกาที่ถูกต้อง แต่เดิมเกิดขึ้นเงียบ ๆ
+   * มอบงานในโปรเจกต์ปิดให้คนนอกแล้วเขาเห็นทั้งงานและความเห็นทุกอัน (รวมราคาลับ)
+   * โดยคนมอบไม่รู้ตัว จึงหาให้ก่อนว่าใครจะได้เห็นเพราะการกระทำนี้ ให้หน้าจอถามก่อนทำ
+   *
+   * @param taskIds งานเดียวหรือหลายงาน
+   * @returns { users: [คนที่จะเห็นงานเพราะการกระทำนี้], projects: [โปรเจกต์ของงาน] } */
+  function revealOutsiders(taskIds, userIds) {
+    var out = { users: [], projects: [] }, seenU = {}, seenP = {};
+    [].concat(taskIds || []).forEach(function (taskId) {
+      var t = task(taskId);
+      if (!t) return;
+      var root = rootOf(t);
+      var ms = index().memByTask[root.id] || [];
+      if (!ms.length) return;              // งานส่วนตัว — มอบให้ใครก็ตั้งใจให้คนนั้นเห็นอยู่แล้ว
+      (userIds || []).forEach(function (u) {
+        if (!u || seenU[u] || u === db.currentUserId) return;
+        var x = user(u);
+        if (!x || x.active === false) return;
+        if (isTaskParticipant(taskId, u) || isTaskParticipant(root.id, u)) return;   // เห็นอยู่แล้ว
+        if (ms.some(function (m) { return !!projectAccess(m.projectId, u); })) return;
+        seenU[u] = true;
+        out.users.push(x);
+      });
+      ms.forEach(function (m) {
+        var p = project(m.projectId);
+        if (p && !seenP[p.id]) { seenP[p.id] = true; out.projects.push(p); }
+      });
+    });
+    return out;
+  }
+
+  /** เพิ่มคนเป็นสมาชิกโปรเจกต์จากหน้าต่างถามก่อนมอบงานได้ไหม — ตามกติกาเดิม จัดการสมาชิก = ผู้ดูแลระบบ */
+  function canAddMembers(projectId) {
+    return !!project(projectId) && can('manage');
+  }
+
+  /** ทำตามที่เลือกในหน้าต่างถาม — ไม่ snapshot/commit ให้ผู้เรียกครอบด้วย batch กับการกระทำจริง
+   *  access = 'comment' | 'edit' เพิ่มเป็นสมาชิกโปรเจกต์แรกของงาน · null = ให้เห็นเฉพาะงานนี้ (ลงประวัติไว้) */
+  function revealTo(taskIds, userIds, access) {
+    var r = revealOutsiders(taskIds, userIds);
+    if (!r.users.length) return true;
+    if (access) {
+      var p = r.projects[0];
+      if (!p || !canAddMembers(p.id) || !ACCESS_RANK[access]) return false;
+      r.users.forEach(function (u) {
+        setProjectMember(p.id, u.id, access, true);
+        audit('project.member', p.name, u.name + ' → ' + access);
+      });
+      return true;
+    }
+    /* เลือกให้เห็นเฉพาะงาน — ทิ้งร่องรอยไว้ในประวัติของงาน คนที่มาดูทีหลังจะรู้ว่าใครเปิดให้คนนอกเห็น */
+    [].concat(taskIds || []).forEach(function (tid) {
+      if (!task(tid)) return;
+      r.users.forEach(function (u) {
+        log(tid, 'ให้ {who} เห็นงานนี้ (ไม่ได้เป็นสมาชิกโปรเจกต์)', { who: u.name });
+      });
+    });
+    return true;
+  }
+
+  /* ชั้นหน้าจอลงทะเบียนไว้ ถูกปฏิเสธที่ชั้นข้อมูลเมื่อไหร่จะได้ขึ้นข้อความบอกเหตุผล
+   * ไม่ใช่กดแล้วเงียบ (ทางที่ไม่ผ่านตัวจัดการคลิก เช่นกด Enter หรือวางข้อความ) */
+  var denyFns = [];
+  function onDeny(fn) { denyFns.push(fn); }
+  function denied(why) {
+    denyFns.forEach(function (fn) { try { fn(why || 'create'); } catch (e) { /* หน้าจอพังไม่ควรลากชั้นข้อมูลพังตาม */ } });
+    return null;
   }
 
   function isAdmin(userId) { return role(userId) === 'admin'; }
@@ -5808,6 +6071,34 @@
     audit('user.handover', from.name,
       to ? 'โอนให้ {who} จำนวน {n} งาน' : 'ปล่อยว่างไว้ จำนวน {n} งาน',
       to ? { who: to.name, n: list.length } : { n: list.length });
+    commit();
+    return list.length;
+  }
+
+  /* Sprint 1B — โปรเจกต์ที่คนนี้เป็นเจ้าของหรือผู้ดูแลโปรเจกต์อยู่
+   * ปิดบัญชีแล้วโปรเจกต์ปิดอาจเหลือแต่ผู้ดูแลที่เข้าไม่ได้ คำขอสิทธิ์ก็ไปตกที่บัญชีที่ปิดแล้ว
+   * จึงให้โอนบทบาทเหล่านี้ไปพร้อมกับงานได้ในหน้าต่างเดียว */
+  function projectRolesOf(userId) {
+    return db.projects.filter(function (p) {
+      return p.owner === userId || projectMembers(p.id).some(function (m) {
+        return m.userId === userId && m.access === 'admin';
+      });
+    });
+  }
+
+  /** โอนความเป็นเจ้าของ/ผู้ดูแลโปรเจกต์ให้อีกคน (คนเดิมยังอยู่ในรายชื่อ เผื่อเปิดบัญชีกลับ) */
+  function handoverProjects(fromId, toId) {
+    var from = user(fromId), to = user(toId);
+    if (!from || !to || fromId === toId) return 0;
+    var list = projectRolesOf(fromId);
+    if (!list.length) return 0;
+    snapshot('โอนสิทธิ์ผู้ดูแลโปรเจกต์');
+    list.forEach(function (p) {
+      if (p.owner === fromId) p.owner = toId;
+      var wasAdmin = projectMembers(p.id).some(function (m) { return m.userId === fromId && m.access === 'admin'; });
+      if (wasAdmin || p.visibility === 'private') setProjectMember(p.id, toId, 'admin', true);
+    });
+    audit('user.handover', from.name, 'โอนความเป็นเจ้าของ/ผู้ดูแล {n} โปรเจกต์ให้ {who}', { n: list.length, who: to.name });
     commit();
     return list.length;
   }
@@ -6619,6 +6910,8 @@
   function importTasksCsvMapped(projectId, text, map) {
     var p = project(projectId);
     if (!p) throw new Error('ไม่พบโปรเจกต์');
+    /* Sprint 1B — นำเข้า = สร้างงานหลายงานในโปรเจกต์ ต้องผ่านด่านเดียวกับการเพิ่มงาน */
+    if (!canCreateTask(projectId)) throw new Error('คุณไม่มีสิทธิ์เพิ่มงานในโปรเจกต์นี้');
     var rows = parseCsv(text);
     if (rows.length < 2) throw new Error('ไฟล์ว่างหรือไม่มีบรรทัดข้อมูล');
     var head = rows[0];
@@ -6899,33 +7192,42 @@
     return db.users.filter(function (u) { return u.role === 'admin' && u.active !== false; })[0] || null;
   }
 
+  /** คำขอที่ยังรอตอบของคนนี้ — คำขอแบบเก่า (เป็นงาน) ที่งานถูกลบไปแล้วถือว่าหมดอายุ ขอใหม่ได้ */
   function pendingRequest(projectId, userId) {
     var p = project(projectId);
-    return p ? (p.accessRequests || []).filter(function (r) { return r.userId === (userId || db.currentUserId); })[0] || null : null;
+    var r = p ? (p.accessRequests || []).filter(function (x) { return x.userId === (userId || db.currentUserId); })[0] || null : null;
+    return r && (!r.taskId || task(r.taskId)) ? r : null;
   }
 
+  /* Sprint 1B — คำขอสิทธิ์เป็นรายการในกล่องข้อความของเจ้าของ (มีปุ่มให้สิทธิ์/ปฏิเสธในแถวนั้นเลย)
+   * เดิมสร้างเป็นงานมอบหมายให้เจ้าของ ได้สองรายการในกล่องข้อความ (มอบหมาย + สร้างงาน)
+   * ชื่องานติดภาษาของคนขอ และค้างอยู่ในงานของฉันของผู้ดูแล ปนกับงานจริง
+   * ตอนนี้เก็บแค่ { userId, at, note } ที่โปรเจกต์ ข้อความแจ้งเก็บเป็นคีย์ แปลตามภาษาคนอ่าน */
   function requestAccess(projectId, note) {
     var p = project(projectId), u = me();
     if (!p || !u) return { ok: false, reason: 'ไม่พบโปรเจกต์' };
     if (projectAccess(projectId)) return { ok: false, reason: 'คุณเข้าโปรเจกต์นี้ได้อยู่แล้ว' };
-    var pend = pendingRequest(projectId);
-    if (pend && task(pend.taskId)) return { ok: false, reason: 'ส่งคำขอไปแล้ว รอเจ้าของโปรเจกต์ตอบ', taskId: pend.taskId };
+    if (pendingRequest(projectId)) return { ok: false, reason: 'ส่งคำขอไปแล้ว รอเจ้าของโปรเจกต์ตอบ' };
     var owner = accessOwner(p);
     if (!owner) return { ok: false, reason: 'โปรเจกต์นี้ไม่มีเจ้าของให้ส่งคำขอ' };
-    var t = batch('ขอสิทธิ์เข้าโปรเจกต์', null, function () {
-      var nt = createTaskRaw({
-        name: L('ขอสิทธิ์เข้าถึงโปรเจกต์ “{p}”', { p: p.name }),
-        assigneeId: owner.id,
-        notes: L('{who} ขอเข้าถึงโปรเจกต์', { who: u.name }) + ' @[' + refLabel(p.name) + '](' + p.id + ')' +
-          (note ? '\n\n' + String(note).slice(0, 1000) : '')
-      }, null, null);
-      notifyOnly(nt.id, [owner.id], 'มอบหมายงาน “{t}” ให้คุณ', 'assigned', { t: nt.name });
+    batch('ขอสิทธิ์เข้าโปรเจกต์', null, function () {
+      var msg = String(note || '').trim().slice(0, 1000);
       p.accessRequests = (p.accessRequests || []).filter(function (r) { return r.userId !== u.id; });
-      p.accessRequests.push({ userId: u.id, taskId: nt.id, at: new Date().toISOString() });
+      p.accessRequests.push({ userId: u.id, at: new Date().toISOString(), note: msg || null });
+      /* แจ้งครั้งเดียว ชนิด access — ไม่ใช่ "มอบหมายงาน" จึงไม่ไปปนในตัวกรอง "มอบหมายให้ฉัน" */
+      notifyOnly(null, [owner.id], 'ขอสิทธิ์เข้าโปรเจกต์ {p}', 'access', { p: p.name }, false,
+        { projectId: p.id, route: 'p-overview' });
       audit('project.access-request', p.name, u.name);
-      return nt;
     });
-    return { ok: true, taskId: t.id, owner: owner };
+    return { ok: true, owner: owner };
+  }
+
+  /** คำขอจากรายการในกล่องข้อความ — ยังรอตอบอยู่และคนที่เปิดดูตอบได้ไหม */
+  function accessRequestFor(n) {
+    if (!n || n.kind !== 'access' || !n.projectId || !n.actorId) return null;
+    var r = pendingRequest(n.projectId, n.actorId);
+    var p = project(n.projectId);
+    return r && p ? { project: p, userId: n.actorId, note: r.note || '', canAnswer: canAnswerAccess(p.id) } : null;
   }
 
   /** งานนี้เป็นคำขอเข้าโปรเจกต์ที่ยังไม่ได้ตอบไหม คืน { project, userId } */
@@ -7005,6 +7307,7 @@
   function bulkAddToProject(ids, projectId, sectionId) {
     var list = rootsOnly(ids);
     if (!project(projectId) || !list.length) return 0;
+    if (!canCreateTask(projectId)) { denied('create'); return 0; }   // Sprint 1B — บอกครั้งเดียว ไม่ใช่ทีละงาน
     return batch('เพิ่ม {n} งานเข้าโปรเจกต์', { n: list.length }, function () {
       list.forEach(function (id) { addTaskToProject(id, projectId, sectionId); });
       return list.length;
@@ -8279,6 +8582,8 @@
    */
   function submitForm(formId, ans) {
     var x = formById(formId);
+    /* Sprint 1B — ไม่ผ่าน canCreateTask โดยตั้งใจ ฟอร์มมีไว้ให้คนที่แก้โปรเจกต์ไม่ได้ (รวมคนแสดงความเห็นได้)
+     * ส่งเรื่องเข้ามาเป็นงาน คนแก้โปรเจกต์เป็นคนเปิดรับฟอร์มเอง ปิดฟอร์มได้ตลอด */
     if (!x || !isActive()) return { err: 'ไม่พบฟอร์มนี้' };
     var p = x.p, f = x.f;
     if (!f.on || p.archived) return { err: 'ฟอร์มนี้ปิดรับคำตอบแล้ว' };
@@ -8344,7 +8649,7 @@
       });
       files.forEach(function (a) { addAttachment(t.id, String(a.name).slice(0, 200), a.url, a); });
       log(t.id, 'ส่งผ่านฟอร์ม “{f}”', { f: f.name });
-      if (t.assigneeId) notifyOnly(t.id, [t.assigneeId], 'มอบหมายงาน “{t}” ให้คุณ', 'assigned', { t: t.name });
+      if (t.assigneeId) notifyOnly(t.id, [t.assigneeId], assignKey(t.type === 'approval'), 'assigned', { t: t.name });
       f.n = (f.n || 0) + 1;
       f.last = new Date().toISOString();
       autoFire('form', t.id, { projectId: p.id, form: f.id });
@@ -8498,6 +8803,7 @@
   function applyTaskTemplate(id, pid, secId) {
     var x = findTaskTemplate(id), p = project(pid);
     if (!x || !p) return null;
+    if (!canCreateTask(pid)) return denied('create');   // Sprint 1B
     var tt = normTT(x.tpl.t), td = today();
     var day = function (r) { return r ? shiftDate(td, r.n, r.unit, p.workDays) : null; };
     var out = null;
@@ -8530,7 +8836,7 @@
         });
       });
       log(t.id, 'สร้างจากเทมเพลต “{t}”', { t: x.tpl.name });
-      if (who) notifyOnly(t.id, [who], 'มอบหมายงาน “{t}” ให้คุณ', 'assigned', { t: t.name });
+      if (who) notifyOnly(t.id, [who], assignKey(t.type === 'approval'), 'assigned', { t: t.name });
       out = t;
     });
     return out;
@@ -10430,6 +10736,7 @@
     var t = task(taskId), a = attOf(taskId, attId);
     text = String(text || '').trim();
     if (!a || !text || !isImageAtt(a)) return null;
+    if (!canCreateTask(null, taskId)) return denied('create');   // Sprint 1B — หมุดบนรูปเป็นงานย่อย
     var pin = null;
     batch('ปักหมุดบนรูป', null, function () {
       a.pins = a.pins || [];
@@ -11653,6 +11960,11 @@
     createFollowUp: createFollowUp, setParent: setParent, promoteSubtask: promoteSubtask,
     fitParentDates: fitParentDates, subtasksOutside: subtasksOutside,
     nextOccurrence: nextOccurrence, canApprove: canApprove,
+    /* Sprint 1B — สิทธิ์สร้างงาน การอนุมัติ และการเห็นงานของคนนอกโปรเจกต์ปิด */
+    canCreateTask: canCreateTask, canArrangeIn: canArrangeIn, onDeny: onDeny,
+    approvalDecided: approvalDecided, canResubmit: canResubmit, resubmitApproval: resubmitApproval,
+    revealOutsiders: revealOutsiders, revealTo: revealTo, canAddMembers: canAddMembers,
+    mentionedIn: function (text) { return parseMentions(String(text || '')); },
     TRASH_DAYS: TRASH_DAYS, trashItems: trashItems, trashExpires: trashExpires,
     restoreTrash: restoreTrash, purgeTrash: purgeTrash,
     checkDueReminders: checkDueReminders,
@@ -11728,6 +12040,7 @@
     setProjectMember: setProjectMember, removeProjectMember: removeProjectMember,
     isAdmin: isAdmin, setRole: setRole, can: can, role: role, adminCount: adminCount,
     openTasksOf: openTasksOf, handoverTasks: handoverTasks,
+    projectRolesOf: projectRolesOf, handoverProjects: handoverProjects, emailProblem: emailProblem,   // Sprint 1B
     NOTIFY_KINDS: NOTIFY_KINDS, pref: pref, setPref: setPref, setNotifyPref: setNotifyPref,
     updateProfile: updateProfile, setAway: setAway, isAway: isAway,
     setPhoto: setPhoto, removePhoto: removePhoto,
@@ -11759,6 +12072,7 @@
     projectJson: projectJson, myTasksIcs: myTasksIcs, projectIcs: projectIcs,
     projectRoles: projectRoles, setProjectRole: setProjectRole,
     requestAccess: requestAccess, pendingRequest: pendingRequest, accessRequestOf: accessRequestOf,
+    accessRequestFor: accessRequestFor,
     canAnswerAccess: canAnswerAccess, answerAccess: answerAccess, accessOwner: accessOwner,
     convertToProject: convertToProject,
     bulkAddToProject: bulkAddToProject, bulkMoveSection: bulkMoveSection, bulkSetField: bulkSetField,

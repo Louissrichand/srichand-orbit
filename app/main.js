@@ -1080,7 +1080,14 @@
     /* บัญชีถูกปิดใช้งาน — กั้นไว้ก่อนวาดแอป และบอกเหตุผลให้ชัด
      * ไม่ปล่อยให้เห็นหน้าจอที่กดอะไรก็ไม่ขึ้นโดยไม่รู้ว่าทำไม */
     if (!S.isActive()) {
-      $gate.innerHTML = R.disabledScreen();
+      /* Sprint 1B — หน้าเข้าสู่ระบบขึ้นอยู่ (เพิ่งออกจากโหมดเครื่องเดียว) ให้หน้านั้นอยู่ต่อ
+       * ไม่งั้นหน้าบัญชีถูกปิดจะทับ ทั้งที่คนเพิ่งเลือกออกไปแล้ว */
+      if (!$gate.hidden && !$gate.dataset.kind) return;
+      /* Sprint 1B — โหมดเครื่องเดียว (สลับผู้ใช้ทดสอบมาเป็นบัญชีที่ถูกปิด) มีทางกลับบัญชีเดิม
+       * ไม่ต้องกดออกจากระบบ ซึ่งเดิมล้างข้อมูลทั้งเครื่องทิ้ง */
+      var dsTeam = global.OrbitSync && global.OrbitSync.state.mode === 'team';
+      var dsBack = !dsTeam && viewAsOrigin() ? S.user(viewAsOrigin()) : null;
+      $gate.innerHTML = R.disabledScreen({ local: !dsTeam, back: dsBack && dsBack.active !== false ? dsBack : null });
       $gate.dataset.kind = "disabled";
       $gate.hidden = false;
       document.body.classList.add('gated');
@@ -1164,16 +1171,22 @@
     if (!allowed(act, ed)) return;
     var md = global.RichText.fromNode(ed);
     if (!md.trim()) { if (kind !== 'e') toast(L('พิมพ์ข้อความก่อน')); return; }
-    /* ล้างช่องก่อนบันทึก การบันทึกทำให้แผงวาดใหม่และคืนเนื้อหาของช่องที่โฟกัสอยู่
-     * ถ้ายังไม่ล้าง ข้อความที่เพิ่งส่งไปจะเด้งกลับมาอยู่ในช่องอีกรอบ */
-    ed.innerHTML = '';
-    setDraft(key, '');
-    if (kind === 'c') S.addComment(ref, md);
-    else if (kind === 'r') { state.openThreads[ref] = true; S.addComment(ed.dataset.id, md, ref); }
-    else {
-      state.editStory = null;
-      if (!S.editComment(ref, md)) renderDrawer();   // ไม่ได้แก้อะไร ก็แค่ปิดโหมดแก้
-    }
+    var send = function () {
+      /* ล้างช่องก่อนบันทึก การบันทึกทำให้แผงวาดใหม่และคืนเนื้อหาของช่องที่โฟกัสอยู่
+       * ถ้ายังไม่ล้าง ข้อความที่เพิ่งส่งไปจะเด้งกลับมาอยู่ในช่องอีกรอบ */
+      ed.innerHTML = '';
+      setDraft(key, '');
+      if (kind === 'c') S.addComment(ref, md);
+      else if (kind === 'r') { state.openThreads[ref] = true; S.addComment(ed.dataset.id, md, ref); }
+      else {
+        state.editStory = null;
+        if (!S.editComment(ref, md)) renderDrawer();   // ไม่ได้แก้อะไร ก็แค่ปิดโหมดแก้
+      }
+    };
+    /* Sprint 1B — @ชื่อ คนนอกโปรเจกต์ปิด = เขากลายเป็นผู้ติดตามและเห็นทั้งงาน ถามก่อนส่ง
+     * ยกเลิกแล้วข้อความยังอยู่ในช่อง แก้ชื่อออกแล้วส่งใหม่ได้ */
+    var cTid = kind === 'e' ? ((S.story(ref) || {}).taskId || null) : (kind === 'c' ? ref : ed.dataset.id);
+    confirmReveal(cTid, S.mentionedIn(md), send);
   }
 
   /** เปิดงานใหม่ เริ่มแผงจากสภาพตั้งต้นเสมอ */
@@ -1511,6 +1524,36 @@
     h += '</div><div class="modal-acts"><button class="btn" data-act="close-modal">' +
       L('ยกเลิก') + '</button></div>';
     openModal(h);
+  }
+
+  /* ---------- Sprint 1B: ถามก่อนให้คนนอกโปรเจกต์เห็นงาน ----------
+   *
+   * มอบหมาย เพิ่มผู้ติดตาม หรือ @ชื่อ คนที่ไม่ได้เป็นสมาชิกโปรเจกต์ (ปิด) ทำให้เขาเห็นทั้งงาน
+   * และความเห็นทุกอันในงานนั้น เดิมเกิดขึ้นเงียบ ๆ ราคาที่คุยกันในโปรเจกต์ปิดจึงหลุดไปถึงคนนอก
+   * ตอนนี้ถามก่อนทุกครั้ง ให้เลือกเองว่าจะเพิ่มเขาเป็นสมาชิก ให้เห็นแค่งานนี้ หรือยกเลิก
+   * ทางเลือกที่เลือกกับการกระทำจริงอยู่ในจุดย้อนกลับเดียวกัน */
+  function confirmReveal(taskIds, userIds, run) {
+    var r = S.revealOutsiders(taskIds, userIds);
+    if (!r.users.length) { run(); return; }
+    var names = r.users.map(function (u) { return u.name; }).join(', ');
+    var ids = r.users.map(function (u) { return u.id; });
+    var p = r.projects[0];
+    function go(access) {
+      S.batch('ให้คนนอกโปรเจกต์เห็นงาน', null, function () {
+        S.revealTo(taskIds, ids, access);
+        run();
+      });
+    }
+    var choices = [];
+    if (p && S.canAddMembers(p.id)) {
+      choices.push({ label: L('เพิ่มเป็นสมาชิกโปรเจกต์ (แสดงความเห็นได้)'), primary: true, run: function () { go('comment'); } });
+      choices.push({ label: L('เพิ่มเป็นสมาชิกโปรเจกต์ (แก้ไขได้)'), run: function () { go('edit'); } });
+    }
+    choices.push({ label: L('ให้เห็นเฉพาะงานนี้'), primary: !choices.length, run: function () { go(null); } });
+    askChoice(L('{who} ไม่ได้เป็นสมาชิกของ “{p}”', { who: names, p: p ? p.name : '' }),
+      L('ถ้าทำต่อ {who} จะเห็นงานนี้ รวมถึงความเห็นและไฟล์แนบทั้งหมดในงาน (แม้โปรเจกต์จะเป็นโปรเจกต์ปิด)', { who: names }) +
+      (p && !S.canAddMembers(p.id) ? ' ' + L('ถ้าต้องการให้เป็นสมาชิกโปรเจกต์ ขอให้ผู้ดูแลระบบเพิ่มให้') : ''),
+      choices);
   }
 
   /* ---------- popover ---------- */
@@ -1872,37 +1915,53 @@
       return '<button data-act="' + act + '"' + d + (extra || '') + '>' +
         I(icon, 14) + '<span class="grow">' + label + '</span></button>';
     }
-    h += item('project-settings', 'settings', L('ตั้งค่าโปรเจกต์'));
+    /* Sprint 1B — เมนูตามสิทธิ์ เดิมทุกคนเห็นครบ (ลบโปรเจกต์ นำเข้า CSV อัตโนมัติ คัดลอก…)
+     * กดแล้วค่อยโดนปฏิเสธ คนที่แก้ไม่ได้เห็นแค่ของที่ใช้ได้จริง: ดูสิทธิ์ แจ้งเตือน ลิงก์ ส่งออก ฟอร์ม */
+    var canStruct = S.can('structure') && S.canInProject(projectId, 'edit');
+    var canCreate = S.canCreateTask(projectId);
+    if (canStruct) h += item('project-settings', 'settings', L('ตั้งค่าโปรเจกต์'));
     h += item('project-access', 'shield', L('ใครเข้าถึงโปรเจกต์นี้ได้')) ;
-    h += item('project-look', 'pencil', L('ตั้งสีและไอคอน'));
-    h += item('add-to-portfolio', 'star', L('เพิ่มเข้าพอร์ตโฟลิโอ'));
-    h += item('team-share', 'users', L('แชร์ให้ทีม…'));
+    if (canStruct) {
+      h += item('project-look', 'pencil', L('ตั้งสีและไอคอน'));
+      h += item('add-to-portfolio', 'star', L('เพิ่มเข้าพอร์ตโฟลิโอ'));
+      h += item('team-share', 'users', L('แชร์ให้ทีม…'));
+    }
     h += '<div class="pop-sep"></div>';
-    h += item('update-status', 'flag', L('อัปเดตสถานะโปรเจกต์'));
+    if (canStruct) h += item('update-status', 'flag', L('อัปเดตสถานะโปรเจกต์'));
     h += item('proj-notify-menu', 'bell', L('การแจ้งเตือนของโปรเจกต์นี้'));
     h += item('copy-project-link', 'link', L('คัดลอกลิงก์โปรเจกต์'));
-    h += item('dup-project', 'copy', L('คัดลอกโปรเจกต์'));
-    h += item('pt-save', 'star', L('บันทึกเป็นเทมเพลตโปรเจกต์…'));
+    if (canStruct) {
+      h += item('dup-project', 'copy', L('คัดลอกโปรเจกต์'));
+      h += item('pt-save', 'star', L('บันทึกเป็นเทมเพลตโปรเจกต์…'));
+    }
     h += '<div class="pop-sep"></div>';
-    h += item('manage-fields', 'filter', L('จัดการฟิลด์'));
-    h += item('auto-open', 'bolt', L('ระบบอัตโนมัติ'));
-    h += item('forms-open', 'note', L('ฟอร์ม'));
-    h += item('types-open', 'diamond', L('ชนิดงานและสถานะ'));
-    h += item('manage-templates', 'star', L('เทมเพลตงาน'));
-    h += item('reset-cols', 'arrowLeft', L('คืนความกว้างคอลัมน์เดิม'));
+    if (canStruct) {
+      h += item('manage-fields', 'filter', L('จัดการฟิลด์'));
+      h += item('auto-open', 'bolt', L('ระบบอัตโนมัติ'));
+    }
+    h += item('forms-open', 'note', L('ฟอร์ม'));          // ฟอร์มเปิดให้คนนอกส่งเรื่องเข้ามาได้โดยตั้งใจ
+    if (canStruct) {
+      h += item('types-open', 'diamond', L('ชนิดงานและสถานะ'));
+      h += item('manage-templates', 'star', L('เทมเพลตงาน'));
+      h += item('reset-cols', 'arrowLeft', L('คืนความกว้างคอลัมน์เดิม'));
+    }
     h += '<div class="pop-sep"></div>';
-    h += item('import-csv', 'archive', L('นำเข้างานจาก CSV'));
+    if (canStruct && canCreate) h += item('import-csv', 'archive', L('นำเข้างานจาก CSV'));
     h += item('export-csv', 'send', L('ส่งออกเป็น CSV'));
     h += item('time-csv', 'send', L('ส่งออกเวลาที่บันทึก (CSV)'));          // 3c
     h += item('export-json', 'send', L('ส่งออกเป็น JSON'));
     h += item('export-ics', 'calendar', L('ดาวน์โหลดปฏิทิน .ics'));
     h += item('print-list', 'note', L('พิมพ์รายการงาน'));
-    h += item('project-trash', 'trash', L('ถังขยะของโปรเจกต์นี้'));
-    h += '<div class="pop-sep"></div>';
-    h += item('toggle-archive', p.archived ? 'arrowLeft' : 'archive',
-      p.archived ? L('เอากลับจากคลัง') : L('เก็บโปรเจกต์เข้าคลัง'));
-    h += '<button class="danger" data-act="delete-project"' + d + '>' +
-      I('trash', 14) + '<span class="grow">' + L('ลบโปรเจกต์') + '</span></button>';
+    if (canCreate) h += item('project-trash', 'trash', L('ถังขยะของโปรเจกต์นี้'));
+    if (canStruct || S.can('manage')) h += '<div class="pop-sep"></div>';
+    if (canStruct) {
+      h += item('toggle-archive', p.archived ? 'arrowLeft' : 'archive',
+        p.archived ? L('เอากลับจากคลัง') : L('เก็บโปรเจกต์เข้าคลัง'));
+    }
+    if (S.can('manage')) {                                // ลบโปรเจกต์ = ผู้ดูแลระบบ (ตาม NEEDS)
+      h += '<button class="danger" data-act="delete-project"' + d + '>' +
+        I('trash', 14) + '<span class="grow">' + L('ลบโปรเจกต์') + '</span></button>';
+    }
     return h;
   }
 
@@ -2636,7 +2695,7 @@
         state.cursor = t.id;
         state.reopenNear = { ref: t.id, above: false };
         resumeNear();
-      }
+      } else { done = false; finish(); }     // Sprint 1B — ถูกปฏิเสธ เก็บช่องพิมพ์ทิ้ง ไม่ค้างไว้
     });
     inp.addEventListener('blur', function () { setTimeout(finish, 0); });
     return true;
@@ -5393,33 +5452,69 @@
    * @param withDisable เปิดจากปุ่มปิดบัญชี จึงต้องปิดบัญชีต่อหลังโอนเสร็จในคราวเดียว
    *                    ถ้าแยกสองขั้น คนจะโอนแล้วลืมปิด หรือปิดแล้วลืมโอน
    */
-  function handoverModal(userId, withDisable) {
+  /**
+   * @param opts.role  เปลี่ยนบทบาทเป็นค่านี้หลังโอนงาน (Sprint 1B — เปลี่ยนเป็นดูอย่างเดียว)
+   */
+  function handoverModal(userId, withDisable, opts) {
+    opts = opts || {};
     var u = S.user(userId);
     if (!u) return '';
     var list = S.openTasksOf(userId);
+    /* Sprint 1B — บุคคลภายนอก (เอเจนซี ฟรีแลนซ์) ไม่ใช่คนรับช่วงงานในองค์กร
+     * เดิมอยู่ในรายชื่อปะปนกับพนักงาน เลือกผิดคนเดียวงานภายในทั้งหมดไปถึงคนนอกพร้อมความเห็นทุกอัน
+     * จึงซ่อนไว้เป็นค่าเริ่มต้น ติ๊ก "แสดงบุคคลภายนอก" ก่อนถึงจะเลือกได้ และมีคำเตือนกำกับ */
     var others = S.db.users.filter(function (x) {
-      return x.id !== userId && x.active !== false;
+      return x.id !== userId && x.active !== false && x.role !== 'viewer';
     });
+    var staff = others.filter(function (x) { return x.role !== 'guest'; });
+    var guests = others.filter(function (x) { return x.role === 'guest'; });
+    var showGuests = !!state.hoGuests;
+    var roles = S.projectRolesOf(userId);
 
-    var h = '<h2>' + (withDisable ? L('ปิดบัญชีและโอนงานต่อ') : L('โอนงานต่อ')) + '</h2>';
+    var h = '<h2>' + (withDisable ? L('ปิดบัญชีและโอนงานต่อ') : opts.role ? L('เปลี่ยนบทบาทและโอนงานต่อ') : L('โอนงานต่อ')) + '</h2>';
     h += '<div class="look-prev">' + R.avatar(u, 'lg') +
       '<div><b>' + R.esc(u.name) + '</b>' +
       '<div style="font-size:12.5px;color:var(--fg-soft)">' + R.esc(u.email || '') + '</div></div></div>';
 
-    h += '<div class="prj-warn">' + I('alert', 15) + '<span>' +
-      L('มีงานที่ยังไม่เสร็จอยู่ {n} งาน ถ้าปล่อยไว้กับบัญชีที่ปิดแล้ว จะไม่มีใครได้รับแจ้งและงานจะค้างเงียบ ๆ',
-        { n: list.length }) + '</span></div>';
+    h += '<div class="prj-warn">' + I('alert', 15) + '<span>' + (!list.length
+      ? L('{name} เป็นเจ้าของหรือผู้ดูแลอยู่ {n} โปรเจกต์ โอนให้คนที่ยังใช้งานอยู่ ไม่งั้นคำขอสิทธิ์และการจัดการสมาชิกจะค้าง',
+        { name: u.name, n: roles.length })
+      : opts.role === 'viewer'
+      ? L('มีงานที่ยังไม่เสร็จอยู่ {n} งาน บทบาทดูอย่างเดียวติ๊กเสร็จหรือแก้งานของตัวเองไม่ได้ งานจะค้างอยู่กับเขา', { n: list.length })
+      : L('มีงานที่ยังไม่เสร็จอยู่ {n} งาน ถ้าปล่อยไว้กับบัญชีที่ปิดแล้ว จะไม่มีใครได้รับแจ้งและงานจะค้างเงียบ ๆ',
+        { n: list.length })) + '</span></div>';
 
     h += '<div class="field" style="margin-top:14px"><label>' + L('โอนให้ใคร') + '</label>' +
       '<select id="hoTo">';
-    others.forEach(function (x) {
+    staff.forEach(function (x) {
       h += '<option value="' + R.esc(x.id) + '">' + R.esc(x.name) +
         (x.title ? ' — ' + R.esc(x.title) : '') + '</option>';
     });
+    if (showGuests && guests.length) {
+      h += '<optgroup label="' + R.esc(L('บุคคลภายนอก — จะเห็นงานและความเห็นทั้งหมดที่โอนไป')) + '">';
+      guests.forEach(function (x) {
+        h += '<option value="' + R.esc(x.id) + '">⚠ ' + R.esc(x.name) + ' (' + R.esc(L('บุคคลภายนอก')) + ')</option>';
+      });
+      h += '</optgroup>';
+    }
     h += '<option value="">' + L('ไม่โอน ปล่อยว่างไว้ (ต้องมีคนมาหยิบเอง)') + '</option>';
     h += '</select></div>';
+    if (guests.length) {
+      h += '<label class="ho-guests"><input type="checkbox" data-act="ho-guests" data-id="' + R.esc(userId) +
+        '" data-off="' + (withDisable ? '1' : '0') + '" data-role="' + R.esc(opts.role || '') + '"' +
+        (showGuests ? ' checked' : '') + '> ' +
+        R.esc(L('แสดงบุคคลภายนอกในรายชื่อ ({n} คน) — ไม่แนะนำ', { n: guests.length })) + '</label>';
+    }
+    /* โปรเจกต์ที่คนนี้เป็นเจ้าของ/ผู้ดูแล — ติ๊กไว้เป็นค่าเริ่มต้นตอนปิดบัญชี ไม่งั้นโปรเจกต์ปิดอาจไม่มีผู้ดูแลที่เข้าได้ */
+    if (roles.length && (withDisable || opts.role)) {
+      h += '<label class="ho-guests"><input type="checkbox" id="hoProjects" checked> ' +
+        R.esc(L('โอนความเป็นเจ้าของ/ผู้ดูแลโปรเจกต์ {n} โปรเจกต์ให้คนเดียวกัน ({p})', {
+          n: roles.length, p: roles.slice(0, 3).map(function (p) { return p.name; }).join(', ') + (roles.length > 3 ? '…' : '') })) +
+        '</label>';
+    }
 
-    h += '<label class="opt-lbl">' + L('งานที่จะโอน') + '</label><div class="ho-list">';
+    if (list.length) h += '<label class="opt-lbl">' + L('งานที่จะโอน') + '</label>';
+    h += '<div class="ho-list">';
     list.slice(0, 12).forEach(function (t) {
       var pj = S.projectsOfTask(t.id)[0];
       h += '<div class="ho-row"><span class="nm">' + R.esc(t.name) + '</span>' +
@@ -5434,8 +5529,8 @@
 
     h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
       '<button class="btn btn-primary" data-act="do-handover" data-id="' + R.esc(userId) +
-      '" data-off="' + (withDisable ? '1' : '0') + '">' +
-      (withDisable ? L('โอนงานแล้วปิดบัญชี') : L('โอนงาน')) + '</button></div>';
+      '" data-off="' + (withDisable ? '1' : '0') + '" data-role="' + R.esc(opts.role || '') + '">' +
+      (withDisable ? L('โอนงานแล้วปิดบัญชี') : opts.role ? L('โอนงานแล้วเปลี่ยนบทบาท') : L('โอนงาน')) + '</button></div>';
     return h;
   }
 
@@ -7559,7 +7654,7 @@
     put('manage', [
       'manage-members', 'add-user', 'do-add-user', 'pick-person', 'remove-user', 'pick-role', 'set-role',
       'set-visibility', 'toggle-lock', 'add-project-member', 'pick-access', 'set-access', 'drop-member',
-      'disable-user', 'enable-user', 'handover', 'do-handover',
+      'disable-user', 'enable-user', 'handover', 'do-handover', 'ho-guests',
       'delete-project', 'reset', 'import', 'paste-backup', 'do-paste-import',
       /* การสำรองข้อมูลคือการดึงฐานข้อมูลทั้งก้อนออกไปเป็นไฟล์
        * ในนั้นมีทุกโปรเจกต์ รวมถึงโปรเจกต์ปิดที่คนกดไม่มีสิทธิ์เห็น และอีเมลของทุกคน
@@ -7619,6 +7714,11 @@
     put('create', ['mt-add', 'mt-add-top', 'calx-add']);
     put('write', ['notif-followup']);
     put('write:task', ['make-public', 'do-make-public']);
+    /* Sprint 1B — ส่งขออนุมัติใหม่หลังถูกขอแก้ (store ตรวจว่าเป็นคนขอหรือแก้งานได้ และไม่ใช่ผู้อนุมัติเอง)
+     * ตัดสินอนุมัติเป็นหน้าที่ของผู้อนุมัติ ไม่ใช่สิทธิ์แก้งาน — ผู้อนุมัติที่มีสิทธิ์แค่แสดงความเห็นในโปรเจกต์
+     * ก็ต้องกดได้ ไม่งั้นงานค้างตลอดไป จึงให้ canApprove ใน store เป็นคนตัดสินคนเดียว */
+    put('write', ['approval-resubmit']);
+    put('self', ['set-approval']);
     /* ของส่วนตัว — เซกชันงานของฉัน มุมมองที่จำไว้ หน้าแรก สมุดโน้ต บุ๊กมาร์ก อ่านแล้ว ห้ามรบกวน
      * การแจ้งเตือนรายโปรเจกต์ แก้ได้ทุกคนที่บัญชียังใช้งานได้ (รวมบทบาทดูอย่างเดียว)
      * เพราะไม่ได้แตะงานหรือโปรเจกต์ของใคร */
@@ -7737,13 +7837,37 @@
     return a ? a.label : id;
   }
 
+  /* Sprint 1B — ชั้นข้อมูลปฏิเสธเองได้แล้ว (ด่านสร้างงาน การอนุมัติ) ทางที่ไม่ผ่านตัวจัดการคลิก
+   * เช่นกด Enter ในช่องเพิ่มงานหรือวางหลายบรรทัด ก็ได้ข้อความบอกเหตุผลเหมือนกัน
+   * จำเวลาไว้ ข้อความ "ทำไม่ได้เพราะ…" อื่นที่ตามมาทันทีจะได้ไม่ทับเหตุผลจริง */
+  var deniedAt = 0;
+  function justDenied() { return Date.now() - deniedAt < 400; }
+  S.onDeny(function (why) {
+    deniedAt = Date.now();
+    if (why === 'approval') {
+      toast(L('งานขออนุมัติต้องให้ผู้อนุมัติตัดสิน — กดอนุมัติหรือปฏิเสธแล้วงานจะปิดให้เอง'));
+      return;
+    }
+    /* บทบาทเขียนได้อยู่แล้ว แต่ติดสิทธิ์ของโปรเจกต์/งาน — บอกให้ตรงจุด ไม่ใช่โทษบทบาท */
+    if (state.route.type !== 'project' && S.can('write')) {
+      toast(L('คุณไม่มีสิทธิ์แก้ไขในโปรเจกต์หรืองานนี้'));
+      return;
+    }
+    denyToast();
+  });
+
   /** ผ่านสิทธิ์ไหม ถ้าไม่ผ่านจะเตือนให้ผู้ใช้รู้ว่าทำไม ไม่เงียบหาย */
   function allowed(act, el) {
     var need = NEEDS[act];
     if (!need) return true;
     var ok;
     if (need === "write:task") ok = S.can("write", actTaskId(el));
-    else if (need === "create") ok = S.can("write");
+    /* Sprint 1B — สร้างงานในหน้าโปรเจกต์ = สร้างงานในโปรเจกต์นั้น ต้องแก้โปรเจกต์ได้ด้วย
+     * (เดิมตรวจแค่บทบาทองค์กร คนที่แสดงความเห็นได้จึงเปิดช่อง + เพิ่มงานได้) */
+    else if (need === "create") {
+      var cPid = el.dataset.project || (state.route.type === "project" ? state.route.id : null);
+      ok = cPid ? S.canCreateTask(cPid) : S.can("write");
+    }
     else if (need === "self") ok = S.isActive();
     else if (need === "structure") {
       /* การแก้โครงสร้างเกิดขึ้นในบริบทของโปรเจกต์ที่เปิดอยู่
@@ -8068,10 +8192,12 @@
         e.stopPropagation();
         editCell(el);
         break;
-      case 'cell-set-assignee':
+      case 'cell-set-assignee': {
         closePops();
-        S.updateTask(el.dataset.id, { assigneeId: el.dataset.user || null });
+        var csaId = el.dataset.id, csaU = el.dataset.user || null;
+        confirmReveal(csaId, [csaU], function () { S.updateTask(csaId, { assigneeId: csaU }); });   // Sprint 1B
         break;
+      }
       case 'cell-set-priority':
         closePops();
         S.updateTask(el.dataset.id, { priority: el.dataset.v || 'none' });
@@ -8699,8 +8825,7 @@
         });
         closeModal();
         var c = S.duplicateTask(id, dopt);
-        if (c) openTask(c.id);
-        toast(L('คัดลอกงานแล้ว'), L('ย้อนกลับ'), 'undo');
+        if (c) { openTask(c.id); toast(L('คัดลอกงานแล้ว'), L('ย้อนกลับ'), 'undo'); }   // Sprint 1B — ถูกปฏิเสธ = ไม่บอกว่าสำเร็จ
         break;
       }
       case 'followup': openModal(followUpModal(id)); break;
@@ -8720,7 +8845,7 @@
         if (S.mergeDuplicate(id, mt)) {
           openTask(mt);
           toast(L('รวมงานซ้ำแล้ว'), L('ย้อนกลับ'), 'undo');
-        } else toast(L('รวมไม่ได้ — งานนี้เป็นงานย่อยของงานที่เลือก'));
+        } else if (!justDenied()) toast(L('รวมไม่ได้ — งานนี้เป็นงานย่อยของงานที่เลือก'));
         break;
       }
       case 'do-make-subtask': {
@@ -8729,7 +8854,7 @@
         if (S.setParent(id, pt)) {
           renderAll();
           toast(L('ย้ายเป็นงานย่อยแล้ว'), L('ย้อนกลับ'), 'undo');
-        } else toast(L('ย้ายไม่ได้ — งานที่เลือกเป็นงานย่อยของงานนี้อยู่แล้ว'));
+        } else if (!justDenied()) toast(L('ย้ายไม่ได้ — งานที่เลือกเป็นงานย่อยของงานนี้อยู่แล้ว'));
         break;
       }
       case 'promote-task':
@@ -8775,8 +8900,12 @@
           document.querySelectorAll('.ac-user:checked'), function (cb) { return cb.value; });
         if (!who.length) { toast(L('เลือกอย่างน้อยหนึ่งคน')); break; }
         closeModal();
-        var made = S.assignCopies(id, who);
-        toast(L('มอบหมายแล้ว สร้างสำเนา {n} งาน', { n: made.length }), L('ย้อนกลับ'), 'undo');
+        var acId = id;
+        /* Sprint 1B — สำเนาอยู่โปรเจกต์เดียวกับต้นฉบับ มอบให้คนนอกโปรเจกต์ปิด = ให้เขาเห็นงาน ถามก่อน */
+        confirmReveal(acId, who, function () {
+          var made = S.assignCopies(acId, who);
+          if (made.length || !justDenied()) toast(L('มอบหมายแล้ว สร้างสำเนา {n} งาน', { n: made.length }), L('ย้อนกลับ'), 'undo');
+        });
         break;
       }
       case 'trash-restore': {
@@ -8849,7 +8978,7 @@
         askText(L('ชื่องานใหม่'), '', function (v) {
           if (!v) return;
           var nt = S.createTask({ name: v }, qp.id, qp.sections[0].id);
-          openTask(nt.id);
+          if (nt) openTask(nt.id);          // Sprint 1B — ถูกด่านสร้างงานปฏิเสธ = null (ขึ้นข้อความแล้ว)
         }, { ok: L('เพิ่มงาน'), pasteCtx: { projectId: qp.id, sectionId: qp.sections[0].id },
              note: L('วางข้อความหลายบรรทัดเพื่อสร้างหลายงานพร้อมกัน') });
         break;
@@ -8880,10 +9009,12 @@
         openPop(el, ph);
         break;
       }
-      case 'set-assignee':
+      case 'set-assignee': {
         closePops();
-        S.updateTask(id, { assigneeId: el.dataset.user || null });
+        var saId = id, saU = el.dataset.user || null;
+        confirmReveal(saId, [saU], function () { S.updateTask(saId, { assigneeId: saU }); });   // Sprint 1B
         break;
+      }
       case 'pick-priority': {
         if (popIsOpenFor(el)) { closePops(); break; }
         var qh = '';
@@ -8899,9 +9030,28 @@
         closePops();
         S.updateTask(id, { priority: el.dataset.p });
         break;
-      case 'set-approval':
-        if (!S.canApprove(id)) { toast(L('ผู้อนุมัติคือผู้รับผิดชอบงานนี้ หรือคนที่แก้ไขโปรเจกต์ได้')); break; }
-        S.updateTask(id, { approval: el.dataset.v });
+      case 'set-approval': {
+        /* Sprint 1B — กดได้เฉพาะผู้อนุมัติ (ผู้รับผิดชอบ) ปฏิเสธต้องถามก่อน เพราะงานปิดทันทีและแจ้งคนขอ */
+        var apT = S.task(id);
+        if (!apT) break;
+        if (!S.canApprove(id)) {
+          var apU = S.user(apT.assigneeId);
+          toast(apU ? L('เฉพาะผู้อนุมัติ ({who}) ที่ตัดสินงานนี้ได้', { who: apU.name })
+                    : L('เลือกผู้อนุมัติก่อน แล้วผู้อนุมัติจึงตัดสินได้'));
+          break;
+        }
+        var apV = el.dataset.v, apId = id;
+        if (apV === 'rejected') {
+          askConfirm(L('ปฏิเสธ “{t}”?', { t: apT.name }),
+            L('งานจะถูกปิดเป็น “ไม่อนุมัติ” และแจ้งคนขอทันที ถ้าแค่อยากให้แก้บางจุด ใช้ “ขอแก้ไข” แทน'),
+            function () { S.updateTask(apId, { approval: 'rejected' }); }, { ok: L('ปฏิเสธ') });
+          break;
+        }
+        S.updateTask(id, { approval: apV });
+        break;
+      }
+      case 'approval-resubmit':
+        if (S.resubmitApproval(id)) toast(L('ส่งขออนุมัติอีกครั้งแล้ว'), L('ย้อนกลับ'), 'undo');
         break;
       case 'pick-follower': {
         if (popIsOpenFor(el)) { closePops(); break; }
@@ -8913,10 +9063,15 @@
         openPop(el, fh);
         break;
       }
-      case 'do-follow':
+      case 'do-follow': {
         closePops();
-        S.toggleFollower(id, el.dataset.user);
+        var dfT = S.task(id), dfU = el.dataset.user, dfId = id;
+        /* Sprint 1B — เพิ่มผู้ติดตาม = ให้เห็นงาน ถามก่อนถ้าเป็นคนนอกโปรเจกต์ (เอาออกไม่ต้องถาม) */
+        if (dfT && dfT.followers.indexOf(dfU) < 0) {
+          confirmReveal(dfId, [dfU], function () { S.toggleFollower(dfId, dfU); });
+        } else S.toggleFollower(id, dfU);
         break;
+      }
       case 'remove-follower': S.toggleFollower(id, el.dataset.user); break;
       case 'toggle-follow': S.toggleFollower(id, S.db.currentUserId); break;
       case 'toggle-like': S.toggleLike(id); break;
@@ -8993,11 +9148,15 @@
         openPop(el, ah);
         break;
       }
-      case 'set-sub-assignee':
-        S.updateTask(id, { assigneeId: el.dataset.user || null });
+      case 'set-sub-assignee': {
         closePops();
-        renderAll();
+        var ssaId = id, ssaU = el.dataset.user || null;
+        confirmReveal(ssaId, [ssaU], function () {       // Sprint 1B
+          S.updateTask(ssaId, { assigneeId: ssaU });
+          renderAll();
+        });
         break;
+      }
 
       case 'pick-tag': {
         var pt = S.task(id);
@@ -9019,9 +9178,9 @@
       /* --- multi-homing --- */
       case 'add-home': openModal(addHomeModal(id)); break;
       case 'do-add-home':
-        S.addTaskToProject(id, projectId, null);
         closeModal();
-        toast(L('เพิ่มเข้าโปรเจกต์แล้ว'));
+        /* Sprint 1B — ด่านสร้างงานของโปรเจกต์ปลายทางอาจปฏิเสธ (ขึ้นเหตุผลเองแล้ว) อย่าบอกว่าสำเร็จ */
+        if (S.addTaskToProject(id, projectId, null)) toast(L('เพิ่มเข้าโปรเจกต์แล้ว'));
         break;
       case 'unhome':
         if (!S.removeTaskFromProject(id, projectId)) toast(L('งานต้องอยู่อย่างน้อย 1 โปรเจกต์'));
@@ -9163,11 +9322,13 @@
         var dsid = el.dataset.story;
         var ds = S.story(dsid);
         if (!ds || ds.actorId !== S.db.currentUserId) break;
+        /* Sprint 1B — ความเห็นที่ลบไปอยู่ในถังขยะ 30 วัน บอกไว้ตั้งแต่ตอนถาม จะได้ไม่ลังเลว่าหายถาวรไหม */
         askConfirm(L('ลบความเห็นนี้?'),
-          S.repliesOf(dsid).length ? L('ยังมีคนตอบอยู่ใต้ความเห็นนี้ คำตอบจะยังอยู่ และจะขึ้นว่า “ความเห็นนี้ถูกลบแล้ว” แทน') : '',
+          (S.repliesOf(dsid).length ? L('ยังมีคนตอบอยู่ใต้ความเห็นนี้ คำตอบจะยังอยู่ และจะขึ้นว่า “ความเห็นนี้ถูกลบแล้ว” แทน') + ' ' : '') +
+          L('ความเห็นจะไปอยู่ในถังขยะ {n} วัน กู้คืนได้', { n: S.TRASH_DAYS }),
           function () {
             if (state.editStory === dsid) state.editStory = null;
-            if (S.deleteComment(dsid)) toast(L('ลบความเห็นแล้ว'), L('ย้อนกลับ'), 'undo');
+            if (S.deleteComment(dsid)) toast(L('ย้ายความเห็นไปถังขยะแล้ว'), L('ย้อนกลับ'), 'undo');
           }, { ok: L('ลบ') });
         break;
       }
@@ -9274,9 +9435,12 @@
       case 'do-bulk-followers': {
         var bfu = Array.prototype.map.call(document.querySelectorAll('.bf-user:checked'), function (c) { return c.value; });
         if (!bfu.length) { toast(L('เลือกอย่างน้อย 1 คน')); break; }
-        S.bulkAddFollowers(selectedIds(), bfu);
         closeModal();
-        toast(L('เพิ่มผู้ติดตามแล้ว'), L('ย้อนกลับ'), 'undo');
+        var bfIds = selectedIds();
+        confirmReveal(bfIds, bfu, function () {           // Sprint 1B
+          S.bulkAddFollowers(bfIds, bfu);
+          toast(L('เพิ่มผู้ติดตามแล้ว'), L('ย้อนกลับ'), 'undo');
+        });
         break;
       }
       case 'bulk-tag': {
@@ -9437,7 +9601,8 @@
       }
       case 'access-grant':
       case 'access-deny': {
-        var arAcc = (document.getElementById('arAccess') || {}).value || 'edit';
+        /* Sprint 1B — ตอบจากกล่องข้อความได้ แต่ละแถวมีช่องเลือกสิทธิ์ของตัวเอง (data-sel) */
+        var arAcc = (document.getElementById(el.dataset.sel || 'arAccess') || {}).value || 'edit';
         if (!S.answerAccess(id, el.dataset.user, act === 'access-grant', arAcc)) { denyToast(); break; }
         toast(act === 'access-grant' ? L('ให้สิทธิ์แล้ว') : L('ปฏิเสธคำขอแล้ว'), L('ย้อนกลับ'), 'undo');
         break;
@@ -10825,10 +10990,15 @@
       case 'add-user': openModal(addMemberModal()); break;
       case 'pick-person': {
         var pRole = document.getElementById('uRole').value;
+        var pOid = global.OrbitAuth.orbitId(el.dataset.oid);
+        /* Sprint 1B — อีเมลนี้อาจถูกกรอกเองไว้ก่อนแล้ว (คนละรหัส) เพิ่มซ้ำจะได้คนเดียวกันสองรายการ */
+        var pProb = S.user(pOid) ? null : S.emailProblem(el.dataset.email, pOid);
+        if (pProb) { toast(L(pProb.key, pProb.params || undefined)); break; }
         var added = S.addUser({
-          id: global.OrbitAuth.orbitId(el.dataset.oid),
+          id: pOid,
           name: el.dataset.name, email: el.dataset.email, role: pRole
         });
+        if (!added) break;
         el.disabled = true;
         el.querySelector('i').textContent = L('เพิ่มแล้ว');
         toast(L('เพิ่ม “{name}” เข้ารายชื่อแล้ว', { name: added.name }));
@@ -10837,11 +11007,16 @@
       case 'do-add-user': {
         var un = document.getElementById('uName').value.trim();
         if (!un) { toast(L('ใส่ชื่อก่อน')); break; }
-        S.addUser({
-          name: un,
-          email: document.getElementById('uEmail').value.trim(),
-          role: document.getElementById('uRole').value
-        });
+        var uEm = document.getElementById('uEmail').value.trim();
+        /* Sprint 1B — ตรวจรูปแบบและอีเมลซ้ำ (ไม่สนตัวพิมพ์) ก่อนเพิ่ม หน้าต่างยังเปิดค้างให้แก้ต่อได้ */
+        var uProb = S.emailProblem(uEm);
+        if (uProb) {
+          toast(L(uProb.key, uProb.params || undefined));
+          var uEmEl = document.getElementById('uEmail');
+          if (uEmEl) { uEmEl.focus(); uEmEl.select(); }
+          break;
+        }
+        if (!S.addUser({ name: un, email: uEm, role: document.getElementById('uRole').value })) break;
         closeModal();
         renderAll();
         toast(L('เพิ่ม “{name}” เข้ารายชื่อแล้ว', { name: un }));
@@ -10865,7 +11040,9 @@
         if (!du) break;
         /* มีงานค้างอยู่ ต้องตัดสินใจเรื่องงานก่อน ไม่ใช่ปิดแล้วค่อยไปตามหาทีหลัง
          * งานที่ผูกกับบัญชีที่เข้าไม่ได้จะเงียบไปจนกว่าจะเลยกำหนด */
-        if (S.openTasksOf(id).length) { openModal(handoverModal(id, true)); break; }
+        /* Sprint 1B — เป็นเจ้าของ/ผู้ดูแลโปรเจกต์อยู่ก็ต้องโอนก่อนเหมือนงาน (คำขอสิทธิ์จะไปตกที่บัญชีที่ปิด) */
+        state.hoGuests = false;
+        if (S.openTasksOf(id).length || S.projectRolesOf(id).length) { openModal(handoverModal(id, true)); break; }
         var duId = id;
         askConfirm(L('ปิดใช้งานบัญชีของ “{name}”?', { name: du.name }),
           L('เขาจะเข้าระบบไม่ได้ทันที แต่งานที่มอบหมายไว้ยังอยู่ครบ'), function () {
@@ -10875,18 +11052,44 @@
           }, { ok: L('ปิดใช้งานบัญชี') });
         break;
       }
-      case 'handover': openModal(handoverModal(id, false)); break;
+      case 'handover': state.hoGuests = false; openModal(handoverModal(id, false)); break;
+      case 'ho-guests':
+        /* Sprint 1B — แสดง/ซ่อนบุคคลภายนอกในรายชื่อคนรับงาน วาดหน้าต่างใหม่โดยคงตัวเลือกเดิมไว้ */
+        state.hoGuests = !!el.checked;
+        openModal(handoverModal(id, el.dataset.off === '1', { role: el.dataset.role || null }));
+        break;
       case 'do-handover': {
         var toSel = document.getElementById('hoTo');
         var to = toSel ? toSel.value : '';
         var alsoOff = el.dataset.off === '1';
-        var moved = S.handoverTasks(id, to || null);
-        if (alsoOff && !S.setActive(id, false)) { toast(L('ปิดบัญชีนี้ไม่ได้')); break; }
-        closeModal();
-        renderAll();
-        toast(alsoOff
-          ? L('โอนงาน {n} งาน และปิดบัญชีแล้ว', { n: moved })
-          : L('โอนงาน {n} งานแล้ว', { n: moved }), L('ย้อนกลับ'), 'undo');
+        var newRole = el.dataset.role || '';
+        var withProj = !!(document.getElementById('hoProjects') || {}).checked;
+        var hoFrom = id;
+        var toU = to ? S.user(to) : null;
+        var doHo = function () {
+          var moved = 0, projN = 0, failed = false;
+          /* Sprint 1B — โอนงาน โอนบทบาทในโปรเจกต์ และปิดบัญชี/เปลี่ยนบทบาท อยู่ในจุดย้อนกลับเดียว */
+          S.batch('โอนงานต่อ', null, function () {
+            moved = S.handoverTasks(hoFrom, to || null);
+            if (withProj && to) projN = S.handoverProjects(hoFrom, to);
+            if (alsoOff && !S.setActive(hoFrom, false)) failed = true;
+            if (newRole && !S.setRole(hoFrom, newRole)) failed = true;
+          });
+          if (failed) { S.undo(); toast(alsoOff ? L('ปิดบัญชีนี้ไม่ได้') : L('ต้องมีผู้ดูแลอย่างน้อยหนึ่งคน')); return; }
+          closeModal();
+          renderAll();
+          var msg = alsoOff ? L('โอนงาน {n} งาน และปิดบัญชีแล้ว', { n: moved })
+            : newRole ? L('โอนงาน {n} งาน และเปลี่ยนบทบาทแล้ว', { n: moved })
+            : L('โอนงาน {n} งานแล้ว', { n: moved });
+          if (projN) msg += ' · ' + L('โอนผู้ดูแล {n} โปรเจกต์', { n: projN });
+          toast(msg, L('ย้อนกลับ'), 'undo');
+        };
+        /* เลือกบุคคลภายนอกต้องยืนยันอีกชั้น เพราะเขาจะเห็นงานภายในทั้งหมดที่โอนไป */
+        if (toU && toU.role === 'guest') {
+          askConfirm(L('โอนงานให้บุคคลภายนอก “{name}”?', { name: toU.name }),
+            L('{name} เป็นบุคคลภายนอก จะเห็นงานทั้ง {n} งาน รวมความเห็นและไฟล์แนบ แม้งานจะอยู่ในโปรเจกต์ที่เขาไม่ได้ถูกเชิญ',
+              { name: toU.name, n: S.openTasksOf(hoFrom).length }), doHo, { ok: L('โอนให้บุคคลภายนอก') });
+        } else doHo();
         break;
       }
       case 'enable-user':
@@ -10920,7 +11123,25 @@
       }
       case 'set-role': {
         closePops();
-        if (!S.setRole(id, el.dataset.role)) toast(L('ต้องมีผู้ดูแลอย่างน้อยหนึ่งคน'));
+        var srU = S.user(id), srRole = el.dataset.role, srId = id;
+        var srOpen = S.openTasksOf(id).length;
+        /* Sprint 1B — เปลี่ยนเป็นดูอย่างเดียวทั้งที่ยังมีงานค้าง = งานติดอยู่กับคนที่ติ๊กเสร็จไม่ได้แล้ว
+         * ถามก่อน บอกจำนวนงาน และให้เลือกโอนงานไปพร้อมกันได้เลย */
+        if (srU && srRole === 'viewer' && srU.role !== 'viewer' && srOpen) {
+          askChoice(L('เปลี่ยน “{name}” เป็นดูอย่างเดียว?', { name: srU.name }),
+            L('{name} มีงานที่ยังไม่เสร็จ {n} งาน บทบาทดูอย่างเดียวติ๊กเสร็จหรือแก้งานเหล่านี้ไม่ได้อีก', { name: srU.name, n: srOpen }), [
+              { label: L('โอนงานก่อน แล้วเปลี่ยนบทบาท'), primary: true, run: function () {
+                state.hoGuests = false;
+                openModal(handoverModal(srId, false, { role: 'viewer' }));
+              } },
+              { label: L('เปลี่ยนบทบาทโดยไม่โอนงาน'), run: function () {
+                if (!S.setRole(srId, 'viewer')) toast(L('ต้องมีผู้ดูแลอย่างน้อยหนึ่งคน'));
+                renderAll();
+              } }
+            ]);
+          break;
+        }
+        if (!S.setRole(id, srRole)) toast(L('ต้องมีผู้ดูแลอย่างน้อยหนึ่งคน'));
         renderAll();
         break;
       }
@@ -10957,6 +11178,24 @@
        * ถ้าบันทึกไม่สำเร็จ ห้ามล้างและห้ามออก ไม่งั้นงานที่เพิ่งพิมพ์หายไปเฉย ๆ */
       case 'sign-out': {
         closePops();
+        /* Sprint 1B — โหมดเครื่องเดียว ข้อมูลในเบราว์เซอร์คือของจริงชุดเดียว ไม่ใช่แคชของส่วนกลาง
+         * เดิมออกจากระบบ (เช่นจากหน้าจอบัญชีถูกปิด) แล้วล้างทิ้งกลับเป็นข้อมูลตัวอย่างทันทีโดยไม่เตือน
+         * ตอนนี้ไม่ล้างเลย กลับไปหน้าเข้าสู่ระบบโดยเก็บข้อมูลไว้ และเสนอให้ดาวน์โหลดสำรองก่อน */
+        if (!(global.OrbitSync && global.OrbitSync.state.mode === 'team')) {
+          var leaveLocal = function () {
+            setLocalOnly(false);
+            if ($gate.dataset.kind === 'disabled') delete $gate.dataset.kind;
+            gate.error = null; gate.busy = false; gate.checking = false;
+            showGate();
+            toast(L('ออกแล้ว ข้อมูลยังอยู่ในเบราว์เซอร์นี้ กด “ลองใช้แบบเครื่องเดียวก่อน” เพื่อกลับมาใช้ต่อ'));
+          };
+          askChoice(L('ออกจากโหมดเครื่องเดียว?'),
+            L('ข้อมูลทั้งหมดอยู่ในเบราว์เซอร์นี้เท่านั้น ออกแล้วข้อมูลจะยังอยู่ ไม่ถูกลบ แต่ถ้าล้างข้อมูลเบราว์เซอร์จะหายถาวร ควรดาวน์โหลดไฟล์สำรองเก็บไว้'), [
+              { label: L('ดาวน์โหลดสำรองก่อน'), primary: true, run: function () { doExport(); leaveLocal(); } },
+              { label: L('ออกโดยเก็บข้อมูลไว้'), run: leaveLocal }
+            ]);
+          break;
+        }
         var leave = function () {
           if (global.OrbitSync) global.OrbitSync.stop();
           S.wipeLocal();
@@ -11531,8 +11770,11 @@
 
     // แก้หลายงานพร้อมกัน
     if (act === 'bulk-assignee' && el.value) {
-      S.bulkUpdate(selectedIds(), { assigneeId: el.value });
-      clearSel();
+      var baIds = selectedIds(), baU = el.value;
+      confirmReveal(baIds, [baU], function () {          // Sprint 1B
+        S.bulkUpdate(baIds, { assigneeId: baU });
+        clearSel();
+      });
       return;
     }
     if (act === 'bulk-priority' && el.value) {
@@ -11939,9 +12181,10 @@
       else if (k === 'i') { state.route = { type: 'inbox' }; clearSel(); renderAll(); }
       else if (k === 'q' && state.route.type === 'project') {
         var qp2 = S.project(state.route.id);
-        if (!S.can('write')) { denyToast(); return; }
+        if (!S.canCreateTask(qp2 && qp2.id)) { denyToast(); return; }     // Sprint 1B — สิทธิ์ของโปรเจกต์ด้วย
         askText(L('ชื่องานใหม่'), '', function (v) {
-          if (v) openTask(S.createTask({ name: v }, qp2.id, qp2.sections[0].id).id);
+          var qt2 = v ? S.createTask({ name: v }, qp2.id, qp2.sections[0].id) : null;
+          if (qt2) openTask(qt2.id);
         }, { ok: L('เพิ่มงาน'), pasteCtx: { projectId: qp2.id, sectionId: qp2.sections[0].id } });
       } else if (k === 'q' && state.route.type === 'mytasks') {
         /* Tab+Q ในงานของฉัน = งานส่วนตัวใหม่ ลง "เพิ่งได้รับมอบหมาย" */
@@ -12383,7 +12626,7 @@
     if (intoId && intoId !== movingId) {
       if (S.setParent(movingId, intoId)) {
         toast(L('ย้ายเป็นงานย่อยของ “{t}” แล้ว', { t: S.task(intoId).name }), L('ย้อนกลับ'), 'undo');
-      } else toast(L('ย้ายไม่ได้ — งานที่เลือกเป็นงานย่อยของงานนี้อยู่แล้ว'));
+      } else if (!justDenied()) toast(L('ย้ายไม่ได้ — งานที่เลือกเป็นงานย่อยของงานนี้อยู่แล้ว'));
       return;
     }
     /* งานของฉัน — ย้ายเข้าเซกชันส่วนตัว ไม่แตะคอลัมน์ของโปรเจกต์ */
@@ -12627,6 +12870,7 @@
 
   function showGate() {
     if (!$gate) return;
+    delete $gate.dataset.kind;          // Sprint 1B — ตอนนี้เป็นหน้าเข้าสู่ระบบ ไม่ใช่หน้าบัญชีถูกปิดแล้ว
     $gate.innerHTML = R.gateScreen(gate);
     $gate.hidden = false;
     document.body.classList.add('gated');

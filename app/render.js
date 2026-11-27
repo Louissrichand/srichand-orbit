@@ -291,7 +291,8 @@
 
       p += '<div class="sb-section"><div class="sb-label"><button class="sb-labelbtn" data-act="go" data-route="projects" title="' +
         L('ดูโปรเจกต์ทั้งหมด') + '">' + L('โปรเจกต์') + '</button>' +
-        '<button data-act="new-project" title="' + L('สร้างโปรเจกต์ใหม่') + '">+</button></div>' +
+        /* Sprint 1B — บทบาทที่สร้างโปรเจกต์ไม่ได้ (ดูอย่างเดียว บุคคลภายนอก) ไม่ต้องเห็นปุ่มที่กดแล้วโดนปฏิเสธ */
+        (S.can('structure') ? '<button data-act="new-project" title="' + L('สร้างโปรเจกต์ใหม่') + '">+</button>' : '') + '</div>' +
         S.visibleProjects().map(projectItem).join('') + '</div>';
 
       /* คลังก็ต้องกรองตามสิทธิ์เหมือนกัน ไม่งั้นเก็บเข้าคลังแล้วโปรเจกต์ปิดโผล่ให้ทุกคนเห็น */
@@ -418,6 +419,7 @@
              '"><i></i>' + L('ตั้งสถานะ') + I('chevronDown', 12) + '</button>';
       }
       if (p.archived) h += '<span class="chip">' + L('เก็บเข้าคลังแล้ว') + '</span>';
+      h += accessChip(p.id);
 
       /* รูปสมาชิกซ้อนกันไว้ข้างชื่อ ตอบคำถาม "ใครอยู่ในโปรเจกต์นี้" โดยไม่ต้องเปิดเมนู
        * โปรเจกต์ที่เปิดให้ทั้งองค์กรไม่มีรายชื่อระบุตัว จึงไม่โชว์อะไรเลย
@@ -508,7 +510,7 @@
     if (route.type === 'project') {
       /* มุมมองที่มีแถบเครื่องมือ มีปุ่มเพิ่มงานอยู่ที่นั่นแล้ว
        * ปุ่มเดียวกันสองที่ทำให้คนลังเลว่าสองอันนี้ต่างกันไหม เหลือไว้ที่เดียว */
-      if (VIEWS_WITH_TOOLBAR.indexOf(route.view) < 0) {
+      if (VIEWS_WITH_TOOLBAR.indexOf(route.view) < 0 && S.canCreateTask(route.id)) {   // Sprint 1B
         h += '<button class="btn btn-primary" data-act="quick-add">' + L('+ เพิ่มงาน') + '</button>';
       }
       h += '<button class="btn btn-ghost" data-act="project-menu" data-id="' +
@@ -656,7 +658,8 @@
     var h = '<div class="vtb">';
 
     /* --- ซ้าย: เพิ่มงาน --- */
-    if (S.can('write')) {
+    /* Sprint 1B — เดิมเช็กแค่บทบาทองค์กร คนที่แสดงความเห็นได้/ดูได้อย่างเดียวในโปรเจกต์นี้ก็เห็นปุ่ม */
+    if (S.canCreateTask(projectId)) {
       h += '<div class="vtb-add">' +
         '<button class="btn btn-sm btn-primary" data-act="quick-add">' +
         I('plus', 13) + ' ' + L('เพิ่มงาน') + '</button>' +
@@ -723,8 +726,23 @@
 
   function checkbox(t) {
     var cls = 'check' + (t.completed ? ' on' : '') + (t.type === 'milestone' ? ' milestone' : '');
+    /* Sprint 1B — งานขออนุมัติปิดด้วยปุ่มอนุมัติ/ปฏิเสธ ติ๊กเองไม่ได้ บอกไว้ที่ป้ายของช่องติ๊ก */
+    var tip = t.type === 'approval' && !t.completed ? L('ปิดงานนี้ด้วยการอนุมัติหรือปฏิเสธของผู้อนุมัติ') : L('ทำเสร็จ');
     return '<button class="' + cls + '" data-act="toggle" data-id="' + esc(t.id) +
-      '" title="' + L('ทำเสร็จ') + '">' + '<span>' + ICON.check + '</span></button>';
+      '" title="' + esc(tip) + '">' + '<span>' + ICON.check + '</span></button>';
+  }
+
+  /** Sprint 1B — ป้ายบอกสิทธิ์ของเราในโปรเจกต์ (เฉพาะคนที่แก้ไม่ได้)
+   *  เดิมคนที่แสดงความเห็นได้อย่างเดียวรู้ตัวว่าแก้ไม่ได้ก็ต่อเมื่อพิมพ์ไปแล้วโดนปฏิเสธ */
+  function accessChip(projectId) {
+    var acc = S.projectAccess(projectId);
+    if (!acc || S.canCreateTask(projectId)) return '';
+    var lbl = acc === 'comment' && S.can('comment') ? 'แสดงความเห็นได้' : 'ดูอย่างเดียว';
+    var tip = lbl === 'แสดงความเห็นได้' ? 'ดูและแสดงความเห็นได้ แต่สร้างหรือแก้งานในโปรเจกต์นี้ไม่ได้'
+      : 'เปิดดูได้อย่างเดียว แก้และแสดงความเห็นไม่ได้';
+    return '<span class="chip access-chip" title="' + esc(L('สิทธิ์ของคุณ: {a}', { a: L(lbl) }) + ' — ' + L(tip)) + '">' +
+      I(lbl === 'ดูอย่างเดียว' ? 'eye' : 'lock', 12) + '<span class="ac-t">' +
+      esc(L('สิทธิ์ของคุณ: {a}', { a: L(lbl) })) + '</span></span>';
   }
 
   function selbox(t, selected) {
@@ -1137,6 +1155,7 @@
     var groups = S.viewGroups(projectId, view);
     var cols = S.listColumns(projectId, view).filter(function (c) { return c.on; });
     var canStruct = S.can('structure') && S.canInProject(projectId, 'edit');
+    var canAddT = S.canCreateTask(projectId);      // Sprint 1B — ปุ่ม + เพิ่มงานใต้คอลัมน์
     var bySection = view.group === 'section';
 
     // ความกว้างมาจากที่ผู้ใช้ลากไว้ ถ้ายังไม่เคยลากใช้ค่าตั้งต้น
@@ -1191,7 +1210,7 @@
       g.items.forEach(function (x) { h += listRow(x.task, cols, g, sel, ui, 0); });
       h += '</div>';
 
-      if (g.isSection) {
+      if (g.isSection && canAddT) {
         h += '<div class="tbl-add"><button class="add-row" data-act="inline-add" data-section="' +
           esc(g.key) + '">' + I('plus', 14) + ' ' + L('เพิ่มงาน') + '</button></div>';
       }
@@ -3964,6 +3983,24 @@
     var where = t ? t.name : (np ? np.name : (n.route === 'mytasks' ? L('งานของฉัน')
       : (S.routeLabel(n.route) || L('(งานถูกลบแล้ว)'))));     // 4a — ทีม พอร์ตโฟลิโอ เป้าหมาย
     h += '<div class="body"><div class="txt">' + esc(ntxt) + '</div>';
+    /* Sprint 1B — คำขอสิทธิ์เข้าโปรเจกต์ ตอบได้จากแถวนี้เลย (ชุดปุ่มเดียวกับในแผงงานคำขอแบบเก่า)
+     * ตอบไปแล้ว (โดยใครก็ตาม) ปุ่มหายเอง เหลือแต่ข้อความ */
+    var areq = S.accessRequestFor(n);
+    if (areq) {
+      if (areq.note) h += '<div class="nrow-note">“' + esc(areq.note) + '”</div>';
+      if (areq.canAnswer) {
+        var selId = 'arAccess-' + n.id;
+        h += '<div class="nrow-access"><select class="inp" id="' + esc(selId) + '" data-act="ar-pick" aria-label="' +
+          esc(L('สิทธิ์ที่จะให้')) + '">' + S.PROJECT_ACCESS.filter(function (x) { return x.id !== 'admin'; })
+            .map(function (x) { return '<option value="' + x.id + '">' + esc(L(x.label)) + '</option>'; }).join('') + '</select>' +
+          '<button class="btn btn-sm btn-primary" data-act="access-grant" data-id="' + esc(areq.project.id) +
+          '" data-user="' + esc(areq.userId) + '" data-sel="' + esc(selId) + '">' + L('ให้สิทธิ์') + '</button>' +
+          '<button class="btn btn-sm" data-act="access-deny" data-id="' + esc(areq.project.id) +
+          '" data-user="' + esc(areq.userId) + '">' + L('ปฏิเสธ') + '</button></div>';
+      }
+    } else if (n.kind === 'access') {
+      h += '<div class="nrow-note">' + esc(L('ตอบคำขอนี้แล้ว')) + '</div>';
+    }
     if (!dense) {
       var pj = t ? S.projectsOfTask(S.rootOf(t).id)[0] : null;
       h += '<div class="sub" title="' + esc(fmtExact(n.createdAt)) + '">' +
@@ -3997,7 +4034,8 @@
   var TRASH_KIND = {
     task:    ['งาน', 'checkCircle'],
     project: ['โปรเจกต์', 'grid'],
-    field:   ['ฟิลด์', 'hash']
+    field:   ['ฟิลด์', 'hash'],
+    comment: ['ความเห็น', 'note']          // Sprint 1B
   };
 
   function trashView(projectId) {
@@ -4026,6 +4064,10 @@
         extra = L('พร้อม {n} งาน', { n: x.data.bundle.tasks.filter(function (t) { return !t.parentId; }).length });
       } else if (x.kind === 'field' && x.data.values.length) {
         extra = L('ค่าที่กรอกไว้ {n} ช่อง', { n: x.data.values.length });
+      } else if (x.kind === 'comment') {
+        /* Sprint 1B — บอกว่าเป็นความเห็นในงานไหน (งานถูกลบไปแล้วก็บอก จะได้รู้ว่าต้องกู้งานก่อน) */
+        var ctk = S.task(x.data.taskId);
+        extra = ctk ? L('ในงาน “{t}”', { t: ctk.name }) : L('งานของความเห็นนี้ถูกลบไปแล้ว');
       }
       h += '<div class="trash-row">' +
         '<span class="trash-ic">' + I(k[1], 16) + '</span>' +
@@ -4119,7 +4161,7 @@
     var h = '<div class="empty noaccess"><div class="big">🔒</div>';
     if (!p) return h + L('ไม่พบโปรเจกต์นี้') + '</div>';
     h += '<p><b>' + esc(p.name) + '</b></p><p>' + L('นี่คือโปรเจกต์ปิด คุณยังไม่ได้เป็นสมาชิก') + '</p>';
-    if (pend && S.task(pend.taskId)) {
+    if (pend) {          // Sprint 1B — คำขอไม่ได้เป็นงานแล้ว (pendingRequest กรองคำขอเก่าที่งานหายไปให้แล้ว)
       h += '<p class="noaccess-sent">' + I('check', 13) + ' ' +
         L('ส่งคำขอแล้วเมื่อ {when} รอเจ้าของโปรเจกต์ตอบ', { when: esc(fmtWhen(pend.at)) }) + '</p>';
     } else if (S.isActive()) {
@@ -4270,6 +4312,12 @@
 
     h += '<textarea class="dw-title' + (t.completed ? ' done' : '') +
       '" data-act="edit-title" rows="1">' + esc(t.name) + '</textarea>';
+    /* Sprint 1B — บอกตั้งแต่เปิดงานว่าแก้ไม่ได้ ไม่ต้องลองแก้ก่อนแล้วค่อยรู้ */
+    if (!S.can('write', t.id)) {
+      var roLbl = S.can('comment', t.id) ? 'แสดงความเห็นได้' : 'ดูอย่างเดียว';
+      h += '<div class="dw-ro-note">' + I(roLbl === 'ดูอย่างเดียว' ? 'eye' : 'lock', 13) + '<span>' +
+        esc(L('สิทธิ์ของคุณ: {a}', { a: L(roLbl) })) + ' — ' + esc(L('แก้ไขงานนี้ไม่ได้')) + '</span></div>';
+    }
 
     /* 2c — งานคำขอเข้าโปรเจกต์ปิด เจ้าของ/ผู้ดูแลตอบได้จากตรงนี้เลย */
     var areq = S.accessRequestOf(t.id);
@@ -4313,28 +4361,44 @@
     }
 
     // สถานะอนุมัติ
-    /* ผู้อนุมัติคือผู้รับผิดชอบงาน — ปุ่มตัดสินใจกดได้เฉพาะเขา (หรือคนที่แก้โปรเจกต์ได้)
-     * คนอื่นยังเห็นสถานะและปุ่ม แต่กดไม่ได้ พร้อมบอกเหตุผล จะได้ไม่งงว่าปุ่มหายไปไหน */
+    /* Sprint 1B — ปุ่มตัดสินมีเฉพาะผู้อนุมัติ (ผู้รับผิดชอบ) คนอื่นเห็นสถานะกับ "รอ {ชื่อ} อนุมัติ" แทน
+     * เดิมโชว์ปุ่มให้ทุกคน (กดไม่ได้บ้าง กดได้บ้าง) คนขอเลยกดอนุมัติงานของตัวเองได้
+     * หลังผู้อนุมัติ "ขอแก้ไข" คนขอได้ปุ่ม "ส่งขออนุมัติอีกครั้ง" ไม่ต้องไปตามกันนอกระบบ */
     if (t.type === 'approval') {
       var a = approvalState(t.approval);
       var mayApprove = S.canApprove(t.id);
+      var apU = S.user(t.assigneeId);
+      var apName = '<b>' + esc(apU ? apU.name : '?') + '</b>';
       var ACTS = [['approved', 'อนุมัติ', 'check'], ['changes', 'ขอแก้ไข', 'pencil'],
                   ['rejected', 'ปฏิเสธ', 'close']];
       h += '<div class="fld"><label>' + L('การอนุมัติ') + '</label><div class="val">' +
         '<div class="fld-inline appr-row"><span class="approval-pill" style="background:' + a.color +
         '22;color:' + a.color + '">' + esc(L(a.label)) + '</span>';
-      ACTS.forEach(function (x) {
-        if (x[0] === t.approval) return;
-        h += '<button class="btn btn-sm appr-btn appr-' + x[0] + '" data-act="set-approval" data-id="' +
-          esc(t.id) + '" data-v="' + x[0] + '"' + (mayApprove ? '' : ' disabled') + '>' +
-          I(x[2], 12) + ' ' + esc(L(x[1])) + '</button>';
-      });
-      if (t.approval !== 'pending') {
-        h += '<button class="btn btn-sm btn-ghost" data-act="set-approval" data-id="' + esc(t.id) +
-          '" data-v="pending"' + (mayApprove ? '' : ' disabled') + '>' + esc(L('กลับไปรออนุมัติ')) + '</button>';
+      if (mayApprove) {
+        ACTS.forEach(function (x) {
+          if (x[0] === t.approval) return;
+          h += '<button class="btn btn-sm appr-btn appr-' + x[0] + '" data-act="set-approval" data-id="' +
+            esc(t.id) + '" data-v="' + x[0] + '">' + I(x[2], 12) + ' ' + esc(L(x[1])) + '</button>';
+        });
+        if (t.approval !== 'pending') {
+          h += '<button class="btn btn-sm btn-ghost" data-act="set-approval" data-id="' + esc(t.id) +
+            '" data-v="pending">' + esc(L('กลับไปรออนุมัติ')) + '</button>';
+        }
       }
-      h += '</div>' + (mayApprove ? '' : '<div class="fld-hint">' +
-        L('ผู้อนุมัติคือผู้รับผิดชอบงานนี้ หรือคนที่แก้ไขโปรเจกต์ได้') + '</div>') + '</div></div>';
+      if (S.canResubmit(t.id)) {
+        h += '<button class="btn btn-sm btn-primary" data-act="approval-resubmit" data-id="' + esc(t.id) + '">' +
+          I('send', 12) + ' ' + esc(L('ส่งขออนุมัติอีกครั้ง')) + '</button>';
+      }
+      h += '</div>';
+      var apHint = '';
+      if (!apU) apHint = L('ยังไม่มีผู้อนุมัติ — เลือกผู้อนุมัติด้านล่างก่อน');
+      else if (mayApprove) apHint = t.approval === 'pending' || t.approval === 'changes'
+        ? L('คุณคือผู้อนุมัติ — อนุมัติหรือปฏิเสธแล้วงานจะปิดให้เอง') : '';
+      else if (t.approval === 'pending') apHint = L('รอ {who} อนุมัติ', { who: apName });
+      else if (t.approval === 'changes') apHint = L('{who} ขอให้แก้ไข — แก้แล้วกด “ส่งขออนุมัติอีกครั้ง”', { who: apName });
+      else apHint = L('ตัดสินโดย {who}', { who: apName });
+      if (apHint) h += '<div class="fld-hint">' + apHint + '</div>';
+      h += '</div></div>';
     }
 
     h += '<div class="fld"><label>' + (t.type === 'approval' ? L('ผู้อนุมัติ') : L('ผู้รับผิดชอบ')) +
@@ -4930,12 +4994,26 @@
     /* ช่องความเห็นเป็นตัวแก้ไขแบบเห็นภาพชุดเดียวกับรายละเอียด
      * ร่างที่พิมพ์ค้างไว้เก็บแยกต่อคนต่องาน (main.js) ปิดแผงหรือรีเฟรชแล้วยังอยู่ */
     var ck = 'c:' + t.id;
-    h += '<div class="dw-foot"><div class="comment-box">' + avatar(S.me()) +
-      composerHtml(ck, t.id, L('เขียนความเห็น… พิมพ์ @ เพื่ออ้างถึงคน งาน หรือโปรเจกต์ (Ctrl+Enter ส่ง)'),
-        draft(ck), 'commentInput') +
-      '<button class="btn btn-primary btn-sm" data-act="send-comment" data-id="' +
-      esc(t.id) + '">' + L('ส่ง') + '</button></div></div>';
+    if (S.can('comment', t.id)) {
+      h += '<div class="dw-foot"><div class="comment-box">' + avatar(S.me()) +
+        composerHtml(ck, t.id, L('เขียนความเห็น… พิมพ์ @ เพื่ออ้างถึงคน งาน หรือโปรเจกต์ (Ctrl+Enter ส่ง)'),
+          draft(ck), 'commentInput') +
+        '<button class="btn btn-primary btn-sm" data-act="send-comment" data-id="' +
+        esc(t.id) + '">' + L('ส่ง') + '</button></div></div>';
+    } else {
+      /* Sprint 1B — ดูอย่างเดียว: ไม่ให้พิมพ์ความเห็นยาว ๆ แล้วค่อยโดนปฏิเสธตอนกดส่ง */
+      h += '<div class="dw-foot dw-ro-foot">' + I('eye', 13) + ' ' +
+        L('คุณดูงานนี้ได้อย่างเดียว แสดงความเห็นไม่ได้') + '</div>';
+    }
 
+    /* Sprint 1B — คนที่แก้งานนี้ไม่ได้ (แสดงความเห็นได้/ดูอย่างเดียว) เห็นช่องต่าง ๆ เป็นแบบอ่านอย่างเดียว
+     * เดิมพิมพ์ชื่องานหรือเลือกวันได้ก่อน แล้วค่อยโดนปฏิเสธตอนบันทึก ทำเป็นขั้นสุดท้ายของการวาด
+     * จับเฉพาะช่องแก้ค่าของงานด้วย data-act จึงไม่ไปแตะช่องความเห็นที่ยังใช้ได้ */
+    if (!S.can('write', t.id)) {
+      h = h.replace('data-act="edit-title"', 'data-act="edit-title" readonly')
+        .replace(/(<(?:input|select)\b[^>]*data-act="(?:edit-(?:type|cstatus|start|starttime|due|duetime|recur|recur-n|field)|dw-sec-pick)"[^>]*)>/g, '$1 disabled>')
+        .replace(/(<button class="picker-btn" data-act="pick-assignee")/, '$1 disabled');
+    }
     return h;
   }
 
@@ -5081,7 +5159,9 @@
 
   /** หน้าจอสำหรับบัญชีที่ถูกปิดใช้งาน
    *  ถ้าไม่มีหน้านี้ คนที่ถูกปิดจะเห็นแอปที่กดอะไรก็ไม่ขึ้น โดยไม่รู้ว่าทำไม */
-  function disabledScreen() {
+  /** @param opts { local: โหมดเครื่องเดียว, back: ผู้ใช้ต้นทางที่สลับมา (กลับได้) } — Sprint 1B */
+  function disabledScreen(opts) {
+    opts = opts || {};
     var me = S.me();
     var h = '<div class="gate-card">';
     h += '<div class="gate-logo">' + global.Icons.logoLockup(30) + '</div>';
@@ -5092,7 +5172,12 @@
     }
     h += '<div class="gate-err">' + I('alert', 15) + '<span>' +
       L('หากคิดว่าเป็นความผิดพลาด กรุณาติดต่อฝ่ายเทคโนโลยีสารสนเทศ') + '</span></div>';
-    h += '<button class="gate-alt" data-act="sign-out">' + L('ออกจากระบบ') + '</button>';
+    if (opts.back) {
+      h += '<button class="btn btn-primary gate-btn" data-act="do-switch-user" data-id="' + esc(opts.back.id) + '">' +
+        esc(L('กลับเป็น {name} (ทดสอบ)', { name: opts.back.name })) + '</button>';
+    }
+    /* โหมดเครื่องเดียว — ออกแล้วข้อมูลในเครื่องยังอยู่ (main.js ถามก่อนและเสนอดาวน์โหลดสำรอง) */
+    h += '<button class="gate-alt" data-act="sign-out">' + (opts.local ? L('ออกจากโหมดเครื่องเดียว') : L('ออกจากระบบ')) + '</button>';
     h += '</div>';
     return h;
   }
@@ -5135,7 +5220,8 @@
   var AUDIT_GROUP = {
     auth: 'การเข้าใช้งาน', user: 'จัดการสมาชิก', project: 'โปรเจกต์',
     system: 'ระบบ', task: 'งาน', security: 'ความปลอดภัย', field: 'ฟิลด์', tag: 'แท็ก', template: 'เทมเพลต', team: 'ทีม', goal: 'เป้าหมาย', settings: 'ตั้งค่า',
-    portfolio: 'พอร์ตโฟลิโอ', time: 'ไทม์ชีต', report: 'รายงาน', files: 'ไฟล์แนบ'
+    portfolio: 'พอร์ตโฟลิโอ', time: 'ไทม์ชีต', report: 'รายงาน', files: 'ไฟล์แนบ',
+    comment: 'ความเห็น'                   // Sprint 1B
   };
   function auditGroupLabel(g) { return AUDIT_GROUP[g] || g; }
 
@@ -5200,6 +5286,8 @@
     'field.lib-delete': 'ได้เอาฟิลด์ออกจากคลังขององค์กร',
     'tag.rename': 'ได้เปลี่ยนชื่อแท็ก',
     'tag.delete': 'ได้ลบแท็ก',
+    /* Sprint 1B */
+    'comment.delete': 'ได้ลบความเห็นในงาน',
     /* 4a */
     'team.create': 'ได้สร้างทีม', 'team.delete': 'ได้ลบทีม', 'team.privacy': 'ได้เปลี่ยนความเป็นส่วนตัวของทีม',
     'team.member': 'ได้เพิ่มสมาชิกทีม', 'team.member-remove': 'ได้ถอดสมาชิกออกจากทีม', 'team.join': 'ได้เข้าร่วมทีม',
@@ -5217,7 +5305,8 @@
 
   var AUDIT_ICON = {
     auth: 'signIn', user: 'users', project: 'archive',
-    system: 'settings', task: 'checkCircle', security: 'shield', field: 'hash', tag: 'flag', template: 'star', team: 'users', goal: 'flag', settings: 'settings'
+    system: 'settings', task: 'checkCircle', security: 'shield', field: 'hash', tag: 'flag', template: 'star', team: 'users', goal: 'flag', settings: 'settings',
+    comment: 'note'                     // Sprint 1B
   };
   function auditIcon(a) { return AUDIT_ICON[a.split('.')[0]] || 'more'; }
   /** บอกว่าคนนี้เข้าระบบด้วยวิธีไหน ผู้ดูแลจะได้รู้ว่าต้องตัดสิทธิ์ที่ไหนบ้าง */
