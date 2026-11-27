@@ -15,6 +15,8 @@
     /* แจ้งเวอร์ชันใหม่ */
     'มี Orbit เวอร์ชันใหม่': 'A new version of Orbit is available', 'รีเฟรช': 'Refresh', 'ไว้ทีหลัง': 'Later',
     'ยังบันทึกงานไม่สำเร็จ ลองใหม่อีกครั้ง': 'Your changes aren’t saved yet. Try again.',
+    /* หน้าโปรเจกต์ทั้งหมด — สลับการ์ด/รายการ */
+    'การ์ด': 'Cards', 'แสดงเป็นการ์ด': 'Show as cards', 'แสดงเป็นรายการ': 'Show as list',
     'ฉัน': 'Me', 'บันทึก': 'Save', 'ยกเลิก': 'Cancel', 'ปิด': 'Close',
     'ลบ': 'Delete', 'เพิ่ม': 'Add', 'ใช้': 'Use', 'ส่ง': 'Send',
     'สร้าง': 'Create', 'ย้อนกลับ': 'Undo', 'ทั้งหมด': 'All', 'ทุกคน': 'Everyone',

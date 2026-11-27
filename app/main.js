@@ -9859,6 +9859,8 @@
 
       /* --- projects --- */
       case 'new-project': state.npTab = 'blank'; state.npPf = null; openModal(projectModal(null)); break;
+      /* หน้าโปรเจกต์ทั้งหมด — การ์ด/รายการ จำไว้กับผู้ใช้ */
+      case 'pjx-layout': S.setPref('projectsLayout', el.dataset.v === 'list' ? 'list' : 'grid'); renderAll(); break;
       case 'create-project': {
         var secInput = document.getElementById('pSections');
         var secs = secInput ? secInput.value.split(',').map(function (x) { return x.trim(); })
