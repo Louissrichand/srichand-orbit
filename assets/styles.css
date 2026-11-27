@@ -19,12 +19,12 @@
   --line-soft:   #f0f0f1;
   --line-strong: #d5d5d7;
 
-  --accent:      #796eff;
-  --accent-dk:   #5a4fe0;
-  --accent-bg:   #f0eeff;
+  --accent:      #B32240;   /* สีแบรนด์ Srichand */
+  --accent-dk:   #8F1A33;
+  --accent-bg:   #FBEDF0;
 
-  --danger:      #e8384f;
-  --danger-bg:   #fdeaec;
+  --danger:      #D63E26;   /* ส้มแดง แยกจากสีแบรนด์ที่เป็นแดงเลือดหมู */
+  --danger-bg:   #FDECE8;
   --warn:        #f5a623;
   --warn-bg:     #fff4e0;
   --warn-fg:     #b8730a;
@@ -33,7 +33,7 @@
   --info:        #14aaf5;
   /* 3c — ชุดสีกราฟ (เรียงให้ติดกันแยกออกง่าย) และสีเส้นทางวิกฤต */
   --chart-1: #796eff; --chart-2: #14aaf5; --chart-3: #37c5ab; --chart-4: #f5a623;
-  --chart-5: #fd612c; --chart-6: #aa62e3; --chart-7: #e362e3; --chart-8: #6d6e6f; --crit: #e8384f;
+  --chart-5: #fd612c; --chart-6: #aa62e3; --chart-7: #e362e3; --chart-8: #6d6e6f; --crit: #D63E26;
 
   --scroll:      #d5d6d8;
   --scroll-hi:   #b8b9bc;
@@ -71,12 +71,12 @@
     --line-soft:   #26282c;
     --line-strong: #414449;
 
-    --accent:      #9c93ff;
-    --accent-dk:   #b3acff;
-    --accent-bg:   #2a2740;
+    --accent:      #DB4D73;
+    --accent-dk:   #EE8AA3;
+    --accent-bg:   #3A1A23;
 
-    --danger:      #ff6b7d;
-    --danger-bg:   #3a2226;
+    --danger:      #FF7A5C;
+    --danger-bg:   #3A2420;
     --warn:        #ffc061;
     --warn-bg:     #3a2f1c;
     --warn-fg:     #ffc061;
@@ -108,12 +108,12 @@
   --line-soft:   #26282c;
   --line-strong: #414449;
 
-  --accent:      #9c93ff;
-  --accent-dk:   #b3acff;
-  --accent-bg:   #2a2740;
+  --accent:      #DB4D73;
+  --accent-dk:   #EE8AA3;
+  --accent-bg:   #3A1A23;
 
-  --danger:      #ff6b7d;
-  --danger-bg:   #3a2226;
+  --danger:      #FF7A5C;
+  --danger-bg:   #3A2420;
   --warn:        #ffc061;
   --warn-bg:     #3a2f1c;
   --warn-fg:     #ffc061;

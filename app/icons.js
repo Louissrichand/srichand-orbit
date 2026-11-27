@@ -127,8 +127,8 @@
       '" viewBox="0 0 32 32" aria-hidden="true">' +
       '<defs>' +
         '<linearGradient id="' + n + 'bg" x1="0" y1="0" x2="1" y2="1">' +
-          '<stop offset="0" stop-color="#F10B26"/>' +
-          '<stop offset="1" stop-color="#E2176E"/>' +
+          '<stop offset="0" stop-color="#B32240"/>' +
+          '<stop offset="1" stop-color="#C2305E"/>' +
         '</linearGradient>' +
         '<linearGradient id="' + n + 'dot" x1="0.3" y1="0" x2="0.7" y2="1">' +
           '<stop offset="0" stop-color="#ffffff"/>' +
