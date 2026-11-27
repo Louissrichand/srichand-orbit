@@ -9,6 +9,25 @@
   'use strict';
 
   var EN = {
+    /* Sprint 1A */
+    'ส่งแล้ว': 'Sent', 'โพสต์': 'Post', 'เปิดงานใหม่แล้ว': 'Task reopened',
+    'คลิกช่องความเห็นก่อน แล้วกด Ctrl+Enter เพื่อส่ง · ทำเครื่องหมายว่าเสร็จใช้ Tab+Y':
+      'Click into the comment box first, then press Ctrl+Enter to send · Mark complete with Tab+Y',
+    'ทำเครื่องหมายว่าเสร็จใช้ Tab+Y': 'Mark complete with Tab+Y',
+    'ส่งความเห็น / ประกาศ (เมื่อเคอร์เซอร์อยู่ในช่องพิมพ์)': 'Send a comment / message (while typing in the box)',
+    'ทำเครื่องหมายว่าเสร็จ / เปิดใหม่ (งานที่เปิดหรือเลือกอยู่)': 'Mark complete / reopen (the open or selected task)',
+    'สิทธิ์ในโปรเจกต์กำหนดว่าแต่ละคนเห็นและแก้อะไรได้ใน Orbit': 'Project access decides what each person can see and change in Orbit.',
+    'ลิงก์ฟอร์มใช้ได้เฉพาะพนักงานที่ล็อกอิน Orbit แล้ว คนนอกองค์กรยังเปิดฟอร์มนี้ไม่ได้':
+      'Form links work only for staff signed in to Orbit. People outside the organisation can’t open this form yet.',
+    'ฟอร์มนี้ใช้ได้เฉพาะพนักงานที่ล็อกอิน Orbit แล้ว': 'This form is only for staff signed in to Orbit.',
+    'อัตโนมัติตามเวลา (ใกล้ครบกำหนด เลยกำหนด ตามกำหนดเวลา) ทำงานเมื่อมีคนเปิด Orbit อยู่ ตรวจทุก 5 นาที ถ้าช่วงนั้นไม่มีใครเปิด จะทำตามหลังทันทีที่มีคนเปิด และแต่ละรอบทำครั้งเดียวแม้หลายคนเปิดพร้อมกัน':
+      'Time-based automations (due date approaching, overdue, scheduled) run while someone has Orbit open, checked every 5 minutes. If nobody has it open, they run as soon as someone opens it, and each run happens only once even if several people have Orbit open.',
+    'ยังไม่มีการแจ้งเตือนทางอีเมล ทุกอย่างจะเข้ากล่องข้อความใน Orbit': 'Email notifications aren’t available yet. Everything arrives in your Orbit inbox.',
+    'เข้าระบบด้วยบัญชี Microsoft ของบริษัท เปลี่ยนรหัสผ่านหรือตั้งการยืนยันสองชั้นได้ที่บัญชี Microsoft ของคุณ':
+      'You sign in with your company Microsoft account. Change your password or two-step verification in your Microsoft account.',
+    'ถ้าต้องการให้คนระดับ “ดูอย่างเดียว” แก้ข้อมูลไม่ได้จริง ให้ตั้งสิทธิ์ของคนนั้นบนไซต์ SharePoint เป็น Read ด้วย':
+      'To make sure a “View only” person really can’t change data, also set their SharePoint site permission to Read.',
+
     /* --- ทั่วไป --- */
     /* แถบซ้ายสองชั้น — ชื่อหมวด */
     'กลยุทธ์': 'Strategy', 'ความรู้': 'Knowledge', 'คนและทีม': 'People', 'ซ่อนแถบเมนู': 'Hide sidebar',
@@ -17,6 +36,43 @@
     'ยังบันทึกงานไม่สำเร็จ ลองใหม่อีกครั้ง': 'Your changes aren’t saved yet. Try again.',
     /* หน้าโปรเจกต์ทั้งหมด — สลับการ์ด/รายการ */
     'การ์ด': 'Cards', 'แสดงเป็นการ์ด': 'Show as cards', 'แสดงเป็นรายการ': 'Show as list',
+    /* Sprint 1C */
+    'แปลงปี พ.ศ. {b} เป็น ค.ศ. {g} ให้แล้ว': 'Converted Buddhist year {b} to {g}',
+    'ปี {y} ไม่ถูกต้อง ใช้ปี ค.ศ. {a}–{z} (หรือ พ.ศ.) — ยังไม่ได้บันทึกวันที่นี้':
+      'Year {y} isn’t valid. Use a year from {a} to {z} (Buddhist years are converted). This date wasn’t saved.',
+    'ตั้งกำหนดส่งรอบแรกเป็น {d} ให้แล้ว': 'First due date set to {d}',
+    'ยังไม่ได้บันทึกรายละเอียดโปรเจกต์': 'Project details not saved',
+    'ค่าที่พิมพ์ไว้ในแท็บรายละเอียดโปรเจกต์ยังไม่ได้บันทึก': 'What you typed on the Project details tab hasn’t been saved yet.',
+    'กลับไปแก้ต่อ': 'Keep editing', 'ทิ้งการแก้ไข': 'Discard changes', 'กลับไปดู': 'Go back',
+    'วันเริ่มโปรเจกต์': 'Project start date',
+    'วันเริ่มโปรเจกต์ต้องไม่หลังกำหนดส่ง': 'The project start date can’t be after its due date',
+    'มีรายละเอียดโปรเจกต์ที่แก้ไว้แต่ยังไม่ได้บันทึก': 'You have unsaved changes to the project details',
+    'ชื่อโปรเจกต์ใหม่': 'New project name', '{name} (สำเนา)': '{name} (copy)',
+    'รวมงานย่อยทุกชั้น ลำดับก่อนหลัง วันเริ่ม/กำหนดส่ง และค่าฟิลด์ (งานที่เสร็จแล้วกลับเป็นยังไม่เสร็จ)':
+      'Includes all subtasks, dependencies, start/due dates and field values (completed tasks are reopened)',
+    'เฉพาะงานที่ยังไม่เสร็จ': 'Only incomplete tasks',
+    'ยกเรื่องที่ยังค้างไปประชุมหรือรอบถัดไป': 'Carry open items over to the next meeting or cycle',
+    'เลื่อนวันทั้งหมด': 'Shift all dates',
+    'วันแรกสุดของโปรเจกต์นี้คือ {d} จะถูกเลื่อนไปเป็นวันเริ่มใหม่ วันอื่นเลื่อนตามเท่ากัน':
+      'The earliest date in this project ({d}) moves to the new start date; every other date shifts by the same amount',
+    'โปรเจกต์นี้ยังไม่มีวันที่ วันเริ่มใหม่จะเป็นวันเริ่มของโปรเจกต์สำเนา':
+      'This project has no dates yet. The new start date becomes the copy’s start date',
+    'วันเริ่มใหม่': 'New start date', 'เลือกวันเริ่มใหม่ก่อน': 'Choose a new start date first',
+    'คอลัมน์ ฟิลด์ มุมมองที่บันทึกไว้ คอลัมน์ที่เปิดอยู่ อัตโนมัติ ฟอร์ม และชนิดงานไปด้วยเสมอ ความเห็นและประวัติไม่ไปด้วย':
+      'Sections, fields, saved views, visible columns, rules, forms and task types are always copied. Comments and history are not.',
+    'สร้างงานจากหน้าเอกสาร': 'Create tasks from page',
+    'หนึ่งบรรทัดเป็นหนึ่งงาน · {n} งาน': 'One task per line · [n|1 task|{n} tasks]',
+    'สร้างไว้ที่': 'Create in', 'งานของฉัน (ส่วนตัว)': 'My Tasks (private)',
+    'แทนแต่ละบรรทัดในหน้าด้วยลิงก์ไปงานที่สร้าง': 'Replace each line on the page with a link to its new task',
+    'ใกล้ครบกำหนด {n}': '{n} due soon',
+    'โปรเจกต์ที่สถานะเสี่ยง/ไม่ตามแผน หรือมีงานเลยกำหนด': 'Projects that are at risk or off track, or have overdue tasks',
+    'วิดเจ็ตนี้กรองด้วย {n} เงื่อนไข': 'This widget is filtered by [n|1 condition|{n} conditions]',
+    'ตัวกรอง {n}': '[n|1 filter|{n} filters]',
+    'ยังไม่มีงาน — เริ่มเพิ่มงานได้เลย': 'No tasks yet — add your first task',
+    'งานเลยกำหนดที่ยังไม่เสร็จ {n} งาน — นับรวมไว้ในวันนี้': '[n|1 overdue task|{n} overdue tasks] not done yet — counted in today',
+    'ค้าง {n}': '{n} overdue', 'ค้าง': 'Overdue',
+    'งานเลยกำหนด นับรวมไว้ในวันนี้': 'overdue tasks, counted in today',
+    'เลยกำหนด {d} ยังไม่เสร็จ': 'Overdue since {d}, not done',
     'ฉัน': 'Me', 'บันทึก': 'Save', 'ยกเลิก': 'Cancel', 'ปิด': 'Close',
     'ลบ': 'Delete', 'เพิ่ม': 'Add', 'ใช้': 'Use', 'ส่ง': 'Send',
     'สร้าง': 'Create', 'ย้อนกลับ': 'Undo', 'ทั้งหมด': 'All', 'ทุกคน': 'Everyone',
@@ -2259,7 +2315,87 @@
     'ไฟล์ใหญ่เกินที่แนบได้': 'The file is too large', 'ไฟล์ใหม่เก็บบน SharePoint/OneDrive ในโฟลเดอร์ {f}/attachments ไฟล์ละไม่เกิน 100 MB': 'New files go to SharePoint/OneDrive in {f}/attachments, up to 100 MB each',
     'ไม่ต้องแสดงอีก': 'Don’t show again', 'ไม่พบไฟล์': 'No files found', 'ไม่มีสิทธิ์เข้าถึงไดรฟ์นี้ (ตรวจสิทธิ์ Files.ReadWrite.All)': 'No access to this drive (check the Files.ReadWrite.All permission)',
     'ไม่มีไฟล์ที่ฝังอยู่ในไฟล์ข้อมูลแล้ว': 'No files are embedded in the data file any more', 'ไม่ใส่ = ใช้ชื่อบริการ': 'Empty = use the service name', 'ไม่ได้รับอนุญาตให้แจ้งเตือน': 'Notification permission was not granted',
-    'ไม่มีไทม์ชีตที่คุณต้องตรวจ': 'No timesheets to review', 'ไม่อยู่ {n} วัน': 'Away [n|{n} day|{n} days]', 'ไม่เก็บเงิน': 'Non-billable', 'ไม่ใส่ = ใช้ชื่อแหล่งข้อมูล': 'Empty = use the source name'
+    'ไม่มีไทม์ชีตที่คุณต้องตรวจ': 'No timesheets to review', 'ไม่อยู่ {n} วัน': 'Away [n|{n} day|{n} days]', 'ไม่เก็บเงิน': 'Non-billable', 'ไม่ใส่ = ใช้ชื่อแหล่งข้อมูล': 'Empty = use the source name',
+    /* Sprint 1B */
+    /* สิทธิ์สร้างงานและป้ายสิทธิ์ */
+    'คุณไม่มีสิทธิ์เพิ่มงานในโปรเจกต์นี้': 'You don’t have permission to add tasks to this project',
+    'คุณไม่มีสิทธิ์แก้ไขในโปรเจกต์หรืองานนี้': 'You don’t have permission to edit in this project or task',
+    'สิทธิ์ของคุณ: {a}': 'Your access: {a}',
+    'ดูและแสดงความเห็นได้ แต่สร้างหรือแก้งานในโปรเจกต์นี้ไม่ได้': 'You can view and comment, but can’t create or edit tasks in this project',
+    'เปิดดูได้อย่างเดียว แก้และแสดงความเห็นไม่ได้': 'You can look but can’t edit or comment',
+    'แก้ไขงานนี้ไม่ได้': 'you can’t edit this task',
+    'คุณดูงานนี้ได้อย่างเดียว แสดงความเห็นไม่ได้': 'You can only view this task — commenting is off',
+    /* การอนุมัติ */
+    'ขออนุมัติ “{t}” จากคุณ': 'requested your approval on “{t}”',
+    'ขออนุมัติจาก {who}': 'requested approval from {who}',
+    'ส่ง “{t}” ขออนุมัติจากคุณอีกครั้ง': 'resubmitted “{t}” for your approval',
+    'ส่งขออนุมัติอีกครั้ง': 'Resubmit for approval',
+    'ส่งขออนุมัติอีกครั้งแล้ว': 'Resubmitted for approval',
+    'ส่งงานนี้ขออนุมัติอีกครั้ง': 'resubmitted this for approval',
+    'งานขออนุมัติต้องให้ผู้อนุมัติตัดสิน — กดอนุมัติหรือปฏิเสธแล้วงานจะปิดให้เอง': 'Approval tasks are decided by the approver — approving or rejecting completes the task',
+    'เฉพาะผู้อนุมัติ ({who}) ที่ตัดสินงานนี้ได้': 'Only the approver ({who}) can decide on this task',
+    'เลือกผู้อนุมัติก่อน แล้วผู้อนุมัติจึงตัดสินได้': 'Choose an approver first — then they can decide',
+    'ปฏิเสธ “{t}”?': 'Reject “{t}”?',
+    'งานจะถูกปิดเป็น “ไม่อนุมัติ” และแจ้งคนขอทันที ถ้าแค่อยากให้แก้บางจุด ใช้ “ขอแก้ไข” แทน': 'The task is closed as “Rejected” and the requester is notified right away. To ask for a few fixes, use “Changes requested” instead',
+    'ยังไม่มีผู้อนุมัติ — เลือกผู้อนุมัติด้านล่างก่อน': 'No approver yet — choose one below first',
+    'คุณคือผู้อนุมัติ — อนุมัติหรือปฏิเสธแล้วงานจะปิดให้เอง': 'You’re the approver — approving or rejecting completes the task',
+    'รอ {who} อนุมัติ': 'Waiting for {who} to approve',
+    '{who} ขอให้แก้ไข — แก้แล้วกด “ส่งขออนุมัติอีกครั้ง”': '{who} requested changes — make them, then press “Resubmit for approval”',
+    'ตัดสินโดย {who}': 'Decided by {who}',
+    'ปิดงานนี้ด้วยการอนุมัติหรือปฏิเสธของผู้อนุมัติ': 'The approver completes this task by approving or rejecting',
+    /* คนนอกโปรเจกต์ปิด */
+    '{who} ไม่ได้เป็นสมาชิกของ “{p}”': '{who} isn’t a member of “{p}”',
+    'ถ้าทำต่อ {who} จะเห็นงานนี้ รวมถึงความเห็นและไฟล์แนบทั้งหมดในงาน (แม้โปรเจกต์จะเป็นโปรเจกต์ปิด)': 'If you continue, {who} will see this task, including all its comments and attachments (even though the project is private)',
+    'ถ้าต้องการให้เป็นสมาชิกโปรเจกต์ ขอให้ผู้ดูแลระบบเพิ่มให้': 'To make them a project member, ask an admin to add them',
+    'เพิ่มเป็นสมาชิกโปรเจกต์ (แสดงความเห็นได้)': 'Add as project member (can comment)',
+    'เพิ่มเป็นสมาชิกโปรเจกต์ (แก้ไขได้)': 'Add as project member (can edit)',
+    'ให้เห็นเฉพาะงานนี้': 'Share this task only',
+    'ให้คนนอกโปรเจกต์เห็นงาน': 'Share a task outside the project',
+    'ให้ {who} เห็นงานนี้ (ไม่ได้เป็นสมาชิกโปรเจกต์)': 'shared this task with {who} (not a project member)',
+    /* โอนงาน เปลี่ยนบทบาท และเพิ่มสมาชิก */
+    'เปลี่ยนบทบาทและโอนงานต่อ': 'Change role and hand over tasks',
+    'มีงานที่ยังไม่เสร็จอยู่ {n} งาน บทบาทดูอย่างเดียวติ๊กเสร็จหรือแก้งานของตัวเองไม่ได้ งานจะค้างอยู่กับเขา': '[n|{n} open task|{n} open tasks] left. View-only people can’t complete or edit their own tasks, so these would get stuck',
+    '{name} เป็นเจ้าของหรือผู้ดูแลอยู่ {n} โปรเจกต์ โอนให้คนที่ยังใช้งานอยู่ ไม่งั้นคำขอสิทธิ์และการจัดการสมาชิกจะค้าง': '{name} owns or administers [n|{n} project|{n} projects]. Hand them to an active person, or access requests and member management will stall',
+    'บุคคลภายนอก — จะเห็นงานและความเห็นทั้งหมดที่โอนไป': 'Guests — will see every handed-over task and its comments',
+    'แสดงบุคคลภายนอกในรายชื่อ ({n} คน) — ไม่แนะนำ': 'Show guests in the list ([n|{n} person|{n} people]) — not recommended',
+    'โอนความเป็นเจ้าของ/ผู้ดูแลโปรเจกต์ {n} โปรเจกต์ให้คนเดียวกัน ({p})': 'Also hand over ownership/admin of [n|{n} project|{n} projects] to the same person ({p})',
+    'โอนงานแล้วเปลี่ยนบทบาท': 'Hand over, then change role',
+    'โอนงาน {n} งาน และเปลี่ยนบทบาทแล้ว': 'Handed over [n|{n} task|{n} tasks] and changed the role',
+    'โอนผู้ดูแล {n} โปรเจกต์': 'admin of [n|{n} project|{n} projects] handed over',
+    'โอนงานให้บุคคลภายนอก “{name}”?': 'Hand tasks to guest “{name}”?',
+    '{name} เป็นบุคคลภายนอก จะเห็นงานทั้ง {n} งาน รวมความเห็นและไฟล์แนบ แม้งานจะอยู่ในโปรเจกต์ที่เขาไม่ได้ถูกเชิญ': '{name} is an external guest and will see all [n|{n} task|{n} tasks], including comments and attachments, even in projects they weren’t invited to',
+    'โอนให้บุคคลภายนอก': 'Hand to guest',
+    'โอนสิทธิ์ผู้ดูแลโปรเจกต์': 'Hand over project admin',
+    'โอนความเป็นเจ้าของ/ผู้ดูแล {n} โปรเจกต์ให้ {who}': 'handed ownership/admin of [n|{n} project|{n} projects] to {who}',
+    'เปลี่ยน “{name}” เป็นดูอย่างเดียว?': 'Make “{name}” view only?',
+    '{name} มีงานที่ยังไม่เสร็จ {n} งาน บทบาทดูอย่างเดียวติ๊กเสร็จหรือแก้งานเหล่านี้ไม่ได้อีก': '{name} has [n|{n} open task|{n} open tasks]. As view only, they can no longer complete or edit them',
+    'โอนงานก่อน แล้วเปลี่ยนบทบาท': 'Hand over tasks, then change role',
+    'เปลี่ยนบทบาทโดยไม่โอนงาน': 'Change role without handing over',
+    'รูปแบบอีเมลไม่ถูกต้อง': 'That email address doesn’t look right',
+    'อีเมลนี้มีอยู่แล้วในรายชื่อ ({name})': 'This email is already in the list ({name})',
+    /* ออกจากระบบในโหมดเครื่องเดียว */
+    'ออกจากโหมดเครื่องเดียว?': 'Leave single-device mode?',
+    'ออกจากโหมดเครื่องเดียว': 'Leave single-device mode',
+    'ข้อมูลทั้งหมดอยู่ในเบราว์เซอร์นี้เท่านั้น ออกแล้วข้อมูลจะยังอยู่ ไม่ถูกลบ แต่ถ้าล้างข้อมูลเบราว์เซอร์จะหายถาวร ควรดาวน์โหลดไฟล์สำรองเก็บไว้': 'All your data lives only in this browser. Leaving keeps it — nothing is deleted — but clearing browser data would lose it for good, so download a backup',
+    'ดาวน์โหลดสำรองก่อน': 'Download a backup first',
+    'ออกโดยเก็บข้อมูลไว้': 'Leave and keep the data',
+    'ออกแล้ว ข้อมูลยังอยู่ในเบราว์เซอร์นี้ กด “ลองใช้แบบเครื่องเดียวก่อน” เพื่อกลับมาใช้ต่อ': 'Signed out. Your data is still in this browser — choose “Try it on this device only” to continue',
+    'กลับเป็น {name} (ทดสอบ)': 'Switch back to {name} (testing)',
+    /* ความเห็นในถังขยะ */
+    'ความเห็นจะไปอยู่ในถังขยะ {n} วัน กู้คืนได้': 'It goes to the trash for {n} days and can be restored.',
+    'ย้ายความเห็นไปถังขยะแล้ว': 'Comment moved to trash',
+    'ลบความเห็นหนึ่งรายการ': 'deleted a comment',
+    'ลบความเห็นในงานนี้ (กู้คืนได้จากถังขยะ)': 'deleted a comment on this task (restorable from trash)',
+    'กู้คืนความเห็นจากถังขยะ': 'restored a comment from the trash',
+    'ความเห็นนี้กลับมาอยู่แล้ว': 'This comment is already back',
+    'งานของความเห็นนี้ถูกลบไปแล้ว กู้งานคืนก่อน': 'This comment’s task was deleted — restore the task first',
+    'งานของความเห็นนี้ถูกลบไปแล้ว': 'Its task was deleted',
+    'ในงาน “{t}”': 'on “{t}”',
+    'ได้ลบความเห็นในงาน': 'deleted a comment on',
+    /* คำขอสิทธิ์ในกล่องข้อความ */
+    'ขอสิทธิ์เข้าโปรเจกต์ {p}': 'requested access to {p}',
+    'สิทธิ์ที่จะให้': 'Access to grant',
+    'ตอบคำขอนี้แล้ว': 'This request has been answered'
   };
 
   var lang = 'th';
@@ -2282,7 +2418,9 @@
    *
    * คีย์ที่ไม่มีวงเล็บเหลี่ยมทำงานเหมือนเดิมทุกประการ ไม่ต้องไล่แก้ทั้งพจนานุกรม
    */
-  var PLURAL = /\[(\w+)\|([^\]|]*)\|([^\]]*)\]/g;
+  /* Sprint 1A — รับ [{n}|…|…] ด้วย (ใส่ปีกการอบชื่อตัวแปรเผลอกันได้ง่าย มีอยู่แล้วหลายข้อความ)
+   * เดิมรูปนี้ไม่ตรงแบบ คนใช้เห็นข้อความดิบ "[2|Added 2 dependency|Added 2 dependencies]" */
+  var PLURAL = /\[\{?(\w+)\}?\|([^\]|]*)\|([^\]]*)\]/g;
 
   function pickPlural(s, p) {
     if (s.indexOf('[') < 0) return s;

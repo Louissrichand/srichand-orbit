@@ -191,7 +191,8 @@
           });
         }
       });
-      if (g.isSection) rows.push({ kind: 'add', sectionKey: g.key });
+      /* Sprint 1B — แถว + เพิ่มงานเฉพาะคนที่สร้างงานในโปรเจกต์นี้ได้ */
+      if (g.isSection && S.canCreateTask(projectId)) rows.push({ kind: 'add', sectionKey: g.key });
     });
 
     /* --- ช่วงเวลาที่ต้องวาด --- */

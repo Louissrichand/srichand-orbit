@@ -65,6 +65,8 @@
 
   function fmtDate(isoStr) {
     if (!isoStr) return '';
+    /* Sprint 1C — ได้เวลาเต็ม (2026-11-27T03:10:00Z) มาก็ใช้แค่ส่วนวันที่ ไม่งั้นเทียบ "วันนี้" ไม่ติด */
+    if (/^\d{4}-\d\d-\d\dT/.test(String(isoStr))) isoStr = String(isoStr).slice(0, 10);
     var p = String(isoStr).split('-');
     if (p.length !== 3) return String(isoStr);
     var t = S.today();
@@ -72,8 +74,42 @@
     if (isoStr === S.addDays(t, 1)) return L('พรุ่งนี้');
     if (isoStr === S.addDays(t, -1)) return L('เมื่อวาน');
     var s = parseInt(p[2], 10) + ' ' + MON()[parseInt(p[1], 10) - 1];
-    if (p[0] !== t.split('-')[0]) s += ' ' + global.I18N.yearShort(parseInt(p[0], 10));
+    if (p[0] !== t.split('-')[0]) s += ' ' + yearTag(parseInt(p[0], 10));
     return s;
+  }
+
+  /* Sprint 1C — ปีต่อท้ายวันที่ใช้รูปเดียวทั้งแอป
+   * ไทย: พ.ศ. สองหลัก "4 ธ.ค. 69" ตามที่คนไทยเขียนกันจริง (แบบเต็ม "4 ธันวาคม 2569" อยู่ใน fmtExact)
+   * อังกฤษ: ปีเต็ม "30 Jun 2027" เพราะ "30 Jun 27" อ่านเป็นวันที่ 27 ได้
+   * ปีที่ห่างจากปีนี้เกิน 50 ปี (ข้อมูลที่พิมพ์ผิดมาก่อน เช่นปี ค.ศ. 2569) แสดงเต็ม
+   * ไม่งั้น พ.ศ. 3112 จะถูกตัดเหลือ "12" แล้วดูเหมือนวันที่ปกติจนไม่มีใครเห็นว่าผิด */
+  function yearTag(y) {
+    if (global.I18N.getLang() === 'en') return String(y);
+    var cy = new Date().getFullYear();
+    return Math.abs(y - cy) <= 50 ? global.I18N.yearShort(y) : String(global.I18N.year(y));
+  }
+
+  /* Sprint 1C — วันที่ดิบ 2026-11-28 ในข้อความที่คนอ่าน (กล่องข้อความ บันทึก) แปลงตามภาษาคนอ่าน
+   * ค่าแทนที่เก็บเป็นรูปมาตรฐานเพื่อเทียบได้ จัดรูปตอนแสดงเท่านั้น (สลับภาษาแล้วเปลี่ยนตาม) */
+  function dateParams(p) {
+    if (!p) return p;
+    var out = {};
+    Object.keys(p).forEach(function (k) {
+      var v = p[k];
+      out[k] = (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) ? fmtDate(v) : v;
+    });
+    return out;
+  }
+  /** ข้อความสำเร็จรูปรุ่นเก่า (ไม่มีคีย์) ที่มีวันที่ดิบฝังอยู่ */
+  function localizeIso(s) {
+    return String(s == null ? '' : s).replace(/(^|[^\d-])(\d{4}-\d{2}-\d{2})(?![\dT])/g, function (m, pre, d) {
+      return pre + fmtDate(d);
+    });
+  }
+  /** ข้อความของการแจ้งเตือน (กล่องข้อความ และแจ้งเตือนของเบราว์เซอร์) วันที่ตามภาษาคนอ่าน */
+  function notifText(n) {
+    return n.key ? (n.actorName ? n.actorName + ' ' : '') + L(n.key, dateParams(n.params) || undefined)
+                 : localizeIso(n.text);
   }
 
   function dueClass(isoStr, completed) {
@@ -97,6 +133,9 @@
    * ซึ่งเป็นสิ่งที่คนย้อนอ่านเธรดต้องการรู้จริง ๆ
    */
   function fmtWhen(isoTs) {
+    /* Sprint 1C — ค่าที่มีแต่วันที่ (สถานะโปรเจกต์รุ่นเก่า) อย่าคิดเป็น "5 ชม.ที่แล้ว"
+     * new Date('2026-11-27') คือเที่ยงคืนตามเวลา UTC = 07:00 ที่ไทย ตัวเลขชั่วโมงจึงมั่วทุกครั้ง */
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(isoTs || ''))) return fmtDate(isoTs);
     var d = new Date(isoTs);
     if (isNaN(d.getTime())) return '';
     var mins = Math.round((Date.now() - d.getTime()) / 60000);
@@ -108,10 +147,12 @@
 
   /** วันและเวลาแบบเต็มไม่กำกวม ใช้เป็น tooltip ของเวลาแบบย่อ */
   function fmtExact(isoTs) {
-    var d = new Date(isoTs);
+    /* Sprint 1C — มีแต่วันที่ = ไม่มีเวลาให้บอก (อย่าเดาเป็น 07:00 จากเที่ยงคืน UTC) */
+    var dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(String(isoTs || ''));
+    var d = new Date(dateOnly ? isoTs + 'T00:00:00' : isoTs);
     if (isNaN(d.getTime())) return '';
     return d.getDate() + ' ' + MONF()[d.getMonth()] + ' ' +
-           global.I18N.year(d.getFullYear()) + ' ' + fmtTime(d);
+           global.I18N.year(d.getFullYear()) + (dateOnly ? '' : ' ' + fmtTime(d));
   }
 
   /** ข้อความบันทึกความเคลื่อนไหว แปลตอนแสดง
@@ -120,16 +161,8 @@
    * แต่คนอ่านต้องการ "3 ก.ย." จึงจัดรูปตอนแสดง ไม่ใช่ตอนเก็บ
    * ถ้าจัดรูปตอนเก็บ พอสลับภาษาแล้วบันทึกเก่าจะยังเป็นภาษาที่เขียนไว้ตอนนั้น */
   function storyText(s) {
-    var p = s.params;
-    if (p) {
-      var out = {};
-      Object.keys(p).forEach(function (k) {
-        var v = p[k];
-        out[k] = (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) ? fmtDate(v) : v;
-      });
-      p = out;
-    }
-    return L(s.text, p || undefined);
+    var p = dateParams(s.params);
+    return p ? L(s.text, p) : localizeIso(L(s.text));
   }
 
   /** ขนาดไฟล์แบบอ่านง่าย */
@@ -291,7 +324,8 @@
 
       p += '<div class="sb-section"><div class="sb-label"><button class="sb-labelbtn" data-act="go" data-route="projects" title="' +
         L('ดูโปรเจกต์ทั้งหมด') + '">' + L('โปรเจกต์') + '</button>' +
-        '<button data-act="new-project" title="' + L('สร้างโปรเจกต์ใหม่') + '">+</button></div>' +
+        /* Sprint 1B — บทบาทที่สร้างโปรเจกต์ไม่ได้ (ดูอย่างเดียว บุคคลภายนอก) ไม่ต้องเห็นปุ่มที่กดแล้วโดนปฏิเสธ */
+        (S.can('structure') ? '<button data-act="new-project" title="' + L('สร้างโปรเจกต์ใหม่') + '">+</button>' : '') + '</div>' +
         S.visibleProjects().map(projectItem).join('') + '</div>';
 
       /* คลังก็ต้องกรองตามสิทธิ์เหมือนกัน ไม่งั้นเก็บเข้าคลังแล้วโปรเจกต์ปิดโผล่ให้ทุกคนเห็น */
@@ -418,6 +452,7 @@
              '"><i></i>' + L('ตั้งสถานะ') + I('chevronDown', 12) + '</button>';
       }
       if (p.archived) h += '<span class="chip">' + L('เก็บเข้าคลังแล้ว') + '</span>';
+      h += accessChip(p.id);
 
       /* รูปสมาชิกซ้อนกันไว้ข้างชื่อ ตอบคำถาม "ใครอยู่ในโปรเจกต์นี้" โดยไม่ต้องเปิดเมนู
        * โปรเจกต์ที่เปิดให้ทั้งองค์กรไม่มีรายชื่อระบุตัว จึงไม่โชว์อะไรเลย
@@ -508,7 +543,7 @@
     if (route.type === 'project') {
       /* มุมมองที่มีแถบเครื่องมือ มีปุ่มเพิ่มงานอยู่ที่นั่นแล้ว
        * ปุ่มเดียวกันสองที่ทำให้คนลังเลว่าสองอันนี้ต่างกันไหม เหลือไว้ที่เดียว */
-      if (VIEWS_WITH_TOOLBAR.indexOf(route.view) < 0) {
+      if (VIEWS_WITH_TOOLBAR.indexOf(route.view) < 0 && S.canCreateTask(route.id)) {   // Sprint 1B
         h += '<button class="btn btn-primary" data-act="quick-add">' + L('+ เพิ่มงาน') + '</button>';
       }
       h += '<button class="btn btn-ghost" data-act="project-menu" data-id="' +
@@ -656,7 +691,8 @@
     var h = '<div class="vtb">';
 
     /* --- ซ้าย: เพิ่มงาน --- */
-    if (S.can('write')) {
+    /* Sprint 1B — เดิมเช็กแค่บทบาทองค์กร คนที่แสดงความเห็นได้/ดูได้อย่างเดียวในโปรเจกต์นี้ก็เห็นปุ่ม */
+    if (S.canCreateTask(projectId)) {
       h += '<div class="vtb-add">' +
         '<button class="btn btn-sm btn-primary" data-act="quick-add">' +
         I('plus', 13) + ' ' + L('เพิ่มงาน') + '</button>' +
@@ -723,8 +759,23 @@
 
   function checkbox(t) {
     var cls = 'check' + (t.completed ? ' on' : '') + (t.type === 'milestone' ? ' milestone' : '');
+    /* Sprint 1B — งานขออนุมัติปิดด้วยปุ่มอนุมัติ/ปฏิเสธ ติ๊กเองไม่ได้ บอกไว้ที่ป้ายของช่องติ๊ก */
+    var tip = t.type === 'approval' && !t.completed ? L('ปิดงานนี้ด้วยการอนุมัติหรือปฏิเสธของผู้อนุมัติ') : L('ทำเสร็จ');
     return '<button class="' + cls + '" data-act="toggle" data-id="' + esc(t.id) +
-      '" title="' + L('ทำเสร็จ') + '">' + '<span>' + ICON.check + '</span></button>';
+      '" title="' + esc(tip) + '">' + '<span>' + ICON.check + '</span></button>';
+  }
+
+  /** Sprint 1B — ป้ายบอกสิทธิ์ของเราในโปรเจกต์ (เฉพาะคนที่แก้ไม่ได้)
+   *  เดิมคนที่แสดงความเห็นได้อย่างเดียวรู้ตัวว่าแก้ไม่ได้ก็ต่อเมื่อพิมพ์ไปแล้วโดนปฏิเสธ */
+  function accessChip(projectId) {
+    var acc = S.projectAccess(projectId);
+    if (!acc || S.canCreateTask(projectId)) return '';
+    var lbl = acc === 'comment' && S.can('comment') ? 'แสดงความเห็นได้' : 'ดูอย่างเดียว';
+    var tip = lbl === 'แสดงความเห็นได้' ? 'ดูและแสดงความเห็นได้ แต่สร้างหรือแก้งานในโปรเจกต์นี้ไม่ได้'
+      : 'เปิดดูได้อย่างเดียว แก้และแสดงความเห็นไม่ได้';
+    return '<span class="chip access-chip" title="' + esc(L('สิทธิ์ของคุณ: {a}', { a: L(lbl) }) + ' — ' + L(tip)) + '">' +
+      I(lbl === 'ดูอย่างเดียว' ? 'eye' : 'lock', 12) + '<span class="ac-t">' +
+      esc(L('สิทธิ์ของคุณ: {a}', { a: L(lbl) })) + '</span></span>';
   }
 
   function selbox(t, selected) {
@@ -1137,6 +1188,7 @@
     var groups = S.viewGroups(projectId, view);
     var cols = S.listColumns(projectId, view).filter(function (c) { return c.on; });
     var canStruct = S.can('structure') && S.canInProject(projectId, 'edit');
+    var canAddT = S.canCreateTask(projectId);      // Sprint 1B — ปุ่ม + เพิ่มงานใต้คอลัมน์
     var bySection = view.group === 'section';
 
     // ความกว้างมาจากที่ผู้ใช้ลากไว้ ถ้ายังไม่เคยลากใช้ค่าตั้งต้น
@@ -1191,7 +1243,7 @@
       g.items.forEach(function (x) { h += listRow(x.task, cols, g, sel, ui, 0); });
       h += '</div>';
 
-      if (g.isSection) {
+      if (g.isSection && canAddT) {
         h += '<div class="tbl-add"><button class="add-row" data-act="inline-add" data-section="' +
           esc(g.key) + '">' + I('plus', 14) + ' ' + L('เพิ่มงาน') + '</button></div>';
       }
@@ -1220,7 +1272,14 @@
 
     h += '</div>';
 
-    if (!total) {
+    if (!total && !S.tasksInProject(projectId).length) {
+      /* Sprint 1C — โปรเจกต์ใหม่ที่ยังไม่มีงานสักชิ้น ไม่ใช่ "ไม่มีงานตรงกับตัวกรอง"
+       * ทั้งที่ไม่ได้ตั้งตัวกรองอะไรเลย คนเปิดมาครั้งแรกจะนึกว่างานหายหรือมีอะไรซ่อนอยู่ */
+      h += '<div class="empty"><div class="big">' + I('checkCircle', 32) + '</div>' +
+        L('ยังไม่มีงาน — เริ่มเพิ่มงานได้เลย') +
+        (S.can('write') && S.canInProject(projectId, 'edit') ? '<div style="margin-top:12px"><button class="btn btn-primary" data-act="quick-add">' +
+        L('+ เพิ่มงาน') + '</button></div>' : '') + '</div>';
+    } else if (!total) {
       h += '<div class="empty"><div class="big">' + I('search', 32) + '</div>' +
         L('ไม่มีงานที่ตรงกับตัวกรอง') +
         (S.filterCount(view) ? '<div style="margin-top:12px"><button class="btn" data-act="flt-clear">' +
@@ -1650,6 +1709,9 @@
       L('เลยกำหนด') + '</em></div>' +
       '</div>';
     h += bar(L('ความคืบหน้า'), s.done, s.total || 1, p.color);
+    if (p.startOn) {        // Sprint 1C — วันเริ่มโปรเจกต์ (เช่นวันที่เลือกตอนสร้างจากเทมเพลต)
+      h += '<div class="ovw-kv"><span>' + L('วันเริ่มโปรเจกต์') + '</span><b>' + esc(fmtDate(p.startOn)) + '</b></div>';
+    }
     if (p.dueOn) {
       h += '<div class="ovw-kv"><span>' + L('กำหนดส่งของโปรเจกต์') + '</span><b>' +
         esc(fmtDate(p.dueOn)) + '</b></div>';
@@ -1750,8 +1812,9 @@
         '<button class="btn btn-sm btn-ghost" data-act="msg-file" data-k="new">' + I('paperclip', 13) + ' ' + L('แนบไฟล์') + '</button>' +
         '<input type="file" id="msgFile" data-act="msg-file-pick" hidden multiple>' +
         '<span class="grow"></span>' +
+        /* Sprint 1A — ปุ่มเป็นคำกริยา "โพสต์" (เดิม "ประกาศ" ซึ่งภาษาอังกฤษแปลเป็นชื่อแท็บ "Messages") */
         '<button class="btn btn-primary btn-sm" data-act="post-message" data-id="' +
-        esc(projectId) + '">' + L('ประกาศ') + '</button></div></div>';
+        esc(projectId) + '">' + L('โพสต์') + '</button></div></div>';
     }
 
     /* 3b — รายงานสถานะขึ้นในฟีดเดียวกับประกาศ เรียงตามเวลา */
@@ -1930,7 +1993,7 @@
         '<button class="btn btn-primary" data-act="ff-submit" data-id="' + esc(f.id) + '">' + L('ส่งฟอร์ม') + '</button></div>';
     }
     h += '</div><p class="ffp-note">' + I('lock', 12) + ' ' +
-      L('ส่งได้เฉพาะสมาชิกที่เข้าระบบ Orbit แล้ว ฟอร์มสาธารณะสำหรับคนนอกองค์กรต้องมีเซิร์ฟเวอร์ จะมาในเฟส 5') + '</p></div>';
+      L('ฟอร์มนี้ใช้ได้เฉพาะพนักงานที่ล็อกอิน Orbit แล้ว') + '</p></div>';   // Sprint 1A — ไม่พูดถึงเซิร์ฟเวอร์/เฟสของทีมพัฒนา
     return h;
   }
 
@@ -2045,7 +2108,7 @@
         '"></span><div><div style="font-weight:600;color:' + st.color + '">' + esc(L(st.label)) +
         '</div><div style="margin-top:4px">' + esc(p.status.text) + '</div>' +
         '<div style="font-size:12px;color:var(--fg-faint);margin-top:6px">' +
-        esc(by ? by.name : '?') + ' · ' + fmtDate(p.status.at) + '</div></div></div>';
+        esc(by ? by.name : '?') + ' · ' + esc(fmtWhen(S.statusAt(p))) + '</div></div></div>';
 
       /* ประวัติย้อนหลัง ตอบคำถามที่ถามกันบ่อยที่สุดคือ "เปลี่ยนเป็นสีแดงตั้งแต่เมื่อไร"
        * ตัดรายการล่าสุดออกเพราะแสดงเต็ม ๆ อยู่ข้างบนแล้ว */
@@ -2146,8 +2209,8 @@
     h += '<div class="pf-kpis">';
     h += '<div class="stat"><div class="k">' + L('โปรเจกต์') + '</div><div class="v">' + st.projects + '</div></div>';
     h += '<div class="stat"><div class="k">' + L('ความคืบหน้ารวม') + '</div><div class="v">' + st.percent + '%</div></div>';
-    h += '<div class="stat' + (st.atRisk ? ' warn' : '') + '"><div class="k">' + L('ต้องจับตา') +
-      '</div><div class="v">' + st.atRisk + '</div></div>';
+    h += '<div class="stat' + (st.atRisk ? ' warn' : '') + '" title="' + esc(L('โปรเจกต์ที่สถานะเสี่ยง/ไม่ตามแผน หรือมีงานเลยกำหนด')) +
+      '"><div class="k">' + L('ต้องจับตา') + '</div><div class="v">' + st.atRisk + '</div></div>';
     h += '<div class="stat' + (st.overdue ? ' bad' : '') + '"><div class="k">' + L('งานเลยกำหนด') +
       '</div><div class="v">' + st.overdue + '</div></div>';
     h += '<div class="stat"><div class="k">' + L('งานทั้งหมด') + '</div><div class="v">' + st.total + '</div></div>';
@@ -2342,11 +2405,14 @@
     h += '</div></div>';
     h += '<div class="pfp-side"><div class="ovw-card"><h3>' + L('สถานะล่าสุดของโปรเจกต์') + '</h3>';
     if (!list.length) h += '<div class="ovw-empty">' + L('ยังไม่มีโปรเจกต์') + '</div>';
-    list.slice().sort(function (a, b) { return String((b.status || {}).at || '') < String((a.status || {}).at || '') ? -1 : 1; })
+    /* Sprint 1C — เวลาจากรายการล่าสุดในประวัติ (เวลาเต็ม) ไม่ใช่ status.at รุ่นเก่าที่เก็บแค่วันที่
+     * ซึ่งทำให้รายงานเมื่อ 10 นาทีก่อนขึ้นว่า "5 ชม.ที่แล้ว" ขณะที่หน้าแรกบอก "4 นาทีที่แล้ว" */
+    list.slice().sort(function (a, b) { return String(S.statusAt(b) || '') < String(S.statusAt(a) || '') ? -1 : 1; })
       .forEach(function (p) {
+        var sAt = p.status ? S.statusAt(p) : null;
         h += '<div class="pf-risk" data-act="go" data-route="project" data-id="' + esc(p.id) + '"><span class="em">' + esc(p.icon) + '</span>' +
           '<span class="grow"><b>' + esc(p.name) + '</b>' + (p.status && p.status.text ? '<em>' + esc(S.plainText(p.status.text)) + '</em>' : '') +
-          '<em>' + (p.status ? esc(fmtWhen(p.status.at)) : '') + '</em></span>' + pfStatePill(p.status && p.status.state) + '</div>';
+          '<em' + (sAt ? ' title="' + esc(fmtExact(sAt)) + '"' : '') + '>' + (sAt ? esc(fmtWhen(sAt)) : '') + '</em></span>' + pfStatePill(p.status && p.status.state) + '</div>';
       });
     h += '</div></div></div>';
     return h;
@@ -2448,10 +2514,8 @@
     h += '<div class="bar-note">' + L('แท่ง = สัดส่วนงานที่เสร็จ เรียงจากช้าที่สุดขึ้นก่อน') + '</div></div>';
 
     h += '<div class="panel"><h3>' + L('ต้องจับตา') + '</h3>';
-    var risky = list.filter(function (p) {
-      var s = S.projectStats(p.id);
-      return (p.status && (p.status.state === 'at_risk' || p.status.state === 'off_track')) || s.overdue > 0;
-    });
+    /* Sprint 1C — นิยามเดียวกับตัวเลข "ต้องจับตา" บนแถบสรุป (S.needsWatch) */
+    var risky = list.filter(function (p) { return S.needsWatch(p); });
     if (!risky.length) h += '<div class="pf-none">' + L('ยังไม่มีโปรเจกต์ที่น่าห่วง') + '</div>';
     risky.forEach(function (p) {
       var s = S.projectStats(p.id);
@@ -3294,6 +3358,11 @@
     }
     (showAll ? projs : projs.slice(0, 7)).forEach(function (p) {
       var dn = S.dueSoonCount(p.id);
+      /* Sprint 1C — เลยกำหนดแยกจากใกล้ครบกำหนด (สีแดง) เดิมนับรวมกันว่า "ใกล้ครบกำหนด" ทั้งที่เลยไปแล้ว */
+      var dov = S.overdueCount(p.id);
+      var dueTxt = [];
+      if (dov) dueTxt.push('<span class="hproj-late">' + esc(L('เลยกำหนด {n}', { n: dov })) + '</span>');
+      if (dn) dueTxt.push(esc(L('ใกล้ครบกำหนด {n}', { n: dn })));
       var ps = p.status ? projectState(p.status.state) : null;
       pb += '<button class="hproj" data-act="go" data-route="project" data-id="' + esc(p.id) + '">' +
         '<span class="hproj-ic" style="background:' + esc(p.color) + '22">' + esc(p.icon) + '</span>' +
@@ -3302,7 +3371,7 @@
           ? '<span class="lockmark" title="' + L('โปรเจกต์ปิด') + '">' + I('shield', 11) + '</span>' : '') +
         '</span><span class="hproj-sub">' +
         (ps ? '<i class="st-dot" style="background:' + esc(ps.color) + '" title="' + esc(L(ps.label)) + '"></i>' : '') +
-        (dn ? esc(L('งานใกล้ครบกำหนด {n} งาน', { n: dn })) : L('ไม่มีงานใกล้ครบกำหนด')) +
+        (dueTxt.length ? dueTxt.join(' · ') : L('ไม่มีงานใกล้ครบกำหนด')) +
         '</span></span></button>';
     });
     pb += '</div>';
@@ -3960,10 +4029,28 @@
     h += n.read ? '<span class="nrow-dot"></span>' : '<span class="unread-dot"></span>';
     if (!dense) h += '<span class="nrow-av">' + (actor ? avatar(actor, 'sm')
       : '<span class="nrow-sys">' + I(n.kind === 'due' || n.kind === 'overdue' ? 'calendar' : 'bell', 13) + '</span>') + '</span>';
-    var ntxt = n.key ? (n.actorName ? n.actorName + ' ' : '') + L(n.key, n.params || undefined) : n.text;
+    var ntxt = notifText(n);
     var where = t ? t.name : (np ? np.name : (n.route === 'mytasks' ? L('งานของฉัน')
       : (S.routeLabel(n.route) || L('(งานถูกลบแล้ว)'))));     // 4a — ทีม พอร์ตโฟลิโอ เป้าหมาย
     h += '<div class="body"><div class="txt">' + esc(ntxt) + '</div>';
+    /* Sprint 1B — คำขอสิทธิ์เข้าโปรเจกต์ ตอบได้จากแถวนี้เลย (ชุดปุ่มเดียวกับในแผงงานคำขอแบบเก่า)
+     * ตอบไปแล้ว (โดยใครก็ตาม) ปุ่มหายเอง เหลือแต่ข้อความ */
+    var areq = S.accessRequestFor(n);
+    if (areq) {
+      if (areq.note) h += '<div class="nrow-note">“' + esc(areq.note) + '”</div>';
+      if (areq.canAnswer) {
+        var selId = 'arAccess-' + n.id;
+        h += '<div class="nrow-access"><select class="inp" id="' + esc(selId) + '" data-act="ar-pick" aria-label="' +
+          esc(L('สิทธิ์ที่จะให้')) + '">' + S.PROJECT_ACCESS.filter(function (x) { return x.id !== 'admin'; })
+            .map(function (x) { return '<option value="' + x.id + '">' + esc(L(x.label)) + '</option>'; }).join('') + '</select>' +
+          '<button class="btn btn-sm btn-primary" data-act="access-grant" data-id="' + esc(areq.project.id) +
+          '" data-user="' + esc(areq.userId) + '" data-sel="' + esc(selId) + '">' + L('ให้สิทธิ์') + '</button>' +
+          '<button class="btn btn-sm" data-act="access-deny" data-id="' + esc(areq.project.id) +
+          '" data-user="' + esc(areq.userId) + '">' + L('ปฏิเสธ') + '</button></div>';
+      }
+    } else if (n.kind === 'access') {
+      h += '<div class="nrow-note">' + esc(L('ตอบคำขอนี้แล้ว')) + '</div>';
+    }
     if (!dense) {
       var pj = t ? S.projectsOfTask(S.rootOf(t).id)[0] : null;
       h += '<div class="sub" title="' + esc(fmtExact(n.createdAt)) + '">' +
@@ -3997,7 +4084,8 @@
   var TRASH_KIND = {
     task:    ['งาน', 'checkCircle'],
     project: ['โปรเจกต์', 'grid'],
-    field:   ['ฟิลด์', 'hash']
+    field:   ['ฟิลด์', 'hash'],
+    comment: ['ความเห็น', 'note']          // Sprint 1B
   };
 
   function trashView(projectId) {
@@ -4026,6 +4114,10 @@
         extra = L('พร้อม {n} งาน', { n: x.data.bundle.tasks.filter(function (t) { return !t.parentId; }).length });
       } else if (x.kind === 'field' && x.data.values.length) {
         extra = L('ค่าที่กรอกไว้ {n} ช่อง', { n: x.data.values.length });
+      } else if (x.kind === 'comment') {
+        /* Sprint 1B — บอกว่าเป็นความเห็นในงานไหน (งานถูกลบไปแล้วก็บอก จะได้รู้ว่าต้องกู้งานก่อน) */
+        var ctk = S.task(x.data.taskId);
+        extra = ctk ? L('ในงาน “{t}”', { t: ctk.name }) : L('งานของความเห็นนี้ถูกลบไปแล้ว');
       }
       h += '<div class="trash-row">' +
         '<span class="trash-ic">' + I(k[1], 16) + '</span>' +
@@ -4119,7 +4211,7 @@
     var h = '<div class="empty noaccess"><div class="big">🔒</div>';
     if (!p) return h + L('ไม่พบโปรเจกต์นี้') + '</div>';
     h += '<p><b>' + esc(p.name) + '</b></p><p>' + L('นี่คือโปรเจกต์ปิด คุณยังไม่ได้เป็นสมาชิก') + '</p>';
-    if (pend && S.task(pend.taskId)) {
+    if (pend) {          // Sprint 1B — คำขอไม่ได้เป็นงานแล้ว (pendingRequest กรองคำขอเก่าที่งานหายไปให้แล้ว)
       h += '<p class="noaccess-sent">' + I('check', 13) + ' ' +
         L('ส่งคำขอแล้วเมื่อ {when} รอเจ้าของโปรเจกต์ตอบ', { when: esc(fmtWhen(pend.at)) }) + '</p>';
     } else if (S.isActive()) {
@@ -4270,6 +4362,12 @@
 
     h += '<textarea class="dw-title' + (t.completed ? ' done' : '') +
       '" data-act="edit-title" rows="1">' + esc(t.name) + '</textarea>';
+    /* Sprint 1B — บอกตั้งแต่เปิดงานว่าแก้ไม่ได้ ไม่ต้องลองแก้ก่อนแล้วค่อยรู้ */
+    if (!S.can('write', t.id)) {
+      var roLbl = S.can('comment', t.id) ? 'แสดงความเห็นได้' : 'ดูอย่างเดียว';
+      h += '<div class="dw-ro-note">' + I(roLbl === 'ดูอย่างเดียว' ? 'eye' : 'lock', 13) + '<span>' +
+        esc(L('สิทธิ์ของคุณ: {a}', { a: L(roLbl) })) + ' — ' + esc(L('แก้ไขงานนี้ไม่ได้')) + '</span></div>';
+    }
 
     /* 2c — งานคำขอเข้าโปรเจกต์ปิด เจ้าของ/ผู้ดูแลตอบได้จากตรงนี้เลย */
     var areq = S.accessRequestOf(t.id);
@@ -4313,28 +4411,44 @@
     }
 
     // สถานะอนุมัติ
-    /* ผู้อนุมัติคือผู้รับผิดชอบงาน — ปุ่มตัดสินใจกดได้เฉพาะเขา (หรือคนที่แก้โปรเจกต์ได้)
-     * คนอื่นยังเห็นสถานะและปุ่ม แต่กดไม่ได้ พร้อมบอกเหตุผล จะได้ไม่งงว่าปุ่มหายไปไหน */
+    /* Sprint 1B — ปุ่มตัดสินมีเฉพาะผู้อนุมัติ (ผู้รับผิดชอบ) คนอื่นเห็นสถานะกับ "รอ {ชื่อ} อนุมัติ" แทน
+     * เดิมโชว์ปุ่มให้ทุกคน (กดไม่ได้บ้าง กดได้บ้าง) คนขอเลยกดอนุมัติงานของตัวเองได้
+     * หลังผู้อนุมัติ "ขอแก้ไข" คนขอได้ปุ่ม "ส่งขออนุมัติอีกครั้ง" ไม่ต้องไปตามกันนอกระบบ */
     if (t.type === 'approval') {
       var a = approvalState(t.approval);
       var mayApprove = S.canApprove(t.id);
+      var apU = S.user(t.assigneeId);
+      var apName = '<b>' + esc(apU ? apU.name : '?') + '</b>';
       var ACTS = [['approved', 'อนุมัติ', 'check'], ['changes', 'ขอแก้ไข', 'pencil'],
                   ['rejected', 'ปฏิเสธ', 'close']];
       h += '<div class="fld"><label>' + L('การอนุมัติ') + '</label><div class="val">' +
         '<div class="fld-inline appr-row"><span class="approval-pill" style="background:' + a.color +
         '22;color:' + a.color + '">' + esc(L(a.label)) + '</span>';
-      ACTS.forEach(function (x) {
-        if (x[0] === t.approval) return;
-        h += '<button class="btn btn-sm appr-btn appr-' + x[0] + '" data-act="set-approval" data-id="' +
-          esc(t.id) + '" data-v="' + x[0] + '"' + (mayApprove ? '' : ' disabled') + '>' +
-          I(x[2], 12) + ' ' + esc(L(x[1])) + '</button>';
-      });
-      if (t.approval !== 'pending') {
-        h += '<button class="btn btn-sm btn-ghost" data-act="set-approval" data-id="' + esc(t.id) +
-          '" data-v="pending"' + (mayApprove ? '' : ' disabled') + '>' + esc(L('กลับไปรออนุมัติ')) + '</button>';
+      if (mayApprove) {
+        ACTS.forEach(function (x) {
+          if (x[0] === t.approval) return;
+          h += '<button class="btn btn-sm appr-btn appr-' + x[0] + '" data-act="set-approval" data-id="' +
+            esc(t.id) + '" data-v="' + x[0] + '">' + I(x[2], 12) + ' ' + esc(L(x[1])) + '</button>';
+        });
+        if (t.approval !== 'pending') {
+          h += '<button class="btn btn-sm btn-ghost" data-act="set-approval" data-id="' + esc(t.id) +
+            '" data-v="pending">' + esc(L('กลับไปรออนุมัติ')) + '</button>';
+        }
       }
-      h += '</div>' + (mayApprove ? '' : '<div class="fld-hint">' +
-        L('ผู้อนุมัติคือผู้รับผิดชอบงานนี้ หรือคนที่แก้ไขโปรเจกต์ได้') + '</div>') + '</div></div>';
+      if (S.canResubmit(t.id)) {
+        h += '<button class="btn btn-sm btn-primary" data-act="approval-resubmit" data-id="' + esc(t.id) + '">' +
+          I('send', 12) + ' ' + esc(L('ส่งขออนุมัติอีกครั้ง')) + '</button>';
+      }
+      h += '</div>';
+      var apHint = '';
+      if (!apU) apHint = L('ยังไม่มีผู้อนุมัติ — เลือกผู้อนุมัติด้านล่างก่อน');
+      else if (mayApprove) apHint = t.approval === 'pending' || t.approval === 'changes'
+        ? L('คุณคือผู้อนุมัติ — อนุมัติหรือปฏิเสธแล้วงานจะปิดให้เอง') : '';
+      else if (t.approval === 'pending') apHint = L('รอ {who} อนุมัติ', { who: apName });
+      else if (t.approval === 'changes') apHint = L('{who} ขอให้แก้ไข — แก้แล้วกด “ส่งขออนุมัติอีกครั้ง”', { who: apName });
+      else apHint = L('ตัดสินโดย {who}', { who: apName });
+      if (apHint) h += '<div class="fld-hint">' + apHint + '</div>';
+      h += '</div></div>';
     }
 
     h += '<div class="fld"><label>' + (t.type === 'approval' ? L('ผู้อนุมัติ') : L('ผู้รับผิดชอบ')) +
@@ -4930,12 +5044,26 @@
     /* ช่องความเห็นเป็นตัวแก้ไขแบบเห็นภาพชุดเดียวกับรายละเอียด
      * ร่างที่พิมพ์ค้างไว้เก็บแยกต่อคนต่องาน (main.js) ปิดแผงหรือรีเฟรชแล้วยังอยู่ */
     var ck = 'c:' + t.id;
-    h += '<div class="dw-foot"><div class="comment-box">' + avatar(S.me()) +
-      composerHtml(ck, t.id, L('เขียนความเห็น… พิมพ์ @ เพื่ออ้างถึงคน งาน หรือโปรเจกต์ (Ctrl+Enter ส่ง)'),
-        draft(ck), 'commentInput') +
-      '<button class="btn btn-primary btn-sm" data-act="send-comment" data-id="' +
-      esc(t.id) + '">' + L('ส่ง') + '</button></div></div>';
+    if (S.can('comment', t.id)) {
+      h += '<div class="dw-foot"><div class="comment-box">' + avatar(S.me()) +
+        composerHtml(ck, t.id, L('เขียนความเห็น… พิมพ์ @ เพื่ออ้างถึงคน งาน หรือโปรเจกต์ (Ctrl+Enter ส่ง)'),
+          draft(ck), 'commentInput') +
+        '<button class="btn btn-primary btn-sm" data-act="send-comment" data-id="' +
+        esc(t.id) + '">' + L('ส่ง') + '</button></div></div>';
+    } else {
+      /* Sprint 1B — ดูอย่างเดียว: ไม่ให้พิมพ์ความเห็นยาว ๆ แล้วค่อยโดนปฏิเสธตอนกดส่ง */
+      h += '<div class="dw-foot dw-ro-foot">' + I('eye', 13) + ' ' +
+        L('คุณดูงานนี้ได้อย่างเดียว แสดงความเห็นไม่ได้') + '</div>';
+    }
 
+    /* Sprint 1B — คนที่แก้งานนี้ไม่ได้ (แสดงความเห็นได้/ดูอย่างเดียว) เห็นช่องต่าง ๆ เป็นแบบอ่านอย่างเดียว
+     * เดิมพิมพ์ชื่องานหรือเลือกวันได้ก่อน แล้วค่อยโดนปฏิเสธตอนบันทึก ทำเป็นขั้นสุดท้ายของการวาด
+     * จับเฉพาะช่องแก้ค่าของงานด้วย data-act จึงไม่ไปแตะช่องความเห็นที่ยังใช้ได้ */
+    if (!S.can('write', t.id)) {
+      h = h.replace('data-act="edit-title"', 'data-act="edit-title" readonly')
+        .replace(/(<(?:input|select)\b[^>]*data-act="(?:edit-(?:type|cstatus|start|starttime|due|duetime|recur|recur-n|field)|dw-sec-pick)"[^>]*)>/g, '$1 disabled>')
+        .replace(/(<button class="picker-btn" data-act="pick-assignee")/, '$1 disabled');
+    }
     return h;
   }
 
@@ -5081,7 +5209,9 @@
 
   /** หน้าจอสำหรับบัญชีที่ถูกปิดใช้งาน
    *  ถ้าไม่มีหน้านี้ คนที่ถูกปิดจะเห็นแอปที่กดอะไรก็ไม่ขึ้น โดยไม่รู้ว่าทำไม */
-  function disabledScreen() {
+  /** @param opts { local: โหมดเครื่องเดียว, back: ผู้ใช้ต้นทางที่สลับมา (กลับได้) } — Sprint 1B */
+  function disabledScreen(opts) {
+    opts = opts || {};
     var me = S.me();
     var h = '<div class="gate-card">';
     h += '<div class="gate-logo">' + global.Icons.logoLockup(30) + '</div>';
@@ -5092,7 +5222,12 @@
     }
     h += '<div class="gate-err">' + I('alert', 15) + '<span>' +
       L('หากคิดว่าเป็นความผิดพลาด กรุณาติดต่อฝ่ายเทคโนโลยีสารสนเทศ') + '</span></div>';
-    h += '<button class="gate-alt" data-act="sign-out">' + L('ออกจากระบบ') + '</button>';
+    if (opts.back) {
+      h += '<button class="btn btn-primary gate-btn" data-act="do-switch-user" data-id="' + esc(opts.back.id) + '">' +
+        esc(L('กลับเป็น {name} (ทดสอบ)', { name: opts.back.name })) + '</button>';
+    }
+    /* โหมดเครื่องเดียว — ออกแล้วข้อมูลในเครื่องยังอยู่ (main.js ถามก่อนและเสนอดาวน์โหลดสำรอง) */
+    h += '<button class="gate-alt" data-act="sign-out">' + (opts.local ? L('ออกจากโหมดเครื่องเดียว') : L('ออกจากระบบ')) + '</button>';
     h += '</div>';
     return h;
   }
@@ -5135,7 +5270,8 @@
   var AUDIT_GROUP = {
     auth: 'การเข้าใช้งาน', user: 'จัดการสมาชิก', project: 'โปรเจกต์',
     system: 'ระบบ', task: 'งาน', security: 'ความปลอดภัย', field: 'ฟิลด์', tag: 'แท็ก', template: 'เทมเพลต', team: 'ทีม', goal: 'เป้าหมาย', settings: 'ตั้งค่า',
-    portfolio: 'พอร์ตโฟลิโอ', time: 'ไทม์ชีต', report: 'รายงาน', files: 'ไฟล์แนบ'
+    portfolio: 'พอร์ตโฟลิโอ', time: 'ไทม์ชีต', report: 'รายงาน', files: 'ไฟล์แนบ',
+    comment: 'ความเห็น'                   // Sprint 1B
   };
   function auditGroupLabel(g) { return AUDIT_GROUP[g] || g; }
 
@@ -5200,6 +5336,8 @@
     'field.lib-delete': 'ได้เอาฟิลด์ออกจากคลังขององค์กร',
     'tag.rename': 'ได้เปลี่ยนชื่อแท็ก',
     'tag.delete': 'ได้ลบแท็ก',
+    /* Sprint 1B */
+    'comment.delete': 'ได้ลบความเห็นในงาน',
     /* 4a */
     'team.create': 'ได้สร้างทีม', 'team.delete': 'ได้ลบทีม', 'team.privacy': 'ได้เปลี่ยนความเป็นส่วนตัวของทีม',
     'team.member': 'ได้เพิ่มสมาชิกทีม', 'team.member-remove': 'ได้ถอดสมาชิกออกจากทีม', 'team.join': 'ได้เข้าร่วมทีม',
@@ -5217,7 +5355,8 @@
 
   var AUDIT_ICON = {
     auth: 'signIn', user: 'users', project: 'archive',
-    system: 'settings', task: 'checkCircle', security: 'shield', field: 'hash', tag: 'flag', template: 'star', team: 'users', goal: 'flag', settings: 'settings'
+    system: 'settings', task: 'checkCircle', security: 'shield', field: 'hash', tag: 'flag', template: 'star', team: 'users', goal: 'flag', settings: 'settings',
+    comment: 'note'                     // Sprint 1B
   };
   function auditIcon(a) { return AUDIT_ICON[a.split('.')[0]] || 'more'; }
   /** บอกว่าคนนี้เข้าระบบด้วยวิธีไหน ผู้ดูแลจะได้รู้ว่าต้องตัดสิทธิ์ที่ไหนบ้าง */
@@ -5339,7 +5478,8 @@
       h += '<li><b>' + L(r.label) + '</b><span>' + L(r.desc) + '</span></li>';
     });
     h += '<li class="hint">' + I('shield', 14) + '<span>' +
-      L('ตอนนี้ระดับ “ดูอย่างเดียว” ยังบังคับได้จริงก็ต่อเมื่อตั้งสิทธิ์บนไซต์ SharePoint ของคนนั้นเป็น Read ด้วย เมื่อย้ายไปฐานข้อมูลแล้ว API จะบังคับให้เอง') +
+      /* Sprint 1A — บอกสิ่งที่ผู้ดูแลต้องทำ ไม่พูดถึงฐานข้อมูล/API ที่ยังไม่มี */
+      L('ถ้าต้องการให้คนระดับ “ดูอย่างเดียว” แก้ข้อมูลไม่ได้จริง ให้ตั้งสิทธิ์ของคนนั้นบนไซต์ SharePoint เป็น Read ด้วย') +
       '</span></li>';
     h += '</ul></details>';
     h += '</section>';
@@ -5404,7 +5544,7 @@
           I(auditIcon(r.action), 14) + '</span><div>' +
           '<b>' + esc(who ? who.name : '—') + '</b> ' + esc(L(auditText(r.action))) +
           (r.target ? ' <u>' + esc(r.target) + '</u>' : '') +
-          (r.detail ? '<span class="d">' + esc(L(r.detail, r.detailParams || undefined)) + '</span>' : '') +
+          (r.detail ? '<span class="d">' + esc(r.detailParams ? L(r.detail, dateParams(r.detailParams)) : localizeIso(L(r.detail))) + '</span>' : '') +
           '<em title="' + esc(fmtExact(r.at)) + '">' + esc(fmtWhen(r.at)) + '</em></div></li>';
       });
       h += '</ul>';
@@ -5572,7 +5712,10 @@
     var title = w.title ? L(w.title) : L(def ? def[1] : '');
     var h = '<section class="dw' + (w.full ? ' full' : '') + (w.kind === 'number' ? ' num' : '') + '" data-w="' + esc(w.id) + '">' +
       '<header><b class="grow">' + esc(title) + '</b>' +
-      (w.filters.length ? '<span class="dw-flt" title="' + L('มีตัวกรอง') + '">' + I('filter', 12) + w.filters.length + '</span>' : '');
+      /* Sprint 1C — ป้ายตัวกรองเดิมเป็น "▽2" ติดชื่อวิดเจ็ต อ่านแล้วเหมือน "เลยกำหนด 2" ทั้งที่ค่าเป็น 0
+       * เขียนคำว่าตัวกรองกำกับไว้ในกรอบเส้นประจาง ๆ ให้ดูเป็นป้ายตั้งค่า ไม่ใช่ตัวเลขผลลัพธ์ */
+      (w.filters.length ? '<span class="dw-flt" title="' + esc(L('วิดเจ็ตนี้กรองด้วย {n} เงื่อนไข', { n: w.filters.length })) + '">' +
+        I('filter', 11) + '<span>' + esc(L('ตัวกรอง {n}', { n: w.filters.length })) + '</span></span>' : '');
     h += '<button class="btn btn-sm btn-ghost" data-act="dash-menu" data-w="' + esc(w.id) + '" title="' + L('ตัวเลือก') + '">' +
       I('more', 14) + '</button></header>';
     if (w.kind === 'text') {
@@ -5847,6 +5990,7 @@
     accountBlock: accountBlock, accountMenu: accountMenu, gateScreen: gateScreen,
     esc: esc, avatar: avatar, initials: initials,
     fmtDate: fmtDate, fmtWhen: fmtWhen, fmtExact: fmtExact, whenTag: whenTag,
+    yearTag: yearTag, dateParams: dateParams, localizeIso: localizeIso, notifText: notifText,   // Sprint 1C
     prio: prio, taskType: taskType, approvalState: approvalState,
     projectState: projectState, recurLabel: recurLabel,
     MON: MON, MONF: MONF, DOW: DOW, DOWR: DOWR, weekStart: weekStart, YR: YR, ICON: ICON,

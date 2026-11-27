@@ -174,6 +174,8 @@
     function bnOn() { return !!S.pref('browserNotify'); }
     function bnPerm() { var N = NotifAPI(); return N ? N.permission : 'unsupported'; }
     function bnText(n) {
+      /* Sprint 1C — ใช้ตัวเดียวกับกล่องข้อความ วันที่ดิบ 2026-11-28 กลายเป็น "28 พ.ย." ตามภาษาคนอ่าน */
+      if (global.Render && global.Render.notifText) return global.Render.notifText(n);
       var body = n.key ? L(n.key, n.params || undefined) : (n.text || '');
       return (n.actorName ? n.actorName + ' ' : '') + body;
     }

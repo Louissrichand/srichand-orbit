@@ -99,7 +99,14 @@
 
   /** เมนูข้างบนมือถือ — เลื่อนเข้ามาทับ พร้อมฉากทึบให้แตะปิด */
   function setSidebar(open) {
-    document.getElementById('sidebar').classList.toggle('open', !!open);
+    var sb = document.getElementById('sidebar');
+    /* Sprint 1A — ปิดเมนูมือถือแล้วลืมหมวดที่แตะดูค้างไว้ เปิดใหม่ต้องเห็นหมวดของหน้าที่อยู่จริง
+     * เดิมแตะดู "กลยุทธ์" แล้วปิดเมนูไปทำงานต่อ เปิดเมนูอีกครั้งยังค้างที่กลยุทธ์ หาเมนูของหน้าปัจจุบันไม่เจอ */
+    if (!open && sb.classList.contains('open') && state.navPick) {
+      state.navPick = null;
+      $sidebar.innerHTML = R.sidebar(state.route, null);
+    }
+    sb.classList.toggle('open', !!open);
     if ($scrim) $scrim.classList.toggle('open', !!open);
   }
   function closeSidebar() { setSidebar(false); }
@@ -135,29 +142,52 @@
 
   /** ล้างการเลือกแล้วเก็บกวาดหน้าจอโดยไม่ต้อง re-render ทั้งหน้า */
   function clearSelUI() {
-    var ids = Object.keys(state.sel);
     state.sel = {};
-    ids.forEach(function (i) {
-      var nodes = $view.querySelectorAll('.row[data-id="' + i + '"], .card[data-id="' + i + '"], .tr[data-id="' + i + '"]');
-      Array.prototype.forEach.call(nodes, function (n) {
-        n.classList.remove('sel');
-        var box = n.querySelector('.selbox');
-        if (box) box.classList.remove('on');
-      });
-    });
+    syncSelDom();
     updateSelectionUI(null);
+  }
+
+  /** Sprint 1A — ทำไฮไลต์ทุกแถวบนจอให้ตรงกับ state.sel
+   *  เดิมล้างเฉพาะแถวที่อยู่ใน state.sel ถ้าสถานะถูกล้างไปก่อน (เช่นหลังมอบหมายหลายงาน) แถวยังติดไฮไลต์
+   *  จอบอกว่าเลือก 3 งาน แต่คำสั่งถัดไปเห็นว่าไม่ได้เลือกอะไร — ไล่ทุกแถวแทน จอกับสถานะจึงตรงกันเสมอ */
+  function syncSelDom() {
+    Array.prototype.forEach.call($view.querySelectorAll('.row[data-id], .card[data-id], .tr[data-id]'), function (n) {
+      var on = !!state.sel[n.dataset.id];
+      n.classList.toggle('sel', on);
+      var box = n.querySelector('.selbox');
+      if (box) box.classList.toggle('on', on);
+    });
   }
 
   /* ---------- toast ---------- */
 
   var toastTimer = null;
-  function toast(msg, actionLabel, actionAttr) {
-    $toast.innerHTML = R.esc(msg) +
-      (actionLabel ? ' <button data-act="' + actionAttr + '">' + R.esc(actionLabel) + '</button>' : '');
-    $toast.classList.add('show');
+  /* Sprint 1A — ข้อความแจ้งที่มีปุ่ม (ย้อนกลับ) ค้างไว้ 9 วินาที เอาเมาส์ชี้แล้วหยุดนับ
+   * เดิมหายใน 3.6 วินาที คนอ่านไม่ทันก็กดไม่ทัน และกล่องยังปล่อยคลิกทะลุไปโดนแถวข้างใต้ (CSS)
+   * บอก Ctrl+Z ไว้ข้างปุ่มด้วย (เฉพาะเครื่องที่มีเมาส์/คีย์บอร์ด) คนที่พลาดปุ่มจะรู้ว่ายังย้อนได้ */
+  var toastLeft = 0, toastStart = 0;
+  function armToast(ms) {
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { $toast.classList.remove('show'); }, 3600);
+    toastLeft = ms;
+    toastStart = Date.now();
+    toastTimer = setTimeout(function () { $toast.classList.remove('show'); }, ms);
   }
+  function toast(msg, actionLabel, actionAttr) {
+    var kbd = actionAttr === 'undo' && !isTouch() ? ' <span class="toast-kbd">Ctrl+Z</span>' : '';
+    $toast.innerHTML = '<span class="toast-msg">' + R.esc(msg) + '</span>' +
+      (actionLabel ? ' <button data-act="' + actionAttr + '">' + R.esc(actionLabel) + '</button>' + kbd : '');
+    $toast.classList.toggle('has-act', !!actionLabel);
+    $toast.classList.add('show');
+    armToast(actionLabel ? 9000 : 4500);
+  }
+  $toast.addEventListener('mouseenter', function () {
+    if (!$toast.classList.contains('show')) return;
+    clearTimeout(toastTimer);
+    toastLeft = Math.max(2000, toastLeft - (Date.now() - toastStart));
+  });
+  $toast.addEventListener('mouseleave', function () {
+    if ($toast.classList.contains('show')) armToast(toastLeft);
+  });
 
   /* ---------- theme ---------- */
 
@@ -1080,7 +1110,14 @@
     /* บัญชีถูกปิดใช้งาน — กั้นไว้ก่อนวาดแอป และบอกเหตุผลให้ชัด
      * ไม่ปล่อยให้เห็นหน้าจอที่กดอะไรก็ไม่ขึ้นโดยไม่รู้ว่าทำไม */
     if (!S.isActive()) {
-      $gate.innerHTML = R.disabledScreen();
+      /* Sprint 1B — หน้าเข้าสู่ระบบขึ้นอยู่ (เพิ่งออกจากโหมดเครื่องเดียว) ให้หน้านั้นอยู่ต่อ
+       * ไม่งั้นหน้าบัญชีถูกปิดจะทับ ทั้งที่คนเพิ่งเลือกออกไปแล้ว */
+      if (!$gate.hidden && !$gate.dataset.kind) return;
+      /* Sprint 1B — โหมดเครื่องเดียว (สลับผู้ใช้ทดสอบมาเป็นบัญชีที่ถูกปิด) มีทางกลับบัญชีเดิม
+       * ไม่ต้องกดออกจากระบบ ซึ่งเดิมล้างข้อมูลทั้งเครื่องทิ้ง */
+      var dsTeam = global.OrbitSync && global.OrbitSync.state.mode === 'team';
+      var dsBack = !dsTeam && viewAsOrigin() ? S.user(viewAsOrigin()) : null;
+      $gate.innerHTML = R.disabledScreen({ local: !dsTeam, back: dsBack && dsBack.active !== false ? dsBack : null });
       $gate.dataset.kind = "disabled";
       $gate.hidden = false;
       document.body.classList.add('gated');
@@ -1093,6 +1130,8 @@
     applyTheme();
     /* 3c — สมุดโน้ตส่วนตัวเป็นหน้าเอกสาร สร้างให้ครั้งแรกที่เปิดแอป (commit แล้ววาดใหม่เอง) */
     if (S.me() && !S.notepadPage() && S.ensureNotepadPage()) return;
+    /* Sprint 1A — ไปหน้าอื่นแล้วล้างหมวดที่แตะดูไว้ทิ้ง (เดิมแค่ไม่ใช้ แต่ยังค้างในสถานะ) */
+    if (state.navPick && state.navPick.key !== R.routeKey(state.route)) state.navPick = null;
     $sidebar.innerHTML = R.sidebar(state.route, state.navPick);
     renderTopbar();
     renderViewBody();
@@ -1164,17 +1203,42 @@
     if (!allowed(act, ed)) return;
     var md = global.RichText.fromNode(ed);
     if (!md.trim()) { if (kind !== 'e') toast(L('พิมพ์ข้อความก่อน')); return; }
-    /* ล้างช่องก่อนบันทึก การบันทึกทำให้แผงวาดใหม่และคืนเนื้อหาของช่องที่โฟกัสอยู่
-     * ถ้ายังไม่ล้าง ข้อความที่เพิ่งส่งไปจะเด้งกลับมาอยู่ในช่องอีกรอบ */
-    ed.innerHTML = '';
-    setDraft(key, '');
-    if (kind === 'c') S.addComment(ref, md);
-    else if (kind === 'r') { state.openThreads[ref] = true; S.addComment(ed.dataset.id, md, ref); }
-    else {
-      state.editStory = null;
-      if (!S.editComment(ref, md)) renderDrawer();   // ไม่ได้แก้อะไร ก็แค่ปิดโหมดแก้
-    }
+    var send = function () {
+      /* ล้างช่องก่อนบันทึก การบันทึกทำให้แผงวาดใหม่และคืนเนื้อหาของช่องที่โฟกัสอยู่
+       * ถ้ายังไม่ล้าง ข้อความที่เพิ่งส่งไปจะเด้งกลับมาอยู่ในช่องอีกรอบ */
+      ed.innerHTML = '';
+      setDraft(key, '');
+      var sent = null;
+      if (kind === 'c') sent = S.addComment(ref, md);
+      else if (kind === 'r') { state.openThreads[ref] = true; sent = S.addComment(ed.dataset.id, md, ref); }
+      else {
+        state.editStory = null;
+        if (!S.editComment(ref, md)) renderDrawer();   // ไม่ได้แก้อะไร ก็แค่ปิดโหมดแก้
+      }
+      /* Sprint 1A — บอกให้เห็นว่าส่งไปแล้ว: เลื่อนไปหาความเห็นใหม่แล้วไฮไลต์ + ข้อความ "ส่งแล้ว"
+       * เดิมส่งแล้วเงียบ ความเห็นใหม่อาจอยู่นอกจอ คนเลยกดซ้ำหรือคิดว่ายังไม่ส่ง */
+      if (sent && state.openTaskId) {
+        state.flashStory = sent.id;
+        renderDrawer();
+        toast(L('ส่งแล้ว'));
+      }
+    };
+    /* Sprint 1B — @ชื่อ คนนอกโปรเจกต์ปิด = เขากลายเป็นผู้ติดตามและเห็นทั้งงาน ถามก่อนส่ง
+     * ยกเลิกแล้วข้อความยังอยู่ในช่อง แก้ชื่อออกแล้วส่งใหม่ได้ */
+    var cTid = kind === 'e' ? ((S.story(ref) || {}).taskId || null) : (kind === 'c' ? ref : ed.dataset.id);
+    confirmReveal(cTid, S.mentionedIn(md), send);
   }
+
+  /* Sprint 1A — กดปุ่มส่งแล้วไม่ให้ช่องพิมพ์เสียโฟกัส
+   * ถ้าช่องเสียโฟกัสตอนกดเมาส์ลง แถบเครื่องมือหุบ กล่องเตี้ยลง ปุ่มเลื่อนหนีจากใต้เมาส์/นิ้วก่อนปล่อย
+   * คลิกแรกจึงหาย (มือถือแป้นพิมพ์ยังหุบด้วย ยิ่งเลื่อนมาก) ห้ามการย้ายโฟกัสไว้ คลิกจึงถึงปุ่มเสมอ */
+  var SEND_ACTS = ['send-comment', 'send-reply', 'comment-save', 'post-message', 'msg-reply'];
+  document.addEventListener('mousedown', function (e) {
+    var b = e.target.closest && e.target.closest('[data-act]');
+    if (!b || SEND_ACTS.indexOf(b.dataset.act) < 0) return;
+    var ae = document.activeElement;
+    if (ae && ae.classList && ae.classList.contains('rte')) e.preventDefault();
+  }, true);
 
   /** เปิดงานใหม่ เริ่มแผงจากสภาพตั้งต้นเสมอ */
   function resetDrawerState() {
@@ -1444,6 +1508,80 @@
     inp.addEventListener('blur', function () { finish(true); });
   }
 
+  /* ---------- Sprint 1C — ช่องวันที่ทุกช่องรับปี พ.ศ. ได้ และไม่ยอมเก็บปีที่ผิดรูป ----------
+   *
+   * ช่องวันที่ของเบราว์เซอร์ (input type=date) เป็น ค.ศ. เสมอ แต่หน้าจอภาษาไทยแสดงปี พ.ศ.
+   * คนไทยจึงพิมพ์ 04/12/2569 ตามความเคยชิน แล้วได้ปี ค.ศ. 2569 ลงข้อมูลจริง (โชว์เป็น "4 ธ.ค. 12")
+   * หรือพิมพ์เลขเกินจนได้ปี 122026 โดยไม่มีอะไรเตือนเลย
+   *
+   * Chrome ยิง input/change ทุกครั้งที่พิมพ์เลขหนึ่งหลัก ระหว่างพิมพ์ปีจึงเป็น 0002 0025 0256 …
+   * และช่องในแผงงานบันทึกแล้ววาดใหม่ทุกครั้งที่ได้ change พิมพ์วันเสร็จหนึ่งช่องโฟกัสก็หลุด พิมพ์ต่อไม่ได้
+   * จึงดักที่ window ช่วง capture (ก่อนตัวจัดการของแอปทุกตัว):
+   *   ค่าที่มาจากการพิมพ์ = เก็บไว้ก่อน ยังไม่ให้แอปเห็น (เลือกจากปฏิทินของเบราว์เซอร์ = ผ่านทันทีเหมือนเดิม)
+   *   ออกจากช่องหรือกด Enter ค่อยตัดสินค่าสุดท้ายแล้วยิง change ครั้งเดียว:
+   *     ปีปกติ 2000–2100 = ผ่าน
+   *     ปี ≥ 2400 = พ.ศ. ลบ 543 ให้ แล้วบอกด้วยข้อความสั้น ๆ
+   *     ปีนอกช่วง = ไม่บันทึก คืนค่าล่าสุดที่ถูกต้อง และบอกว่าทำไม (Enter ไม่ไปกดบันทึกของหน้าต่างต่อ)
+   * ช่องที่อ่านค่าตอนกดปุ่มบันทึกก็ได้ค่าที่แปลงแล้ว เพราะ blur เกิดก่อน click ของปุ่มเสมอ
+   * ทำที่เดียวตรงนี้ ทุกช่องวันที่ในแอป (งาน กำหนดส่งหลายงาน โปรเจกต์ ตัวกรอง ฟอร์ม เป้าหมาย …) ได้ครบ */
+  var DATE_Y_MIN = 2000, DATE_Y_MAX = 2100, BE_FROM = 2400;
+  function dgYear(v) { var m = /^(\d{4,6})-\d\d-\d\d$/.exec(v || ''); return m ? +m[1] : null; }
+  function dgIsDate(el) { return !!el && el.tagName === 'INPUT' && el.type === 'date'; }
+  function dgOk(v) { var y = dgYear(v); return !v || (y !== null && y >= DATE_Y_MIN && y <= DATE_Y_MAX); }
+
+  function dgFire(el) {
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  /** ตัดสินค่าสุดท้ายของช่องที่ค้างอยู่ คืน false ถ้าปฏิเสธ (ค่าถูกคืนเป็นของเดิมแล้ว) */
+  function dgSettle(el) {
+    el._dgKey = false;
+    if (!el._dgPend) return true;
+    el._dgPend = false;
+    var v = el.value, y = dgYear(v);
+    if (dgOk(v)) {
+      if (v !== el._dgOk) { el._dgOk = v; dgFire(el); }
+      return true;
+    }
+    if (y !== null && y >= BE_FROM && y - 543 >= DATE_Y_MIN && y - 543 <= DATE_Y_MAX) {
+      el.value = (y - 543) + v.slice(String(y).length);
+      el._dgOk = el.value;
+      toast(L('แปลงปี พ.ศ. {b} เป็น ค.ศ. {g} ให้แล้ว', { b: y, g: y - 543 }));
+      dgFire(el);
+      return true;
+    }
+    el.value = el._dgOk || '';
+    toast(L('ปี {y} ไม่ถูกต้อง ใช้ปี ค.ศ. {a}–{z} (หรือ พ.ศ.) — ยังไม่ได้บันทึกวันที่นี้',
+      { y: y === null ? '?' : y, a: DATE_Y_MIN, z: DATE_Y_MAX }));
+    return false;
+  }
+  global.addEventListener('focusin', function (e) {
+    var el = e.target;
+    if (dgIsDate(el) && !el._dgPend) el._dgOk = dgOk(el.value) ? el.value : '';
+  }, true);
+  function dgGuard(e) {
+    var el = e.target;
+    if (!dgIsDate(el)) return;
+    if (dgOk(el.value) && !el._dgKey) { el._dgOk = el.value; el._dgPend = false; return; }
+    if (!('_dgOk' in el)) el._dgOk = dgOk(el.defaultValue) ? el.defaultValue : '';
+    el._dgPend = true;
+    e.stopImmediatePropagation();            // ยังพิมพ์ไม่จบ — แอปยังไม่ต้องเห็น
+  }
+  global.addEventListener('input', dgGuard, true);
+  global.addEventListener('change', dgGuard, true);
+  global.addEventListener('blur', function (e) { if (dgIsDate(e.target)) dgSettle(e.target); }, true);
+  global.addEventListener('keydown', function (e) {
+    var el = e.target;
+    if (!dgIsDate(el)) return;
+    if (e.key !== 'Enter') {
+      /* ตัวเลข ลบ หรือลูกศรขึ้นลง = กำลังพิมพ์/แก้ค่าเอง (Tab กับลูกศรซ้ายขวาแค่ย้ายช่อง) */
+      if (/^\d$/.test(e.key) || e.key === 'Backspace' || e.key === 'Delete' || e.key === 'ArrowUp' || e.key === 'ArrowDown') el._dgKey = true;
+      return;
+    }
+    if (!el._dgPend) { el._dgKey = false; return; }
+    if (!dgSettle(el)) { e.preventDefault(); e.stopImmediatePropagation(); }
+  }, true);
+
   /* ---------- modal ---------- */
 
   function openModal(html, wide) {
@@ -1452,8 +1590,43 @@
     $modal.innerHTML = html;
     $mdBack.classList.add('open');
     var first = $modal.querySelector('input, select, textarea');
-    if (first) setTimeout(function () { first.focus(); if (first.select) first.select(); }, 40);
+    /* Sprint 1A — select() ใช้กับช่องวันที่/ตัวเลขไม่ได้ (โยน error) ครอบไว้
+     * หน้าต่างที่ไม่มีช่องกรอก (askConfirm/askChoice) ย้ายโฟกัสมาที่หน้าต่าง
+     * ไม่งั้นปุ่มเดิมที่เปิดหน้าต่างยังโฟกัสอยู่ กด Enter แล้วกลายเป็นกดปุ่มนั้นซ้ำแทนการตอบตกลง */
+    if (first) setTimeout(function () { first.focus(); try { if (first.select) first.select(); } catch (er) { /* ช่องชนิดนี้เลือกข้อความไม่ได้ */ } }, 40);
+    else {
+      $modal.setAttribute('tabindex', '-1');
+      try { $modal.focus({ preventScroll: true }); } catch (er) { $modal.focus(); }
+    }
   }
+
+  /* Sprint 1A — Enter ในหน้าต่างถาม = ปุ่มหลัก (ตกลง / บันทึก / สร้าง) · Esc = ยกเลิก (ตัวจัดการคีย์หลัก)
+   * เดิมมีแค่ช่อง askText ที่ Enter ใช้ได้ หน้าต่างเพิ่มฟิลด์ สร้างแท็ก ยืนยัน/เลือกทาง กด Enter แล้วไม่เกิดอะไร
+   * ผูกที่ window ให้ทำงานหลังตัวจัดการอื่นทุกตัว ถ้ามีใครจัดการ Enter ไปแล้ว (preventDefault) จะไม่ซ้ำ
+   * ไม่แตะ textarea / ตัวแก้ไขข้อความ (Enter = ขึ้นบรรทัดใหม่) ปุ่ม/ลิงก์ (Enter = กดตัวมันเอง) และ select
+   * หน้าต่างที่ปุ่มหลักคือ "ปิด" (เช่นตั้งค่า) ไม่ปิดให้ — แก้ค่าในช่องแล้วกด Enter ไม่ควรพาหน้าต่างหายไป */
+  global.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' || e.defaultPrevented || e.isComposing) return;
+    if (e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!$mdBack.classList.contains('open')) return;
+    var t = e.target;
+    if (!t || (t !== $modal && t !== document.body && !$modal.contains(t))) return;
+    var tag = t.tagName;
+    if (tag === 'TEXTAREA' || tag === 'BUTTON' || tag === 'A' || tag === 'SELECT' || t.isContentEditable) return;
+    if (tag === 'INPUT' && /^(file|button|submit|reset|color|range)$/i.test(t.type)) return;
+    var primary = function () {
+      var b = $modal.querySelector('[data-act="ask-ok"]') ||
+        $modal.querySelector('.ask-choices .btn-primary') ||
+        $modal.querySelector('.modal-acts .btn-primary');
+      return b && !b.disabled && b.dataset.act !== 'close-modal' ? b : null;
+    };
+    if (!primary()) return;
+    e.preventDefault();
+    /* ให้ change ของช่องนี้เกิดก่อนกดปุ่ม (บางหน้าต่างวาดใหม่ตอน change จึงหาปุ่มใหม่อีกรอบ) */
+    if (tag === 'INPUT' && t.blur) t.blur();
+    var ok = primary();
+    if (ok) ok.click();
+  });
   function closeModal() { $mdBack.classList.remove('open'); $modal.innerHTML = ''; }
 
   /* ---------- ถามผู้ใช้ด้วยหน้าต่างของแอปเอง ----------
@@ -1511,6 +1684,36 @@
     h += '</div><div class="modal-acts"><button class="btn" data-act="close-modal">' +
       L('ยกเลิก') + '</button></div>';
     openModal(h);
+  }
+
+  /* ---------- Sprint 1B: ถามก่อนให้คนนอกโปรเจกต์เห็นงาน ----------
+   *
+   * มอบหมาย เพิ่มผู้ติดตาม หรือ @ชื่อ คนที่ไม่ได้เป็นสมาชิกโปรเจกต์ (ปิด) ทำให้เขาเห็นทั้งงาน
+   * และความเห็นทุกอันในงานนั้น เดิมเกิดขึ้นเงียบ ๆ ราคาที่คุยกันในโปรเจกต์ปิดจึงหลุดไปถึงคนนอก
+   * ตอนนี้ถามก่อนทุกครั้ง ให้เลือกเองว่าจะเพิ่มเขาเป็นสมาชิก ให้เห็นแค่งานนี้ หรือยกเลิก
+   * ทางเลือกที่เลือกกับการกระทำจริงอยู่ในจุดย้อนกลับเดียวกัน */
+  function confirmReveal(taskIds, userIds, run) {
+    var r = S.revealOutsiders(taskIds, userIds);
+    if (!r.users.length) { run(); return; }
+    var names = r.users.map(function (u) { return u.name; }).join(', ');
+    var ids = r.users.map(function (u) { return u.id; });
+    var p = r.projects[0];
+    function go(access) {
+      S.batch('ให้คนนอกโปรเจกต์เห็นงาน', null, function () {
+        S.revealTo(taskIds, ids, access);
+        run();
+      });
+    }
+    var choices = [];
+    if (p && S.canAddMembers(p.id)) {
+      choices.push({ label: L('เพิ่มเป็นสมาชิกโปรเจกต์ (แสดงความเห็นได้)'), primary: true, run: function () { go('comment'); } });
+      choices.push({ label: L('เพิ่มเป็นสมาชิกโปรเจกต์ (แก้ไขได้)'), run: function () { go('edit'); } });
+    }
+    choices.push({ label: L('ให้เห็นเฉพาะงานนี้'), primary: !choices.length, run: function () { go(null); } });
+    askChoice(L('{who} ไม่ได้เป็นสมาชิกของ “{p}”', { who: names, p: p ? p.name : '' }),
+      L('ถ้าทำต่อ {who} จะเห็นงานนี้ รวมถึงความเห็นและไฟล์แนบทั้งหมดในงาน (แม้โปรเจกต์จะเป็นโปรเจกต์ปิด)', { who: names }) +
+      (p && !S.canAddMembers(p.id) ? ' ' + L('ถ้าต้องการให้เป็นสมาชิกโปรเจกต์ ขอให้ผู้ดูแลระบบเพิ่มให้') : ''),
+      choices);
   }
 
   /* ---------- popover ---------- */
@@ -1590,6 +1793,7 @@
 
   function openTask(id) {
     if (!S.task(id) || !S.canSeeTask(id)) return;
+    outsideClose = null;        // Sprint 1A — คลิกนอกแผงที่เปิดงานอื่น = สลับงาน ไม่ต้องปิดแผง
     flushEditor();
     if (state.openTaskId !== id) resetDrawerState();
     state.openTaskId = id;
@@ -1714,7 +1918,7 @@
     h += formulaFieldsHtml(state.route.id, '', ft.id !== 'formula');      // 3c — สูตรและอ้างอิง
     h += '<div class="field" id="nfRefWrap"' + (ft.id === 'ref' ? '' : ' hidden') + '><label>' + L('อ้างอิงถึง') + '</label>' +
       S.REF_KINDS.map(function (k) { return '<label class="chk"><input type="checkbox" class="nf-refkind" value="' + k[0] + '" checked> ' + L(k[1]) + '</label>'; }).join('') +
-      '<div class="fld-hint">' + L('เป้าหมายจะเพิ่มได้เมื่อมีหน้าเป้าหมาย (ชิ้นงาน 4a)') + '</div></div>';
+      '</div>';    // Sprint 1A — เอาข้อความ "เป้าหมายจะเพิ่มได้เมื่อมีหน้าเป้าหมาย" ออก หน้าเป้าหมายมีแล้วและอ้างอิงเป้าหมายได้จริง
     h += '<div id="nfNumWrap"' + (ft.id === 'number' || ft.id === 'formula' ? '' : ' hidden') + '>' + numberFormatFields(null) + '</div>';
 
     if (!forLib) {
@@ -1849,7 +2053,7 @@
     }
 
     h += '<div class="modal-note" style="margin-top:16px">' +
-      L('ในเวอร์ชันนี้การกันสิทธิ์ทำที่หน้าจอ เมื่อย้ายไปฐานข้อมูลแล้วจะบังคับที่เซิร์ฟเวอร์จริง') +
+      L('สิทธิ์ในโปรเจกต์กำหนดว่าแต่ละคนเห็นและแก้อะไรได้ใน Orbit') +     // Sprint 1A — ภาษาคนใช้ ไม่พูดถึงฐานข้อมูล/เซิร์ฟเวอร์
       '</div>';
     h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
     return h;
@@ -1872,37 +2076,53 @@
       return '<button data-act="' + act + '"' + d + (extra || '') + '>' +
         I(icon, 14) + '<span class="grow">' + label + '</span></button>';
     }
-    h += item('project-settings', 'settings', L('ตั้งค่าโปรเจกต์'));
+    /* Sprint 1B — เมนูตามสิทธิ์ เดิมทุกคนเห็นครบ (ลบโปรเจกต์ นำเข้า CSV อัตโนมัติ คัดลอก…)
+     * กดแล้วค่อยโดนปฏิเสธ คนที่แก้ไม่ได้เห็นแค่ของที่ใช้ได้จริง: ดูสิทธิ์ แจ้งเตือน ลิงก์ ส่งออก ฟอร์ม */
+    var canStruct = S.can('structure') && S.canInProject(projectId, 'edit');
+    var canCreate = S.canCreateTask(projectId);
+    if (canStruct) h += item('project-settings', 'settings', L('ตั้งค่าโปรเจกต์'));
     h += item('project-access', 'shield', L('ใครเข้าถึงโปรเจกต์นี้ได้')) ;
-    h += item('project-look', 'pencil', L('ตั้งสีและไอคอน'));
-    h += item('add-to-portfolio', 'star', L('เพิ่มเข้าพอร์ตโฟลิโอ'));
-    h += item('team-share', 'users', L('แชร์ให้ทีม…'));
+    if (canStruct) {
+      h += item('project-look', 'pencil', L('ตั้งสีและไอคอน'));
+      h += item('add-to-portfolio', 'star', L('เพิ่มเข้าพอร์ตโฟลิโอ'));
+      h += item('team-share', 'users', L('แชร์ให้ทีม…'));
+    }
     h += '<div class="pop-sep"></div>';
-    h += item('update-status', 'flag', L('อัปเดตสถานะโปรเจกต์'));
+    if (canStruct) h += item('update-status', 'flag', L('อัปเดตสถานะโปรเจกต์'));
     h += item('proj-notify-menu', 'bell', L('การแจ้งเตือนของโปรเจกต์นี้'));
     h += item('copy-project-link', 'link', L('คัดลอกลิงก์โปรเจกต์'));
-    h += item('dup-project', 'copy', L('คัดลอกโปรเจกต์'));
-    h += item('pt-save', 'star', L('บันทึกเป็นเทมเพลตโปรเจกต์…'));
+    if (canStruct) {
+      h += item('dup-project', 'copy', L('คัดลอกโปรเจกต์'));
+      h += item('pt-save', 'star', L('บันทึกเป็นเทมเพลตโปรเจกต์…'));
+    }
     h += '<div class="pop-sep"></div>';
-    h += item('manage-fields', 'filter', L('จัดการฟิลด์'));
-    h += item('auto-open', 'bolt', L('ระบบอัตโนมัติ'));
-    h += item('forms-open', 'note', L('ฟอร์ม'));
-    h += item('types-open', 'diamond', L('ชนิดงานและสถานะ'));
-    h += item('manage-templates', 'star', L('เทมเพลตงาน'));
-    h += item('reset-cols', 'arrowLeft', L('คืนความกว้างคอลัมน์เดิม'));
+    if (canStruct) {
+      h += item('manage-fields', 'filter', L('จัดการฟิลด์'));
+      h += item('auto-open', 'bolt', L('ระบบอัตโนมัติ'));
+    }
+    h += item('forms-open', 'note', L('ฟอร์ม'));          // ฟอร์มเปิดให้คนนอกส่งเรื่องเข้ามาได้โดยตั้งใจ
+    if (canStruct) {
+      h += item('types-open', 'diamond', L('ชนิดงานและสถานะ'));
+      h += item('manage-templates', 'star', L('เทมเพลตงาน'));
+      h += item('reset-cols', 'arrowLeft', L('คืนความกว้างคอลัมน์เดิม'));
+    }
     h += '<div class="pop-sep"></div>';
-    h += item('import-csv', 'archive', L('นำเข้างานจาก CSV'));
+    if (canStruct && canCreate) h += item('import-csv', 'archive', L('นำเข้างานจาก CSV'));
     h += item('export-csv', 'send', L('ส่งออกเป็น CSV'));
     h += item('time-csv', 'send', L('ส่งออกเวลาที่บันทึก (CSV)'));          // 3c
     h += item('export-json', 'send', L('ส่งออกเป็น JSON'));
     h += item('export-ics', 'calendar', L('ดาวน์โหลดปฏิทิน .ics'));
     h += item('print-list', 'note', L('พิมพ์รายการงาน'));
-    h += item('project-trash', 'trash', L('ถังขยะของโปรเจกต์นี้'));
-    h += '<div class="pop-sep"></div>';
-    h += item('toggle-archive', p.archived ? 'arrowLeft' : 'archive',
-      p.archived ? L('เอากลับจากคลัง') : L('เก็บโปรเจกต์เข้าคลัง'));
-    h += '<button class="danger" data-act="delete-project"' + d + '>' +
-      I('trash', 14) + '<span class="grow">' + L('ลบโปรเจกต์') + '</span></button>';
+    if (canCreate) h += item('project-trash', 'trash', L('ถังขยะของโปรเจกต์นี้'));
+    if (canStruct || S.can('manage')) h += '<div class="pop-sep"></div>';
+    if (canStruct) {
+      h += item('toggle-archive', p.archived ? 'arrowLeft' : 'archive',
+        p.archived ? L('เอากลับจากคลัง') : L('เก็บโปรเจกต์เข้าคลัง'));
+    }
+    if (S.can('manage')) {                                // ลบโปรเจกต์ = ผู้ดูแลระบบ (ตาม NEEDS)
+      h += '<button class="danger" data-act="delete-project"' + d + '>' +
+        I('trash', 14) + '<span class="grow">' + L('ลบโปรเจกต์') + '</span></button>';
+    }
     return h;
   }
 
@@ -2070,11 +2290,106 @@
     ['scheduling', 'ตารางวันทำงาน']
   ];
 
+  /* Sprint 1C — หน้าต่างคัดลอกโปรเจกต์
+   * เดิมถามแค่ "เอางานไปด้วยไหม" แล้วตั้งชื่อเป็น "(สำเนา)" ให้เอง ต้องไปเปลี่ยนชื่อและไล่เลื่อนวันทีละงานทีหลัง
+   * คนจัดประชุมประจำต้องการยกเฉพาะเรื่องที่ยังค้างไปประชุมครั้งหน้า จึงมีตัวเลือก "เฉพาะงานที่ยังไม่เสร็จ"
+   * เลื่อนวัน = เลือกวันเริ่มใหม่ ทุกวันในสำเนาเลื่อนเท่ากันจากวันแรกสุดของโปรเจกต์เดิม */
+  function dupProjectModal(pid) {
+    var p = S.project(pid);
+    var first = S.projectFirstDate(pid, false);
+    var h = '<h2>' + L('คัดลอกโปรเจกต์') + '</h2>';
+    h += '<div class="field"><label>' + L('ชื่อโปรเจกต์ใหม่') + '</label><input id="dupName" maxlength="200" value="' +
+      R.esc(L('{name} (สำเนา)', { name: p.name })) + '"></div>';
+    h += '<div class="dup-opts">';
+    h += '<label class="chk"><input type="checkbox" id="dupTasks" data-act="dup-sync" checked><span>' + L('คัดลอกงานไปด้วย') +
+      '<em>' + L('รวมงานย่อยทุกชั้น ลำดับก่อนหลัง วันเริ่ม/กำหนดส่ง และค่าฟิลด์ (งานที่เสร็จแล้วกลับเป็นยังไม่เสร็จ)') + '</em></span></label>';
+    h += '<div class="dup-sub" id="dupTaskSub"><label class="chk"><input type="checkbox" id="dupOpen"><span>' +
+      L('เฉพาะงานที่ยังไม่เสร็จ') + '<em>' + L('ยกเรื่องที่ยังค้างไปประชุมหรือรอบถัดไป') + '</em></span></label></div>';
+    h += '<label class="chk"><input type="checkbox" id="dupShift" data-act="dup-sync"><span>' + L('เลื่อนวันทั้งหมด') +
+      '<em>' + (first ? R.esc(L('วันแรกสุดของโปรเจกต์นี้คือ {d} จะถูกเลื่อนไปเป็นวันเริ่มใหม่ วันอื่นเลื่อนตามเท่ากัน', { d: R.fmtDate(first) }))
+                      : L('โปรเจกต์นี้ยังไม่มีวันที่ วันเริ่มใหม่จะเป็นวันเริ่มของโปรเจกต์สำเนา')) + '</em></span></label>';
+    h += '<div class="dup-sub off" id="dupShiftSub"><span>' + L('วันเริ่มใหม่') + '</span><input type="date" id="dupStart" value="' +
+      S.today() + '"></div>';
+    h += '</div>';
+    h += '<p class="prj-note">' + L('คอลัมน์ ฟิลด์ มุมมองที่บันทึกไว้ คอลัมน์ที่เปิดอยู่ อัตโนมัติ ฟอร์ม และชนิดงานไปด้วยเสมอ ความเห็นและประวัติไม่ไปด้วย') + '</p>';
+    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="dup-project-go" data-id="' + R.esc(pid) + '">' + L('คัดลอก') + '</button></div>';
+    return h;
+  }
+  /** เปิด/ปิดตัวเลือกย่อยตามช่องติ๊กของหน้าต่างคัดลอกโปรเจกต์ */
+  function dupSync() {
+    var t = document.getElementById('dupTasks'), s = document.getElementById('dupShift');
+    var ts = document.getElementById('dupTaskSub'), ss = document.getElementById('dupShiftSub');
+    if (ts && t) ts.classList.toggle('off', !t.checked);
+    if (ss && s) ss.classList.toggle('off', !s.checked);
+  }
+
+  /* Sprint 1C — ร่างของแท็บ "รายละเอียดโปรเจกต์"
+   * เดิมพิมพ์คำอธิบาย/กำหนดส่งแล้วสลับไปแท็บตารางวันทำงาน ปุ่มบันทึกหายไป กลับมาค่าที่พิมพ์ก็หายเงียบ ๆ
+   * ตอนนี้สลับแท็บ = เก็บร่างไว้ในหน่วยความจำ (ไม่ลงข้อมูลจนกดบันทึก) แท็บอื่นมีแถบเตือนพร้อมปุ่มบันทึก
+   * และปิดหน้าต่างทั้งที่ยังมีร่างค้าง จะถามก่อนทิ้ง */
+  var psDraft = null;
+  var PS_KEYS = ['name', 'owner', 'start', 'due', 'view', 'desc'];
+  function psFromProject(p) {
+    return { pid: p.id, name: p.name || '', owner: p.owner || '', start: p.startOn || '', due: p.dueOn || '',
+             view: p.defaultView || 'list', desc: p.description || '' };
+  }
+  function psValues(p) { return psDraft && psDraft.pid === p.id ? psDraft : psFromProject(p); }
+  /** อ่านค่าจากช่องของแท็บรายละเอียด (ถ้าเปิดอยู่) เก็บเป็นร่าง */
+  function psCapture() {
+    var nm = document.getElementById('psName');
+    if (!nm || !nm.dataset.pid || !$modal.contains(nm)) return;
+    var v = function (id) { var e = document.getElementById(id); return e ? e.value : ''; };
+    psDraft = { pid: nm.dataset.pid, name: nm.value, owner: v('psOwner'), start: v('psStart'), due: v('psDue'),
+                view: v('psView'), desc: v('psDesc') };
+  }
+  function psDirty() {
+    var p = psDraft && S.project(psDraft.pid);
+    if (!p) return false;
+    var o = psFromProject(p);
+    return PS_KEYS.some(function (k) { return String(psDraft[k] || '').trim() !== String(o[k] || '').trim(); });
+  }
+  /** บันทึกร่าง คืน false ถ้าค่าไม่ผ่าน (ร่างยังอยู่) */
+  function psSave(id) {
+    psCapture();
+    var p = S.project(id);
+    if (!p) return false;
+    var pd = psValues(p);
+    if (pd.start && pd.due && pd.start > pd.due) { toast(L('วันเริ่มโปรเจกต์ต้องไม่หลังกำหนดส่ง')); return false; }
+    S.updateProject(id, {
+      name: String(pd.name).trim() || p.name,
+      owner: pd.owner || null,
+      startOn: pd.start || null,
+      dueOn: pd.due || null,
+      defaultView: pd.view || p.defaultView,
+      description: String(pd.desc).trim()
+    });
+    psDraft = null;
+    return true;
+  }
+  /** ปิดหน้าต่างตั้งค่าโปรเจกต์ทั้งที่มีร่างค้าง — ถามก่อน คืน true ถ้าถามแล้ว (ยังไม่ปิด) */
+  function psGuardClose() {
+    if (!$modal.querySelector('.prj-set')) return false;
+    psCapture();
+    if (!psDirty()) { psDraft = null; return false; }
+    var gid = psDraft.pid;
+    askChoice(L('ยังไม่ได้บันทึกรายละเอียดโปรเจกต์'), L('ค่าที่พิมพ์ไว้ในแท็บรายละเอียดโปรเจกต์ยังไม่ได้บันทึก'), [
+      { label: L('บันทึก'), primary: true, run: function () {
+        if (psSave(gid)) { renderAll(); toast(L('บันทึกการตั้งค่าแล้ว')); }
+        else openModal(projectSettingsModal(gid, 'details'), true);
+      } },
+      { label: L('กลับไปแก้ต่อ'), run: function () { openModal(projectSettingsModal(gid, 'details'), true); } },
+      { label: L('ทิ้งการแก้ไข'), run: function () { psDraft = null; } }
+    ]);
+    return true;
+  }
+
   function projectSettingsModal(projectId, tab) {
     var p = S.project(projectId);
     if (!p) return '';
     tab = tab || 'details';
     var d = ' data-id="' + R.esc(projectId) + '"';
+    var pv = psValues(p);           // Sprint 1C — ร่างที่ค้างจากการสลับแท็บ (ถ้ามี)
 
     var h = '<h2>' + L('ตั้งค่าโปรเจกต์') + '</h2>';
     h += '<div class="prj-set"><nav class="prj-tabs">';
@@ -2083,32 +2398,42 @@
         '" data-act="project-settings"' + d + ' data-tab="' + t[0] + '">' + L(t[1]) + '</button>';
     });
     h += '</nav><div class="prj-pane">';
+    /* Sprint 1C — มีร่างค้างจากแท็บรายละเอียด บอกไว้บนสุดของแท็บอื่น และบันทึกได้จากตรงนี้เลย */
+    if (tab !== 'details' && psDraft && psDraft.pid === projectId && psDirty()) {
+      h += '<div class="ps-draft">' + I('alert', 14) + '<span class="grow">' +
+        L('มีรายละเอียดโปรเจกต์ที่แก้ไว้แต่ยังไม่ได้บันทึก') + '</span>' +
+        '<button class="btn btn-sm" data-act="project-settings"' + d + ' data-tab="details">' + L('กลับไปดู') + '</button>' +
+        '<button class="btn btn-sm btn-primary" data-act="save-project-details"' + d + '>' + L('บันทึก') + '</button></div>';
+    }
 
     if (tab === 'details') {
       h += '<div class="prj-2col">';
       h += '<div class="field"><label>' + L('ชื่อโปรเจกต์') + '</label>' +
-        '<input id="psName" value="' + R.esc(p.name) + '"></div>';
+        '<input id="psName" data-pid="' + R.esc(projectId) + '" value="' + R.esc(pv.name) + '"></div>';
       h += '<div class="field"><label>' + L('เจ้าของโปรเจกต์') + '</label><select id="psOwner">' +
         '<option value="">' + L('ยังไม่ระบุ') + '</option>';
       S.db.users.forEach(function (u) {
-        h += '<option value="' + R.esc(u.id) + '"' + (p.owner === u.id ? ' selected' : '') +
+        h += '<option value="' + R.esc(u.id) + '"' + (pv.owner === u.id ? ' selected' : '') +
           '>' + R.esc(u.name) + '</option>';
       });
       h += '</select></div>';
+      /* Sprint 1C — วันเริ่มโปรเจกต์ (เดิมวันเริ่มที่เลือกตอนใช้เทมเพลตหายไปเลย ไม่มีที่ให้เห็น) */
+      h += '<div class="field"><label>' + L('วันเริ่มโปรเจกต์') + '</label>' +
+        '<input id="psStart" type="date" value="' + R.esc(pv.start) + '"></div>';
       h += '<div class="field"><label>' + L('กำหนดส่งของโปรเจกต์') + '</label>' +
-        '<input id="psDue" type="date" value="' + R.esc(p.dueOn || '') + '"></div>';
+        '<input id="psDue" type="date" value="' + R.esc(pv.due) + '"></div>';
       h += '<div class="field"><label>' + L('มุมมองที่เปิดเป็นค่าเริ่มต้น') + '</label><select id="psView">';
       S.PROJECT_VIEWS.filter(function (v) {
         return S.projectViews(projectId).indexOf(v.id) >= 0;
       }).forEach(function (v) {
-        h += '<option value="' + v.id + '"' + ((p.defaultView || 'list') === v.id ? ' selected' : '') +
+        h += '<option value="' + v.id + '"' + (pv.view === v.id ? ' selected' : '') +
           '>' + R.esc(L(v.label)) + '</option>';
       });
       h += '</select></div>';
       h += '</div>';
       h += '<div class="field"><label>' + L('คำอธิบายโปรเจกต์') + '</label>' +
         '<textarea id="psDesc" rows="4" placeholder="' + L('โปรเจกต์นี้เกี่ยวกับอะไร') + '">' +
-        R.esc(p.description || '') + '</textarea></div>';
+        R.esc(pv.desc) + '</textarea></div>';
 
       var st = S.projectStats(projectId);
       h += '<div class="prj-facts">' +
@@ -2636,7 +2961,7 @@
         state.cursor = t.id;
         state.reopenNear = { ref: t.id, above: false };
         resumeNear();
-      }
+      } else { done = false; finish(); }     // Sprint 1B — ถูกปฏิเสธ เก็บช่องพิมพ์ทิ้ง ไม่ค้างไว้
     });
     inp.addEventListener('blur', function () { setTimeout(finish, 0); });
     return true;
@@ -3061,7 +3386,8 @@
     return h;
   }
 
-  var FORM_PUBLIC_NOTE = 'ลิงก์ฟอร์มเปิดได้เฉพาะสมาชิกที่เข้าระบบ Orbit (หรือในโหมดเครื่องเดียว) ฟอร์มสาธารณะสำหรับคนนอกองค์กรต้องมีเซิร์ฟเวอร์ จะมาในเฟส 5';
+  /* Sprint 1A — เขียนเป็นภาษาคนใช้ (เดิมพูดถึงเซิร์ฟเวอร์และ "เฟส 5" ของทีมพัฒนา) */
+  var FORM_PUBLIC_NOTE = 'ลิงก์ฟอร์มใช้ได้เฉพาะพนักงานที่ล็อกอิน Orbit แล้ว คนนอกองค์กรยังเปิดฟอร์มนี้ไม่ได้';
 
   function feNewItem(kind) {
     var opts = (kind === 'select' || kind === 'multi') ? [L('ตัวเลือก 1'), L('ตัวเลือก 2')] : [];
@@ -3701,7 +4027,8 @@
     $modal.scrollTop = top;
   }
 
-  var AU_TIME_NOTE = 'อัตโนมัติตามเวลา (ใกล้ครบกำหนด เลยกำหนด ตามกำหนดเวลา) ไม่มีเซิร์ฟเวอร์คอยปลุก จะทำงานเมื่อมีสมาชิกเปิดแอปอยู่ ตรวจทุก 5 นาที รอบที่พลาดไปจะทำตามหลังเมื่อมีคนเปิด และแต่ละรอบทำครั้งเดียวแม้หลายคนเปิดพร้อมกัน';
+  /* Sprint 1A — เขียนเป็นภาษาคนใช้ (เดิม "ไม่มีเซิร์ฟเวอร์คอยปลุก") */
+  var AU_TIME_NOTE = 'อัตโนมัติตามเวลา (ใกล้ครบกำหนด เลยกำหนด ตามกำหนดเวลา) ทำงานเมื่อมีคนเปิด Orbit อยู่ ตรวจทุก 5 นาที ถ้าช่วงนั้นไม่มีใครเปิด จะทำตามหลังทันทีที่มีคนเปิด และแต่ละรอบทำครั้งเดียวแม้หลายคนเปิดพร้อมกัน';
 
   function autoListModal() {
     var st = state.auto, pid = st.pid, p = S.project(pid);
@@ -4410,8 +4737,8 @@
       ['/', L('ไปที่ช่องค้นหา')],
       ['Esc', L('ปิดหน้าต่าง / แผงรายละเอียด')],
       ['Ctrl + Z', L('ย้อนกลับการกระทำล่าสุด')],
-      ['Ctrl + Enter', L('ส่งความเห็น')],
-      ['Ctrl + /', L('เปิดหน้าคีย์ลัดนี้')],
+      ['Ctrl + Enter', L('ส่งความเห็น / ประกาศ (เมื่อเคอร์เซอร์อยู่ในช่องพิมพ์)')],
+      ['? / Ctrl + /', L('เปิดหน้าคีย์ลัดนี้')],
       ['Tab + H', L('ไปหน้าแรก')],
       ['Tab + Z', L('ไปงานของฉัน')],
       ['Tab + I', L('ไปกล่องข้อความ')],
@@ -4419,7 +4746,7 @@
       ['Tab + O', L('ซ่อน/แสดงแถบซ้าย')],
       ['Tab + Enter', L('เปิดรายละเอียดของงานที่เลือก')],
       ['↑ / ↓', L('เลือกงานก่อนหน้า / ถัดไป')],
-      ['Ctrl + Enter', L('ทำเครื่องหมายว่าเสร็จ (งานที่เลือก) / ส่งความเห็น')],
+      ['Tab + Y', L('ทำเครื่องหมายว่าเสร็จ / เปิดใหม่ (งานที่เปิดหรือเลือกอยู่)')],
       ['Tab + D', L('ตั้งกำหนดส่ง')],
       ['Tab + A', L('มอบหมายงาน')],
       ['Tab + M', L('มอบหมายงานที่เปิดอยู่ให้ตัวเอง')],
@@ -4575,6 +4902,19 @@
     if (state.cursor && S.task(state.cursor)) return state.cursor;
     var ids = selectedIds();
     return ids.length === 1 ? ids[0] : null;
+  }
+
+  /** Sprint 1A — ติ๊กเสร็จ/เปิดใหม่ทางเดียวกันทุกที่ (ช่องติ๊กในรายการ งานของฉัน หัวแผงงาน Tab+Y)
+   *  เดิมเฉพาะ Ctrl+Enter ที่ขึ้น "ทำเสร็จแล้ว · ย้อนกลับ" กดช่องติ๊กแล้วงานหายจากรายการเงียบ ๆ ไม่รู้จะเอาคืนยังไง */
+  function toggleDone(id) {
+    var t = S.task(id);
+    if (!t) return;
+    var was = t.completed;
+    S.updateTask(id, { completed: !was });
+    var now = S.task(id);
+    if (now && now.completed !== was) {
+      toast(now.completed ? L('ทำเสร็จแล้ว') : L('เปิดงานใหม่แล้ว'), L('ย้อนกลับ'), 'undo');
+    }
   }
 
   /** เปิดแผงงาน (ถ้ายังไม่เปิด) แล้วทำต่อกับปุ่ม/ช่องในแผง */
@@ -5287,7 +5627,7 @@
       }
       if (EXT.hooks.settingsNotify) h += EXT.hooks.settingsNotify();     // 4b — แจ้งเตือนของเบราว์เซอร์
       h += '<div class="prj-warn">' + I('alert', 15) + '<span>' +
-        L('การแจ้งเตือนทางอีเมลยังไม่เปิด จะทำได้เมื่อเชื่อมต่อระบบส่วนกลางแล้ว ตอนนี้ทุกอย่างอยู่ในกล่องข้อความของแอป') +
+        L('ยังไม่มีการแจ้งเตือนทางอีเมล ทุกอย่างจะเข้ากล่องข้อความใน Orbit') +      // Sprint 1A — ไม่พูดถึงระบบหลังบ้าน
         '</span></div>';
       h += '<div class="modal-acts"><button class="btn btn-primary" data-act="close-modal">' + L('ปิด') + '</button></div>';
     }
@@ -5310,7 +5650,7 @@
         L('ผู้ดูแลระบบเท่านั้นที่เปลี่ยนได้') + '</em></div>';
 
       h += '<div class="prj-warn">' + I('alert', 15) + '<span>' +
-        L('การเปลี่ยนรหัสผ่านและการยืนยันสองชั้น จะทำได้เมื่อเชื่อมต่อระบบส่วนกลางแล้ว ตอนนี้เข้าระบบด้วยบัญชี Microsoft ของบริษัทเป็นหลัก') +
+        L('เข้าระบบด้วยบัญชี Microsoft ของบริษัท เปลี่ยนรหัสผ่านหรือตั้งการยืนยันสองชั้นได้ที่บัญชี Microsoft ของคุณ') +   // Sprint 1A
         '</span></div>';
 
       if (team) {
@@ -5393,33 +5733,69 @@
    * @param withDisable เปิดจากปุ่มปิดบัญชี จึงต้องปิดบัญชีต่อหลังโอนเสร็จในคราวเดียว
    *                    ถ้าแยกสองขั้น คนจะโอนแล้วลืมปิด หรือปิดแล้วลืมโอน
    */
-  function handoverModal(userId, withDisable) {
+  /**
+   * @param opts.role  เปลี่ยนบทบาทเป็นค่านี้หลังโอนงาน (Sprint 1B — เปลี่ยนเป็นดูอย่างเดียว)
+   */
+  function handoverModal(userId, withDisable, opts) {
+    opts = opts || {};
     var u = S.user(userId);
     if (!u) return '';
     var list = S.openTasksOf(userId);
+    /* Sprint 1B — บุคคลภายนอก (เอเจนซี ฟรีแลนซ์) ไม่ใช่คนรับช่วงงานในองค์กร
+     * เดิมอยู่ในรายชื่อปะปนกับพนักงาน เลือกผิดคนเดียวงานภายในทั้งหมดไปถึงคนนอกพร้อมความเห็นทุกอัน
+     * จึงซ่อนไว้เป็นค่าเริ่มต้น ติ๊ก "แสดงบุคคลภายนอก" ก่อนถึงจะเลือกได้ และมีคำเตือนกำกับ */
     var others = S.db.users.filter(function (x) {
-      return x.id !== userId && x.active !== false;
+      return x.id !== userId && x.active !== false && x.role !== 'viewer';
     });
+    var staff = others.filter(function (x) { return x.role !== 'guest'; });
+    var guests = others.filter(function (x) { return x.role === 'guest'; });
+    var showGuests = !!state.hoGuests;
+    var roles = S.projectRolesOf(userId);
 
-    var h = '<h2>' + (withDisable ? L('ปิดบัญชีและโอนงานต่อ') : L('โอนงานต่อ')) + '</h2>';
+    var h = '<h2>' + (withDisable ? L('ปิดบัญชีและโอนงานต่อ') : opts.role ? L('เปลี่ยนบทบาทและโอนงานต่อ') : L('โอนงานต่อ')) + '</h2>';
     h += '<div class="look-prev">' + R.avatar(u, 'lg') +
       '<div><b>' + R.esc(u.name) + '</b>' +
       '<div style="font-size:12.5px;color:var(--fg-soft)">' + R.esc(u.email || '') + '</div></div></div>';
 
-    h += '<div class="prj-warn">' + I('alert', 15) + '<span>' +
-      L('มีงานที่ยังไม่เสร็จอยู่ {n} งาน ถ้าปล่อยไว้กับบัญชีที่ปิดแล้ว จะไม่มีใครได้รับแจ้งและงานจะค้างเงียบ ๆ',
-        { n: list.length }) + '</span></div>';
+    h += '<div class="prj-warn">' + I('alert', 15) + '<span>' + (!list.length
+      ? L('{name} เป็นเจ้าของหรือผู้ดูแลอยู่ {n} โปรเจกต์ โอนให้คนที่ยังใช้งานอยู่ ไม่งั้นคำขอสิทธิ์และการจัดการสมาชิกจะค้าง',
+        { name: u.name, n: roles.length })
+      : opts.role === 'viewer'
+      ? L('มีงานที่ยังไม่เสร็จอยู่ {n} งาน บทบาทดูอย่างเดียวติ๊กเสร็จหรือแก้งานของตัวเองไม่ได้ งานจะค้างอยู่กับเขา', { n: list.length })
+      : L('มีงานที่ยังไม่เสร็จอยู่ {n} งาน ถ้าปล่อยไว้กับบัญชีที่ปิดแล้ว จะไม่มีใครได้รับแจ้งและงานจะค้างเงียบ ๆ',
+        { n: list.length })) + '</span></div>';
 
     h += '<div class="field" style="margin-top:14px"><label>' + L('โอนให้ใคร') + '</label>' +
       '<select id="hoTo">';
-    others.forEach(function (x) {
+    staff.forEach(function (x) {
       h += '<option value="' + R.esc(x.id) + '">' + R.esc(x.name) +
         (x.title ? ' — ' + R.esc(x.title) : '') + '</option>';
     });
+    if (showGuests && guests.length) {
+      h += '<optgroup label="' + R.esc(L('บุคคลภายนอก — จะเห็นงานและความเห็นทั้งหมดที่โอนไป')) + '">';
+      guests.forEach(function (x) {
+        h += '<option value="' + R.esc(x.id) + '">⚠ ' + R.esc(x.name) + ' (' + R.esc(L('บุคคลภายนอก')) + ')</option>';
+      });
+      h += '</optgroup>';
+    }
     h += '<option value="">' + L('ไม่โอน ปล่อยว่างไว้ (ต้องมีคนมาหยิบเอง)') + '</option>';
     h += '</select></div>';
+    if (guests.length) {
+      h += '<label class="ho-guests"><input type="checkbox" data-act="ho-guests" data-id="' + R.esc(userId) +
+        '" data-off="' + (withDisable ? '1' : '0') + '" data-role="' + R.esc(opts.role || '') + '"' +
+        (showGuests ? ' checked' : '') + '> ' +
+        R.esc(L('แสดงบุคคลภายนอกในรายชื่อ ({n} คน) — ไม่แนะนำ', { n: guests.length })) + '</label>';
+    }
+    /* โปรเจกต์ที่คนนี้เป็นเจ้าของ/ผู้ดูแล — ติ๊กไว้เป็นค่าเริ่มต้นตอนปิดบัญชี ไม่งั้นโปรเจกต์ปิดอาจไม่มีผู้ดูแลที่เข้าได้ */
+    if (roles.length && (withDisable || opts.role)) {
+      h += '<label class="ho-guests"><input type="checkbox" id="hoProjects" checked> ' +
+        R.esc(L('โอนความเป็นเจ้าของ/ผู้ดูแลโปรเจกต์ {n} โปรเจกต์ให้คนเดียวกัน ({p})', {
+          n: roles.length, p: roles.slice(0, 3).map(function (p) { return p.name; }).join(', ') + (roles.length > 3 ? '…' : '') })) +
+        '</label>';
+    }
 
-    h += '<label class="opt-lbl">' + L('งานที่จะโอน') + '</label><div class="ho-list">';
+    if (list.length) h += '<label class="opt-lbl">' + L('งานที่จะโอน') + '</label>';
+    h += '<div class="ho-list">';
     list.slice(0, 12).forEach(function (t) {
       var pj = S.projectsOfTask(t.id)[0];
       h += '<div class="ho-row"><span class="nm">' + R.esc(t.name) + '</span>' +
@@ -5434,8 +5810,8 @@
 
     h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
       '<button class="btn btn-primary" data-act="do-handover" data-id="' + R.esc(userId) +
-      '" data-off="' + (withDisable ? '1' : '0') + '">' +
-      (withDisable ? L('โอนงานแล้วปิดบัญชี') : L('โอนงาน')) + '</button></div>';
+      '" data-off="' + (withDisable ? '1' : '0') + '" data-role="' + R.esc(opts.role || '') + '">' +
+      (withDisable ? L('โอนงานแล้วปิดบัญชี') : opts.role ? L('โอนงานแล้วเปลี่ยนบทบาท') : L('โอนงาน')) + '</button></div>';
     return h;
   }
 
@@ -6013,12 +6389,18 @@
         var mt = document.getElementById('msgTitle');
         var md = mb ? global.RichText.fromNode(mb) : '';
         if (!md.trim()) { toast(L('เขียนเนื้อหาก่อน')); return true; }
+        /* Sprint 1A — ล้างช่องและร่างก่อนบันทึก ช่องพิมพ์ยังโฟกัสอยู่ (ปุ่มส่งไม่แย่งโฟกัสแล้ว)
+         * การวาดใหม่จะคืนเนื้อหาของช่องที่โฟกัสอยู่/ร่างกลับมา ถ้ายังไม่ล้าง ข้อความที่โพสต์แล้วจะค้างในช่อง */
+        if (mb) mb.innerHTML = '';
+        setDraft('mn:' + id, '');
         if (S.addProjectMessage(id, mt ? mt.value : '', md, state.msgFiles['new'] || [])) {
-          setDraft('mn:' + id, '');
           state.msgFiles['new'] = [];
           state.msgTitle = '';
           renderAll();
           toast(L('ประกาศแล้ว'), L('ย้อนกลับ'), 'undo');
+        } else {
+          setDraft('mn:' + id, md);
+          if (mb) mb.innerHTML = global.RichText.toHtml(md, { editable: true });
         }
         return true;
       }
@@ -6027,11 +6409,15 @@
         var rb = $view.querySelector('.rte-msg[data-key="mr:' + msg + '"]');
         var rmd = rb ? global.RichText.fromNode(rb) : '';
         if (!rmd.trim()) { toast(L('พิมพ์ข้อความก่อน')); return true; }
+        if (rb) rb.innerHTML = '';           // Sprint 1A — ล้างก่อนบันทึก (เหตุผลเดียวกับโพสต์ด้านบน)
+        setDraft('mr:' + msg, '');
         if (S.addMessageReply(id, msg, rmd, state.msgFiles['r:' + msg] || [])) {
-          setDraft('mr:' + msg, '');
           state.msgFiles['r:' + msg] = [];
-          if (rb) rb.innerHTML = '';
           renderAll();
+          toast(L('ส่งแล้ว'));      // Sprint 1A — บอกให้รู้ว่าคำตอบส่งไปแล้ว
+        } else {
+          setDraft('mr:' + msg, rmd);
+          if (rb) rb.innerHTML = global.RichText.toHtml(rmd, { editable: true });
         }
         return true;
       }
@@ -6161,7 +6547,8 @@
     var pg = host && host.closest ? host.closest('.pg[data-page]') : null;
     if (!pg || !host.closest('.rte-page')) return;
     var txt = sel.toString().replace(/\s+/g, ' ').trim();
-    if (txt) state.pageSel = { id: pg.dataset.page, text: txt.slice(0, 300), range: r.cloneRange() };
+    /* Sprint 1C — เก็บข้อความดิบที่ยังมีตัวขึ้นบรรทัดไว้ด้วย "สร้างงาน" จะได้แยกหนึ่งบรรทัดหนึ่งงาน */
+    if (txt) state.pageSel = { id: pg.dataset.page, text: txt.slice(0, 300), raw: sel.toString().slice(0, 8000), range: r.cloneRange() };
   });
 
   /** ไฮไลต์ข้อความที่มีความเห็นค้างอยู่ (ครั้งแรกที่เจอในหน้า) — <mark> ไม่ถูกเก็บลงเนื้อหา */
@@ -6185,6 +6572,41 @@
         }
       });
     });
+  }
+
+  /* Sprint 1C — ยืนยันก่อนสร้างงานจากหน้าเอกสาร: เห็นรายการงานที่จะได้ (ผู้รับผิดชอบจาก @ชื่อ)
+   * และเลือกปลายทาง ค่าเริ่มต้น = โปรเจกต์ของหน้านั้น (คอลัมน์แรก) ถ้าเป็นหน้าเดี่ยว = งานส่วนตัวในงานของฉัน */
+  function pageTaskModal(id, items) {
+    var l = S.pageLoc(id), esc = R.esc;
+    var defP = l && l.project && S.canInProject(l.project.id, 'edit') ? l.project : null;
+    var h = '<h2>' + L('สร้างงานจากหน้าเอกสาร') + '</h2>';
+    h += '<p class="modal-sub">' + esc(L('หนึ่งบรรทัดเป็นหนึ่งงาน · {n} งาน', { n: items.length })) + '</p>';
+    h += '<div class="pgt-list">';
+    items.forEach(function (x) {
+      var u = x.assigneeId ? S.user(x.assigneeId) : null;
+      h += '<div class="pgt-row">' + I('checkCircle', 14) + '<span class="grow" title="' + esc(x.name) + '">' + esc(x.name) + '</span>' +
+        (u ? R.avatar(u, 'sm') + '<span>' + esc(u.name) + '</span>' : '') + '</div>';
+    });
+    h += '</div>';
+    h += '<div class="field"><label>' + L('สร้างไว้ที่') + '</label><select id="pgtTarget">' +
+      '<option value=""' + (defP ? '' : ' selected') + '>' + esc(L('งานของฉัน (ส่วนตัว)')) + '</option>';
+    S.activeProjects().filter(function (p) { return S.canInProject(p.id, 'edit'); }).forEach(function (p) {
+      h += '<optgroup label="' + esc(p.name) + '">';
+      p.sections.forEach(function (s, i) {
+        h += '<option value="' + esc(p.id + '|' + s.id) + '"' + (defP && defP.id === p.id && i === 0 ? ' selected' : '') + '>' +
+          esc(p.name + ' › ' + s.name) + '</option>';
+      });
+      h += '</optgroup>';
+    });
+    h += '</select></div>';
+    if (S.canEditPage(id)) {
+      h += '<label class="chk"><input type="checkbox" id="pgtReplace" checked> ' +
+        esc(L('แทนแต่ละบรรทัดในหน้าด้วยลิงก์ไปงานที่สร้าง')) + '</label>';
+    }
+    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="pg-task-go" data-id="' + esc(id) + '">' +
+      esc(items.length === 1 ? L('สร้างงาน') : L('สร้าง {n} งาน', { n: items.length })) + '</button></div>';
+    return h;
   }
 
   function versionsModal(id) {
@@ -6346,19 +6768,35 @@
         if (!pt || pt.id !== id) { toast(L('เลือกข้อความในหน้าก่อน แล้วกดอีกครั้ง')); return true; }
         var ed2 = $view.querySelector('.rte-page[contenteditable="true"][data-id="' + id + '"]');
         if (ed2) savePageEditor(ed2);                  // เนื้อหาล่าสุดลงที่เก็บก่อน
-        var nt = S.taskFromPage(id, pt.text);
-        if (!nt) { toast(L('สร้างงานไม่ได้ในหน้านี้')); return true; }
-        /* แทนข้อความที่เลือกด้วยป้ายอ้างถึงงาน (ครั้งแรกที่เจอในเนื้อหา) แล้วบันทึกหน้า */
+        /* Sprint 1C — หนึ่งบรรทัดหนึ่งงาน แล้วให้เลือกก่อนว่าจะลงโปรเจกต์/คอลัมน์ไหน */
+        var pItems = S.pageTaskLines(pt.raw || pt.text);
+        if (!pItems.length) { toast(L('เลือกข้อความในหน้าก่อน แล้วกดอีกครั้ง')); return true; }
+        state.pgTask = { id: id, items: pItems };
+        openModal(pageTaskModal(id, pItems));
+        return true;
+      }
+      case 'pg-task-go': {
+        var pk = state.pgTask;
+        if (!pk || pk.id !== id) { closeModal(); return true; }
+        var tgt = ((document.getElementById('pgtTarget') || {}).value || '').split('|');
+        var repl = (document.getElementById('pgtReplace') || {}).checked;
+        var made = S.tasksFromPage(id, pk.items, tgt[0] || null, tgt[1] || null);
+        closeModal();
+        state.pgTask = null;
+        if (!made.length) { toast(L('สร้างงานไม่ได้ในหน้านี้')); return true; }
+        /* แทนแต่ละบรรทัดด้วยป้ายอ้างถึงงานของบรรทัดนั้น (ครั้งแรกที่เจอในเนื้อหา) แล้วบันทึกหน้าครั้งเดียว */
         var pl2 = S.pageLoc(id);
-        if (pl2 && S.canEditPage(id)) {
-          var at2 = pl2.page.body.indexOf(pt.text);
-          if (at2 >= 0) {
-            S.savePage(id, { body: pl2.page.body.slice(0, at2) + '@[' + nt.name.replace(/[\[\]\n]/g, ' ') + '](' + nt.id + ')' +
-              pl2.page.body.slice(at2 + pt.text.length) });
-          }
+        if (repl && pl2 && S.canEditPage(id)) {
+          var nb = pl2.page.body;
+          made.forEach(function (nt, i) {
+            var src = pk.items[i] && pk.items[i].src, at2 = src ? nb.indexOf(src) : -1;
+            if (at2 >= 0) nb = nb.slice(0, at2) + '@[' + nt.name.replace(/[\[\]\n]/g, ' ') + '](' + nt.id + ')' + nb.slice(at2 + src.length);
+          });
+          if (nb !== pl2.page.body) S.savePage(id, { body: nb });
         }
         state.pageSel = null;
-        toast(L('สร้างงาน “{t}” แล้ว', { t: nt.name }), L('เปิดงาน'), 'open-task" data-id="' + nt.id);
+        if (made.length === 1) toast(L('สร้างงาน “{t}” แล้ว', { t: made[0].name }), L('เปิดงาน'), 'open-task" data-id="' + made[0].id);
+        else toast(L('สร้าง {n} งานแล้ว', { n: made.length }));
         return true;
       }
       case 'pg-reply': {
@@ -7559,7 +7997,7 @@
     put('manage', [
       'manage-members', 'add-user', 'do-add-user', 'pick-person', 'remove-user', 'pick-role', 'set-role',
       'set-visibility', 'toggle-lock', 'add-project-member', 'pick-access', 'set-access', 'drop-member',
-      'disable-user', 'enable-user', 'handover', 'do-handover',
+      'disable-user', 'enable-user', 'handover', 'do-handover', 'ho-guests',
       'delete-project', 'reset', 'import', 'paste-backup', 'do-paste-import',
       /* การสำรองข้อมูลคือการดึงฐานข้อมูลทั้งก้อนออกไปเป็นไฟล์
        * ในนั้นมีทุกโปรเจกต์ รวมถึงโปรเจกต์ปิดที่คนกดไม่มีสิทธิ์เห็น และอีเมลของทุกคน
@@ -7567,7 +8005,7 @@
       'export', 'copy-backup', 'copy-dump'
     ]);
     put('structure', [
-      'new-project', 'create-project', 'edit-project', 'save-project', 'dup-project',
+      'new-project', 'create-project', 'edit-project', 'save-project', 'dup-project', 'dup-project-go',
       'toggle-archive', 'update-status', 'save-status',
       'add-section', 'rename-section', 'delete-section', 'move-section',
       'manage-fields', 'add-field', 'delete-field', 'create-field', 'rename-field',
@@ -7619,6 +8057,11 @@
     put('create', ['mt-add', 'mt-add-top', 'calx-add']);
     put('write', ['notif-followup']);
     put('write:task', ['make-public', 'do-make-public']);
+    /* Sprint 1B — ส่งขออนุมัติใหม่หลังถูกขอแก้ (store ตรวจว่าเป็นคนขอหรือแก้งานได้ และไม่ใช่ผู้อนุมัติเอง)
+     * ตัดสินอนุมัติเป็นหน้าที่ของผู้อนุมัติ ไม่ใช่สิทธิ์แก้งาน — ผู้อนุมัติที่มีสิทธิ์แค่แสดงความเห็นในโปรเจกต์
+     * ก็ต้องกดได้ ไม่งั้นงานค้างตลอดไป จึงให้ canApprove ใน store เป็นคนตัดสินคนเดียว */
+    put('write', ['approval-resubmit']);
+    put('self', ['set-approval']);
     /* ของส่วนตัว — เซกชันงานของฉัน มุมมองที่จำไว้ หน้าแรก สมุดโน้ต บุ๊กมาร์ก อ่านแล้ว ห้ามรบกวน
      * การแจ้งเตือนรายโปรเจกต์ แก้ได้ทุกคนที่บัญชียังใช้งานได้ (รวมบทบาทดูอย่างเดียว)
      * เพราะไม่ได้แตะงานหรือโปรเจกต์ของใคร */
@@ -7685,7 +8128,7 @@
      * เวลา: ประมาณ = แก้งานได้ บันทึกเวลา/จับเวลา = แสดงความเห็นได้ ตรวจรูป/อ้างอิง = แก้งานได้ */
     put('self', ['pg-new', 'pg-del', 'pg-private', 'pg-restore', 'pg-comment', 'pg-reply', 'pg-resolve', 'pg-cdel', 'pg-title',
       'timer-stop', 'timer-discard']);
-    put('create', ['pg-task']);
+    put('create', ['pg-task', 'pg-task-go']);       // Sprint 1C — pg-task-go = ยืนยันสร้างหลายงาน
     put('write:task', ['tt-est', 'proof-pin', 'proof-unpin', 'ref-toggle']);
     put('comment', ['tt-add', 'tt-save', 'tt-del', 'timer-start']);
     /* 4a — ทีม: สร้าง/แชร์โปรเจกต์ให้ทีม = แก้โครงสร้าง; จัดการทีม (สมาชิก ความเป็นส่วนตัว ลบ ปักหมุด ทรัพยากร)
@@ -7737,13 +8180,37 @@
     return a ? a.label : id;
   }
 
+  /* Sprint 1B — ชั้นข้อมูลปฏิเสธเองได้แล้ว (ด่านสร้างงาน การอนุมัติ) ทางที่ไม่ผ่านตัวจัดการคลิก
+   * เช่นกด Enter ในช่องเพิ่มงานหรือวางหลายบรรทัด ก็ได้ข้อความบอกเหตุผลเหมือนกัน
+   * จำเวลาไว้ ข้อความ "ทำไม่ได้เพราะ…" อื่นที่ตามมาทันทีจะได้ไม่ทับเหตุผลจริง */
+  var deniedAt = 0;
+  function justDenied() { return Date.now() - deniedAt < 400; }
+  S.onDeny(function (why) {
+    deniedAt = Date.now();
+    if (why === 'approval') {
+      toast(L('งานขออนุมัติต้องให้ผู้อนุมัติตัดสิน — กดอนุมัติหรือปฏิเสธแล้วงานจะปิดให้เอง'));
+      return;
+    }
+    /* บทบาทเขียนได้อยู่แล้ว แต่ติดสิทธิ์ของโปรเจกต์/งาน — บอกให้ตรงจุด ไม่ใช่โทษบทบาท */
+    if (state.route.type !== 'project' && S.can('write')) {
+      toast(L('คุณไม่มีสิทธิ์แก้ไขในโปรเจกต์หรืองานนี้'));
+      return;
+    }
+    denyToast();
+  });
+
   /** ผ่านสิทธิ์ไหม ถ้าไม่ผ่านจะเตือนให้ผู้ใช้รู้ว่าทำไม ไม่เงียบหาย */
   function allowed(act, el) {
     var need = NEEDS[act];
     if (!need) return true;
     var ok;
     if (need === "write:task") ok = S.can("write", actTaskId(el));
-    else if (need === "create") ok = S.can("write");
+    /* Sprint 1B — สร้างงานในหน้าโปรเจกต์ = สร้างงานในโปรเจกต์นั้น ต้องแก้โปรเจกต์ได้ด้วย
+     * (เดิมตรวจแค่บทบาทองค์กร คนที่แสดงความเห็นได้จึงเปิดช่อง + เพิ่มงานได้) */
+    else if (need === "create") {
+      var cPid = el.dataset.project || (state.route.type === "project" ? state.route.id : null);
+      ok = cPid ? S.canCreateTask(cPid) : S.can("write");
+    }
     else if (need === "self") ok = S.isActive();
     else if (need === "structure") {
       /* การแก้โครงสร้างเกิดขึ้นในบริบทของโปรเจกต์ที่เปิดอยู่
@@ -7763,6 +8230,29 @@
   // ใช้เวลาแทนธงบูลีน เพราะบางครั้งเบราว์เซอร์ไม่ยิง click ตามหลัง mouseup
   // (เช่นปล่อยเมาส์นอกตัวแท่ง) ธงจะค้างแล้วไปกลืนคลิกครั้งถัดไป
   var lastDragEnd = 0;
+
+  /* Sprint 1A — คลิกนอกแผงงาน = ปิดแผง "และ" ทำสิ่งที่คลิกด้วย
+   * เดิมฉากหลังรับคลิกแรกไว้ปิดแผงอย่างเดียว (กดอวาตาร์ เมนู รายการถัดไปในกล่องข้อความ แล้วไม่เกิดอะไร)
+   * ตอนนี้ฉากหลังปล่อยคลิกทะลุ (CSS) ตรงนี้จำไว้ว่าคลิกมาจากนอกแผง แล้วปิดแผงหลังคำสั่งของคลิกนั้นทำงานเสร็จ
+   * ถ้าคลิกนั้นเปิดงานอื่น (แถวงาน รายการในกล่องข้อความ) openTask จะล้างธงนี้ แผงแค่สลับไปงานใหม่ ไม่ปิด
+   * ไม่นับ: กล่องแจ้งเตือน (ปุ่มย้อนกลับ) หน้าต่าง/เมนูลอยที่เปิดจากในแผง รายการ @ และการลากเลือกข้อความที่เริ่มในแผง */
+  var outsideClose = null, downInDrawer = false;
+  document.addEventListener('pointerdown', function (e) {
+    downInDrawer = !!(e.target && e.target.closest && e.target.closest('#drawer'));
+  }, true);
+  document.addEventListener('click', function (e) {
+    if (!state.openTaskId || !$drawer.classList.contains('open')) return;
+    var t = e.target;
+    if (!t || !t.closest || downInDrawer || $drawer.contains(t)) return;
+    if (Date.now() - lastDragEnd < 250) return;
+    if (t.closest('#toast, #modalBackdrop, .pop, .rte-mention, #optPanel, #optBackdrop, #gate')) return;
+    if (!document.body.contains(t)) return;          // ปุ่มในเมนูที่เพิ่งถูกลบไป ไม่ใช่คลิกนอกแผง
+    var was = outsideClose = state.openTaskId;
+    setTimeout(function () {
+      if (outsideClose === was && state.openTaskId === was) closeDrawer();
+      outsideClose = null;
+    }, 0);
+  }, true);
 
   document.addEventListener('click', function (e) {
     if (Date.now() - lastDragEnd < 250) {
@@ -7784,7 +8274,7 @@
     }
 
     if ($scrim && e.target === $scrim) { closeSidebar(); return; }
-    if (e.target === $mdBack) { closeModal(); return; }
+    if (e.target === $mdBack) { if (!psGuardClose()) closeModal(); return; }     // Sprint 1C — ถามก่อนทิ้งร่างตั้งค่าโปรเจกต์
     if (e.target === $dwBack) { closeDrawer(); return; }
     if (e.target === $optBack) { closeOpts(); return; }
     if (!el) return;
@@ -7823,6 +8313,7 @@
 
       case 'go': {
         closeSidebar();
+        state.navPick = null;     // Sprint 1A — เลือกหน้าแล้ว แถบซ้ายกลับไปตามหมวดของหน้านั้น (แม้เป็นหน้าเดิม)
         var rt = el.dataset.route;
         if (rt === 'project') { goProject(id); break; }
         if (rt === 'portfolio') { goPortfolio(id); break; }
@@ -8068,10 +8559,12 @@
         e.stopPropagation();
         editCell(el);
         break;
-      case 'cell-set-assignee':
+      case 'cell-set-assignee': {
         closePops();
-        S.updateTask(el.dataset.id, { assigneeId: el.dataset.user || null });
+        var csaId = el.dataset.id, csaU = el.dataset.user || null;
+        confirmReveal(csaId, [csaU], function () { S.updateTask(csaId, { assigneeId: csaU }); });   // Sprint 1B
         break;
+      }
       case 'cell-set-priority':
         closePops();
         S.updateTask(el.dataset.id, { priority: el.dataset.v || 'none' });
@@ -8649,11 +9142,7 @@
       }
 
       /* --- task basics --- */
-      case 'toggle': {
-        var tk1 = S.task(id);
-        if (tk1) S.updateTask(id, { completed: !tk1.completed });
-        break;
-      }
+      case 'toggle': toggleDone(id); break;
       case 'open-task': {
         /* Shift+คลิก = เลือกช่วงจากแถวที่เลือกล่าสุด  Ctrl/⌘+คลิก = เลือกทีละแถว (ไม่เปิดแผงงาน) */
         var rowEl = el.closest('.tr, .card, .row');
@@ -8699,8 +9188,7 @@
         });
         closeModal();
         var c = S.duplicateTask(id, dopt);
-        if (c) openTask(c.id);
-        toast(L('คัดลอกงานแล้ว'), L('ย้อนกลับ'), 'undo');
+        if (c) { openTask(c.id); toast(L('คัดลอกงานแล้ว'), L('ย้อนกลับ'), 'undo'); }   // Sprint 1B — ถูกปฏิเสธ = ไม่บอกว่าสำเร็จ
         break;
       }
       case 'followup': openModal(followUpModal(id)); break;
@@ -8720,7 +9208,7 @@
         if (S.mergeDuplicate(id, mt)) {
           openTask(mt);
           toast(L('รวมงานซ้ำแล้ว'), L('ย้อนกลับ'), 'undo');
-        } else toast(L('รวมไม่ได้ — งานนี้เป็นงานย่อยของงานที่เลือก'));
+        } else if (!justDenied()) toast(L('รวมไม่ได้ — งานนี้เป็นงานย่อยของงานที่เลือก'));
         break;
       }
       case 'do-make-subtask': {
@@ -8729,7 +9217,7 @@
         if (S.setParent(id, pt)) {
           renderAll();
           toast(L('ย้ายเป็นงานย่อยแล้ว'), L('ย้อนกลับ'), 'undo');
-        } else toast(L('ย้ายไม่ได้ — งานที่เลือกเป็นงานย่อยของงานนี้อยู่แล้ว'));
+        } else if (!justDenied()) toast(L('ย้ายไม่ได้ — งานที่เลือกเป็นงานย่อยของงานนี้อยู่แล้ว'));
         break;
       }
       case 'promote-task':
@@ -8751,7 +9239,9 @@
         var at0 = rd.indexOf(dnum);
         if (at0 >= 0) rd.splice(at0, 1); else rd.push(dnum);
         rd.sort();
-        S.updateTask(rt0.id, { recur: { freq: 'weekly', interval: rt0.recur.interval || 1, days: rd } });
+        var rdp = { recur: { freq: 'weekly', interval: rt0.recur.interval || 1, days: rd } };
+        if (!rt0.dueOn) rdp.dueOn = S.firstRecurDate(rdp.recur, rt0.startOn);     // Sprint 1C — รอบแรกขึ้นปฏิทิน
+        S.updateTask(rt0.id, rdp);
         break;
       }
       case 'fit-parent-dates':
@@ -8775,8 +9265,12 @@
           document.querySelectorAll('.ac-user:checked'), function (cb) { return cb.value; });
         if (!who.length) { toast(L('เลือกอย่างน้อยหนึ่งคน')); break; }
         closeModal();
-        var made = S.assignCopies(id, who);
-        toast(L('มอบหมายแล้ว สร้างสำเนา {n} งาน', { n: made.length }), L('ย้อนกลับ'), 'undo');
+        var acId = id;
+        /* Sprint 1B — สำเนาอยู่โปรเจกต์เดียวกับต้นฉบับ มอบให้คนนอกโปรเจกต์ปิด = ให้เขาเห็นงาน ถามก่อน */
+        confirmReveal(acId, who, function () {
+          var made = S.assignCopies(acId, who);
+          if (made.length || !justDenied()) toast(L('มอบหมายแล้ว สร้างสำเนา {n} งาน', { n: made.length }), L('ย้อนกลับ'), 'undo');
+        });
         break;
       }
       case 'trash-restore': {
@@ -8849,7 +9343,7 @@
         askText(L('ชื่องานใหม่'), '', function (v) {
           if (!v) return;
           var nt = S.createTask({ name: v }, qp.id, qp.sections[0].id);
-          openTask(nt.id);
+          if (nt) openTask(nt.id);          // Sprint 1B — ถูกด่านสร้างงานปฏิเสธ = null (ขึ้นข้อความแล้ว)
         }, { ok: L('เพิ่มงาน'), pasteCtx: { projectId: qp.id, sectionId: qp.sections[0].id },
              note: L('วางข้อความหลายบรรทัดเพื่อสร้างหลายงานพร้อมกัน') });
         break;
@@ -8880,10 +9374,12 @@
         openPop(el, ph);
         break;
       }
-      case 'set-assignee':
+      case 'set-assignee': {
         closePops();
-        S.updateTask(id, { assigneeId: el.dataset.user || null });
+        var saId = id, saU = el.dataset.user || null;
+        confirmReveal(saId, [saU], function () { S.updateTask(saId, { assigneeId: saU }); });   // Sprint 1B
         break;
+      }
       case 'pick-priority': {
         if (popIsOpenFor(el)) { closePops(); break; }
         var qh = '';
@@ -8899,9 +9395,28 @@
         closePops();
         S.updateTask(id, { priority: el.dataset.p });
         break;
-      case 'set-approval':
-        if (!S.canApprove(id)) { toast(L('ผู้อนุมัติคือผู้รับผิดชอบงานนี้ หรือคนที่แก้ไขโปรเจกต์ได้')); break; }
-        S.updateTask(id, { approval: el.dataset.v });
+      case 'set-approval': {
+        /* Sprint 1B — กดได้เฉพาะผู้อนุมัติ (ผู้รับผิดชอบ) ปฏิเสธต้องถามก่อน เพราะงานปิดทันทีและแจ้งคนขอ */
+        var apT = S.task(id);
+        if (!apT) break;
+        if (!S.canApprove(id)) {
+          var apU = S.user(apT.assigneeId);
+          toast(apU ? L('เฉพาะผู้อนุมัติ ({who}) ที่ตัดสินงานนี้ได้', { who: apU.name })
+                    : L('เลือกผู้อนุมัติก่อน แล้วผู้อนุมัติจึงตัดสินได้'));
+          break;
+        }
+        var apV = el.dataset.v, apId = id;
+        if (apV === 'rejected') {
+          askConfirm(L('ปฏิเสธ “{t}”?', { t: apT.name }),
+            L('งานจะถูกปิดเป็น “ไม่อนุมัติ” และแจ้งคนขอทันที ถ้าแค่อยากให้แก้บางจุด ใช้ “ขอแก้ไข” แทน'),
+            function () { S.updateTask(apId, { approval: 'rejected' }); }, { ok: L('ปฏิเสธ') });
+          break;
+        }
+        S.updateTask(id, { approval: apV });
+        break;
+      }
+      case 'approval-resubmit':
+        if (S.resubmitApproval(id)) toast(L('ส่งขออนุมัติอีกครั้งแล้ว'), L('ย้อนกลับ'), 'undo');
         break;
       case 'pick-follower': {
         if (popIsOpenFor(el)) { closePops(); break; }
@@ -8913,10 +9428,15 @@
         openPop(el, fh);
         break;
       }
-      case 'do-follow':
+      case 'do-follow': {
         closePops();
-        S.toggleFollower(id, el.dataset.user);
+        var dfT = S.task(id), dfU = el.dataset.user, dfId = id;
+        /* Sprint 1B — เพิ่มผู้ติดตาม = ให้เห็นงาน ถามก่อนถ้าเป็นคนนอกโปรเจกต์ (เอาออกไม่ต้องถาม) */
+        if (dfT && dfT.followers.indexOf(dfU) < 0) {
+          confirmReveal(dfId, [dfU], function () { S.toggleFollower(dfId, dfU); });
+        } else S.toggleFollower(id, dfU);
         break;
+      }
       case 'remove-follower': S.toggleFollower(id, el.dataset.user); break;
       case 'toggle-follow': S.toggleFollower(id, S.db.currentUserId); break;
       case 'toggle-like': S.toggleLike(id); break;
@@ -8993,11 +9513,15 @@
         openPop(el, ah);
         break;
       }
-      case 'set-sub-assignee':
-        S.updateTask(id, { assigneeId: el.dataset.user || null });
+      case 'set-sub-assignee': {
         closePops();
-        renderAll();
+        var ssaId = id, ssaU = el.dataset.user || null;
+        confirmReveal(ssaId, [ssaU], function () {       // Sprint 1B
+          S.updateTask(ssaId, { assigneeId: ssaU });
+          renderAll();
+        });
         break;
+      }
 
       case 'pick-tag': {
         var pt = S.task(id);
@@ -9019,9 +9543,9 @@
       /* --- multi-homing --- */
       case 'add-home': openModal(addHomeModal(id)); break;
       case 'do-add-home':
-        S.addTaskToProject(id, projectId, null);
         closeModal();
-        toast(L('เพิ่มเข้าโปรเจกต์แล้ว'));
+        /* Sprint 1B — ด่านสร้างงานของโปรเจกต์ปลายทางอาจปฏิเสธ (ขึ้นเหตุผลเองแล้ว) อย่าบอกว่าสำเร็จ */
+        if (S.addTaskToProject(id, projectId, null)) toast(L('เพิ่มเข้าโปรเจกต์แล้ว'));
         break;
       case 'unhome':
         if (!S.removeTaskFromProject(id, projectId)) toast(L('งานต้องอยู่อย่างน้อย 1 โปรเจกต์'));
@@ -9163,11 +9687,13 @@
         var dsid = el.dataset.story;
         var ds = S.story(dsid);
         if (!ds || ds.actorId !== S.db.currentUserId) break;
+        /* Sprint 1B — ความเห็นที่ลบไปอยู่ในถังขยะ 30 วัน บอกไว้ตั้งแต่ตอนถาม จะได้ไม่ลังเลว่าหายถาวรไหม */
         askConfirm(L('ลบความเห็นนี้?'),
-          S.repliesOf(dsid).length ? L('ยังมีคนตอบอยู่ใต้ความเห็นนี้ คำตอบจะยังอยู่ และจะขึ้นว่า “ความเห็นนี้ถูกลบแล้ว” แทน') : '',
+          (S.repliesOf(dsid).length ? L('ยังมีคนตอบอยู่ใต้ความเห็นนี้ คำตอบจะยังอยู่ และจะขึ้นว่า “ความเห็นนี้ถูกลบแล้ว” แทน') + ' ' : '') +
+          L('ความเห็นจะไปอยู่ในถังขยะ {n} วัน กู้คืนได้', { n: S.TRASH_DAYS }),
           function () {
             if (state.editStory === dsid) state.editStory = null;
-            if (S.deleteComment(dsid)) toast(L('ลบความเห็นแล้ว'), L('ย้อนกลับ'), 'undo');
+            if (S.deleteComment(dsid)) toast(L('ย้ายความเห็นไปถังขยะแล้ว'), L('ย้อนกลับ'), 'undo');
           }, { ok: L('ลบ') });
         break;
       }
@@ -9189,8 +9715,14 @@
         break;
 
       /* --- bulk --- */
-      case 'bulk-complete': S.bulkUpdate(selectedIds(), { completed: true }); clearSel(); break;
-      case 'bulk-reopen': S.bulkUpdate(selectedIds(), { completed: false }); clearSel(); break;
+      /* Sprint 1A — ล้างการเลือกทั้งสถานะและหน้าจอพร้อมกัน (clearSelUI) เดิม clearSel() ล้างแค่สถานะ
+       * หลังบันทึกวาดจอไปแล้ว แถวจึงค้างไฮไลต์ทั้งที่ไม่ได้เลือกอะไร คำสั่งถัดไปเลยทำกับจำนวนที่ไม่ตรงกับจอ */
+      case 'bulk-complete':
+        S.bulkUpdate(selectedIds(), { completed: true });
+        clearSelUI();
+        toast(L('ทำเสร็จแล้ว'), L('ย้อนกลับ'), 'undo');
+        break;
+      case 'bulk-reopen': S.bulkUpdate(selectedIds(), { completed: false }); clearSelUI(); break;
       case 'bulk-due': {
         var bulkIds = selectedIds();
         askText(L('กำหนดส่งใหม่'), S.today(), function (v) {
@@ -9274,9 +9806,12 @@
       case 'do-bulk-followers': {
         var bfu = Array.prototype.map.call(document.querySelectorAll('.bf-user:checked'), function (c) { return c.value; });
         if (!bfu.length) { toast(L('เลือกอย่างน้อย 1 คน')); break; }
-        S.bulkAddFollowers(selectedIds(), bfu);
         closeModal();
-        toast(L('เพิ่มผู้ติดตามแล้ว'), L('ย้อนกลับ'), 'undo');
+        var bfIds = selectedIds();
+        confirmReveal(bfIds, bfu, function () {           // Sprint 1B
+          S.bulkAddFollowers(bfIds, bfu);
+          toast(L('เพิ่มผู้ติดตามแล้ว'), L('ย้อนกลับ'), 'undo');
+        });
         break;
       }
       case 'bulk-tag': {
@@ -9437,7 +9972,8 @@
       }
       case 'access-grant':
       case 'access-deny': {
-        var arAcc = (document.getElementById('arAccess') || {}).value || 'edit';
+        /* Sprint 1B — ตอบจากกล่องข้อความได้ แต่ละแถวมีช่องเลือกสิทธิ์ของตัวเอง (data-sel) */
+        var arAcc = (document.getElementById(el.dataset.sel || 'arAccess') || {}).value || 'edit';
         if (!S.answerAccess(id, el.dataset.user, act === 'access-grant', arAcc)) { denyToast(); break; }
         toast(act === 'access-grant' ? L('ให้สิทธิ์แล้ว') : L('ปฏิเสธคำขอแล้ว'), L('ย้อนกลับ'), 'undo');
         break;
@@ -9990,16 +10526,13 @@
 
       case 'project-settings':
         closePops();
+        /* Sprint 1C — สลับแท็บในหน้าต่างเดิม = เก็บร่างของแท็บรายละเอียดไว้ เปิดใหม่จากเมนู = เริ่มจากค่าจริง */
+        if ($modal.contains(el) && $modal.querySelector('.prj-set')) psCapture();
+        else psDraft = null;
         openModal(projectSettingsModal(id || state.route.id, el.dataset.tab), true);
         break;
       case 'save-project-details': {
-        S.updateProject(id, {
-          name: document.getElementById('psName').value.trim() || S.project(id).name,
-          owner: document.getElementById('psOwner').value || null,
-          dueOn: document.getElementById('psDue').value || null,
-          defaultView: document.getElementById('psView').value,
-          description: document.getElementById('psDesc').value.trim()
-        });
+        if (!psSave(id)) break;          // Sprint 1C — บันทึกจากร่าง (กดได้จากทุกแท็บ)
         closeModal();
         renderAll();
         toast(L('บันทึกการตั้งค่าแล้ว'));
@@ -10222,18 +10755,24 @@
         break;
       }
       case 'dup-project': {
-        var dupId = id;
-        var runDup = function (withTasks) {
-          var dp2 = S.duplicateProject(dupId, withTasks);
-          if (dp2) goProject(dp2.id);
-          toast(L('คัดลอกโปรเจกต์แล้ว'));
-        };
-        /* สามทางเลือกจริง ๆ ไม่ใช่ตกลงกับยกเลิก
-         * ของเดิมยัดสองความหมายลงในปุ่มยกเลิก ซึ่งอ่านแล้วเดาไม่ออก */
-        askChoice(L('คัดลอกโปรเจกต์'), L('จะเอางานทั้งหมดไปด้วยไหม'), [
-          { label: L('คัดลอกงานไปด้วย'), primary: true, run: function () { runDup(true); } },
-          { label: L('เอาแค่โครงคอลัมน์และฟิลด์'), run: function () { runDup(false); } }
-        ]);
+        /* Sprint 1C — หน้าต่างเดียวตั้งชื่อ เลือกเอางาน (เฉพาะที่ยังไม่เสร็จได้) และเลื่อนวันทั้งโปรเจกต์ */
+        closePops();
+        if (S.project(id)) openModal(dupProjectModal(id));
+        break;
+      }
+      case 'dup-sync': dupSync(); break;
+      case 'dup-project-go': {
+        var dTasks = document.getElementById('dupTasks'), dShift = document.getElementById('dupShift');
+        var dStart = (document.getElementById('dupStart') || {}).value || '';
+        if (dShift && dShift.checked && !/^\d{4}-\d\d-\d\d$/.test(dStart)) { toast(L('เลือกวันเริ่มใหม่ก่อน')); break; }
+        var dp2 = S.duplicateProject(id, {
+          name: (document.getElementById('dupName') || {}).value || '',
+          tasks: !!(dTasks && dTasks.checked),
+          openOnly: !!(dTasks && dTasks.checked && (document.getElementById('dupOpen') || {}).checked),
+          shiftTo: dShift && dShift.checked ? dStart : null
+        });
+        closeModal();
+        if (dp2) { goProject(dp2.id); toast(L('คัดลอกโปรเจกต์แล้ว')); }
         break;
       }
       case 'delete-project': {
@@ -10825,10 +11364,15 @@
       case 'add-user': openModal(addMemberModal()); break;
       case 'pick-person': {
         var pRole = document.getElementById('uRole').value;
+        var pOid = global.OrbitAuth.orbitId(el.dataset.oid);
+        /* Sprint 1B — อีเมลนี้อาจถูกกรอกเองไว้ก่อนแล้ว (คนละรหัส) เพิ่มซ้ำจะได้คนเดียวกันสองรายการ */
+        var pProb = S.user(pOid) ? null : S.emailProblem(el.dataset.email, pOid);
+        if (pProb) { toast(L(pProb.key, pProb.params || undefined)); break; }
         var added = S.addUser({
-          id: global.OrbitAuth.orbitId(el.dataset.oid),
+          id: pOid,
           name: el.dataset.name, email: el.dataset.email, role: pRole
         });
+        if (!added) break;
         el.disabled = true;
         el.querySelector('i').textContent = L('เพิ่มแล้ว');
         toast(L('เพิ่ม “{name}” เข้ารายชื่อแล้ว', { name: added.name }));
@@ -10837,11 +11381,16 @@
       case 'do-add-user': {
         var un = document.getElementById('uName').value.trim();
         if (!un) { toast(L('ใส่ชื่อก่อน')); break; }
-        S.addUser({
-          name: un,
-          email: document.getElementById('uEmail').value.trim(),
-          role: document.getElementById('uRole').value
-        });
+        var uEm = document.getElementById('uEmail').value.trim();
+        /* Sprint 1B — ตรวจรูปแบบและอีเมลซ้ำ (ไม่สนตัวพิมพ์) ก่อนเพิ่ม หน้าต่างยังเปิดค้างให้แก้ต่อได้ */
+        var uProb = S.emailProblem(uEm);
+        if (uProb) {
+          toast(L(uProb.key, uProb.params || undefined));
+          var uEmEl = document.getElementById('uEmail');
+          if (uEmEl) { uEmEl.focus(); uEmEl.select(); }
+          break;
+        }
+        if (!S.addUser({ name: un, email: uEm, role: document.getElementById('uRole').value })) break;
         closeModal();
         renderAll();
         toast(L('เพิ่ม “{name}” เข้ารายชื่อแล้ว', { name: un }));
@@ -10865,7 +11414,9 @@
         if (!du) break;
         /* มีงานค้างอยู่ ต้องตัดสินใจเรื่องงานก่อน ไม่ใช่ปิดแล้วค่อยไปตามหาทีหลัง
          * งานที่ผูกกับบัญชีที่เข้าไม่ได้จะเงียบไปจนกว่าจะเลยกำหนด */
-        if (S.openTasksOf(id).length) { openModal(handoverModal(id, true)); break; }
+        /* Sprint 1B — เป็นเจ้าของ/ผู้ดูแลโปรเจกต์อยู่ก็ต้องโอนก่อนเหมือนงาน (คำขอสิทธิ์จะไปตกที่บัญชีที่ปิด) */
+        state.hoGuests = false;
+        if (S.openTasksOf(id).length || S.projectRolesOf(id).length) { openModal(handoverModal(id, true)); break; }
         var duId = id;
         askConfirm(L('ปิดใช้งานบัญชีของ “{name}”?', { name: du.name }),
           L('เขาจะเข้าระบบไม่ได้ทันที แต่งานที่มอบหมายไว้ยังอยู่ครบ'), function () {
@@ -10875,18 +11426,44 @@
           }, { ok: L('ปิดใช้งานบัญชี') });
         break;
       }
-      case 'handover': openModal(handoverModal(id, false)); break;
+      case 'handover': state.hoGuests = false; openModal(handoverModal(id, false)); break;
+      case 'ho-guests':
+        /* Sprint 1B — แสดง/ซ่อนบุคคลภายนอกในรายชื่อคนรับงาน วาดหน้าต่างใหม่โดยคงตัวเลือกเดิมไว้ */
+        state.hoGuests = !!el.checked;
+        openModal(handoverModal(id, el.dataset.off === '1', { role: el.dataset.role || null }));
+        break;
       case 'do-handover': {
         var toSel = document.getElementById('hoTo');
         var to = toSel ? toSel.value : '';
         var alsoOff = el.dataset.off === '1';
-        var moved = S.handoverTasks(id, to || null);
-        if (alsoOff && !S.setActive(id, false)) { toast(L('ปิดบัญชีนี้ไม่ได้')); break; }
-        closeModal();
-        renderAll();
-        toast(alsoOff
-          ? L('โอนงาน {n} งาน และปิดบัญชีแล้ว', { n: moved })
-          : L('โอนงาน {n} งานแล้ว', { n: moved }), L('ย้อนกลับ'), 'undo');
+        var newRole = el.dataset.role || '';
+        var withProj = !!(document.getElementById('hoProjects') || {}).checked;
+        var hoFrom = id;
+        var toU = to ? S.user(to) : null;
+        var doHo = function () {
+          var moved = 0, projN = 0, failed = false;
+          /* Sprint 1B — โอนงาน โอนบทบาทในโปรเจกต์ และปิดบัญชี/เปลี่ยนบทบาท อยู่ในจุดย้อนกลับเดียว */
+          S.batch('โอนงานต่อ', null, function () {
+            moved = S.handoverTasks(hoFrom, to || null);
+            if (withProj && to) projN = S.handoverProjects(hoFrom, to);
+            if (alsoOff && !S.setActive(hoFrom, false)) failed = true;
+            if (newRole && !S.setRole(hoFrom, newRole)) failed = true;
+          });
+          if (failed) { S.undo(); toast(alsoOff ? L('ปิดบัญชีนี้ไม่ได้') : L('ต้องมีผู้ดูแลอย่างน้อยหนึ่งคน')); return; }
+          closeModal();
+          renderAll();
+          var msg = alsoOff ? L('โอนงาน {n} งาน และปิดบัญชีแล้ว', { n: moved })
+            : newRole ? L('โอนงาน {n} งาน และเปลี่ยนบทบาทแล้ว', { n: moved })
+            : L('โอนงาน {n} งานแล้ว', { n: moved });
+          if (projN) msg += ' · ' + L('โอนผู้ดูแล {n} โปรเจกต์', { n: projN });
+          toast(msg, L('ย้อนกลับ'), 'undo');
+        };
+        /* เลือกบุคคลภายนอกต้องยืนยันอีกชั้น เพราะเขาจะเห็นงานภายในทั้งหมดที่โอนไป */
+        if (toU && toU.role === 'guest') {
+          askConfirm(L('โอนงานให้บุคคลภายนอก “{name}”?', { name: toU.name }),
+            L('{name} เป็นบุคคลภายนอก จะเห็นงานทั้ง {n} งาน รวมความเห็นและไฟล์แนบ แม้งานจะอยู่ในโปรเจกต์ที่เขาไม่ได้ถูกเชิญ',
+              { name: toU.name, n: S.openTasksOf(hoFrom).length }), doHo, { ok: L('โอนให้บุคคลภายนอก') });
+        } else doHo();
         break;
       }
       case 'enable-user':
@@ -10920,7 +11497,25 @@
       }
       case 'set-role': {
         closePops();
-        if (!S.setRole(id, el.dataset.role)) toast(L('ต้องมีผู้ดูแลอย่างน้อยหนึ่งคน'));
+        var srU = S.user(id), srRole = el.dataset.role, srId = id;
+        var srOpen = S.openTasksOf(id).length;
+        /* Sprint 1B — เปลี่ยนเป็นดูอย่างเดียวทั้งที่ยังมีงานค้าง = งานติดอยู่กับคนที่ติ๊กเสร็จไม่ได้แล้ว
+         * ถามก่อน บอกจำนวนงาน และให้เลือกโอนงานไปพร้อมกันได้เลย */
+        if (srU && srRole === 'viewer' && srU.role !== 'viewer' && srOpen) {
+          askChoice(L('เปลี่ยน “{name}” เป็นดูอย่างเดียว?', { name: srU.name }),
+            L('{name} มีงานที่ยังไม่เสร็จ {n} งาน บทบาทดูอย่างเดียวติ๊กเสร็จหรือแก้งานเหล่านี้ไม่ได้อีก', { name: srU.name, n: srOpen }), [
+              { label: L('โอนงานก่อน แล้วเปลี่ยนบทบาท'), primary: true, run: function () {
+                state.hoGuests = false;
+                openModal(handoverModal(srId, false, { role: 'viewer' }));
+              } },
+              { label: L('เปลี่ยนบทบาทโดยไม่โอนงาน'), run: function () {
+                if (!S.setRole(srId, 'viewer')) toast(L('ต้องมีผู้ดูแลอย่างน้อยหนึ่งคน'));
+                renderAll();
+              } }
+            ]);
+          break;
+        }
+        if (!S.setRole(id, srRole)) toast(L('ต้องมีผู้ดูแลอย่างน้อยหนึ่งคน'));
         renderAll();
         break;
       }
@@ -10957,6 +11552,24 @@
        * ถ้าบันทึกไม่สำเร็จ ห้ามล้างและห้ามออก ไม่งั้นงานที่เพิ่งพิมพ์หายไปเฉย ๆ */
       case 'sign-out': {
         closePops();
+        /* Sprint 1B — โหมดเครื่องเดียว ข้อมูลในเบราว์เซอร์คือของจริงชุดเดียว ไม่ใช่แคชของส่วนกลาง
+         * เดิมออกจากระบบ (เช่นจากหน้าจอบัญชีถูกปิด) แล้วล้างทิ้งกลับเป็นข้อมูลตัวอย่างทันทีโดยไม่เตือน
+         * ตอนนี้ไม่ล้างเลย กลับไปหน้าเข้าสู่ระบบโดยเก็บข้อมูลไว้ และเสนอให้ดาวน์โหลดสำรองก่อน */
+        if (!(global.OrbitSync && global.OrbitSync.state.mode === 'team')) {
+          var leaveLocal = function () {
+            setLocalOnly(false);
+            if ($gate.dataset.kind === 'disabled') delete $gate.dataset.kind;
+            gate.error = null; gate.busy = false; gate.checking = false;
+            showGate();
+            toast(L('ออกแล้ว ข้อมูลยังอยู่ในเบราว์เซอร์นี้ กด “ลองใช้แบบเครื่องเดียวก่อน” เพื่อกลับมาใช้ต่อ'));
+          };
+          askChoice(L('ออกจากโหมดเครื่องเดียว?'),
+            L('ข้อมูลทั้งหมดอยู่ในเบราว์เซอร์นี้เท่านั้น ออกแล้วข้อมูลจะยังอยู่ ไม่ถูกลบ แต่ถ้าล้างข้อมูลเบราว์เซอร์จะหายถาวร ควรดาวน์โหลดไฟล์สำรองเก็บไว้'), [
+              { label: L('ดาวน์โหลดสำรองก่อน'), primary: true, run: function () { doExport(); leaveLocal(); } },
+              { label: L('ออกโดยเก็บข้อมูลไว้'), run: leaveLocal }
+            ]);
+          break;
+        }
         var leave = function () {
           if (global.OrbitSync) global.OrbitSync.stop();
           S.wipeLocal();
@@ -11150,7 +11763,7 @@
         break;
 
       case 'undo': doUndo(); break;
-      case 'close-modal': closeModal(); break;
+      case 'close-modal': if (!psGuardClose()) closeModal(); break;     // Sprint 1C
     }
   });
 
@@ -11530,14 +12143,18 @@
     }
 
     // แก้หลายงานพร้อมกัน
+    /* Sprint 1A — clearSelUI ไม่ใช่ clearSel: บันทึกวาดจอไปแล้วตอนยังเลือกอยู่ ต้องล้างไฮไลต์บนจอด้วย */
     if (act === 'bulk-assignee' && el.value) {
-      S.bulkUpdate(selectedIds(), { assigneeId: el.value });
-      clearSel();
+      var baIds = selectedIds(), baU = el.value;
+      confirmReveal(baIds, [baU], function () {          // Sprint 1B
+        S.bulkUpdate(baIds, { assigneeId: baU });
+        clearSelUI();
+      });
       return;
     }
     if (act === 'bulk-priority' && el.value) {
       S.bulkUpdate(selectedIds(), { priority: el.value });
-      clearSel();
+      clearSelUI();
       return;
     }
 
@@ -11563,10 +12180,14 @@
         if (el.value === 'weekly' && !days0.length) {
           days0 = [new Date((t.dueOn || S.today()) + 'T00:00:00').getDay()];
         }
-        S.updateTask(id, {
+        var rpatch = {
           recur: el.value ? { freq: el.value, interval: (t.recur && t.recur.interval) || 1,
                               days: el.value === 'weekly' ? days0 : [] } : null
-        });
+        };
+        /* Sprint 1C — ยังไม่มีกำหนดส่ง = ตั้งรอบแรกให้เลย งานจะได้ขึ้นในรายการและปฏิทิน */
+        if (rpatch.recur && !t.dueOn) rpatch.dueOn = S.firstRecurDate(rpatch.recur, t.startOn);
+        S.updateTask(id, rpatch);
+        if (rpatch.dueOn) toast(L('ตั้งกำหนดส่งรอบแรกเป็น {d} ให้แล้ว', { d: R.fmtDate(rpatch.dueOn) }));
         break;
       }
       case 'edit-recur-n': {
@@ -11782,6 +12403,21 @@
       return;
     }
 
+    /* Sprint 1A — Enter ในช่องค้น/สร้างแท็ก: ตรงกับแท็กที่มีเป๊ะก็ใช้อันนั้น ไม่งั้นเอาตัวเลือกแรกในรายการ
+     * (ไม่มีแท็กที่ใกล้เคียงเลย ตัวเลือกแรกคือ "สร้างแท็ก …") เดิมกด Enter แล้วไม่เกิดอะไร */
+    if (e.key === 'Enter' && e.target.id === 'tagQ') {
+      e.preventDefault();
+      var tq = e.target.value.trim().toLowerCase();
+      var tpop = e.target.closest('.pop');
+      if (!tq || !tpop) return;
+      var tbtns = Array.prototype.slice.call(tpop.querySelectorAll('[data-act="pick-tag"]'));
+      var tpick = tbtns.filter(function (b) {
+        return b.querySelector('.chip') && (b.dataset.tag || '').toLowerCase() === tq;   // .chip = แท็กที่มีอยู่แล้ว
+      })[0] || tbtns[0];
+      if (tpick) tpick.click();
+      return;
+    }
+
     if (e.key === 'Enter' && e.target.id === 'subAdd') {
       e.preventDefault();
       var sname = e.target.value.trim();
@@ -11794,7 +12430,7 @@
     }
 
     if (e.key === 'Escape') {
-      if ($mdBack.classList.contains('open')) { closeModal(); return; }
+      if ($mdBack.classList.contains('open')) { if (!psGuardClose()) closeModal(); return; }     // Sprint 1C
       if (document.querySelector('.pop')) { closePops(); return; }
       if (optOpen()) { closeOpts(); return; }
       if (document.getElementById('sidebar').classList.contains('open')) { closeSidebar(); return; }
@@ -11805,22 +12441,26 @@
 
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       var box = e.target.closest && e.target.closest('.rte-compose');
+      var mbox = !box && e.target.closest && e.target.closest('.rte-msg');
       if (box) {
         e.preventDefault();
         submitComposer(box);
+      } else if (mbox) {
+        /* Sprint 1A — ช่องเขียนประกาศ/ตอบประกาศ ก็ส่งด้วย Ctrl+Enter ได้เหมือนช่องความเห็น */
+        e.preventDefault();
+        var mhost = mbox.closest('.msg-new, .msg-replybox');
+        var mbtn = mhost && mhost.querySelector('[data-act="post-message"], [data-act="msg-reply"]');
+        if (mbtn) mbtn.click();
       } else if (e.target.dataset && e.target.dataset.save === 'notes') {
         e.preventDefault();
         e.target.blur();          // Ctrl+Enter ในรายละเอียด = บันทึกแล้วออกจากช่อง
-      } else if (!typing && !$mdBack.classList.contains('open')) {
-        /* 2c — Ctrl+Enter นอกช่องพิมพ์ = ทำเครื่องหมายว่าเสร็จ (งานที่เปิดอยู่หรือแถวที่เลือก) */
-        var ceId = focusTaskId();
-        if (ceId) {
-          e.preventDefault();
-          if (!S.can('write', ceId)) { denyToast(); return; }
-          var ceT = S.task(ceId);
-          S.updateTask(ceId, { completed: !ceT.completed });
-          toast(ceT.completed ? L('ทำเสร็จแล้ว') : L('เปิดงานนี้อีกครั้ง'), L('ย้อนกลับ'), 'undo');
-        }
+      } else if (!typing && !$mdBack.classList.contains('open') && focusTaskId()) {
+        /* Sprint 1A — Ctrl+Enter นอกช่องพิมพ์ไม่ทำเครื่องหมายเสร็จอีกแล้ว
+         * ผู้ทดสอบตั้งใจส่งความเห็นแต่ช่องไม่ได้โฟกัสอยู่ กดแล้วงาน (ที่รออนุมัติ) กลายเป็นเสร็จโดยไม่รู้ตัว
+         * ทำเครื่องหมายเสร็จย้ายไป Tab+Y — ตรงนี้แค่บอกว่าต้องทำยังไง */
+        e.preventDefault();
+        toast(state.openTaskId ? L('คลิกช่องความเห็นก่อน แล้วกด Ctrl+Enter เพื่อส่ง · ทำเครื่องหมายว่าเสร็จใช้ Tab+Y')
+                               : L('ทำเครื่องหมายว่าเสร็จใช้ Tab+Y'));
       }
       return;
     }
@@ -11834,6 +12474,14 @@
       return;
     }
     if (e.ctrlKey && (e.key === '/' || kc === '/')) {
+      e.preventDefault();
+      openModal(shortcutsModal(), true);
+      return;
+    }
+    /* Sprint 1A — "?" (Shift+/) เปิดหน้าคีย์ลัดเหมือนแอปทั่วไป เฉพาะตอนไม่ได้พิมพ์อยู่
+     * ดูตำแหน่งปุ่มด้วย แป้นไทย Shift+/ ไม่ได้ตัว "?" */
+    if ((e.key === '?' || (kc === '/' && e.shiftKey)) && !typing && !e.ctrlKey && !e.metaKey && !e.altKey &&
+        !tabHeld && !$mdBack.classList.contains('open')) {
       e.preventDefault();
       openModal(shortcutsModal(), true);
       return;
@@ -11935,13 +12583,20 @@
           if (rn) { rn.scrollIntoView({ block: 'center' }); global.RichText.focusEnd(rn); }
         });
       }
+      else if (k === 'y') {
+        /* Sprint 1A — Tab+Y ทำเครื่องหมายว่าเสร็จ/เปิดใหม่ (แทน Ctrl+Enter นอกช่องพิมพ์ ที่ชนกับการส่งความเห็น) */
+        if (!ft) toast(L('เลือกงานก่อน (คลิกแถว หรือใช้ลูกศรขึ้นลง)'));
+        else if (!S.can('write', ft)) { denyToast(); return; }
+        else toggleDone(ft);
+      }
       else if (k === 'z') { state.route = { type: 'mytasks' }; clearSel(); renderAll(); }
       else if (k === 'i') { state.route = { type: 'inbox' }; clearSel(); renderAll(); }
       else if (k === 'q' && state.route.type === 'project') {
         var qp2 = S.project(state.route.id);
-        if (!S.can('write')) { denyToast(); return; }
+        if (!S.canCreateTask(qp2 && qp2.id)) { denyToast(); return; }     // Sprint 1B — สิทธิ์ของโปรเจกต์ด้วย
         askText(L('ชื่องานใหม่'), '', function (v) {
-          if (v) openTask(S.createTask({ name: v }, qp2.id, qp2.sections[0].id).id);
+          var qt2 = v ? S.createTask({ name: v }, qp2.id, qp2.sections[0].id) : null;
+          if (qt2) openTask(qt2.id);
         }, { ok: L('เพิ่มงาน'), pasteCtx: { projectId: qp2.id, sectionId: qp2.sections[0].id } });
       } else if (k === 'q' && state.route.type === 'mytasks') {
         /* Tab+Q ในงานของฉัน = งานส่วนตัวใหม่ ลง "เพิ่งได้รับมอบหมาย" */
@@ -12383,7 +13038,7 @@
     if (intoId && intoId !== movingId) {
       if (S.setParent(movingId, intoId)) {
         toast(L('ย้ายเป็นงานย่อยของ “{t}” แล้ว', { t: S.task(intoId).name }), L('ย้อนกลับ'), 'undo');
-      } else toast(L('ย้ายไม่ได้ — งานที่เลือกเป็นงานย่อยของงานนี้อยู่แล้ว'));
+      } else if (!justDenied()) toast(L('ย้ายไม่ได้ — งานที่เลือกเป็นงานย่อยของงานนี้อยู่แล้ว'));
       return;
     }
     /* งานของฉัน — ย้ายเข้าเซกชันส่วนตัว ไม่แตะคอลัมน์ของโปรเจกต์ */
@@ -12627,6 +13282,7 @@
 
   function showGate() {
     if (!$gate) return;
+    delete $gate.dataset.kind;          // Sprint 1B — ตอนนี้เป็นหน้าเข้าสู่ระบบ ไม่ใช่หน้าบัญชีถูกปิดแล้ว
     $gate.innerHTML = R.gateScreen(gate);
     $gate.hidden = false;
     document.body.classList.add('gated');

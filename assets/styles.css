@@ -707,6 +707,14 @@ a { color: var(--accent); }
   opacity: 0; pointer-events: none; transition: opacity .16s; z-index: 40;
 }
 .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
+/* Sprint 1A — จอกว้าง: แผงงานไม่บังหน้าหลัง คลิกข้างนอกทะลุไปทำงานได้เลย (main.js ปิดแผงให้เอง)
+ * เดิมฉากทึบรับคลิกแรกไว้ปิดแผงอย่างเดียว ปุ่ม/เมนู/รายการในกล่องข้อความที่กดจึงไม่ทำงาน ต้องกดซ้ำ
+ * และไม่หรี่หน้าหลังแล้ว เพราะหน้าหลังยังใช้งานได้ (แบบแผงงานของ Asana)
+ * จอแคบแผงกินเกือบทั้งจอ เหลือขอบซ้ายนิดเดียว — ยังให้ฉากทึบรับแตะไว้ปิดแผงอย่างเดียวเหมือนเดิม
+ * ไม่งั้นแตะขอบเพื่อปิดแผงแล้วไปโดนแถวงานข้างใต้ */
+@media (min-width: 861px) {
+  #drawerBackdrop.open { pointer-events: none; background: transparent; }
+}
 
 .drawer {
   position: fixed; top: 0; right: 0; bottom: 0; width: var(--drawer-w);
@@ -832,6 +840,7 @@ select.inp, input.inp { background: var(--bg-sunk); }
   transform: translateY(6px); transition: transform .14s;
   border: 1px solid var(--line);
 }
+.modal:focus { outline: none; }   /* Sprint 1A — รับโฟกัสไว้ให้ Enter = ตกลง ไม่ต้องมีกรอบ */
 .modal.wide { max-width: 720px; }
 .modal-backdrop.open .modal { transform: none; }
 .modal h2 { margin: 0 0 16px; font-size: 17px; }
@@ -878,10 +887,18 @@ kbd {
   opacity: 0; pointer-events: none; transition: all .18s; z-index: 100;
   display: flex; align-items: center; gap: 12px; max-width: calc(100vw - 40px);
 }
+/* Sprint 1A — กล่องที่มีปุ่ม (ย้อนกลับ) ต้องรับคลิกเอง เดิม pointer-events: none ทั้งกล่อง
+ * กด "ย้อนกลับ" แล้วคลิกทะลุไปโดนฉากหลังแผงงาน (แผงปิด) หรือแถวงานข้างใต้แทน
+ * กล่องที่เป็นแค่ข้อความยังปล่อยคลิกทะลุ ไม่บังช่องความเห็น/ปุ่มส่งบนมือถือ */
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast.show.has-act { pointer-events: auto; }
 .toast button {
   color: var(--sidebar-on); font-weight: 700; text-decoration: underline;
   white-space: nowrap;
+}
+.toast-kbd {
+  font-size: 11px; opacity: .7; white-space: nowrap;
+  border: 1px solid currentColor; border-radius: 4px; padding: 0 4px; line-height: 16px;
 }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -1910,6 +1927,30 @@ ul.audit em { display: block; font-style: normal; font-size: 12px; color: var(--
   font-size: 12px; color: var(--fg-faint);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+
+/* ---------- Sprint 1C — วันที่ สำเนาโปรเจกต์ ตัวเลขที่ต้องตรงกัน ---------- */
+.hproj-late { color: var(--danger); font-weight: 600; }
+/* หน้าต่างคัดลอกโปรเจกต์ */
+.dup-opts { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 12px; }
+.dup-opts .chk { display: flex; align-items: flex-start; gap: 8px; font-size: 13.5px; }
+.dup-opts .chk em { display: block; font-style: normal; font-size: 12px; color: var(--fg-soft); margin-top: 1px; }
+.dup-sub { margin: 0 0 0 26px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dup-sub input[type=date] { width: 180px; max-width: 100%; }
+.dup-sub.off { opacity: .5; pointer-events: none; }
+/* ตั้งค่าโปรเจกต์ — แจ้งว่ามีรายละเอียดที่ยังไม่บันทึกค้างอยู่ในแท็บแรก */
+.ps-draft { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; padding: 8px 10px;
+  border-radius: var(--radius); background: var(--warn-bg); color: var(--warn-fg); font-size: 13px; }
+.ps-draft .grow { flex: 1; min-width: 160px; }
+/* หน้าเอกสาร → สร้างงานทีละบรรทัด */
+.pgt-list { display: flex; flex-direction: column; gap: 4px; max-height: 40vh; overflow: auto; margin: 6px 0 4px;
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 6px; }
+.pgt-row { display: flex; align-items: center; gap: 8px; font-size: 13.5px; padding: 3px 4px; }
+.pgt-row .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pgt-row .avatar { flex: none; }
+/* ภาระงาน — งานค้างเลยกำหนด */
+.wl-late { flex: none; font-size: 11px; font-weight: 600; color: var(--danger); background: var(--danger-bg);
+  border-radius: 999px; padding: 1px 7px; white-space: nowrap; }
+.wl-tbar.late { outline: 2px solid var(--danger); outline-offset: -2px; }
 
 /* --- กิจกรรม --- */
 .hact {
@@ -3069,6 +3110,11 @@ button.prof-away:hover { color: var(--accent); }
   border-radius: var(--radius) var(--radius) 0 0; background: var(--bg-sunk);
 }
 .rte-wrap:focus-within > .rte-bar { display: flex; }
+/* Sprint 1A — rte-on (richtext.js) ค้างแถบไว้จนคลิกที่เริ่มตอนออกจากช่องจบก่อน
+ * ไม่งั้นแถบหุบตอนกดเมาส์ลง ปุ่มส่ง/โพสต์ด้านล่างเลื่อนหนี คลิกแรกหาย */
+.rte-wrap.rte-on > .rte-bar { display: flex; }
+.rte-notes-wrap.rte-on .rte-notes,
+.rte-mini.rte-on > .rte-compose { border-top-left-radius: 0; border-top-right-radius: 0; }
 .rte-b {
   min-width: 28px; height: 26px; padding: 0 6px; border-radius: 5px;
   font-size: 13px; color: var(--fg-soft); display: inline-flex;
@@ -4153,7 +4199,9 @@ button.chip.tag:hover { filter: brightness(.94); text-decoration: underline; }
 .dw.full { grid-column: 1 / -1; }
 .dw header { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
 .dw header b { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dw-flt { font-size: 11px; color: var(--fg-faint); display: inline-flex; align-items: center; gap: 2px; }
+/* Sprint 1C — ป้ายตั้งค่า (กรอบเส้นประ ตัวจาง มีคำกำกับ) ไม่ให้อ่านเป็นตัวเลขผลลัพธ์ */
+.dw-flt { font-size: 11px; font-weight: 400; color: var(--fg-faint); display: inline-flex; align-items: center; gap: 3px;
+  border: 1px dashed var(--line-strong); border-radius: 999px; padding: 0 7px; line-height: 18px; white-space: nowrap; flex: none; }
 .dw-text { font-size: 13.5px; }
 .dash-tasks { max-height: 60vh; overflow: auto; }
 .dwe { display: flex; flex-direction: column; gap: 10px; }
@@ -4794,4 +4842,33 @@ button.pjx-tr:hover { background: var(--bg-sunk); }
   .pjx-tr .c-st { justify-content: flex-end; }
   .pjx-head b { white-space: nowrap; }
   .pjx-head .n { display: none; }
+}
+
+/* ---------- Sprint 1B — สิทธิ์ การอนุมัติ และความปลอดภัยของข้อมูล ---------- */
+/* ป้าย "สิทธิ์ของคุณ" ข้างชื่อโปรเจกต์ (เฉพาะคนที่แก้ไม่ได้) */
+.access-chip { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; white-space: nowrap;
+  color: var(--fg-soft); }
+.access-chip svg { flex: none; }
+/* จอไม่กว้าง ชื่อโปรเจกต์สำคัญกว่า เหลือแค่ไอคอนแม่กุญแจ (ข้อความเต็มอยู่ใน title) */
+@media (max-width: 1100px) { .access-chip .ac-t { display: none; } .access-chip { padding-left: 7px; padding-right: 7px; } }
+/* แผงงานของคนที่แก้งานไม่ได้ */
+.dw-ro-note { display: flex; align-items: center; gap: 7px; margin: 2px 0 12px; padding: 7px 10px;
+  border-radius: var(--radius); background: var(--bg-sunk); color: var(--fg-soft); font-size: 12.5px; line-height: 1.45; }
+.dw-ro-note svg { flex: none; }
+.dw-ro-foot { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--fg-faint); }
+.dw-title[readonly] { cursor: default; }
+.picker-btn[disabled] { cursor: default; opacity: .75; }
+/* คำขอสิทธิ์ในกล่องข้อความ — ตอบได้ในแถว */
+.nrow-note { font-size: 12.5px; color: var(--fg-soft); margin-top: 3px; line-height: 1.45; word-break: break-word; }
+.nrow-access { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+.nrow-access .inp { width: auto; min-width: 130px; height: 30px; padding: 0 8px; }
+/* หน้าต่างโอนงาน */
+.ho-guests { display: flex; align-items: flex-start; gap: 7px; font-size: 12.5px; color: var(--fg-soft);
+  margin: -4px 0 12px; line-height: 1.45; cursor: pointer; }
+.ho-guests input { margin-top: 2px; flex: none; }
+/* หน้าต่างถาม/ข้อความที่เปิดจากหน้ากั้น (บัญชีถูกปิด) ต้องอยู่เหนือหน้ากั้น */
+body.gated .modal-backdrop.open { z-index: 310; }
+body.gated .toast { z-index: 320; }
+@media (max-width: 620px) {
+  .nrow-access .inp { min-width: 0; flex: 1 1 120px; }
 }
