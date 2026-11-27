@@ -23,14 +23,14 @@ window.OrbitConfig = {
   /* ---- ที่เก็บข้อมูลกลาง (SharePoint ของบริษัท) ---- */
 
   // โดเมน SharePoint เช่น 'srichand.sharepoint.com'
-  siteHostname: '',
+  siteHostname: 'srichand.sharepoint.com',
 
   // เส้นทางไซต์ที่จะเก็บไฟล์ เช่น '/sites/Orbit'
   // ถ้าเว้นว่างจะใช้ OneDrive ของผู้ใช้แทน (ไม่แชร์กับทีม เหมาะกับการทดสอบ)
-  sitePath: '',
+  sitePath: '/sites/business-development',
 
   // ที่อยู่ไฟล์ในไลบรารีเอกสาร
-  filePath: 'Orbit/orbit-db.json',
+  filePath: 'Orbit Project/orbit-db.json',
 
   /* ---- พฤติกรรมการซิงก์ ---- */
 
