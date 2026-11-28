@@ -972,7 +972,7 @@
         var on = cur.indexOf(o[0]) >= 0;
         return '<button class="flt-chip' + (on ? ' on' : '') + '" data-act="' + pre + '-opt"' + di +
           ' data-v="' + esc(o[0]) + '">' + (o[2] ? '<i class="flt-dot" style="background:' + esc(o[2]) + '"></i>' : '') +
-          (o[0] === S.ME ? I('users', 11) + ' ' + L('ฉัน') : esc(userText ? o[1] : L(o[1]))) + '</button>';
+          (o[0] === S.ME ? I('users', 11) + ' ' + (pre === 'aec' ? L('คนที่กดอยู่ตอนนั้น') : L('ฉัน')) : esc(userText ? o[1] : L(o[1]))) + '</button>';
       }).join('') + '</div>';
     }
     if (kind === 'date') {

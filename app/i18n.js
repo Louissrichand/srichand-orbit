@@ -2870,6 +2870,8 @@
     'บันทึกเป็นแท็บใหม่…': 'Save as new tab…',
     'บันทึกการตั้งค่าของ {v} แล้ว': 'Saved {v} settings',
     'เป็นค่าเริ่มต้นของโปรเจกต์': 'set as project default',
+    // Auto QA
+    'คนที่กดอยู่ตอนนั้น': 'Whoever triggers it',
     'ตั้งค่าเริ่มต้นของมุมมอง': 'Set view default',
     'ตั้งตัวกรอง เรียง จัดกลุ่มให้ถูกใจ แล้วกด “บันทึกเป็นแท็บใหม่…” ถ้าต้องการแท็บแยก แท็บจะขึ้นต่อท้ายแท็บของโปรเจกต์ให้ทุกคนใช้':
       'Set up filters, sorting and grouping, then press “Save as new tab…” if you want a separate tab — it appears after the project tabs for everyone.',
