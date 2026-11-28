@@ -2187,7 +2187,8 @@
 
     // สถานะโปรเจกต์
     h += '<div class="panel"><h3>' + L('สถานะโปรเจกต์') +
-      '<button class="btn btn-sm" data-act="update-status" style="float:right">' + L('อัปเดตสถานะ') + '</button></h3>';
+      /* Sprint 3 — ปุ่มแก้สถานะ เฉพาะคนที่แก้โครงสร้างโปรเจกต์ได้ (ไม่งั้นกดแล้วโดนปฏิเสธ) */
+      (S.can('structure') && S.canInProject(p.id, 'edit') ? '<button class="btn btn-sm" data-act="update-status" style="float:right">' + L('อัปเดตสถานะ') + '</button>' : '') + '</h3>';
     if (p.status) {
       var st = projectState(p.status.state);
       var by = S.user(p.status.by);
@@ -6062,8 +6063,8 @@
     var msEdit = canW && !!(ui2.ms && ui2.ms[p.id]);
     h += '<section class="ovw-card"><h3>' + I('diamond', 13) + ' ' + L('หมุดหมาย') +
       '<span class="ovw-acts"><span class="segmented sm"><button data-act="ms-show" data-id="' + esc(p.id) + '" data-v="open" class="' +
-      (all ? '' : 'on') + '">' + L('ยังไม่ถึง') + '</button><button data-act="ms-show" data-id="' + esc(p.id) + '" data-v="all" class="' +
-      (all ? 'on' : '') + '">' + L('ทั้งหมด') + '</button></span>' +
+      (all ? '' : 'on') + '"' + (S.can('structure') && canW ? '' : ' disabled') + '>' + L('ยังไม่ถึง') + '</button><button data-act="ms-show" data-id="' + esc(p.id) + '" data-v="all" class="' +
+      (all ? 'on' : '') + '"' + (S.can('structure') && canW ? '' : ' disabled') + '>' + L('ทั้งหมด') + '</button></span>' +
       (canW ? '<button class="as-link" data-act="ms-add" data-id="' + esc(p.id) + '">+ ' + L('เพิ่ม') + '</button>' : '') +
       (canW && ms.length ? '<button class="as-link ovw-edit-btn" data-act="ms-edit" data-id="' + esc(p.id) + '">' +
         (msEdit ? I('check', 12) + ' ' + L('เสร็จ') : I('pencil', 12) + ' ' + L('แก้ไข')) + '</button>' : '') + '</span></h3>';
@@ -6084,7 +6085,7 @@
   function ovwExtraSide(p) {
     var pfs = S.portfoliosOfProject(p.id).filter(function (f) { return !S.portfolioHidden || !S.portfolioHidden(f.id); });
     var h = '<section class="ovw-card"><h3>' + L('อยู่ในพอร์ตโฟลิโอ') +
-      (S.can('structure') ? '<button class="as-link" data-act="add-to-portfolio" data-id="' + esc(p.id) + '">+ ' + L('เพิ่ม') + '</button>' : '') + '</h3>';
+      (S.can('structure') && S.canInProject(p.id, 'edit') ? '<button class="as-link" data-act="add-to-portfolio" data-id="' + esc(p.id) + '">+ ' + L('เพิ่ม') + '</button>' : '') + '</h3>';
     if (!pfs.length) h += '<div class="ovw-empty">' + L('ยังไม่ได้อยู่ในพอร์ตโฟลิโอไหน') + '</div>';
     pfs.forEach(function (f) {
       var st = f.status ? projectState(f.status.state) : null;
@@ -6141,7 +6142,7 @@
     var canEdit = S.canEditDash(projectId);
     var h = '<div class="dashb"><div class="dashb-bar"><b>' + L('แดชบอร์ด') + '</b><span class="dashb-n">' +
       esc(L('{n}/{max} วิดเจ็ต', { n: list.length, max: S.DASH_MAX })) + '</span><span class="grow"></span>' +
-      '<button class="btn btn-sm" data-act="update-status">' + L('อัปเดตสถานะ') + '</button>' +
+      (S.can('structure') && S.canInProject(projectId, 'edit') ? '<button class="btn btn-sm" data-act="update-status">' + L('อัปเดตสถานะ') + '</button>' : '') +
       (canEdit ? '<button class="btn btn-sm btn-primary" data-act="dash-add"' + (list.length >= S.DASH_MAX ? ' disabled' : '') + '>' +
         I('plus', 13) + ' ' + L('เพิ่มวิดเจ็ต') + '</button>' : '') + '</div>';
     h += '<div class="dashb-grid">';
@@ -6240,7 +6241,7 @@
       h += '<button class="btn btn-sm btn-ghost" data-act="pg-comment" data-id="' + esc(id) + '" title="' +
         esc(L('เลือกข้อความในหน้าแล้วกดเพื่อแสดงความเห็น')) + '">' + I('send', 13) + '<span class="hide-sm"> ' + L('ความเห็น') + '</span></button>';
     }
-    h += '<button class="btn btn-sm btn-ghost" data-act="pg-task" data-id="' + esc(id) + '" title="' +
+    if (l.project ? S.canCreateTask(l.project.id) : S.can('write')) h += '<button class="btn btn-sm btn-ghost" data-act="pg-task" data-id="' + esc(id) + '" title="' +
       esc(L('เลือกข้อความในหน้าแล้วกดเพื่อสร้างงาน')) + '">' + I('checkCircle', 13) + '<span class="hide-sm"> ' + L('สร้างงาน') + '</span></button>';
     h += '<button class="btn btn-sm btn-ghost" data-act="pg-versions" data-id="' + esc(id) + '" title="' + esc(L('ประวัติเวอร์ชัน')) + '">' +
       I('repeat', 13) + '<span class="hide-sm"> ' + esc(L('{n} เวอร์ชัน', { n: x.versions.length })) + '</span></button>';
