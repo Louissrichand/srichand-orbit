@@ -1255,3 +1255,30 @@ CREATE TABLE dbo.project_embeds (
     CONSTRAINT ck_embed_host CHECK (host IN ('gdocs','gdrive','figma','miro','loom','youtube','m365'))
 );
 GO
+
+/* ======================================================================
+ * Sprint 2C — มุมมองผู้บริหาร (SCHEMA 19 ของ app/store.js)
+ * ====================================================================== */
+
+/* ตัวเลข ณ ตอนรายงาน และที่เปลี่ยนจากรายงานครั้งก่อน คิดตอนโพสต์แล้วเก็บไว้เลย (ไม่คิดใหม่ตอนเปิดดู)
+ * snap = งานทั้งหมด/เสร็จ/เลยกำหนด  chg = สถานะครั้งก่อน + ส่วนต่างงานเสร็จ/เลยกำหนด */
+ALTER TABLE dbo.project_status_updates ADD
+    snap_total INT NULL, snap_done INT NULL, snap_overdue INT NULL,
+    prev_state VARCHAR(10) NULL, delta_done INT NULL, delta_overdue INT NULL;
+ALTER TABLE dbo.portfolio_status_updates ADD
+    snap_total INT NULL, snap_done INT NULL, snap_overdue INT NULL,
+    prev_state VARCHAR(10) NULL, delta_done INT NULL, delta_overdue INT NULL;
+GO
+
+/* ถาม/ตอบใต้รายงานสถานะ (statusLog[].replies ในแอป) — หนึ่งระดับ แจ้งคนเขียนรายงาน เจ้าของ คนที่เคยตอบ และคนที่ถูก @ */
+CREATE TABLE dbo.status_update_replies (
+    id            UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    project_update_id   BIGINT NULL REFERENCES dbo.project_status_updates(id) ON DELETE CASCADE,
+    portfolio_update_id BIGINT NULL REFERENCES dbo.portfolio_status_updates(id),
+    author_id     UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    body          NVARCHAR(MAX)    NOT NULL,   -- มาร์กดาวน์ย่อชุดเดียวกับความเห็น (@ชื่อ ได้)
+    created_at    DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT ck_sur_parent CHECK ((project_update_id IS NULL AND portfolio_update_id IS NOT NULL)
+                                 OR (project_update_id IS NOT NULL AND portfolio_update_id IS NULL))
+);
+GO

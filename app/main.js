@@ -5716,6 +5716,7 @@
       h += '<label class="opt-lbl">' + L('หน้าที่เปิดเมื่อเข้าแอป') + '</label>' +
         segmented('set-landing', [['home', L('หน้าแรก')], ['mytasks', L('งานของฉัน')],
                                   ['inbox', L('กล่องข้อความ')]], S.pref('landing'));
+      if (R.landingPicker) h += R.landingPicker(S.pref('landing'));    // Sprint 2C — หรือพอร์ตโฟลิโอ/รายงานที่เปิดดูทุกเช้า
       h += '<div class="opt-sep"></div>';
       h += setToggle('set-shortcuts', L('เปิดใช้คีย์ลัด'), !!S.pref('shortcuts'),
         L('กด Tab ค้างแล้วตามด้วยตัวอักษร เพื่อข้ามไปหน้าต่าง ๆ ปิดไว้ถ้าพิมพ์ไทยแล้วชนกัน'));
@@ -13806,7 +13807,17 @@
     state.openTaskId = boot.taskId && S.task(boot.taskId) && S.canSeeTask(boot.taskId) ? boot.taskId : null;
     focusStory(boot.storyId);
   } else if (useLanding && land !== 'home') {
-    state.route = { type: land };
+    /* Sprint 2C — หน้าแรกเป็นพอร์ตโฟลิโอหรือรายงานที่เลือกไว้ได้ ('portfolio:<id>' / 'report:<id>')
+     * ของที่ถูกลบหรือหมดสิทธิ์เห็นแล้ว ตกกลับไปหน้าแรกเงียบ ๆ ไม่ใช่เปิดมาเจอหน้าว่าง */
+    var lm = /^(portfolio|report):(.+)$/.exec(String(land));
+    if (!lm) state.route = { type: land };
+    else if (lm[1] === 'portfolio' && S.portfolio(lm[2])) {
+      var lpf = S.portfolio(lm[2]);
+      state.route = lpf.defaultTab && S.pfSavedView(lpf.id, lpf.defaultTab)
+        ? { type: 'portfolio', id: lpf.id, view: 'list', sv: lpf.defaultTab } : { type: 'portfolio', id: lpf.id, view: 'list' };
+    } else if (lm[1] === 'report' && S.report(lm[2]) && S.canSeeReport(lm[2])) {
+      state.route = { type: 'report', id: lm[2] };
+    }
   }
   renderAll();
   noticeNewInbox();          // จำจำนวนที่ยังไม่อ่านตอนเปิดแอปไว้เป็นฐาน ไม่เด้งของเก่า

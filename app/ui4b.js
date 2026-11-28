@@ -355,13 +355,43 @@
         '<button class="btn btn-primary" data-act="rp-wsave">' + L('บันทึก') + '</button></div>';
       return h;
     }
+    /* Sprint 2C — เดิมบรรทัดรองของทุกงานเขียนแค่ว่า "งาน" ผู้บริหารเจาะดูวิดเจ็ตเลยกำหนดแล้วไม่รู้ว่าเป็นของใคร ช้าแค่ไหน
+     * ตอนนี้งานบอก โปรเจกต์ · ผู้รับผิดชอบ · กำหนดส่ง (เลยกำหนดกี่วัน) และเรียงงานที่ช้าที่สุดขึ้นก่อน */
     function rpClickHtml(r, wid, cat, ser) {
       var list = S.reportClick(r.id, wid, cat, ser);
       var lab = { task: 'งาน', project: 'โปรเจกต์', portfolio: 'พอร์ตโฟลิโอ', goal: 'เป้าหมาย' };
-      return '<h2>' + esc(L('{n} รายการ', { n: list.length })) + '</h2><div class="rp-click">' + (list.map(function (x) {
+      var td = S.today();
+      var rows = list.map(function (x) {
+        var o = { x: x, late: -1, due: null, sub: L(lab[x.kind]) };
+        if (x.kind === 'task') {
+          var t = S.task(x.id);
+          if (t) {
+            var pj = S.projectsOfTask(S.rootOf(t).id)[0];
+            var u = S.user(t.assigneeId);
+            o.due = t.dueOn || null;
+            o.late = !t.completed && t.dueOn && t.dueOn < td ? S.daysBetween(t.dueOn, td) : -1;
+            o.sub = [pj ? pj.project.name : L('งานส่วนตัว'), u ? u.name : L('ยังไม่มอบหมาย'),
+              t.dueOn ? R.fmtDate(t.dueOn) : L('ไม่มีกำหนดส่ง')].join(' · ');
+            o.done = !!t.completed;
+          }
+        } else if (x.kind === 'project') {
+          var p = S.project(x.id), ps = p ? S.projectStats(p.id) : null, ow = p && S.user(p.owner);
+          if (p) o.sub = [p.status ? L(R.projectState(p.status.state).label) : L('ยังไม่รายงาน'), ow ? ow.name : '',
+            ps.overdue ? L('เลยกำหนด {n}', { n: ps.overdue }) : ''].filter(Boolean).join(' · ');
+        }
+        return o;
+      });
+      rows.sort(function (a, b) {
+        if (a.late !== b.late) return b.late - a.late;            // ช้าที่สุดก่อน
+        return String(a.due || '9999') < String(b.due || '9999') ? -1 : 1;
+      });
+      return '<h2>' + esc(L('{n} รายการ', { n: list.length })) + '</h2><div class="rp-click">' + (rows.map(function (o) {
+        var x = o.x;
         var act = x.kind === 'task' ? 'data-act="open-task" data-id="' + esc(x.id) + '"'
           : 'data-act="go" data-route="' + x.kind + '" data-id="' + esc(x.id) + '"';
-        return '<button class="pf-pick-row" ' + act + '><span class="grow"><b>' + esc(x.name) + '</b><em>' + esc(L(lab[x.kind])) + '</em></span>' + I('chevronRight', 13) + '</button>';
+        return '<button class="pf-pick-row rp-click-row" ' + act + '><span class="grow"><b' + (o.done ? ' class="done"' : '') + '>' + esc(x.name) + '</b><em>' + esc(o.sub) + '</em></span>' +
+          (o.late > 0 ? '<span class="chip due-over">' + esc(L('เลยกำหนด {n} วัน', { n: o.late })) + '</span>' : '') +
+          I('chevronRight', 13) + '</button>';
       }).join('') || '<p class="prj-note">' + L('ไม่มีรายการ') + '</p>') + '</div>' +
         '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
     }

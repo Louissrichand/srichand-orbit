@@ -1717,7 +1717,9 @@
           '"><i style="background:' + st.color + '"></i>' + esc(L(st.label)) + '</span>' +
           '<div class="grow">' + (sl.title ? '<div class="t"><b>' + esc(sl.title) + '</b></div>' : '') +
           (sl.text ? '<div class="t">' + esc(S.plainText(sl.text).slice(0, 300)) + '</div>' : '') +
-          '<em>' + esc(by ? by.name : '—') + ' · ' + esc(fmtWhen(sl.at)) + '</em></div></div>';
+          '<em>' + esc(by ? by.name : '—') + ' · ' + esc(fmtWhen(sl.at)) + '</em>' +
+          /* Sprint 2C — รายงานเก่าก็บอกได้ว่าเปลี่ยนอะไร และถาม/ตอบต่อได้ */
+          global.Render.statusChangeHtml(p, sl) + global.Render.statusThread(p, sl, { full: false }) + '</div></div>';
       });
       h += '</div>';
     }
@@ -1727,7 +1729,8 @@
     /* --- คอลัมน์ขวา --- */
     h += '<div class="ovw-side">';
 
-    h += '<section class="ovw-card"><h3>' + L('ตอนนี้ถึงไหนแล้ว') + '</h3>';
+    h += '<section class="ovw-card"><h3>' + L('ตอนนี้ถึงไหนแล้ว') +
+      global.Render.printLink('project', p.id) + '</h3>';        // Sprint 2C — สรุปหน้าเดียวสำหรับประชุม
     h += '<div class="ovw-stats">' +
       '<div><b>' + s.total + '</b><em>' + L('งานทั้งหมด') + '</em></div>' +
       '<div><b>' + s.done + '</b><em>' + L('เสร็จแล้ว') + '</em></div>' +
@@ -1919,6 +1922,8 @@
       '22;color:' + st.color + '"><i style="background:' + st.color + '"></i>' + esc(L(st.label)) + '</span>' +
       '<div class="grow">' + (e.title ? '<b>' + esc(e.title) + '</b>' : '<b>' + L('รายงานสถานะ') + '</b>') +
       '<em title="' + esc(fmtExact(e.at)) + '">' + esc(by ? by.name : '—') + ' · ' + esc(fmtWhen(e.at)) + '</em></div></div>';
+    /* Sprint 2C — อะไรเปลี่ยนจากรอบก่อน (สถานะ งานเสร็จ งานเลยกำหนด) ไว้บนสุดเพราะเป็นสิ่งที่ผู้บริหารอ่านก่อน */
+    if (p && global.Render.statusChangeHtml) h += global.Render.statusChangeHtml(p, e);
     if (full && e.blocks && e.blocks.length) {
       e.blocks.forEach(function (b) {
         h += '<div class="sth-blk"><h4>' + esc(blockLabel(b)) + '</h4><div class="sth-txt">' + richText(b.text) + '</div></div>';
@@ -1927,6 +1932,8 @@
       h += '<div class="sth-txt">' + richText(e.text) + '</div>';
     }
     if (full) h += statusHlHtml(e.hl, e.period);
+    /* Sprint 2C — ถาม/ตอบใต้รายงาน (เก็บที่ e.replies) */
+    if (p && global.Render.statusThread) h += global.Render.statusThread(p, e, { full: full });
     return h + '</article>';
   }
 
@@ -2414,6 +2421,8 @@
     });
     h += '<span></span></div>';
     h += '</div></div>';
+    /* Sprint 2C — ตารางกว้าง ~1,360px อ่านบนแท็บเล็ต/มือถือไม่ได้ จอ ≤ 900px สลับเป็นการ์ดทีละโปรเจกต์ (CSS เลือกแสดง) */
+    h += global.Render.pfCards(f, all);
     h += '<div class="pfx-adds"><button class="pf-add" data-act="pf-add" data-pf="' + esc(f.id) + '">' + I('plus', 15) + ' ' +
       L('เพิ่มโปรเจกต์หรือพอร์ตโฟลิโอ') + '</button></div>';
     return h;
@@ -2431,7 +2440,7 @@
         L('อัปเดตสถานะ') + '</button>' : '') + '</h3>';
     var log = (f.statusLog || []).slice().reverse();
     if (!log.length) h += '<div class="ovw-empty">' + L('ยังไม่เคยอัปเดตสถานะ เล่าภาพรวมของทั้งพอร์ตโฟลิโอให้ทุกคนเห็นตรงกัน') + '</div>';
-    log.slice(0, 15).forEach(function (e) { h += statusEntryHtml(null, e, true); });
+    log.slice(0, 15).forEach(function (e) { h += statusEntryHtml(f, e, true); });   // Sprint 2C — ส่งพอร์ตโฟลิโอไปด้วย (ถาม/ตอบ + ที่เปลี่ยน)
     h += '</div></div>';
     h += '<div class="pfp-side"><div class="ovw-card"><h3>' + L('สถานะล่าสุดของโปรเจกต์') + '</h3>';
     if (!list.length) h += '<div class="ovw-empty">' + L('ยังไม่มีโปรเจกต์') + '</div>';
@@ -2516,7 +2525,27 @@
     });
     if (st.noStatus) { stCats.push({ key: '', label: L('ยังไม่รายงาน'), color: 'var(--fg-faint)' }); stVals.push([st.noStatus]); }
     var prog = list.slice(0, 20);
-    var h = '<div class="dash-cols" style="margin-top:16px">';
+    /* Sprint 2C — "ต้องจับตา" ขึ้นก่อนกราฟ (เดิมอยู่ล่างสุด บนแท็บเล็ตต้องเลื่อนผ่านกราฟสองอันกว่าจะเจอ)
+     * Sprint 1C — นิยามเดียวกับตัวเลข "ต้องจับตา" บนแถบสรุป (S.needsWatch) */
+    var h = '<div class="panel pf-watch"><h3>' + I('alert', 14) + ' ' + L('ต้องจับตา') + '</h3>';
+    var risky = list.filter(function (p) { return S.needsWatch(p); });
+    if (!risky.length) h += '<div class="pf-none">' + L('ยังไม่มีโปรเจกต์ที่น่าห่วง') + '</div>';
+    risky.forEach(function (p) {
+      var s = S.projectStats(p.id);
+      var stt = p.status ? projectState(p.status.state) : null;
+      var sAt = p.status ? S.statusAt(p) : null;
+      h += '<div class="pf-risk" data-act="go" data-route="project" data-id="' + esc(p.id) + '">' +
+        '<span class="em">' + esc(p.icon) + '</span>' +
+        '<span class="grow"><b>' + esc(p.name) + '</b>' +
+        (p.status && p.status.text ? '<em>' + esc(S.plainText(p.status.text)) + '</em>' : '') +
+        '<em>' + (sAt ? esc(L('รายงานล่าสุด {w}', { w: fmtWhen(sAt) })) : esc(L('ยังไม่เคยรายงานสถานะ'))) + '</em></span>' +
+        (stt ? '<span class="status-pill" style="background:' + stt.color + '22;color:' + stt.color +
+          '"><i style="background:' + stt.color + '"></i>' + esc(L(stt.label)) + '</span>' : '') +
+        (s.overdue ? '<span class="pf-bad">' + L('เลยกำหนด {n}', { n: s.overdue }) + '</span>' : '') +
+        '</div>';
+    });
+    h += '</div>';
+    h += '<div class="dash-cols" style="margin-top:16px">';
     h += '<div class="panel pf-chart"><h3>' + L('สัดส่วนสถานะโปรเจกต์') + '</h3>' + global.Charts.svg({ type: 'donut', cats: stCats,
       series: [{ key: 'v', label: L('โปรเจกต์') }], values: stVals, empty: L('ยังไม่มีข้อมูล'), h: 220 }) + '</div>';
     h += '<div class="panel pf-chart"><h3>' + L('งานเสร็จ/ค้างต่อโปรเจกต์') + '</h3>' + global.Charts.svg({ type: 'stack',
@@ -2542,24 +2571,6 @@
       h += bar(p.icon + ' ' + p.name, s.done, s.total || 1, p.color);
     });
     h += '<div class="bar-note">' + L('แท่ง = สัดส่วนงานที่เสร็จ เรียงจากช้าที่สุดขึ้นก่อน') + '</div></div>';
-
-    h += '<div class="panel"><h3>' + L('ต้องจับตา') + '</h3>';
-    /* Sprint 1C — นิยามเดียวกับตัวเลข "ต้องจับตา" บนแถบสรุป (S.needsWatch) */
-    var risky = list.filter(function (p) { return S.needsWatch(p); });
-    if (!risky.length) h += '<div class="pf-none">' + L('ยังไม่มีโปรเจกต์ที่น่าห่วง') + '</div>';
-    risky.forEach(function (p) {
-      var s = S.projectStats(p.id);
-      var stt = p.status ? projectState(p.status.state) : null;
-      h += '<div class="pf-risk" data-act="go" data-route="project" data-id="' + esc(p.id) + '">' +
-        '<span class="em">' + esc(p.icon) + '</span>' +
-        '<span class="grow"><b>' + esc(p.name) + '</b>' +
-        (p.status && p.status.text ? '<em>' + esc(p.status.text) + '</em>' : '') + '</span>' +
-        (stt ? '<span class="status-pill" style="background:' + stt.color + '22;color:' + stt.color +
-          '"><i style="background:' + stt.color + '"></i>' + esc(L(stt.label)) + '</span>' : '') +
-        (s.overdue ? '<span class="pf-bad">' + L('เลยกำหนด {n}', { n: s.overdue }) + '</span>' : '') +
-        '</div>';
-    });
-    h += '</div>';
 
     h += '<div class="panel"><h3>' + L('คนที่ถือโปรเจกต์') + '</h3>';
     var byOwner = {};
@@ -3179,6 +3190,9 @@
     if (edit) {
       h += '<div class="home-editbar">' + I('grip', 14) + '<span class="grow">' +
         L('ลากการ์ดเพื่อสลับที่ กดปุ่มบนการ์ดเพื่อย่อขยายหรือเอาออก') + '</span>' +
+        /* Sprint 2C — ชุดสำเร็จรูปสำหรับผู้บริหาร: ภาพรวมผู้บริหารขึ้นบนสุดเต็มแถว ตามด้วยอัปเดตสถานะ */
+        '<button class="btn btn-sm" data-act="home-w-exec" title="' + esc(L('ใส่การ์ดภาพรวมผู้บริหารไว้บนสุด ตามด้วยอัปเดตสถานะ')) + '">' +
+        I('gauge', 13) + ' ' + L('ใช้แบบผู้บริหาร') + '</button>' +
         '<button class="btn btn-sm btn-ghost" data-act="home-w-reset">' + L('คืนค่าเริ่มต้น') + '</button></div>';
     }
 
@@ -3217,7 +3231,9 @@
     var o = null;
     var w = x.w;
 
-    if (w === 'mine') {
+    if (w === 'exec') {
+      o = global.Render.execWidget();              // Sprint 2C (exec2c.js)
+    } else if (w === 'mine') {
       var mine = S.myTasks(S.db.currentUserId);
       var mineTab = st.mine || 'upcoming';
       var mineItems = mineTab === 'overdue' ? mine.overdue
@@ -3323,23 +3339,12 @@
           '<span><b>' + cs.month + '</b>' + L('30 วัน') + '</span></div>' + bars
       };
     } else if (w === 'activity') {
-      var acts = S.recentActivity(HOME_ROWS);
-      var ab = '';
-      if (!acts.length) ab = '<div class="hempty">' + L('ยังไม่มีกิจกรรม') + '</div>';
-      acts.forEach(function (a) {
-        ab += '<div class="hact" data-act="open-task" data-id="' + esc(a.story.taskId) + '">' +
-          avatar(a.actor, 'sm') +
-          '<span class="hact-body"><span class="hact-txt"><strong>' +
-          esc(a.actor ? a.actor.name : '?') + '</strong> ' +
-          esc(a.story.type === 'comment' ? L('แสดงความเห็น') : storyText(a.story)) + '</span>' +
-          '<span class="hact-sub" title="' + esc(fmtExact(a.story.createdAt)) + '">' +
-          esc(a.taskName || '') + ' · ' + esc(fmtWhen(a.story.createdAt)) +
-          '</span></span></div>';
-      });
+      /* Sprint 2C — รวมความเคลื่อนไหวของงานเดียวกันโดยคนเดียวกันเป็นบรรทัดเดียว + ตัวกรองเฉพาะสถานะและการตัดสินใจ (exec2c.js) */
       o = {
         title: hTitle(I('bell', 15), L('กิจกรรมล่าสุด')),
         action: '<button class="btn btn-sm btn-ghost" data-act="go" data-route="inbox">' + L('ดูทั้งหมด') + '</button>',
-        body: ab
+        tabs: global.Render.homeActTabs(),
+        body: global.Render.homeActivityBody(HOME_ROWS)
       };
     } else if (w === 'forms') {
       /* 3b — ฟอร์มที่เปิดรับอยู่ในโปรเจกต์ที่เห็นได้ กดเพื่อเปิดหน้าส่งฟอร์ม */
@@ -3366,6 +3371,9 @@
     if (edit) {
       o.tools = '<div class="hw-tools">' +
         '<span class="hw-grip" title="' + L('ลากเพื่อย้าย') + '">' + I('grip', 14) + '</span>' +
+        /* Sprint 2C — ผู้ทดสอบต้องกด "ย้ายขึ้น" 5 ครั้งเพื่อเอาการ์ดล่างสุดขึ้นบนสุด */
+        '<button data-act="home-w-top" data-i="' + i + '"' + (i === 0 ? ' disabled' : '') +
+        ' title="' + L('ย้ายไปบนสุด') + '" aria-label="' + L('ย้ายไปบนสุด') + '">' + I('toTop', 13) + '</button>' +
         '<button data-act="home-w-move" data-i="' + i + '" data-d="-1"' + (i === 0 ? ' disabled' : '') +
         ' title="' + L('ย้ายขึ้น') + '">' + I('arrowUp', 13) + '</button>' +
         '<button data-act="home-w-move" data-i="' + i + '" data-d="1"' + (i === n - 1 ? ' disabled' : '') +
@@ -5717,9 +5725,15 @@
     var h = '';
     /* บรีฟ — เอกสารสั้นของโปรเจกต์ (หัวข้อ ตาราง @อ้างถึง) แก้ในที่ บันทึกตอนออกจากช่อง */
     var by = S.user(p.briefBy);
+    /* Sprint 2C — เปิดมาเป็นโหมดอ่านก่อนเสมอ ผู้บริหารเลื่อน/คลิกอ่านแล้วเผลอพิมพ์ทับบรีฟ
+     * คนที่แก้ได้กด "แก้ไข" ก่อนถึงจะพิมพ์ได้ (สถานะนี้อยู่แค่ในหน้าจอ ไม่ได้บันทึก) */
+    var ui2 = global.Render.ui2c || {};
+    var briefEdit = can && !!(ui2.brief && ui2.brief[p.id]);
     h += '<section class="ovw-card ovw-brief"><h3>' + L('บรีฟโปรเจกต์') +
-      (p.briefAt ? '<em class="ovw-meta">' + esc(L('แก้ล่าสุดโดย {u} · {w}', { u: by ? by.name : '—', w: fmtWhen(p.briefAt) })) + '</em>' : '') + '</h3>';
-    if (can) {
+      (p.briefAt ? '<em class="ovw-meta">' + esc(L('แก้ล่าสุดโดย {u} · {w}', { u: by ? by.name : '—', w: fmtWhen(p.briefAt) })) + '</em>' : '') +
+      (can ? '<button class="as-link ovw-edit-btn" data-act="brief-edit" data-id="' + esc(p.id) + '">' +
+        (briefEdit ? I('check', 12) + ' ' + L('เสร็จ') : I('pencil', 12) + ' ' + L('แก้ไข')) + '</button>' : '') + '</h3>';
+    if (briefEdit) {
       h += '<div class="rte-wrap rte-brief-wrap">' + RT().toolbar('page', { image: false }) +
         '<div class="rte rte-brief rte-doc" contenteditable="true" spellcheck="true" data-blocks="1" data-save="brief" data-key="b:' +
         esc(p.id) + '" data-id="' + esc(p.id) + '" data-placeholder="' +
@@ -5753,15 +5767,20 @@
     var all = p.msShow === 'all';
     var ms = S.projectMilestones(p.id, all);
     var canW = S.can('write') && S.canInProject(p.id, 'edit');
+    /* Sprint 2C — วันที่และช่องติ๊กของหมุดหมายแก้ได้เฉพาะตอนกด "แก้ไข" (เดิมเป็นช่องวันที่ตลอด เผลอเลื่อนวันกันบ่อย) */
+    var msEdit = canW && !!(ui2.ms && ui2.ms[p.id]);
     h += '<section class="ovw-card"><h3>' + I('diamond', 13) + ' ' + L('หมุดหมาย') +
       '<span class="ovw-acts"><span class="segmented sm"><button data-act="ms-show" data-id="' + esc(p.id) + '" data-v="open" class="' +
       (all ? '' : 'on') + '">' + L('ยังไม่ถึง') + '</button><button data-act="ms-show" data-id="' + esc(p.id) + '" data-v="all" class="' +
       (all ? 'on' : '') + '">' + L('ทั้งหมด') + '</button></span>' +
-      (canW ? '<button class="as-link" data-act="ms-add" data-id="' + esc(p.id) + '">+ ' + L('เพิ่ม') + '</button>' : '') + '</span></h3>';
+      (canW ? '<button class="as-link" data-act="ms-add" data-id="' + esc(p.id) + '">+ ' + L('เพิ่ม') + '</button>' : '') +
+      (canW && ms.length ? '<button class="as-link ovw-edit-btn" data-act="ms-edit" data-id="' + esc(p.id) + '">' +
+        (msEdit ? I('check', 12) + ' ' + L('เสร็จ') : I('pencil', 12) + ' ' + L('แก้ไข')) + '</button>' : '') + '</span></h3>';
     if (!ms.length) h += '<div class="ovw-empty">' + L('ยังไม่มีหมุดหมาย หมุดหมายคือจุดสำคัญ เช่น ส่งแบบให้ลูกค้า หรือวันเปิดตัว') + '</div>';
     ms.forEach(function (t) {
-      var w = S.can('write', t.id);
-      h += '<div class="ms-row' + (t.completed ? ' done' : '') + '">' + checkbox(t) +
+      var w = msEdit && S.can('write', t.id);
+      h += '<div class="ms-row' + (t.completed ? ' done' : '') + '">' +
+        (w ? checkbox(t) : '<span class="check ro' + (t.completed ? ' on' : '') + ' milestone" aria-hidden="true"><span>' + ICON.check + '</span></span>') +
         '<button class="grow ms-nm" data-act="open-task" data-id="' + esc(t.id) + '">' + esc(t.name) + '</button>' +
         (w ? '<input type="date" class="ms-date' + dueClass(t.dueOn, t.completed) + '" data-act="ms-due" data-id="' + esc(t.id) +
           '" value="' + esc(t.dueOn || '') + '">'

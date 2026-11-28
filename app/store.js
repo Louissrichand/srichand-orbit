@@ -10,7 +10,7 @@
 
   var KEY = 'orbit.db.v4';
   var LEGACY_KEYS = ['orbit.db.v3', 'orbit.db.v2', 'orbit.db.v1', 'taskflow.db.v1'];   // ชื่อ/เวอร์ชันเดิม
-  var SCHEMA = 18;      // Sprint 1B — ถังขยะของความเห็น คำขอสิทธิ์แบบไม่สร้างงาน
+  var SCHEMA = 19;      // Sprint 2C — คำตอบใต้รายงานสถานะ (statusLog[].replies) และตัวเลขเทียบรอบก่อน (snap/chg)
 
   /* 4b — ค่าคงที่ที่ migrate() ใช้ (ต้องประกาศก่อน hydrate() ทำงาน) */
   var TIME_CATS_DEFAULT = ['งานลูกค้า', 'งานภายใน', 'ประชุม', 'อบรม'];
@@ -698,6 +698,17 @@
       p.accessRequests.forEach(function (r) { if (!('note' in r)) r.note = null; });
     });
     prunePersonal(d);
+    /* Sprint 2C (SCHEMA 19) — ผู้บริหารถาม/ตอบใต้รายงานสถานะได้ เก็บคำตอบติดไว้กับรายงานนั้นเลย
+     * (replies: [{ id, by, at, body }]) ไม่แยกเป็นตารางใหม่ ข้อมูลกลางเป็นก้อนเดียวจึงต้องเล็ก
+     * รายงานเก่าไม่มี snap/chg (ตัวเลข ณ ตอนรายงานและที่เปลี่ยนจากรอบก่อน) ปล่อยว่างไว้ หน้าจอบอกได้แค่สถานะที่เปลี่ยน */
+    var fixReplies = function (host) {
+      (host.statusLog || []).forEach(function (e) {
+        if (!e) return;
+        e.replies = Array.isArray(e.replies) ? e.replies.filter(function (r) { return r && r.id && r.by; }) : [];
+      });
+    };
+    d.projects.forEach(fixReplies);
+    (d.portfolios || []).forEach(fixReplies);
     /* Sprint 1C ตั้งกำหนดส่งรอบแรกให้ตอนตั้งทำซ้ำ (firstRecurDate) แต่งานทำซ้ำจากข้อมูลเก่าที่ไม่มีกำหนดส่ง
      * ยังไม่โผล่ในปฏิทินจนกว่าจะมีคนไปแก้ — ให้วันครบกำหนดรอบแรกตอนโหลด เฉพาะงานที่ยังไม่เสร็จ (ทำครั้งเดียว มีวันแล้วไม่แตะอีก) */
     d.tasks.forEach(function (t) {
@@ -2005,6 +2016,7 @@
 
   /* ---------- หน้าแรก ---------- */
   var HOME_WIDGETS = [
+    { id: 'exec',     label: 'ภาพรวมผู้บริหาร',     icon: 'gauge' },     // Sprint 2C — ตอบ "ตอนนี้อะไรถึงไหน" ในการ์ดเดียว
     { id: 'mine',     label: 'งานของฉัน',          icon: 'checkCircle' },
     { id: 'assigned', label: 'งานที่ฉันมอบหมาย',   icon: 'users' },
     { id: 'projects', label: 'โปรเจกต์ล่าสุด',     icon: 'grid' },
@@ -5068,10 +5080,10 @@
       by: db.currentUserId, at: new Date().toISOString()   // Sprint 1C — เวลาจริง (เดิมแค่วันที่ → "5 ชม.ที่แล้ว")
     };
     f.statusLog = f.statusLog || [];
-    f.statusLog.push({
+    f.statusLog.push(stampStatus(f.statusLog, {          // Sprint 2C — ตัวเลข ณ ตอนนี้ + ที่เปลี่ยนจากรอบก่อน
       id: uid('ps'), state: state, text: f.status.text,
       by: db.currentUserId, at: new Date().toISOString()
-    });
+    }, statusSnapOf(id)));
     if (f.statusLog.length > 30) f.statusLog = f.statusLog.slice(-30);
     commit();
   }
@@ -5147,10 +5159,10 @@
       at: new Date().toISOString()     // Sprint 1C — เวลาจริง เดิมเก็บแค่วันที่ พอร์ตโฟลิโอจึงขึ้น "5 ชม.ที่แล้ว" ทั้งที่เพิ่งรายงาน
     };
     p.statusLog = p.statusLog || [];
-    p.statusLog.push({
+    p.statusLog.push(stampStatus(p.statusLog, {          // Sprint 2C
       id: uid('ps'), state: state, text: p.status.text,
       by: db.currentUserId, at: new Date().toISOString()
-    });
+    }, statusSnapOf(id)));
     if (p.statusLog.length > 30) p.statusLog = p.statusLog.slice(-30);
     var watchers = projectWatchers(id, 'status');
     if (watchers.length) {
@@ -9661,9 +9673,9 @@
       by: db.currentUserId, at: new Date().toISOString() };
     p.status = { state: o.state, text: summary, title: entry.title, by: db.currentUserId, at: entry.at };   // Sprint 1C — เวลาเดียวกับรายการในประวัติ
     p.statusLog = p.statusLog || [];
-    p.statusLog.push(entry);
+    p.statusLog.push(stampStatus(p.statusLog, entry, statusSnapOf(pid)));   // Sprint 2C — ก่อน push จะได้เทียบกับรอบก่อนจริง
     if (p.statusLog.length > 30) p.statusLog = p.statusLog.slice(-30);
-    p.statusLayout = { blocks: all.map(function (b) { return { k: b.k, title: b.title }; }), hl: hl, period: period };
+    p.statusLayout ={ blocks: all.map(function (b) { return { k: b.k, title: b.title }; }), hl: hl, period: period };
     var watchers = projectWatchers(pid, 'status');
     if (watchers.length) {
       notifyOnly(null, watchers, 'อัปเดตสถานะของ {p}', 'status', { p: p.name }, false,
@@ -13440,6 +13452,197 @@
     reportData: reportData, reportClick: reportClick, normalizeRWidget: normalizeRWidget
   };
   Object.keys(X4B2).forEach(function (k) { global.Store[k] = X4B2[k]; });
+
+  /* ======================================================================
+   * Sprint 2C — มุมมองผู้บริหาร
+   * ผู้บริหารถาม "ตอนนี้ทำอะไรถึงไหนแล้ว?" แล้วต้องได้คำตอบโดยไม่ต้องคลิกไล่ทีละโปรเจกต์
+   * ทุกตัวเลขในนี้คิดจากสายตาของคนที่เปิดดู (โปรเจกต์/งานที่เห็นได้เท่านั้น)
+   * ====================================================================== */
+
+  /* ตัวเลข ณ ตอนรายงาน — t งานทั้งหมด d เสร็จแล้ว o เลยกำหนด (เก็บสั้น ๆ เพราะทุกรายงานพกไปด้วย) */
+  function statusSnapOf(hostId) {
+    if (/^pf_/.test(String(hostId || ''))) {
+      var ps = portfolioStats(hostId);
+      return { t: ps.total, d: ps.done, o: ps.overdue };
+    }
+    var st = projectStats(hostId);
+    return { t: st.total, d: st.done, o: st.overdue };
+  }
+  /** ตัวเลขของรายงานเก่าที่ยังไม่มี snap — ไฮไลต์ "ภาพรวมความคืบหน้า" (3b) เก็บตัวเลขชุดเดียวกันไว้ */
+  function snapOfEntry(e) {
+    if (!e) return null;
+    if (e.snap) return e.snap;
+    var c = (e.hl || []).filter(function (x) { return x && x.k === 'chart'; })[0];
+    return c ? { t: c.total, d: c.done, o: c.overdue } : null;
+  }
+  /** ติดตัวเลขและ "อะไรเปลี่ยนจากรอบก่อน" ให้รายงานใหม่ คิดตอนรายงานแล้วเก็บไว้เลย
+   *  เปิดดูย้อนหลังเมื่อไรก็ได้ตัวเลขเดิม ไม่ใช่คิดใหม่จากงานวันนี้ซึ่งเปลี่ยนไปแล้ว */
+  function stampStatus(log, entry, snap) {
+    var prev = log && log.length ? log[log.length - 1] : null;
+    var ps = snapOfEntry(prev);
+    entry.replies = entry.replies || [];
+    entry.snap = snap;
+    entry.chg = prev ? {
+      from: prev.state || null, since: prev.at || null,
+      d: ps && snap ? snap.d - ps.d : null, o: ps && snap ? snap.o - ps.o : null
+    } : null;
+    return entry;
+  }
+  /** ที่เปลี่ยนจากรอบก่อนของรายงานหนึ่ง — รายงานเก่าที่ไม่ได้เก็บไว้ บอกได้แค่สถานะที่เปลี่ยน (ดูจากรายงานก่อนหน้าในประวัติ) */
+  function statusChange(host, e) {
+    if (!host || !e) return null;
+    if (e.chg !== undefined) return e.chg;
+    var log = host.statusLog || [], i = log.indexOf(e);
+    if (i <= 0) return null;
+    return { from: log[i - 1].state || null, since: log[i - 1].at || null, d: null, o: null };
+  }
+
+  /* ---------- คำตอบใต้รายงานสถานะ ---------- */
+  var STATUS_REPLY_MAX = 100;
+  function statusHost(id) { return /^pf_/.test(String(id || '')) ? portfolio(id) : project(id); }
+  function statusEntry(hostId, entryId) {
+    var h = statusHost(hostId);
+    return h ? (h.statusLog || []).filter(function (e) { return e && e.id === entryId; })[0] || null : null;
+  }
+  /** ถาม/ตอบได้ = แสดงความเห็นในโปรเจกต์นั้นได้ (พอร์ตโฟลิโอ = แสดงความเห็นได้ในองค์กร) */
+  function canReplyStatus(hostId) {
+    return isActive() && !!statusHost(hostId) && canInProject(hostId, 'comment');
+  }
+  /** ปลายทางของการแจ้งเตือน — โปรเจกต์ไปหน้าภาพรวม พอร์ตโฟลิโอไปแท็บความคืบหน้า */
+  function statusNotifExtra(hostId) {
+    return /^pf_/.test(hostId) ? { route: 'portfolio:' + hostId + ':progress' } : { projectId: hostId, route: 'p-overview' };
+  }
+  function addStatusReply(hostId, entryId, body) {
+    var h = statusHost(hostId), e = statusEntry(hostId, entryId);
+    var text = String(body || '').replace(/\r\n/g, '\n').trim();
+    if (!h || !e || !text || !canReplyStatus(hostId)) return null;
+    e.replies = Array.isArray(e.replies) ? e.replies : [];
+    if (e.replies.length >= STATUS_REPLY_MAX) return null;
+    snapshot('ตอบรายงานสถานะ');
+    var r = { id: uid('sr'), by: db.currentUserId, at: new Date().toISOString(), body: text.slice(0, 5000) };
+    e.replies.push(r);
+    var isPf = /^pf_/.test(hostId);
+    /* แจ้งเฉพาะคนที่ยังเห็นที่นี่ได้ (โปรเจกต์ปิดที่ถูกถอดออกแล้วไม่ต้องได้) */
+    var sees = function (u) { return isPf || !!projectAccess(hostId, u); };
+    var men = parseMentions(text).filter(sees);
+    /* คนที่ต้องรู้: คนเขียนรายงาน เจ้าของ และคนที่เคยถาม/ตอบในเธรดนี้แล้ว (คนที่ถูก @ ได้ข้อความแบบเจาะจงแยกไป) */
+    var who = [e.by, h.owner].concat(e.replies.map(function (x) { return x.by; }))
+      .filter(function (u, i, a) { return u && a.indexOf(u) === i && men.indexOf(u) < 0 && sees(u); });
+    var extra = statusNotifExtra(hostId);
+    if (men.length) notifyOnly(null, men, 'พูดถึงคุณในรายงานสถานะของ {p}', 'mention', { p: h.name }, false, extra);
+    if (who.length) notifyOnly(null, who, 'ตอบรายงานสถานะของ {p}', 'status', { p: h.name }, false, extra);
+    commit();
+    return r;
+  }
+  function deleteStatusReply(hostId, entryId, replyId) {
+    var e = statusEntry(hostId, entryId);
+    var r = e && (e.replies || []).filter(function (x) { return x.id === replyId; })[0];
+    if (!r || (r.by !== db.currentUserId && !can('manage'))) return false;
+    snapshot('ลบคำตอบ');
+    e.replies = e.replies.filter(function (x) { return x !== r; });
+    commit();
+    return true;
+  }
+
+  /* ---------- การ์ดภาพรวมผู้บริหารบนหน้าแรก ---------- */
+  /* เงื่อนไขค้นหาขั้นสูงที่ตรงกับตัวเลขบนการ์ด — กดตัวเลขแล้วรายการที่เปิดต้องนับได้เท่ากันพอดี
+   * (งานหลักที่อยู่ในโปรเจกต์ ยังไม่เสร็จ ไม่นับงานย่อยและงานส่วนตัว เหมือน projectStats) */
+  function execConds(kind) {
+    return [{ f: 'due', op: kind === 'week' ? 'week' : 'overdue', v: null }, { f: 'completed', op: 'no', v: null },
+            { f: 'project', op: 'notempty', v: null }, { f: 'subtask', op: 'no', v: null }];
+  }
+  function execOverview() {
+    var td = today(), risk = [], silent = [];
+    visibleProjects().forEach(function (p) {
+      var st = projectStats(p.id);
+      var s = p.status ? p.status.state : null;
+      var at = statusAt(p);
+      var age = at ? daysBetween(String(at).slice(0, 10), td) : null;
+      var row = { p: p, state: s, overdue: st.overdue, percent: st.percent, total: st.total, at: at, age: age };
+      if (s === 'off_track' || s === 'at_risk') risk.push(row);
+      /* "เงียบ" = ไม่ได้รายงานเกิน 7 วัน (หรือไม่เคย) แต่มีงานเลยกำหนด — โปรเจกต์ที่ปิดไปแล้วไม่นับ */
+      else if (st.overdue > 0 && (age === null || age >= 7) && !(s && projectStateDone(s))) silent.push(row);
+    });
+    risk.sort(function (a, b) {
+      if (a.state !== b.state) return a.state === 'off_track' ? -1 : 1;
+      return b.overdue - a.overdue;
+    });
+    silent.sort(function (a, b) { return b.overdue - a.overdue; });
+    /* คนที่งานล้นหรือค้างเยอะ — ใช้ตัวคำนวณเดียวกับหน้าภาระงาน (นับงานค้างไว้ที่วันนี้ ตาม Sprint 1C) */
+    var people = [];
+    try {
+      workload({ kind: 'all' }, wlDefaultCfg()).rows.forEach(function (r) {
+        var now = r.cells[0] || {}, next = r.cells[1] || {};
+        var score = r.late * 10 + (now.over ? 5 : 0) + (next.over ? 2 : 0);
+        if (!score) return;
+        people.push({ uid: r.uid, late: r.late, over: !!now.over, overNext: !!next.over,
+          v: now.v || 0, cap: now.cap || 0, score: score });
+      });
+    } catch (err) { people = []; }
+    people.sort(function (a, b) { return b.score - a.score; });
+    return {
+      risk: risk, silent: silent, people: people,
+      offTrack: risk.filter(function (x) { return x.state === 'off_track'; }).length,
+      atRisk: risk.filter(function (x) { return x.state === 'at_risk'; }).length,
+      overdue: searchAdv({ conds: execConds('overdue'), limit: 1e6 }).length,
+      dueWeek: searchAdv({ conds: execConds('week'), limit: 1e6 }).length,
+      projects: visibleProjects().length
+    };
+  }
+
+  /* ---------- กิจกรรมล่าสุดบนหน้าแรก ----------
+   * เดิมหนึ่งบรรทัดต่อหนึ่งความเคลื่อนไหว คนเดียวแก้งานเดียวห้าครั้งก็กินห้าบรรทัด เรื่องสำคัญหลุดจากการ์ดไปหมด
+   * ตอนนี้รวมเป็นบรรทัดเดียวต่อ "คน + งาน + วัน" และรายงานสถานะขึ้นในฟีดเดียวกัน
+   * mode 'decisions' = เฉพาะรายงานสถานะ การอนุมัติ และหมุดหมายที่เสร็จ (เรื่องที่ผู้บริหารต้องรู้) */
+  var DECISION_KEYS = ['เปลี่ยนสถานะอนุมัติเป็น “{s}”', 'ส่งงานนี้ขออนุมัติอีกครั้ง'];
+  function isDecisionStory(s, t) {
+    if (s.type !== 'log') return false;
+    if (DECISION_KEYS.indexOf(s.text) >= 0) return true;
+    return s.text === 'ทำงานนี้เสร็จแล้ว' && !!t && t.type === 'milestone';
+  }
+  function activityFeed(limit, mode) {
+    var n = limit || 6, decisions = mode === 'decisions';
+    var out = [];
+    visibleProjects().forEach(function (p) {
+      (p.statusLog || []).forEach(function (e) {
+        if (e && e.at) out.push({ kind: 'status', at: String(e.at), actorId: e.by, host: p, entry: e });
+      });
+    });
+    if (role() !== 'guest') {
+      (db.portfolios || []).forEach(function (f) {
+        (f.statusLog || []).forEach(function (e) {
+          if (e && e.at) out.push({ kind: 'pfstatus', at: String(e.at), actorId: e.by, host: f, entry: e });
+        });
+      });
+    }
+    var list = db.stories.slice().sort(function (a, b) { return a.createdAt < b.createdAt ? 1 : -1; });
+    var seeCache = {}, groups = {}, gl = [];
+    for (var i = 0; i < list.length && i < 4000 && gl.length < n * 3; i++) {
+      var s = list[i];
+      if (!(s.taskId in seeCache)) seeCache[s.taskId] = canSeeTask(s.taskId);
+      if (!seeCache[s.taskId]) continue;
+      var t = task(s.taskId);
+      if (decisions && !isDecisionStory(s, t)) continue;
+      var key = (s.actorId || '') + '|' + s.taskId + '|' + String(s.createdAt).slice(0, 10);
+      var g = groups[key];
+      if (!g) {
+        g = groups[key] = { kind: 'task', at: String(s.createdAt), actorId: s.actorId, taskId: s.taskId,
+          taskName: t ? t.name : null, milestone: !!t && t.type === 'milestone', stories: [] };
+        gl.push(g);
+      }
+      g.stories.push(s);
+    }
+    out = out.concat(gl);
+    out.sort(function (a, b) { return a.at < b.at ? 1 : a.at > b.at ? -1 : 0; });
+    return out.slice(0, n).map(function (x) { x.actor = user(x.actorId); return x; });
+  }
+
+  var X2C = {
+    statusChange: statusChange, statusEntry: statusEntry, canReplyStatus: canReplyStatus,
+    addStatusReply: addStatusReply, deleteStatusReply: deleteStatusReply, STATUS_REPLY_MAX: STATUS_REPLY_MAX,
+    execOverview: execOverview, execConds: execConds, activityFeed: activityFeed, isDecisionStory: isDecisionStory
+  };
+  Object.keys(X2C).forEach(function (k) { global.Store[k] = X2C[k]; });
 
   /* ======================================================================
    * 4b ส่วนที่ 2 — ไฟล์แนบบน SharePoint/OneDrive และสื่อฝัง

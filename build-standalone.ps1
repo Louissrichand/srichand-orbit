@@ -13,7 +13,7 @@ function ReadUtf8($p) { [System.IO.File]::ReadAllText($p, [System.Text.Encoding]
 
 # ลำดับต้องตรงกับ index.html — ตัวหลังเรียกใช้ตัวหน้า
 $files = @('config.js', 'i18n.js', 'icons.js', 'auth.js', 'msphotos.js', 'store.js', 'files.js',
-           'cloud.js', 'sync.js', 'richtext.js', 'charts.js', 'render.js', 'render4b.js', 'gantt.js', 'touch.js', 'pwa.js', 'ui4b.js', 'ui4b2.js', 'mobile.js', 'main.js')
+           'cloud.js', 'sync.js', 'richtext.js', 'charts.js', 'render.js', 'render4b.js', 'gantt.js', 'touch.js', 'pwa.js', 'ui4b.js', 'ui4b2.js', 'mobile.js', 'exec2c.js', 'main.js')
 
 # ฝังไฟล์ฟอนต์ลงใน CSS เลย เพราะไฟล์เดียวจบต้องใช้ได้โดยไม่ต้องแนบโฟลเดอร์ fonts ไปด้วย
 function InlineFonts($css, $base) {

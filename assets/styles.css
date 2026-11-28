@@ -5280,3 +5280,193 @@ body.m2a-bnav-on .m2a-wide-note, body.m2a-bnav-on .m2a-ios { bottom: calc(var(--
   /* กดค้างที่แถวงาน = เลือก/ลาก ไม่ใช่เมนูคัดลอกข้อความของระบบ */
   .row, .tr, .card { -webkit-touch-callout: none; }
 }
+
+/* ---------- Sprint 2C ---------- */
+/* มุมมองผู้บริหาร: การ์ดภาพรวมผู้บริหาร ถาม/ตอบใต้รายงานสถานะ หน้ากระดาษสำหรับพิมพ์ พอร์ตโฟลิโอแบบการ์ดบนจอแคบ */
+
+/* ปุ่มบนการ์ดตอนปรับแต่งหน้าแรกเพิ่ม "ย้ายไปบนสุด" อีกหนึ่งปุ่ม หัวการ์ดเว้นที่ให้ */
+@media (min-width: 1101px) { .hcard.hw-edit .hcard-head { padding-right: 190px; } }
+@media (max-width: 1100px) { .hcard.hw-edit .hcard-head { padding-right: 14px; padding-top: 34px; } }
+.hcard.hw-edit .hcard-head > .btn { display: none; }      /* ตอนจัดการ์ด ปุ่ม "ดูทั้งหมด" ไม่จำเป็นและเบียดชื่อการ์ดจนขึ้นสองบรรทัด */
+
+/* --- การ์ดภาพรวมผู้บริหาร --- */
+.xo { padding: 4px 6px 2px; display: flex; flex-direction: column; gap: 12px; }
+.xo-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.xo-kpi { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-raise); color: var(--fg); min-width: 0; }
+.xo-kpi b { font-size: 24px; line-height: 1.1; font-weight: 700; letter-spacing: -.02em; }
+.xo-kpi span { font-size: 12.5px; color: var(--fg-soft); }
+.xo-kpi em { position: absolute; top: 9px; right: 9px; color: var(--fg-faint); }
+button.xo-kpi { cursor: pointer; }
+button.xo-kpi:hover { border-color: var(--line-strong); background: var(--bg-sunk); }
+.xo-kpi.bad { border-color: var(--danger); background: var(--danger-bg); }
+.xo-kpi.bad b, .xo-kpi.bad span, .xo-kpi.bad em { color: var(--danger); }
+.xo-kpi.warn { border-color: var(--warn); background: var(--warn-bg); }
+.xo-kpi.warn b, .xo-kpi.warn span { color: var(--warn-fg); }
+.xo-kpi.ok b { color: var(--ok); }
+.xo-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px 14px; }
+.xo-sec { min-width: 0; }
+.xo-sec h4 { display: flex; align-items: center; gap: 6px; margin: 0 0 4px; padding: 0 4px; font-size: 12.5px; font-weight: 700;
+  color: var(--fg-soft); }
+.xo-sec h4 span { margin-left: auto; font-weight: 600; color: var(--fg-faint); }
+.xo-row { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; padding: 7px 6px; border-radius: var(--radius);
+  border-bottom: 1px solid var(--line-soft); color: var(--fg); min-width: 0; }
+.xo-row:hover { background: var(--bg-sunk); }
+.xo-row .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.xo-row b { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xo-row em { font-style: normal; font-size: 12px; color: var(--fg-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xo-row em.stale, .xo-row em .stale { color: var(--warn-fg); }
+.xo-row .chip { flex: none; }
+.xo-bad { color: var(--danger); font-weight: 600; }
+.chip.xo-over { background: var(--warn-bg); color: var(--warn-fg); font-weight: 600; }
+.xo-none { display: flex; align-items: center; gap: 6px; padding: 8px 6px; font-size: 12.5px; color: var(--fg-faint); }
+.xo-none svg { color: var(--ok); flex: none; }
+.xo-more { display: inline-flex; align-items: center; gap: 4px; margin: 4px 6px 0; font-size: 12.5px; color: var(--accent); }
+.xo-more:hover { text-decoration: underline; }
+.xo-foot { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--fg-faint); padding: 0 4px; }
+@media (max-width: 620px) {
+  .xo-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .xo-kpi b { font-size: 21px; }
+  .xo-row .status-pill { max-width: 96px; overflow: hidden; }
+}
+
+/* --- กิจกรรมล่าสุด (รวมบรรทัด + เฉพาะสถานะและการตัดสินใจ) --- */
+.status-pill.sm { height: 20px; padding: 0 7px; font-size: 11.5px; gap: 5px; vertical-align: middle; }
+.status-pill.sm i { width: 6px; height: 6px; }
+.hact-dec { display: inline-flex; vertical-align: -2px; margin-right: 4px; color: var(--ok); }
+.hact-more { font-size: 12px; color: var(--fg-faint); white-space: nowrap; }
+
+/* --- อะไรเปลี่ยนจากรอบก่อน --- */
+.stc { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin-top: 8px; font-size: 12.5px; color: var(--fg-soft); }
+.stc-k { font-size: 11.5px; font-weight: 600; color: var(--fg-faint); }
+.stc-tr { display: inline-flex; align-items: center; gap: 5px; }
+.stc-arrow { color: var(--fg-faint); }
+.stc-same { color: var(--fg-soft); }
+.stc-n { font-weight: 600; color: var(--fg-soft); }
+.stc-n.good { color: var(--ok); }
+.stc-n.bad { color: var(--danger); }
+.ovw-logrow .stc { margin-top: 4px; }
+
+/* --- ถาม/ตอบใต้รายงานสถานะ --- */
+.sthr { margin-top: 10px; border-top: 1px solid var(--line-soft); padding-top: 6px; }
+.sthr-tog { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px; margin-left: -6px; border-radius: 6px;
+  font-size: 12.5px; color: var(--fg-soft); }
+.sthr-tog:hover { background: var(--bg-sunk); color: var(--fg); }
+.sthr-tog em { font-style: normal; color: var(--fg-faint); }
+.sthr-ppl { display: inline-flex; }
+.sthr-ppl .avatar { width: 20px; height: 20px; font-size: 9px; margin-left: -4px; box-shadow: 0 0 0 2px var(--bg-raise); }
+.sthr-list .msg-reply .grow { min-width: 0; font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
+.sthr-box { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.sthr-box .rte-msg { min-height: 38px; }
+.sthr-hint { font-size: 11.5px; color: var(--fg-faint); }
+
+/* --- ภาพรวมโปรเจกต์: โหมดอ่านก่อน --- */
+.ovw-card h3 .ovw-edit-btn, .ovw-card h3 .x2c-print-link { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; flex: none; }
+.ovw-acts .ovw-edit-btn { margin-left: 4px; }
+.check.ro { cursor: default; }
+.check.ro:hover { border-color: var(--line-strong); color: transparent; }
+.check.ro.on:hover { border-color: var(--ok); color: #fff; }
+
+/* --- พอร์ตโฟลิโอ: ต้องจับตาก่อนกราฟ + การ์ดบนจอแคบ --- */
+.pf-watch { margin-top: 16px; }
+.pf-watch h3 { display: flex; align-items: center; gap: 6px; color: var(--warn-fg); }
+.pfx-cards { display: none; }
+@media (max-width: 900px) {
+  .pfx-scroll { display: none; }
+  .pfx-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+}
+.pfx-card { display: flex; flex-direction: column; gap: 8px; width: 100%; text-align: left; padding: 12px 14px;
+  border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--bg-raise); color: var(--fg); min-width: 0; }
+.pfx-card:hover { border-color: var(--line-strong); box-shadow: var(--shadow); }
+.pfx-card-top { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.pfx-card-top b { font-size: 14.5px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pfx-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 12.5px; color: var(--fg-soft); }
+.pfx-card-ok { display: inline-flex; align-items: center; gap: 4px; color: var(--ok); }
+.pfx-card-prog { display: flex; align-items: center; gap: 10px; }
+.pfx-card-prog .pf-bar { flex: 1; height: 8px; }
+.pfx-card-pct { font-size: 12.5px; font-weight: 600; color: var(--fg); white-space: nowrap; }
+
+/* --- รายงาน: เจาะดูวิดเจ็ต --- */
+.rp-click-row b.done { text-decoration: line-through; color: var(--fg-faint); }
+.rp-click-row .chip { flex: none; }
+
+/* --- ตั้งค่า: หน้าที่เปิดเมื่อเข้าแอป --- */
+.x2c-land { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.x2c-land label { font-size: 12.5px; color: var(--fg-soft); }
+.x2c-land .opt-select { max-width: 360px; }
+.x2c-land .opt-note { margin: 0; }
+
+/* --- หน้ากระดาษสำหรับพิมพ์ / บันทึก PDF ---
+ * บนจอซ่อนไว้ ตอนพิมพ์ (body.printing) ซ่อนทุกอย่างที่เหลือ
+ * body.print-preview แสดงหน้ากระดาษบนจอแบบเดียวกับที่จะพิมพ์ ไว้ตรวจหน้าตาโดยไม่ต้องเปิดกล่องพิมพ์
+ * สีเป็นชุดสว่างเสมอแม้ผู้ใช้ใช้ธีมมืด (ประกาศ token ทับที่ตัวหน้ากระดาษ) */
+.print-sheet {
+  display: none;
+  --bg: #ffffff; --bg-sunk: #f6f7f8; --bg-raise: #ffffff; --bg-inset: #eef0f2;
+  --fg: #1e1f21; --fg-soft: #55575a; --fg-faint: #85888e;
+  --line: #dcdcde; --line-soft: #ececed; --line-strong: #c8c8cb;
+  --accent: #B32240; --accent-dk: #8F1A33; --accent-bg: #FBEDF0;
+  --danger: #C2361F; --danger-bg: #FDECE8; --warn: #f5a623; --warn-bg: #fff4e0; --warn-fg: #a0620a;
+  --ok: #1f9e87; --ok-bg: #e4f7f3;
+  --chart-1: #796eff; --chart-2: #14aaf5; --chart-3: #37c5ab; --chart-4: #f5a623;
+  --chart-5: #fd612c; --chart-6: #aa62e3; --chart-7: #e362e3; --chart-8: #6d6e6f;
+  color-scheme: light; background: #fff; color: var(--fg); font-size: 10.5pt; line-height: 1.5;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.ps-doc { max-width: 186mm; margin: 0 auto; }
+.ps-head { border-bottom: 2px solid var(--accent); padding-bottom: 8px; margin-bottom: 12px; }
+.ps-brand { font-size: 9pt; font-weight: 700; color: var(--accent); letter-spacing: .08em; text-transform: uppercase; }
+.ps-head h1 { margin: 2px 0 2px; font-size: 18pt; line-height: 1.25; }
+.ps-sub { font-size: 10pt; color: var(--fg-soft); }
+.ps-meta { font-size: 8.5pt; color: var(--fg-faint); margin-top: 2px; }
+.print-sheet section { margin: 0 0 14px; }
+.print-sheet h2 { font-size: 12pt; margin: 0 0 6px; padding-bottom: 3px; border-bottom: 1px solid var(--line); break-after: avoid; page-break-after: avoid; }
+.ps-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.ps-kpi { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+.ps-kpi b { display: block; font-size: 15pt; line-height: 1.2; }
+.ps-kpi span { font-size: 8.5pt; color: var(--fg-soft); }
+.ps-kpi.bad b { color: var(--danger); }
+.ps-kpi.warn b { color: var(--warn-fg); }
+.ps-status { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+.ps-status-h { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.ps-status-h em { font-style: normal; font-size: 9pt; color: var(--fg-faint); margin-left: auto; }
+.ps-blk { margin-top: 6px; }
+.ps-blk h4 { margin: 0 0 2px; font-size: 9pt; text-transform: uppercase; letter-spacing: .04em; color: var(--fg-soft); }
+.ps-blk p, .ps-blk ul, .ps-blk ol { margin: 0 0 4px; }
+.ps-reply { font-size: 9.5pt; padding: 2px 0; }
+.ps-none { color: var(--fg-faint); font-size: 9.5pt; margin: 2px 0; }
+.ps-tbl { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+.ps-tbl th { text-align: left; font-size: 8.5pt; font-weight: 700; color: var(--fg-soft); border-bottom: 1.5px solid var(--line-strong); padding: 4px 6px; }
+.ps-tbl td { border-bottom: 1px solid var(--line-soft); padding: 4px 6px; vertical-align: top; }
+.ps-tbl thead { display: table-header-group; }
+.ps-tbl tr { break-inside: avoid; page-break-inside: avoid; }
+.ps-tbl .r { text-align: right; white-space: nowrap; }
+.print-sheet .bad { color: var(--danger); font-weight: 600; }
+.ps-barcell { white-space: nowrap; }
+.ps-bar { display: inline-block; width: 90px; height: 7px; border-radius: 4px; background: var(--line); overflow: hidden; vertical-align: middle; }
+.ps-bar i { display: block; height: 100%; background: var(--ok); }
+.ps-watch { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 5px 0; border-bottom: 1px solid var(--line-soft); break-inside: avoid; }
+.ps-watch-t { flex-basis: 100%; font-size: 9.5pt; color: var(--fg-soft); }
+.print-sheet .status-pill { height: 20px; font-size: 9pt; padding: 0 7px; }
+.ps-charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+.ps-chart { break-inside: avoid; page-break-inside: avoid; min-width: 0; margin: 0; }
+.ps-chart.full { grid-column: 1 / -1; }
+.ps-chart svg { width: 100%; height: auto; display: block; }
+@media print {
+  @page { size: A4; margin: 12mm; }
+  body.printing > *:not(.print-sheet) { display: none !important; }
+  body.printing .print-sheet { display: block !important; }
+  body.printing .ps-doc { max-width: none; }
+}
+body.print-preview { background: #d9dadd !important; overflow: auto !important; height: auto !important; }
+body.print-preview > *:not(.print-sheet) { display: none !important; }
+body.print-preview .print-sheet { display: block; width: 210mm; min-height: 297mm; margin: 16px auto; padding: 12mm; box-sizing: border-box;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, .18); }
+@media (max-width: 620px) {
+  /* แถบบนของมือถือแน่นอยู่แล้ว การพิมพ์ทำจากคอมพิวเตอร์ ซ่อนปุ่มพิมพ์บนจอเล็ก */
+  .x2c-print-btn { display: none; }
+  /* ต้องจับตา: ชื่อโปรเจกต์เต็มบรรทัด สถานะและงานเลยกำหนดลงบรรทัดถัดไป */
+  .pf-watch .pf-risk { flex-wrap: wrap; row-gap: 4px; }
+  .pf-watch .pf-risk .grow { flex-basis: calc(100% - 40px); }
+  .pf-watch .pf-risk .grow + * { margin-left: 30px; }
+}

@@ -204,6 +204,8 @@
 | POST | `/api/project-templates/{id}/use` | ST + use | `{ name, start, roles: { r0: userId }, skipWeekends }` → โปรเจกต์ใหม่ (รหัสคอลัมน์ ฟิลด์ ชนิด สถานะ ฟอร์ม เทมเพลตงาน ในอัตโนมัติชี้ของใหม่) |
 | GET · POST · PUT · DELETE | `/api/task-templates` · `/api/projects/{id}/task-templates` | ST (ใช้: E) | เทมเพลตงานทั้งองค์กร / รายโปรเจกต์ · `POST …/{tid}/apply { sectionId }` |
 | POST | `/api/projects/{id}/status-updates` | E + ST | `{ state, title, blocks[], highlights[], period }` ไฮไลต์คำนวณที่เซิร์ฟเวอร์ตอนโพสต์ (ภาพนิ่ง) · ปิดงานเตือนของสัปดาห์ · `GET/POST/DELETE /api/status-templates` |
+| POST · DELETE | `/api/status-updates/{id}/replies[/{rid}]` | C ในโปรเจกต์ (พอร์ตโฟลิโอ: C) | ถาม/ตอบใต้รายงานสถานะ `{ body }` (@ชื่อ ได้) · แจ้งคนเขียนรายงาน เจ้าของ คนที่เคยตอบ (kind `status`) และคนที่ถูก @ (kind `mention`) · ลบได้เฉพาะของตัวเองหรือผู้ดูแล · รายงานใหม่เก็บ `snap` (งานทั้งหมด/เสร็จ/เลยกำหนด) และ `chg` (สถานะก่อนหน้า ส่วนต่าง) ตอนโพสต์ (Sprint 2C) |
+| GET | `/api/exec-overview` | R | การ์ดภาพรวมผู้บริหาร — โปรเจกต์หลุดแผน/เสี่ยง ไม่ได้รายงาน ≥ 7 วันแต่มีงานเลยกำหนด จำนวนงานเลยกำหนด/ครบใน 7 วัน (เงื่อนไขเดียวกับค้นหาขั้นสูง) คนที่งานล้นหรือค้าง — นับเฉพาะที่ผู้เรียกเห็นได้ (Sprint 2C) |
 | — | (งานเบื้องหลัง) | ระบบ | เตือนรายงานสถานะวันศุกร์ (`projects.status_remind`) ตอนนี้สร้างตอนมีคนเปิดแอปวันศุกร์ กันซ้ำด้วย `remind_key` · ตอนมีเซิร์ฟเวอร์ให้ย้ายไปตัวตั้งเวลา |
 | GET | `/api/tags/{name}/tasks` | ทุกคน | งานที่มีแท็กนี้และผู้เรียกมองเห็น |
 | PUT · DELETE | `/api/tags/{name}` | ST | เปลี่ยนชื่อ (ชื่อซ้ำ = รวมแท็ก) / เอาออกจากทุกงาน · ลง audit `tag.rename` `tag.delete` |
