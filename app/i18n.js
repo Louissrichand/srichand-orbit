@@ -36,6 +36,11 @@
     'ยังบันทึกงานไม่สำเร็จ ลองใหม่อีกครั้ง': 'Your changes aren’t saved yet. Try again.',
     /* หน้าโปรเจกต์ทั้งหมด — สลับการ์ด/รายการ */
     'การ์ด': 'Cards', 'แสดงเป็นการ์ด': 'Show as cards', 'แสดงเป็นรายการ': 'Show as list',
+    /* เข้าสู่ระบบหมดอายุ */
+    'การเข้าสู่ระบบหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง': 'Your sign-in has expired. Please sign in again.',
+    'เข้าสู่ระบบใหม่': 'Sign in again', 'เข้าสู่ระบบอีกครั้ง': 'Sign in again',
+    'งานที่แก้ล่าสุดเก็บไว้ในเครื่องนี้แล้ว จะส่งขึ้นส่วนกลางให้ทันทีหลังเข้าสู่ระบบ': 'Your latest changes are saved on this device and will be uploaded as soon as you sign in.',
+    'ระหว่างนี้จะไม่เห็นงานใหม่ของเพื่อนร่วมทีม': 'Until then you won’t see your teammates’ latest updates.',
     /* Sprint 1C */
     'แปลงปี พ.ศ. {b} เป็น ค.ศ. {g} ให้แล้ว': 'Converted Buddhist year {b} to {g}',
     'ปี {y} ไม่ถูกต้อง ใช้ปี ค.ศ. {a}–{z} (หรือ พ.ศ.) — ยังไม่ได้บันทึกวันที่นี้':

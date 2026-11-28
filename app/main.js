@@ -11932,7 +11932,19 @@
         break;
       case 'sync-now':
         closePops();
-        global.OrbitSync.pullNow().then(function () { renderAll(); });
+        /* มีงานค้างส่ง ต้องส่งก่อน ไม่งั้นดึงของกลางมาทับแล้วงานที่เพิ่งแก้หาย */
+        (global.OrbitSync.state.dirty ? global.OrbitSync.flush() : Promise.resolve(true)).then(function (ok) {
+          if (ok === false) { renderTopbar(); return; }
+          return global.OrbitSync.pullNow().then(function () { renderAll(); });
+        });
+        break;
+      /* การเข้าสู่ระบบหมดอายุ — พาไปหน้า Microsoft ด้วยบัญชีเดิม
+       * งานในเครื่องบันทึกไว้แล้วและจดว่าค้างส่ง กลับมาแล้วตัวซิงก์ส่งต่อให้เอง */
+      case 'reauth':
+        closePops();
+        try {
+          global.OrbitAuth.reauth().catch(function (err) { toast((err && err.message) || L('เข้าสู่ระบบไม่สำเร็จ')); });
+        } catch (e4) { toast((e4 && e4.message) || L('เข้าสู่ระบบไม่สำเร็จ')); }
         break;
       case 'sync-export-mine':
         doExport();
