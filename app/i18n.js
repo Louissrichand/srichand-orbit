@@ -2755,6 +2755,15 @@
     'อีเมลไม่ถูกต้อง {n} รายการ': 'Invalid emails: {n}',
     // Pre-pilot B
     'สร้างทีมใหม่ {n} ทีม': 'Created [n|{n} new team|{n} new teams]',
+    'มุมมองผู้บริหาร': 'Executive view',
+    'แสดงภาพรวมผู้บริหารไว้บนสุด ซ่อนงานส่วนตัวชั่วคราว (กดอีกครั้งเพื่อกลับ)': 'Show the executive overview first and hide personal work for now (click again to go back)',
+    '{n} พอร์ตโฟลิโอ': '{n} [n|portfolio|portfolios]',
+    'รวมหลายโปรเจกต์ไว้ดูภาพรวมและสถานะเดียวกัน เหมาะกับผู้บริหารที่ต้องติดตามหลายงานพร้อมกัน': 'Group several projects into one overview and status, ideal for leaders following many efforts at once',
+    'ยังไม่มีพอร์ตโฟลิโอ': 'No portfolios yet',
+    'ยังไม่มีพอร์ตโฟลิโอ รวมหลายโปรเจกต์ไว้ดูภาพรวมเดียวได้': 'No portfolios yet. Group several projects into one overview.',
+    'เพิ่มที่เลือก': 'Add selected',
+    'เลือกโปรเจกต์อย่างน้อยหนึ่งโปรเจกต์': 'Select at least one project',
+    'เพิ่มแล้ว {n} โปรเจกต์': 'Added [n|{n} project|{n} projects]',
     //@@B
   };
 

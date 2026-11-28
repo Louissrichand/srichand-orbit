@@ -422,6 +422,7 @@
   function renderViewBody() {
     var r = state.route;
     var body = '';
+    if (r.type !== 'home') state.home.edit = false;   /* Pre-pilot B — ออกจากหน้าแรกแล้วปิดโหมดปรับแต่ง */
 
     /* สมุดโน้ตบนหน้าแรกบันทึกระหว่างพิมพ์ การบันทึกทำให้หน้าวาดใหม่
      * จึงเก็บข้อความกับเคอร์เซอร์ไว้ แล้วคืนให้ช่องใหม่ ไม่ให้โฟกัสหลุดกลางประโยค */
@@ -467,6 +468,8 @@
         calMode: tcx.mode, anchor: tcx.anchor });
     } else if (r.type === 'teams') {
       body = R.teamsView();
+    } else if (r.type === 'portfolios') {
+      body = R.portfoliosView();
     } else if (r.type === 'goals' || r.type === 'goal') {
       /* เป้าหมายส่วนตัวที่ไม่ได้เป็นสมาชิก — ถอยไปหน้ารวมเงียบ ๆ เหมือนไม่มีอยู่ */
       if (r.type === 'goal' && (!S.goal(r.id) || !S.canSeeGoal(r.id))) { state.route = { type: 'goals', view: 'company' }; return renderAll(); }
@@ -2449,14 +2452,14 @@
       h += '<div class="pf-pick">';
       free.forEach(function (p) {
         var s = S.projectStats(p.id);
-        h += '<button class="pf-pick-row" data-act="pf-pick" data-pf="' + R.esc(pfId) +
-          '" data-id="' + R.esc(p.id) + '">' +
+        h += '<label class="pf-pick-row">' +
+          '<input type="checkbox" class="pf-cb" value="' + R.esc(p.id) + '">' +
           '<span class="hproj-ic" style="background:' + R.esc(p.color) + '22">' + R.esc(p.icon) + '</span>' +
           '<span class="grow"><b>' + R.esc(p.name) + '</b><em>' +
-          L('{n} งาน · เสร็จ {p}%', { n: s.total, p: s.percent }) + '</em></span>' +
-          I('plus', 15) + '</button>';
+          L('{n} งาน · เสร็จ {p}%', { n: s.total, p: s.percent }) + '</em></span></label>';
       });
-      h += '</div>';
+      h += '</div><div class="pf-multi-bar"><button class="btn btn-primary btn-sm" data-act="pf-pick-multi" data-pf="' + R.esc(pfId) + '">' +
+        L('เพิ่มที่เลือก') + '</button></div>';
     }
     var inside = S.portfolioProjects(pfId);
     if (inside.length) {
@@ -8429,7 +8432,7 @@
       'auto-new', 'auto-edit', 'auto-toggle', 'auto-dup', 'auto-del', 'ae-save',
       'pick-status', 'clear-status', 'toggle-view',
       'new-portfolio', 'pf-rename', 'pf-desc', 'pf-look', 'save-pf-look', 'pf-delete',
-      'pf-add', 'pf-pick', 'pf-remove', 'pf-pick-status', 'pf-clear-status',
+      'pf-add', 'pf-pick', 'pf-pick-multi', 'pf-remove', 'pf-pick-status', 'pf-clear-status',
       'pf-toggle-project', 'add-to-portfolio',
       'manage-templates', 'delete-template', 'save-template', 'use-template',
       'save-view', 'delete-view', 'reset-cols',
@@ -8483,7 +8486,7 @@
     put('self', [
       'mt-sec-add', 'mt-sec-rename', 'mt-sec-move', 'mt-sec-delete', 'mt-mode', 'mt-set',
       'mt-filter-clear', 'mt-sort-clear', 'calx-mode',
-      'home-edit', 'home-w-add', 'home-w-remove', 'home-w-move', 'home-w-size', 'home-w-reset', 'notepad',
+      'home-edit', 'home-exec', 'home-w-add', 'home-w-remove', 'home-w-move', 'home-w-size', 'home-w-reset', 'notepad',
       'open-notif', 'notif-bookmark', 'notif-read', 'archive-notif', 'unarchive-notif',
       'inbox-read-all', 'inbox-archive-all', 'inbox-sort-set', 'inbox-dense',
       'dnd-set', 'dnd-off', 'dnd-sched', 'dnd-from', 'dnd-to', 'proj-notify'
@@ -10918,6 +10921,11 @@
         state.home.edit = !state.home.edit;
         renderViewBody();
         break;
+      case 'home-exec':
+        state.home.edit = false;
+        S.setPref('homeExec', !S.pref('homeExec'));
+        renderViewBody();
+        break;
       case 'home-w-add': {
         var hla = S.homeLayout();
         hla.push({ w: el.dataset.w, full: false });
@@ -11073,6 +11081,19 @@
         break;
       }
       case 'pf-add': closePops(); openModal(portfolioAddModal(el.dataset.pf || state.route.id)); break;
+      case 'pf-pick-multi': {
+        var pmIds = [].slice.call($modal.querySelectorAll('.pf-cb:checked')).map(function (x) { return x.value; });
+        if (!pmIds.length) { toast(L('เลือกโปรเจกต์อย่างน้อยหนึ่งโปรเจกต์')); break; }
+        var pmN = S.batch('เพิ่มโปรเจกต์เข้าพอร์ตโฟลิโอ', null, function () {
+          var c = 0;
+          pmIds.forEach(function (pid) { if (S.addToPortfolio(el.dataset.pf, pid)) c++; });
+          return c;
+        });
+        openModal(portfolioAddModal(el.dataset.pf));
+        renderAll();
+        toast(L('เพิ่มแล้ว {n} โปรเจกต์', { n: pmN }), L('ย้อนกลับ'), 'undo');
+        break;
+      }
       case 'pf-pick': {
         S.addToPortfolio(el.dataset.pf, el.dataset.id);
         openModal(portfolioAddModal(el.dataset.pf));
