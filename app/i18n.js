@@ -2870,6 +2870,9 @@
     'บันทึกเป็นแท็บใหม่…': 'Save as new tab…',
     'บันทึกการตั้งค่าของ {v} แล้ว': 'Saved {v} settings',
     'เป็นค่าเริ่มต้นของโปรเจกต์': 'set as project default',
+    // Date+Grid
+    'เพิ่มวันที่': 'Add date', 'ล้าง': 'Clear', 'เดือนก่อน': 'Previous month', 'เดือนถัดไป': 'Next month',
+    'พิมพ์วันที่เป็น วัน/เดือน/ปี เช่น 4/12/2569': 'Type the date as day/month/year, e.g. 4/12/2026',
     // Auto QA
     'ทำงานครั้งแรกที่มีคนเปิด Orbit ในวันนั้น (ยังตั้งเวลาเป็นชั่วโมงไม่ได้)': 'Runs the first time anyone opens Orbit that day (time of day cannot be set yet)',
     'ต้องแก้: {m}': 'Needs fixing: {m}', 'เซกชันถูกลบ': 'section was deleted', 'ฟิลด์ถูกลบ': 'field was deleted', 'คนที่เลือกไม่อยู่แล้ว': 'the chosen person is no longer available',

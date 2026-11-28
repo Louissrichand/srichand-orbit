@@ -1468,12 +1468,7 @@
       return;
     }
 
-    if (kind === 'due') { inlineInput(cell, 'date', t.dueOn || '', function (v) {
-      setDates(tid, { dueOn: v || null });       // 3c — ดูงานที่ขยับตามก่อน
-    }); return; }
-    if (kind === 'start') { inlineInput(cell, 'date', t.startOn || '', function (v) {
-      setDates(tid, { startOn: v || null });
-    }); return; }
+    if (kind === 'due' || kind === 'start') { openTaskDatePicker(cell, tid, kind); return; }      // Date+Grid — ปฏิทินเลือกช่วงวันทันที (3c ดูงานที่ขยับตามก่อนอยู่ใน setDates)
     if (kind === 'priority') {
       if (popIsOpenFor(cell)) { closePops(); return; }
       var prh = '';
@@ -1521,7 +1516,15 @@
       return;
     }
 
-    var itype = f.type === 'number' ? 'number' : (f.type === 'date' ? 'date' : 'text');
+    if (f.type === 'date') {      // Date+Grid — ฟิลด์วันที่ใช้ปฏิทินตัวเดียวกัน (วันเดียว)
+      openDatePicker(cell, {
+        range: false,
+        read: function () { var cv = S.fieldValue(tid, fid); return { start: '', due: cv ? String(cv).slice(0, 10) : '' }; },
+        apply: function (p) { S.setFieldValue(tid, fid, p.due || null); }
+      });
+      return;
+    }
+    var itype = f.type === 'number' ? 'number' : 'text';
     inlineInput(cell, itype, cur == null ? '' : cur, function (v) {
       if (f.type === 'number') S.setFieldValue(tid, fid, v === '' ? null : Number(v));
       else S.setFieldValue(tid, fid, v || null);
@@ -1884,6 +1887,7 @@
   function closePops() {
     Array.prototype.forEach.call(document.querySelectorAll('.pop'), function (p) { p.remove(); });
     popAnchor = null;
+    dp = null;
   }
   /* เมนูลอยผูกไว้กับ body และวางด้วยพิกัดจริง
    * ถ้าแปะไว้ในตารางจะโดน overflow:hidden ของหัวคอลัมน์และกรอบเลื่อนตัดหายไป */
@@ -6641,6 +6645,196 @@
     openModal(h, true);
   }
 
+  /* ---------- Date+Grid — ตัวเลือกวันที่แบบ Asana (ช่วงวัน เริ่ม→กำหนดส่ง) ----------
+   * ทุกเซลล์วันที่ (ตารางรายการ Gantt งานของฉัน ฟิลด์วันที่ ตั้งกำหนดส่งหลายงาน) เรียก openDatePicker ตัวเดียวกัน
+   * cfg = { range, tid?, read() → {start,due}, apply({start?,due?}) } · งานจริงบันทึกผ่าน setDates (กฎวันเริ่มไม่เกินกำหนดส่ง + ย้อนกลับได้) */
+  var dp = null;
+  function dpIso(y, m, d) { return y + '-' + (m + 1 < 10 ? '0' : '') + (m + 1) + '-' + (d < 10 ? '0' : '') + d; }
+  function dpParts(s) { var p = String(s).split('-'); return { y: +p[0], m: +p[1] - 1, d: +p[2] }; }
+  function dpShow(s) { if (!s) return ''; var p = dpParts(s); return p.d + '/' + (p.m + 1) + '/' + global.I18N.year(p.y); }
+  function dpParse(txt) {
+    txt = (txt || '').trim();
+    if (!txt) return '';
+    var y, mo, d, m = /^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/.exec(txt);
+    if (m) { y = +m[1]; mo = +m[2]; d = +m[3]; }
+    else {
+      m = /^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})$/.exec(txt);
+      if (!m) return null;
+      d = +m[1]; mo = +m[2]; y = +m[3];
+    }
+    if (y >= 2400) y -= 543;
+    var dt = new Date(y, mo - 1, d);
+    if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d || y < DATE_Y_MIN || y > DATE_Y_MAX) return null;
+    return dpIso(y, mo - 1, d);
+  }
+
+  function openDatePicker(anchor, cfg, active) {
+    if (!anchor) return;
+    var pop = openPop(anchor, '');
+    if (!pop) return;
+    var v = cfg.read();
+    var seed = (active === 'start' ? v.start : v.due) || v.due || v.start || S.today();
+    var sp = dpParts(seed);
+    dp = { pop: pop, anchor: anchor, cfg: cfg, y: sp.y, m: sp.m, active: cfg.range ? (active || 'due') : 'due', hover: null, focus: seed };
+    pop.classList.add('dp-pop');
+    pop.setAttribute('role', 'dialog');
+    pop.setAttribute('tabindex', '-1');
+    pop.addEventListener('click', dpClick);
+    pop.addEventListener('change', dpChange);
+    pop.addEventListener('keydown', dpKey);
+    pop.addEventListener('mouseover', dpOver);
+    dpRender(true);
+    pop.focus();
+  }
+
+  function dpRender(place) {
+    if (!dp) return;
+    var cfg = dp.cfg, v = cfg.read(), s = v.start || '', e = v.due || '', range = !!cfg.range;
+    var mf = global.I18N.monthsFull(), ws = R.weekStart(), today = S.today();
+    var inp = function (k, val, ph) {
+      return '<label class="dp-f' + (dp.active === k ? ' on' : '') + '"><input class="dp-i" data-dpi="' + k + '" value="' + esc(dpShow(val)) +
+        '" placeholder="' + esc(ph) + '" inputmode="numeric" autocomplete="off" aria-label="' + esc(ph) + '">' +
+        (val ? '<button type="button" class="dp-x" data-dpx="' + k + '" aria-label="' + esc(L('ล้าง')) + '">' + I('close', 11) + '</button>' : '') + '</label>';
+    };
+    var h = '<div class="dp-in">' + (range ? inp('start', s, L('วันเริ่ม')) : '') + inp('due', e, range ? L('กำหนดส่ง') : L('วันที่')) + '</div>';
+    h += '<div class="dp-nav"><button type="button" class="dp-nb prev" data-dpn="-1" aria-label="' + esc(L('เดือนก่อน')) + '">' + I('chevronRight', 14) + '</button>' +
+      '<span class="dp-title">' + esc(mf[dp.m] + ' ' + global.I18N.year(dp.y)) + '</span>' +
+      '<button type="button" class="dp-nb" data-dpn="1" aria-label="' + esc(L('เดือนถัดไป')) + '">' + I('chevronRight', 14) + '</button></div>';
+    h += '<div class="dp-dow">' + R.DOWR().map(function (d) { return '<span>' + esc(d) + '</span>'; }).join('') + '</div><div class="dp-grid">';
+    var first = new Date(dp.y, dp.m, 1), lead = (first.getDay() - ws + 7) % 7;
+    var dim = new Date(dp.y, dp.m + 1, 0).getDate(), cells = Math.ceil((lead + dim) / 7) * 7;
+    for (var i = 0; i < cells; i++) {
+      var dt = new Date(dp.y, dp.m, 1 - lead + i), key = dpIso(dt.getFullYear(), dt.getMonth(), dt.getDate());
+      h += '<button type="button" class="dp-d' + (dt.getMonth() !== dp.m ? ' out' : '') + (key === today ? ' today' : '') +
+        '" data-dpd="' + key + '" tabindex="-1">' + dt.getDate() + '</button>';
+    }
+    h += '</div><div class="dp-foot">';
+    if (cfg.tid) {
+      h += '<button type="button" class="dp-ic" data-dpo="time" title="' + esc(L('เวลา')) + '" aria-label="' + esc(L('เวลา')) + '">' + I('clock', 15) + '</button>' +
+        '<button type="button" class="dp-ic" data-dpo="recur" title="' + esc(L('ทำซ้ำ')) + '" aria-label="' + esc(L('ทำซ้ำ')) + '">' + I('repeat', 15) + '</button>';
+    }
+    h += '<span class="grow"></span><button type="button" class="dp-tx" data-dpt="1">' + esc(L('วันนี้')) + '</button>' +
+      '<button type="button" class="dp-tx" data-dpc="1">' + esc(L('ล้าง')) + '</button></div>';
+    dp.pop.innerHTML = h;
+    dpPaint();
+    if (place) keepInView(dp.pop, dp.anchor.getBoundingClientRect());
+  }
+
+  /** ระบายแถบช่วง/ปลายช่วง/วันโฟกัสลงปุ่มวันโดยไม่วาดใหม่ (ใช้ตอนเมาส์ผ่านด้วย) */
+  function dpPaint() {
+    if (!dp) return;
+    var v = dp.cfg.read(), s = v.start || '', e = v.due || '', hv = dp.hover, a = s, b = e, pv = false;
+    if (dp.cfg.range && s && !e && hv) { a = hv < s ? hv : s; b = hv < s ? s : hv; pv = true; }
+    if (!dp.cfg.range) { a = ''; b = e; }
+    Array.prototype.forEach.call(dp.pop.querySelectorAll('.dp-d'), function (x) {
+      var k = x.dataset.dpd, inR = a && b && k >= a && k <= b;
+      x.classList.toggle('in', !!inR && a !== b);
+      x.classList.toggle('s', !!(dp.cfg.range && a && b && k === a && a !== b));
+      x.classList.toggle('e', !!(b && k === b));
+      x.classList.toggle('pv', !!inR && pv);
+      x.classList.toggle('foc', k === dp.focus);
+      if (k === dp.focus) x.setAttribute('aria-current', 'date'); else x.removeAttribute('aria-current');
+    });
+  }
+
+  function dpApply(patch) {
+    if (!dp) return;
+    dp.cfg.apply(patch);
+    if (pendingShift) { closePops(); return; }      // มีงานรออยู่ต้องขยับตาม — หน้าต่างยืนยันขึ้นแทน
+    if (dp && dp.pop && document.body.contains(dp.pop)) dpRender();
+  }
+  function dpPick(key) {
+    if (!dp) return;
+    dp.focus = key;
+    var cfg = dp.cfg;
+    if (!cfg.range) { dpApply({ due: key }); closePops(); return; }
+    var v = cfg.read(), s = v.start || '', e = v.due || '';
+    if (dp.active === 'start') {
+      dpApply({ start: key });
+      if (dp) dp.active = 'due';
+    } else if (s && !e && key < s) {          // ยังไม่มีกำหนดส่ง แล้วกดวันก่อนวันเริ่ม — สลับให้
+      dpApply({ start: key, due: s });
+    } else if (!s && !e && dp.active === 'start') {
+      dpApply({ start: key });
+    } else dpApply({ due: key });
+  }
+  function dpGo(delta) {
+    var t = new Date(dp.y, dp.m + delta, 1);
+    dp.y = t.getFullYear(); dp.m = t.getMonth();
+    dpRender();
+  }
+  function dpClick(ev) {
+    ev.stopPropagation();
+    var t = ev.target.closest ? ev.target.closest('button') : null;
+    if (!t || !dp) return;
+    var d = t.dataset;
+    if (d.dpd) {
+      var pp = dpParts(d.dpd);
+      if (pp.m !== dp.m) { dp.y = pp.y; dp.m = pp.m; }
+      dpPick(d.dpd);
+    } else if (d.dpn) dpGo(+d.dpn);
+    else if (d.dpx) { dp.active = d.dpx; dpApply(d.dpx === 'start' ? { start: null } : { due: null }); if (dp && !dp.cfg.range) closePops(); }
+    else if (d.dpc) { var single = !dp.cfg.range; dpApply(single ? { due: null } : { start: null, due: null }); if (single) closePops(); }
+    else if (d.dpt) { var td = S.today(), tp = dpParts(td); dp.y = tp.y; dp.m = tp.m; dpPick(td); }
+    else if (d.dpo) {
+      var tid = dp.cfg.tid;
+      closePops();
+      state.dwMore = true;         // เวลา/ทำซ้ำอยู่ในแผงงาน (ช่องเพิ่มเติม) — เปิดให้เลย
+      openTask(tid);
+      renderDrawer();
+    }
+  }
+  function dpChange(ev) {
+    var el = ev.target;
+    if (!dp || !el.dataset || !el.dataset.dpi) return;
+    var k = el.dataset.dpi, val = dpParse(el.value);
+    if (val === null) { toast(L('พิมพ์วันที่เป็น วัน/เดือน/ปี เช่น 4/12/2569')); dpRender(); return; }
+    var p = {}; p[k] = val || null;
+    dp.active = k;
+    if (val) { var q = dpParts(val); dp.y = q.y; dp.m = q.m; dp.focus = val; }
+    dpApply(p);
+    if (dp && !dp.cfg.range) closePops();
+    else if (dp) dp.pop.focus();
+  }
+  function dpOver(ev) {
+    var t = ev.target.closest ? ev.target.closest('.dp-d') : null;
+    if (!dp || !t) return;
+    if (dp.hover !== t.dataset.dpd) { dp.hover = t.dataset.dpd; dpPaint(); }
+  }
+  function dpKey(ev) {
+    if (!dp) return;
+    if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); closePops(); return; }
+    var inInput = ev.target && ev.target.tagName === 'INPUT';
+    if (ev.key === 'Enter') {
+      ev.preventDefault();
+      if (inInput) dpChange({ target: ev.target }); else dpPick(dp.focus);
+      return;
+    }
+    if (inInput) { ev.stopPropagation(); return; }
+    var step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[ev.key];
+    if (step) {
+      ev.preventDefault();
+      var f = dpParts(dp.focus), n = new Date(f.y, f.m, f.d + step);
+      dp.focus = dpIso(n.getFullYear(), n.getMonth(), n.getDate());
+      if (n.getMonth() !== dp.m || n.getFullYear() !== dp.y) { dp.y = n.getFullYear(); dp.m = n.getMonth(); dpRender(); } else dpPaint();
+    } else if (ev.key === 'PageUp' || ev.key === 'PageDown') { ev.preventDefault(); dpGo(ev.key === 'PageUp' ? -1 : 1); }
+  }
+
+  /** ตัวเลือกวันที่ของงาน — active = ช่องที่เซลล์นั้นแก้ ('start' | 'due') */
+  function openTaskDatePicker(anchor, tid, active) {
+    openDatePicker(anchor, {
+      range: true, tid: tid,
+      read: function () { var t = S.task(tid) || {}; return { start: t.startOn || '', due: t.dueOn || '' }; },
+      apply: function (p) {
+        var patch = {};
+        if ('start' in p) patch.startOn = p.start;
+        if ('due' in p) patch.dueOn = p.due;
+        pendingShift = null;
+        setDates(tid, patch);
+      }
+    }, active);
+  }
+
   /* ---------- แดชบอร์ด ---------- */
   function widgetOf(pid, wid) {
     return S.dashWidgets(pid).filter(function (w) { return w.id === wid; })[0] || null;
@@ -8624,7 +8818,7 @@
       'add-dependency', 'do-add-dependency', 'remove-dependency', 'g-del-dep',
       'add-attachment', 'remove-attachment',
       'add-tag', 'remove-tag',
-      'edit-cell', 'cell-set-assignee', 'cell-set-option', 'cell-toggle-option',
+      'edit-cell', 'dp-open', 'cell-set-assignee', 'cell-set-option', 'cell-toggle-option',
       'dw-field-multi'
     ]);
     put('comment', [
@@ -8883,7 +9077,7 @@
     var el = e.target.closest ? e.target.closest('[data-act]') : null;
 
     if (!el || ['pick-assignee', 'pick-priority', 'pick-follower',
-         'add-field-picker', 'field-menu', 'opt-color', 'edit-cell',
+         'add-field-picker', 'field-menu', 'opt-color', 'edit-cell', 'dp-open',
          'project-menu', 'status-menu', 'g-zoom-menu', 'g-views-menu', 'pf-menu', 'pf-status',
          'view-menu', 'toggle-view', 'add-menu', 'react-menu',
          'add-tag', 'tag-search', 'sub-dates', 'sub-assign',
@@ -9184,6 +9378,10 @@
       case 'edit-cell':
         e.stopPropagation();
         editCell(el);
+        break;
+      case 'dp-open':             // Date+Grid — เซลล์วันที่ของ Gantt / งานของฉัน
+        e.stopPropagation();
+        openTaskDatePicker(el, el.dataset.id, el.dataset.f === 'start' ? 'start' : 'due');
         break;
       case 'cell-set-assignee': {
         closePops();
@@ -10515,11 +10713,11 @@
       case 'bulk-reopen': S.bulkUpdate(selectedIds(), { completed: false }); clearSelUI(); break;
       case 'bulk-due': {
         var bulkIds = selectedIds();
-        askText(L('กำหนดส่งใหม่'), S.today(), function (v) {
-          S.bulkUpdate(bulkIds, { dueOn: v || null });
-          clearSel();
-          renderAll();
-        }, { type: 'date', note: L('เว้นว่างไว้เพื่อลบกำหนดส่งของงานที่เลือก') });
+        openDatePicker(el, {
+          range: false,
+          read: function () { return { start: '', due: '' }; },
+          apply: function (p) { S.bulkUpdate(bulkIds, { dueOn: p.due || null }); clearSel(); renderAll(); }
+        });
         break;
       }
       case 'bulk-delete': {

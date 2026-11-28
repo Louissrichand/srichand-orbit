@@ -289,7 +289,10 @@
 
       colDefs.forEach(function (c) {
         if (c.id === 'due') {
-          h += '<span class="g-c-due' + R.dueClass(t.dueOn, t.completed) + '">' + due + '</span>';
+          /* Date+Grid — กดช่องวันที่เปิดปฏิทินเลือกช่วงวันทันที (ไม่มีสิทธิ์แก้ = กดแล้วเปิดงานเหมือนเดิม) · ว่างไม่แสดงอะไร */
+          var dEdit = S.can && S.can('write', t.id);
+          h += '<span class="g-c-due' + R.dueClass(t.dueOn, t.completed) + (s ? '' : ' dp-empty') + (dEdit ? ' dp-cell' : '') + '"' +
+            (dEdit ? ' data-act="dp-open" data-id="' + esc(t.id) + '" data-f="due" data-hint="+ ' + esc(L('เพิ่มวันที่')) + '"' : '') + '>' + (s ? due : '') + '</span>';
         } else if (c.id === 'duration') {
           h += '<span class="g-c-duration">' +
             (dur ? '<span title="' + esc(L('{n} วันตามปฏิทิน', { n: dur })) + '">' + L('{n} วันทำการ', { n: wdur == null ? dur : wdur }) + '</span>' : '<span class="g-muted">—</span>') + '</span>';

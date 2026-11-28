@@ -1149,11 +1149,11 @@
     if (c.id === 'due') {
       return '<div class="td td-edit' + dueClass(t.dueOn, t.completed) +
         '" data-act="edit-cell" data-cell="due" data-id="' + id + '">' +
-        (t.dueOn ? '<span class="cell-txt">' + fmtDate(t.dueOn) + '</span>' : '<span class="cell-empty">—</span>') + '</div>';
+        (t.dueOn ? '<span class="cell-txt">' + fmtDate(t.dueOn) + '</span>' : '<span class="cell-empty cell-date-empty" data-hint="+ ' + esc(L('เพิ่มวันที่')) + '"></span>') + '</div>';
     }
     if (c.id === 'start') {
       return '<div class="td td-edit" data-act="edit-cell" data-cell="start" data-id="' + id + '">' +
-        (t.startOn ? '<span class="cell-txt">' + fmtDate(t.startOn) + '</span>' : '<span class="cell-empty">—</span>') + '</div>';
+        (t.startOn ? '<span class="cell-txt">' + fmtDate(t.startOn) + '</span>' : '<span class="cell-empty cell-date-empty" data-hint="+ ' + esc(L('เพิ่มวันที่')) + '"></span>') + '</div>';
     }
     if (c.id === 'priority') {
       var pr = prio(t.priority);
@@ -6162,8 +6162,8 @@
       h += '<div class="ms-row' + (t.completed ? ' done' : '') + '">' +
         (w ? checkbox(t) : '<span class="check ro' + (t.completed ? ' on' : '') + ' milestone" aria-hidden="true"><span>' + ICON.check + '</span></span>') +
         '<button class="grow ms-nm" data-act="open-task" data-id="' + esc(t.id) + '">' + esc(t.name) + '</button>' +
-        (w ? '<input type="date" class="ms-date' + dueClass(t.dueOn, t.completed) + '" data-act="ms-due" data-id="' + esc(t.id) +
-          '" value="' + esc(t.dueOn || '') + '">'
+        (w ? '<button type="button" class="ms-date' + dueClass(t.dueOn, t.completed) + '" data-act="dp-open" data-id="' + esc(t.id) +
+          '" data-f="due">' + (t.dueOn ? fmtDate(t.dueOn) : '<span class="g-muted">+ ' + esc(L('เพิ่มวันที่')) + '</span>') + '</button>'
            : '<span class="chip' + dueClass(t.dueOn, t.completed) + '">' + (t.dueOn ? fmtDate(t.dueOn) : '—') + '</span>') + '</div>';
     });
     h += '</section>';

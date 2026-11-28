@@ -5841,3 +5841,78 @@ label.pf-pick-row { cursor: pointer; }
 
 /* Auto QA */
 .au-warn { display: flex; align-items: center; gap: 4px; margin-top: 3px; font-size: 12px; font-weight: 600; color: var(--danger, #c0392b); }
+
+/* Date+Grid ----------------------------------------------------------
+ * 1) ปฏิทินเลือกช่วงวัน (.dp-pop)  2) ตารางรายการ + ตาราง Gantt ฝั่งซ้ายเป็นกริดเส้นชัด */
+.pop.dp-pop { width: 296px; max-width: calc(100vw - 16px); min-width: 0; max-height: none; padding: 10px 10px 8px; outline: none; }
+.dp-pop .dp-in { display: flex; gap: 6px; margin-bottom: 8px; }
+.dp-pop .dp-f { position: relative; flex: 1; min-width: 0; display: block; }
+.dp-pop .dp-i {
+  width: 100%; box-sizing: border-box; height: 32px; padding: 0 24px 0 9px; font-size: 13px;
+  border: 1px solid var(--line); border-radius: 7px; background: var(--bg); color: var(--fg);
+}
+.dp-pop .dp-f.on .dp-i, .dp-pop .dp-i:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 2px var(--accent-bg); }
+.pop .dp-x { position: absolute; right: 3px; top: 5px; width: 22px; height: 22px; padding: 0; justify-content: center; border-radius: 50%; color: var(--fg-faint); }
+.pop .dp-x svg { color: inherit; }
+.dp-pop .dp-nav { display: flex; align-items: center; justify-content: space-between; margin: 2px 0 4px; }
+.dp-pop .dp-title { font-size: 14px; font-weight: 600; }
+.pop .dp-nb { width: 28px; height: 28px; padding: 0; justify-content: center; border-radius: 7px; }
+.pop .dp-nb.prev svg { transform: rotate(180deg); }
+.dp-pop .dp-dow, .dp-pop .dp-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+.dp-pop .dp-dow span { text-align: center; font-size: 11.5px; color: var(--fg-faint); padding: 4px 0; }
+.pop .dp-d { height: 34px; padding: 0; justify-content: center; border-radius: 0; font-size: 13px; position: relative; font-variant-numeric: tabular-nums; }
+.pop .dp-d.out { color: var(--fg-faint); }
+.pop .dp-d.today { font-weight: 700; color: var(--accent); }
+.pop .dp-d.today::after { content: ''; position: absolute; left: 50%; bottom: 4px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: currentColor; }
+.pop .dp-d.in { background: var(--accent-bg); }
+.pop .dp-d.in.pv { background: color-mix(in srgb, var(--accent-bg) 55%, transparent); }
+.pop .dp-d.s, .pop .dp-d.e { background: var(--accent); color: #fff; font-weight: 600; }
+.pop .dp-d.s { border-radius: 17px 0 0 17px; }
+.pop .dp-d.e { border-radius: 0 17px 17px 0; }
+.pop .dp-d.e:not(.s):not(.in) { border-radius: 17px; }
+.pop .dp-d.s.today::after, .pop .dp-d.e.today::after { background: #fff; }
+.pop .dp-d.foc { box-shadow: inset 0 0 0 2px var(--accent); }
+.pop .dp-d:not(.s):not(.e):hover { background: var(--bg-inset); border-radius: 17px; }
+.dp-pop .dp-foot { display: flex; align-items: center; gap: 2px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); }
+.dp-pop .grow { flex: 1; }
+.pop .dp-ic { width: 32px; height: 32px; padding: 0; justify-content: center; }
+.pop .dp-tx { width: auto; padding: 6px 10px; font-size: 13px; color: var(--fg-soft); }
+@media (max-width: 700px) {
+  .pop.dp-pop { position: fixed !important; left: 0 !important; right: 0 !important; bottom: 0 !important; top: auto !important; width: auto; max-width: none;
+    border-radius: 16px 16px 0 0; padding: 14px 14px calc(12px + env(safe-area-inset-bottom)); z-index: 300; }
+  .pop .dp-d { height: 44px; font-size: 15px; }
+  .dp-pop .dp-i { height: 40px; font-size: 16px; }
+  .pop .dp-nb, .pop .dp-ic { width: 44px; height: 44px; }
+  .pop .dp-tx { min-height: 44px; }
+}
+
+/* วันที่ว่างไม่แสดงอะไร — ชี้แล้วขึ้นคำใบ้ */
+.cell-date-empty::after, .g-c-due.dp-empty::after { content: attr(data-hint); opacity: 0; font-size: 12px; color: var(--fg-faint); white-space: nowrap; }
+.td-edit:hover .cell-date-empty::after, .g-c-due.dp-cell.dp-empty:hover::after { opacity: 1; }
+.g-c-due.dp-cell { cursor: pointer; }
+.g-c-due.dp-cell:hover { background: var(--bg-inset); box-shadow: inset 0 0 0 1px var(--line-strong); }
+button.ms-date { cursor: pointer; }
+
+/* ตารางรายการ: เส้นตั้งระหว่างคอลัมน์ทั้งหัวและตัว เส้นแถวชัดขึ้น */
+.tbl-head { border-top: 1px solid var(--line); }
+.tbl-head, .tr { border-right: 1px solid var(--line); }
+.th { border-left-color: var(--line); }
+.td { border-left-color: var(--line); }
+.tr { border-bottom-color: var(--line); }
+.tbl-sec { background: var(--bg-sunk); box-shadow: 0 1px 0 0 var(--line), 4000px 0 0 0 var(--bg-sunk), 4000px 1px 0 0 var(--line); padding-top: 8px; padding-bottom: 8px; margin-top: 0; }
+.tbl-sec + .tbl-head, .tbl-sec ~ .tr:first-of-type { border-top: 0; }
+
+/* Gantt ฝั่งซ้าย: หัวคอลัมน์ตัวพิมพ์ปกติ + เส้นตั้ง/เส้นแถวชัด */
+.g-lhead { text-transform: none; letter-spacing: 0; font-size: 12px; border-top: 1px solid var(--line); }
+.g-lhead, .g-lrow { gap: 0; padding: 0; align-items: stretch; }
+.g-lrow { border-bottom-color: var(--line); }
+.g-left { border-right: 2px solid var(--line-strong); }
+.g-lhead > .g-c-name, .g-lrow > .g-c-name { padding: 0 8px 0 2px; }
+.g-lhead > :nth-child(n+3), .g-lrow.g-task > :nth-child(n+3) {
+  padding: 0 8px; border-left: 1px solid var(--line); line-height: 33px; min-width: 0;
+}
+.g-lhead > :nth-child(n+3) { line-height: 43px; }
+.g-lrow.g-task > .g-c-dep { align-items: center; line-height: 1.4; }
+.g-lrow.g-sec, .g-lrow.g-addrow { padding: 0 8px 0 4px; align-items: center; gap: 6px; }
+.g-lrow.g-task:hover > .g-c-name { background: transparent; }
+.g-lrow.sel { background: var(--accent-bg); }
