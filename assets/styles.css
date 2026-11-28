@@ -5657,3 +5657,11 @@ span.tb-people.ro { pointer-events: none; }
 .rm4c-x:hover { opacity: 1; }
 .bi-sum { margin: 0 0 8px; padding-left: 18px; line-height: 1.7; overflow-wrap: anywhere; }
 .modal textarea.inp { width: 100%; resize: vertical; font: inherit; }
+
+/* Pre-pilot A */
+.ask-quick { margin: -4px 0 10px; }
+.ask-quick-tip { font-size: 12.5px; color: var(--fg-soft); }
+.ask-quick-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.ask-quick-chips:empty { display: none; }
+.ask-quick-chip { font-size: 12.5px; padding: 2px 9px; border-radius: 999px; background: var(--accent-bg); color: var(--accent); }
+.apv-field-list { margin-top: 6px; }

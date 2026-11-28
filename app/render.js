@@ -598,7 +598,7 @@
       }
       var nmP = S.project(route.id);
       if (nmP && nmP.nextMeeting && nmP.nextMeeting >= S.today()) {        // Sprint 4c - วันประชุมถัดไปบนหัวโปรเจกต์ (กดเพื่อแก้)
-        h += '<button class="btn btn-ghost nm4c" data-act="set-next-meeting" title="' + esc(L('ตั้งวันประชุมถัดไป…')) + '">' + I('calendar', 13) + '<span class="hide-sm"> ' + esc(L('ประชุมครั้งถัดไป {d}', { d: fmtDate(nmP.nextMeeting) })) + '</span></button>';
+        h += '<button class="btn btn-ghost nm4c" data-act="set-next-meeting" title="' + esc(L('ตั้งวันประชุมครั้งถัดไป…')) + '">' + I('calendar', 13) + '<span class="hide-sm"> ' + esc(L('ประชุมครั้งถัดไป {d}', { d: fmtDate(nmP.nextMeeting) })) + '</span></button>';
       }
       h += followBtn('project', route.id);            // Sprint 2B — ติดตามโปรเจกต์ (เดิมซ่อนอยู่ใน ⋯)
       h += '<button class="btn btn-ghost" data-act="project-menu" data-id="' +
@@ -3730,7 +3730,8 @@
         if (g.isSection && !g.items.length) {
           h += '<div class="mt-empty">' + (g.special
             ? L('งานที่มีคนมอบหมายให้คุณจะมาอยู่ที่นี่ก่อน')
-            : L('ลากงานมาวางที่นี่')) + '</div>';
+            : (window.matchMedia && window.matchMedia('(max-width: 820px), (pointer: coarse)').matches
+              ? L('ยังไม่มีงานในเซกชันนี้') : L('ลากงานมาวางที่นี่'))) + '</div>';
         }
         h += '</div>';
         if (g.isSection && canW) {
@@ -4789,8 +4790,12 @@
     if (t.type === 'approval') {
       var a = approvalState(t.approval);
       var mayApprove = S.canApprove(t.id);
-      var apU = S.user(t.assigneeId);
-      var apName = '<b>' + esc(apU ? apU.name : '?') + '</b>';
+      var apIds = S.approverIds(t);
+      var apU = S.user(apIds[0] || t.assigneeId);
+      /* Pre-pilot A — หลายผู้อนุมัติ: ข้อความ "รอ … อนุมัติ" ต้องไม่ใช่แค่ผู้รับผิดชอบ */
+      var apName = apIds.length > 1
+        ? '<b>' + esc(apIds.map(function (x) { var au = S.user(x); return au ? au.name : '?'; }).join(', ')) + '</b>'
+        : '<b>' + esc(apU ? apU.name : '?') + '</b>';
       var ACTS = [['approved', 'อนุมัติ', 'check'], ['changes', 'ขอให้แก้ไข', 'pencil'],   // ปุ่มเป็นคำกริยา (อังกฤษ "Request changes") ต่างจากชื่อสถานะ "ขอแก้ไข" = Changes requested
                   ['rejected', 'ปฏิเสธ', 'close']];
       h += '<div class="fld"><label title="' + esc(L('สถานะรออนุมัติ / อนุมัติ / ไม่อนุมัติ ของงานนี้ ผู้อนุมัติเป็นคนเปลี่ยน')) + '">' + L('การอนุมัติ') + ' <span class="fld-info">ⓘ</span></label><div class="val">' +
@@ -4826,8 +4831,17 @@
 
     h += '<div class="fld"><label>' + (t.type === 'approval' ? L('ผู้อนุมัติ') : L('ผู้รับผิดชอบ')) +
       '</label><div class="val picker">' +
-      '<button class="picker-btn" data-act="pick-assignee">' + avatar(u) +
-      '<span>' + esc(u ? u.name : L('ยังไม่มอบหมาย')) + '</span></button></div></div>';
+      (t.type === 'approval' && S.approverIds(t).length > 1 ? '' : '<button class="picker-btn" data-act="pick-assignee">' + avatar(u) +
+      '<span>' + esc(u ? u.name : L('ยังไม่มอบหมาย')) + '</span></button>') +
+      /* Pre-pilot A — หลายผู้อนุมัติ: ไล่ทุกคนพร้อมผลโหวต (ผู้รับผิดชอบด้านบนไม่ถูกแตะ) */
+      (t.type === 'approval' && S.approverIds(t).length > 1
+        ? '<div class="apv4c-list apv-field-list">' + S.approverIds(t).map(function (aid) {
+            var au = S.user(aid), av = t.approvalVotes && t.approvalVotes[aid];
+            var st = av === 'approved' ? ['อนุมัติแล้ว', '#37c5ab'] : av === 'rejected' ? ['ปฏิเสธ', '#e8384f']
+              : av === 'changes' ? ['ขอให้แก้ไข', '#fd612c'] : ['รอ', '#f5a623'];
+            return '<div class="apv4c-p">' + avatar(au, 'sm') + '<span class="grow">' + esc(au ? au.name : '?') +
+              '</span><span class="approval-pill" style="background:' + st[1] + '22;color:' + st[1] + '">' + esc(L(st[0])) + '</span></div>';
+          }).join('') + '</div>' : '') + '</div></div>';
 
     /* ---- ฟิลด์ที่ซ่อนไว้เป็นค่ามาตรฐาน ----
      *

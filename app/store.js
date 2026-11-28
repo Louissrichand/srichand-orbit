@@ -877,6 +877,15 @@
      * (สร้าง นำเข้า ย้าย ทำซ้ำ คัดลอก) จึงได้เลขเองโดยไม่ต้องไล่แก้ทีละที่
      * ข้อมูลที่มาจากส่วนกลาง (replaceDb) ไม่แตะ เครื่องที่สร้างงานเป็นคนออกเลขเอง */
     if (db && !suppressRemote && assignIds()) dropIndex();
+    /* Pre-pilot A — งานเสร็จแล้ว (ทำเสร็จเอง หรือผลอนุมัติปิดงาน) การแจ้ง "เลยกำหนดแล้ว" ของงานนั้นไม่ค้างในกล่องแจ้งเตือน */
+    if (db && !suppressRemote && db.notifications) {
+      db.notifications.forEach(function (n) {
+        if (n.kind === 'overdue' && !n.read && n.taskId) {
+          var ot = db.tasks.filter(function (x) { return x.id === n.taskId; })[0];
+          if (ot && ot.completed) n.read = true;
+        }
+      });
+    }
     persist();
     listeners.forEach(function (fn) { fn(); });
   }
@@ -3834,6 +3843,10 @@
     function thDowIdx(nm) { return QA_DOW.indexOf(nm === 'พฤหัส' ? 'พฤหัสบดี' : nm); }
     take(new RegExp('วัน(' + dowAlt + ')(หน้า|นี้)?|(' + dowAlt + ')(หน้า|นี้)'), function (x) {
       return dowDate(thDowIdx(x[1] || x[3]), (x[2] || x[4]) === 'หน้า');
+    });
+    /* ชื่อวันเดี่ยว ๆ ("ศุกร์") = วันนั้นที่จะถึงก่อน ไม่นับวันนี้ — ต้องมีช่องว่างคั่นสองข้าง กัน "พระจันทร์" โดนตัด (Pre-pilot A) */
+    take(new RegExp('(?:^|\\s)(' + dowAlt + ')(?=\\s|$)'), function (x) {
+      return dowDate(thDowIdx(x[1]), false);
     });
     /* อังกฤษ: ชื่อเต็ม หรือย่อ 3 ตัว (ยกเว้น Sun/Sat ที่ชนกับชื่อคน/บริษัทบ่อย ต้องเขียนเต็ม) */
     var EN_DOW = { sunday: 0, monday: 1, mon: 1, tuesday: 2, tue: 2, tues: 2, wednesday: 3, wed: 3, thursday: 4, thu: 4, thur: 4, thurs: 4, friday: 5, fri: 5, saturday: 6 };
@@ -8087,6 +8100,51 @@
     return true;
   }
 
+  /* Pre-pilot A — บันทึกประชุมแบบมีวันที่: ใช้ทั้งตอนสร้างโปรเจกต์จากเทมเพลตประชุมและเมนู "บันทึกประชุมครั้งใหม่"
+   * เนื้อหามีหัวข้อวาระ/มติ/งานที่ต้องตามต่อ พร้อมตัวอย่างบรรทัดงาน ให้ใช้ "สร้างงานจากบรรทัด" ได้ทันที */
+  function meetingPageTitle(iso) {
+    var d = new Date((iso || today()) + 'T00:00:00');
+    return L('บันทึกประชุม {d}', { d: d.getDate() + ' ' + global.I18N.monthsShort()[d.getMonth()] });
+  }
+  function meetingPageRaw(p, iso) {
+    p.pages = p.pages || [];
+    var x = normalizePage({ id: uid('pg'), title: meetingPageTitle(iso), icon: '🗓️',
+      body: '## ' + L('วาระ') + '\n- \n\n## ' + L('มติ') + '\n- \n\n## ' + L('งานที่ต้องตามต่อ') + '\n- ' + L('ส่งสไลด์ @ชื่อ ศุกร์') + '\n',
+      by: db.currentUserId, at: new Date().toISOString() });
+    p.pages.push(x);
+    return x;
+  }
+  function createMeetingPage(projectId) {
+    var p = project(projectId);
+    if (!p || !can('write') || !canInProject(projectId, 'edit') || (p.pages || []).length >= PAGE_MAX) return null;
+    snapshot('สร้างหน้า');
+    var x = meetingPageRaw(p, p.nextMeeting && p.nextMeeting >= today() ? p.nextMeeting : today());
+    commit();
+    return x;
+  }
+
+  /** งานที่ยังไม่เสร็จในเซกชันที่เลือก (ชั้นบนสุด) */
+  function openTasksInSections(projectId, secIds) {
+    return tasksInProject(projectId).filter(function (x) {
+      return !x.task.completed && !x.task.parentId && secIds.indexOf(x.membership.sectionId) >= 0;
+    }).map(function (x) { return x.task.id; });
+  }
+  /** ยกงานที่ยังไม่เสร็จทั้งหมดจากเซกชันที่เลือกไปเซกชันปลายทาง + แท็ก "ยกมาจาก {วัน}" — จุดย้อนกลับเดียว */
+  function carryOpenToNext(projectId, fromSecIds, toSecId) {
+    if (!project(projectId) || !can('write') || !canInProject(projectId, 'edit') || !section(projectId, toSecId)) return 0;
+    var ids = openTasksInSections(projectId, (fromSecIds || []).filter(function (s) { return s !== toSecId; }));
+    if (!ids.length) return 0;
+    var tag = L('ยกมาจาก {d}', { d: today() });
+    return batch('ยกงานที่ยังไม่เสร็จไปประชุมครั้งหน้า', null, function () {
+      var moved = bulkMoveSection(ids, projectId, toSecId);
+      ids.forEach(function (tid) {
+        var tk = task(tid);
+        if (tk && (tk.tags || []).indexOf(tag) < 0) updateTask(tid, { tags: (tk.tags || []).concat([tag]) }, { quiet: true });
+      });
+      return moved;
+    });
+  }
+
   function slipOverdue(projectId, newDate) {
     if (!project(projectId) || !newDate || !can('write') || !canInProject(projectId, 'edit')) return 0;
     var t0 = today();
@@ -10118,6 +10176,8 @@
           }
         });
       });
+      /* Pre-pilot A — เทมเพลตประชุม: สร้างหน้า "บันทึกประชุม {วัน}" ให้เลย สร้างงานจากบรรทัดได้ทันที */
+      if (d.sections && d.sections[0] && String(d.sections[0].id).indexOf('bs_meeting_') === 0) meetingPageRaw(p, start);
       audit('project.create', p.name, 'จากเทมเพลต {t}', { t: tpl.name });
       out = p;
     });
@@ -13014,7 +13074,7 @@
     accessRequestFor: accessRequestFor,
     canAnswerAccess: canAnswerAccess, answerAccess: answerAccess, accessOwner: accessOwner,
     convertToProject: convertToProject,
-    setStaleDays: setStaleDays, runStaleCheck: runStaleCheck, setManager: setManager, setUserName: setUserName, subRollup: subRollup, missingRequiredFields: missingRequiredFields, setRequiredFields: setRequiredFields, setNextMeeting: setNextMeeting, setOrgLang: setOrgLang, setOrgPrivacy: setOrgPrivacy, slipOverdue: slipOverdue, bulkAddToProject: bulkAddToProject, bulkMoveSection: bulkMoveSection, bulkSetField: bulkSetField,
+    setStaleDays: setStaleDays, runStaleCheck: runStaleCheck, setManager: setManager, setUserName: setUserName, subRollup: subRollup, missingRequiredFields: missingRequiredFields, setRequiredFields: setRequiredFields, setNextMeeting: setNextMeeting, setOrgLang: setOrgLang, setOrgPrivacy: setOrgPrivacy, slipOverdue: slipOverdue, createMeetingPage: createMeetingPage, openTasksInSections: openTasksInSections, carryOpenToNext: carryOpenToNext, bulkAddToProject: bulkAddToProject, bulkMoveSection: bulkMoveSection, bulkSetField: bulkSetField,
     bulkAddFollowers: bulkAddFollowers, bulkAddTag: bulkAddTag, bulkDependOn: bulkDependOn,
     bulkMerge: bulkMerge,
 
@@ -14709,9 +14769,12 @@
     snapshot('เปลี่ยนผู้อนุมัติ');
     t.approvers = ids.length > 1 ? ids : null;
     t.approvalMode = mode === 'any' ? 'any' : 'all';
-    t.assigneeId = ids[0];
-    if (!t.assignedAt || before[0] !== ids[0]) t.assignedAt = new Date().toISOString();
-    t.assignedBy = db.currentUserId;
+    /* Pre-pilot A — หลายคน: ไม่แตะผู้รับผิดชอบเดิม (รายชื่ออยู่ใน t.approvers) · คนเดียว = แบบเดิม ผู้อนุมัติคือผู้รับผิดชอบ */
+    if (ids.length === 1) {
+      t.assigneeId = ids[0];
+      if (!t.assignedAt || before[0] !== ids[0]) t.assignedAt = new Date().toISOString();
+      t.assignedBy = db.currentUserId;
+    }
     t.approvalVotes = {};
     var fresh = ids.filter(function (u) { return before.indexOf(u) < 0; });
     log(taskId, 'ตั้งผู้อนุมัติ {n} คน', { n: ids.length });

@@ -1911,8 +1911,16 @@
       // ถ้าใต้ปุ่มไม่พอ ให้พลิกไปอยู่เหนือปุ่มแทน
       var above = anchorRect ? anchorRect.top - 5 - r.height : 0;
       if (anchorRect && above > pad) pop.style.top = above + 'px';
-      else pop.style.maxHeight = Math.max(150, global.innerHeight - pad - r.top) + 'px';
+      else {
+        /* Pre-pilot A — เหนือก็ไม่พอ: ชิดขอบล่างจอ แล้วจำกัดความสูงไม่ให้เกินขอบบน (เดิมหลุดขึ้นไปเหนือจอบนมือถือ) */
+        var maxH = Math.max(120, global.innerHeight - 2 * pad);
+        pop.style.maxHeight = maxH + 'px';
+        r = pop.getBoundingClientRect();
+        pop.style.top = Math.max(pad, Math.min(r.top, global.innerHeight - pad - r.height)) + 'px';
+      }
     }
+    r = pop.getBoundingClientRect();
+    if (r.top < pad) pop.style.top = pad + 'px';
   }
 
   /* ---------- navigation ---------- */
@@ -1971,6 +1979,39 @@
   function quickCreate(v, projectId, sectionId) {
     var q = S.quickAdd(v, projectId);
     return S.createTask(q, projectId, q.sectionId || sectionId);
+  }
+
+  /* Pre-pilot A — พิมพ์เร็วในหน้าต่างถามชื่องาน: ตัวอย่างสดใต้ช่อง + แปลงเป็นค่าตอนบันทึก (ตัวอ่านเดียวกับช่องเพิ่มงาน)
+   * projectId null = งานส่วนตัว (อ่านแค่วันที่ ไม่แยก @ชื่อ/#เซกชัน) */
+  function quickParse(v, projectId, extra) {
+    var q = S.quickAdd(v, projectId || null, !projectId), attrs = {};
+    Object.keys(extra || {}).forEach(function (k) { attrs[k] = extra[k]; });
+    attrs.name = q.name;
+    if (q.dueOn) attrs.dueOn = q.dueOn;
+    if (projectId) { if (q.assigneeId) attrs.assigneeId = q.assigneeId; }
+    return { attrs: attrs, sectionId: projectId ? q.sectionId : null };
+  }
+  function quickHint(projectId) {
+    var inp = document.getElementById("askInput");
+    if (!inp || document.getElementById("askQuickHint")) return;
+    var box = document.createElement("div");
+    box.id = "askQuickHint";
+    box.className = "ask-quick";
+    box.innerHTML = "<div class=\"ask-quick-tip\">" + R.esc(projectId
+      ? L("พิมพ์ @ชื่อ #เซกชัน หรือวันที่ (พรุ่งนี้ ศุกร์ 5 ธ.ค.) ต่อท้ายชื่องานได้")
+      : L("พิมพ์วันที่ (พรุ่งนี้ ศุกร์ 5 ธ.ค.) ต่อท้ายชื่องานได้")) + "</div><div class=\"ask-quick-chips\"></div>";
+    inp.parentNode.insertAdjacentElement("afterend", box);
+    var chips = box.lastChild;
+    inp.addEventListener("input", function () {
+      var v = inp.value.trim(), bits = [];
+      if (v) {
+        var q = S.quickAdd(v, projectId || null, !projectId);
+        if (projectId && q.assigneeId) { var qu = S.user(q.assigneeId); if (qu) bits.push(L("มอบให้ {who}", { who: qu.name })); }
+        if (q.dueOn) bits.push(L("ส่ง {d}", { d: R.fmtDate(q.dueOn) }));
+        if (projectId && q.sectionId) { var qs = S.section(projectId, q.sectionId); if (qs) bits.push(L("ใน {s}", { s: qs.name })); }
+      }
+      chips.innerHTML = bits.map(function (b) { return "<span class=\"ask-quick-chip\">" + R.esc(b) + "</span>"; }).join("");
+    });
   }
 
   function inlineAdd(btn, sectionId) {
@@ -2328,7 +2369,9 @@
     }
     if (S.can('write') && S.canInProject(projectId, 'edit')) {      // Sprint 3
       h += item('slip-overdue', 'calendar', L('เลื่อนงานเลยกำหนดไปรอบถัดไป…'));
-      h += item('set-next-meeting', 'calendar', L('ตั้งวันประชุมถัดไป…'));
+      h += item('carry-open', 'calendar', L('ยกงานที่ยังไม่เสร็จไปประชุมครั้งหน้า…'));
+      h += item('set-next-meeting', 'calendar', L('ตั้งวันประชุมครั้งถัดไป…'));
+      if ((S.project(projectId).pages || []).length) h += item('new-meeting-page', 'text', L('บันทึกประชุมครั้งใหม่'));
     }
     h += '<div class="pop-sep"></div>';
     if (canStruct) {
@@ -8492,7 +8535,7 @@
      * ส่วนตัวกรอง เรียง จัดกลุ่ม คอลัมน์ การ์ด และปฏิทินเป็นมุมมองของแต่ละคน จำลง db.personal */
     put('structure', ['sv-rename', 'sv-move', 'sv-update', 'sv-delete', 'tab-default',
       'dup-section', 'do-dup-section']);
-    put('write', ['carry-over', 'slip-overdue', 'pg-move', 'set-next-meeting']);
+    put('write', ['carry-over', 'slip-overdue', 'pg-move', 'set-next-meeting', 'new-meeting-page', 'carry-open', 'carry-open-go']);
     put('structure', ['required-fields', 'save-required-fields', 'stale-days']);
     put('manage', ['fix-user-name', 'set-manager']);        // Sprint 4 — เฉพาะผู้ดูแลระบบ        // Sprint 4
     put('manage', ['set-org-lang', 'set-org-privacy']);       // Sprint 3 — เฉพาะผู้ดูแลระบบ        // Sprint 3 — ย้ายงานระหว่างเซกชัน = แก้งาน ไม่ใช่แก้โครงสร้าง
@@ -9449,7 +9492,7 @@
         var spMon = S.addDays(spT, ((8 - spDow) % 7) || 7);              // วันจันทร์ถัดไป
         var spNext = S.project(spPid).nextMeeting;      // วันประชุมถัดไปที่ตั้งไว้ (ถ้ายังไม่ถึง) มาเป็นตัวเลือกแรก
         askChoice(L('เลื่อนงานเลยกำหนดไปวันไหน'), L('{n} งานที่เลยกำหนดจะถูกเลื่อน และนับว่าเลื่อนแล้วหนึ่งครั้ง', { n: spN }),
-          (spNext && spNext > spT ? [[L('วันประชุมถัดไป'), spNext]] : []).concat([
+          (spNext && spNext > spT ? [[L('วันประชุมครั้งถัดไป'), spNext]] : []).concat([
           [L('พรุ่งนี้'), S.addDays(spT, 1)], [L('วันจันทร์หน้า'), spMon], [L('อีก 7 วัน'), S.addDays(spT, 7)]
         ]).map(function (o) {
           return { label: o[0] + (R.fmtDate(o[1]) !== o[0] ? ' · ' + R.fmtDate(o[1]) : ''), run: function () {
@@ -9478,11 +9521,58 @@
       case 'set-next-meeting': {
         closePops();
         var nmPid = state.route.id, nmCur = S.project(nmPid) && S.project(nmPid).nextMeeting;
-        askText(L('วันประชุมถัดไป'), nmCur ? R.fmtDate(nmCur) : '', function (v) {
-          var nq = S.quickAdd('x ' + (v || ''), null);          // ใช้ตัวอ่านวันที่เดียวกับพิมพ์เร็ว (ศุกร์นี้ 5 ธ.ค. 5/12)
-          if (!nq.dueOn) { toast(L('อ่านวันที่ไม่ออก ลองพิมพ์ เช่น ศุกร์นี้ หรือ 5 ธ.ค.')); return; }
-          if (S.setNextMeeting(nmPid, nq.dueOn)) toast(L('ตั้งวันประชุมถัดไปเป็น {d} แล้ว', { d: R.fmtDate(nq.dueOn) }));
-        }, { ok: L('บันทึก'), placeholder: L('เช่น ศุกร์นี้ หรือ 5 ธ.ค.') });
+        /* Pre-pilot A — ตัวเลือกวันที่จริง (ปฏิทินของเบราว์เซอร์) แทนช่องพิมพ์ ไม่ต้องเดาว่าอ่านวันที่แบบไหนได้ */
+        askText(L('วันประชุมครั้งถัดไป'), nmCur || S.addDays(S.today(), 7), function (v) {
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(v || '')) { toast(L('เลือกวันที่ก่อน')); return; }
+          if (S.setNextMeeting(nmPid, v)) toast(L('ตั้งวันประชุมครั้งถัดไปเป็น {d} แล้ว', { d: R.fmtDate(v) }));
+        }, { ok: L('บันทึก'), type: 'date' });
+        break;
+      }
+      case 'new-meeting-page': {
+        closePops();
+        var nmpPid = state.route.id;
+        var nmp = S.createMeetingPage(nmpPid);
+        if (!nmp) { toast(L('สร้างหน้าไม่ได้ (สิทธิ์หรือครบจำนวนแล้ว)')); break; }
+        pageRoute(nmpPid, nmp.id);
+        toast(L('สร้าง “{t}” แล้ว', { t: nmp.title }), L('ย้อนกลับ'), 'undo');
+        break;
+      }
+      /* Pre-pilot A — ยกงานที่ยังไม่เสร็จ (ทุกงาน ไม่ใช่แค่เลยกำหนด) จากเซกชันที่เลือกไปเซกชันยกยอด เห็นจำนวนก่อน */
+      case 'carry-open': {
+        closePops();
+        var cpid = state.route.id, cpj = S.project(cpid);
+        if (!cpj) break;
+        var carrySec = L('ยกยอดไปครั้งหน้า');
+        var cdest = (cpj.sections.filter(function (x) { return x.name === carrySec; })[0] || cpj.sections[cpj.sections.length - 1]).id;
+        var chtml = '<h2>' + R.esc(L('ยกงานที่ยังไม่เสร็จไปประชุมครั้งหน้า')) + '</h2>' +
+          '<p class="prj-note">' + R.esc(L('เลือกเซกชันที่จะยกงานที่ยังไม่เสร็จออกมา งานจะติดแท็ก “ยกมาจาก {d}” และย้อนกลับได้ในครั้งเดียว', { d: S.today() })) + '</p>' +
+          '<div class="field" id="coSrc">' + cpj.sections.map(function (x) {
+            return '<label class="apv4c-pick"><input type="checkbox" value="' + R.esc(x.id) + '"' + (x.id === cdest ? '' : ' checked') + '> <span>' + R.esc(x.name) + '</span></label>';
+          }).join('') + '</div>' +
+          '<div class="field"><label>' + R.esc(L('ยกไปที่เซกชัน')) + '</label><select id="coDest" class="inp">' + cpj.sections.map(function (x) {
+            return '<option value="' + R.esc(x.id) + '"' + (x.id === cdest ? ' selected' : '') + '>' + R.esc(x.name) + '</option>';
+          }).join('') + '</select></div><div class="modal-note" id="coCount"></div>' +
+          '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+          '<button class="btn btn-primary" id="coGo" data-act="carry-open-go" data-id="' + R.esc(cpid) + '">' + L('ยกงาน') + '</button></div>';
+        openModal(chtml);
+        var coUpd = function () {
+          var srcs = Array.prototype.map.call(document.querySelectorAll('#coSrc input:checked'), function (x) { return x.value; });
+          var dst = document.getElementById('coDest').value;
+          var n = S.openTasksInSections(cpid, srcs.filter(function (x) { return x !== dst; })).length;
+          document.getElementById('coCount').textContent = n ? L('จะยกงาน {n} งาน', { n: n }) : L('ไม่มีงานที่ยังไม่เสร็จในเซกชันที่เลือก');
+          document.getElementById('coGo').disabled = !n;
+        };
+        document.getElementById('coSrc').addEventListener('change', coUpd);
+        document.getElementById('coDest').addEventListener('change', coUpd);
+        coUpd();
+        break;
+      }
+      case 'carry-open-go': {
+        var cgSrcs = Array.prototype.map.call(document.querySelectorAll('#coSrc input:checked'), function (x) { return x.value; });
+        var cgDest = document.getElementById('coDest').value;
+        closeModal();
+        var cgN = S.carryOpenToNext(id, cgSrcs, cgDest);
+        if (cgN) toast(L('ยก {n} งานแล้ว', { n: cgN }), L('ย้อนกลับ'), 'undo');
         break;
       }
       /* Sprint 3 — ยกงานค้าง: ย้ายงานที่ยังไม่เสร็จในเซกชันนี้ไปเซกชันอื่นรวดเดียว (เช่น ประชุมครั้งก่อน → ครั้งนี้)
@@ -9865,10 +9955,12 @@
         askText(L('ชื่องานใหม่'), '', function (v) {
           if (!v) return;
           var qsel = document.getElementById('qaSec');
-          var nt = S.createTask({ name: v }, qp.id, (qsel && qsel.value) || qaCtx.sectionId);
+          var qpz = quickParse(v, qp.id);
+          var nt = S.createTask(qpz.attrs, qp.id, qpz.sectionId || (qsel && qsel.value) || qaCtx.sectionId);
           if (nt) openTask(nt.id);          // Sprint 1B — ถูกด่านสร้างงานปฏิเสธ = null (ขึ้นข้อความแล้ว)
         }, { ok: L('เพิ่มงาน'), pasteCtx: qaCtx,
              note: L('วางข้อความหลายบรรทัดเพื่อสร้างหลายงานพร้อมกัน') });
+        quickHint(qp.id);
         /* Sprint 4b — เลือกเซกชันก่อนเพิ่ม (ค่าเริ่มต้น = เซกชันแรก) */
         var qaIn = document.getElementById('askInput');
         if (qaIn && qp.sections.length > 1) {
@@ -10877,10 +10969,12 @@
       case 'mt-add-top':
         askText(L('ชื่องานใหม่'), '', function (v) {
           if (!v) return;
-          var mmade = S.mtCreateTasks([v], S.MT_RECENT);
+          var mqz = quickParse(v, null);
+          var mmade = S.mtCreateTasks([mqz.attrs.name], S.MT_RECENT, mqz.attrs.dueOn ? { dueOn: mqz.attrs.dueOn } : null);
           if (mmade[0]) openTask(mmade[0].id);
         }, { ok: L('เพิ่มงาน'), pasteCtx: { mtSection: S.MT_RECENT },
              note: L('งานที่สร้างจากงานของฉันเป็นงานส่วนตัว เห็นเฉพาะคุณจนกว่าจะเพิ่มเข้าโปรเจกต์') });
+        quickHint(null);
         break;
 
       /* --- ปฏิทินสัปดาห์/เดือน (R.calBoard) ใช้ได้ทุกขอบเขต --- */
@@ -14132,9 +14226,11 @@
         var sh = '<div class="pop-note strong">' + R.esc(L('เตือนอีกครั้ง…')) + '</div>';
         S.snoozeChoices().forEach(function (c) {
           var d = new Date(c.at);
+          /* Pre-pilot A — หนึ่งบรรทัดต่อหนึ่งตัวเลือก "อีก 1 ชั่วโมง · 15:35" (ไม่ซ้ำเวลา 9:00/09:00) */
+          var sbase = String(L(c.label)).replace(/\s*\([^)]*\d{1,2}:\d{2}\)\s*$/, '').replace(/\s*\d{1,2}:\d{2}\s*$/, '');
+          var sday = S.iso(d) === S.today() ? '' : (R.fmtDate(S.iso(d)) + ' ');
           sh += '<button data-act="notif-snooze-set" data-ids="' + R.esc(ids) + '" data-at="' + R.esc(c.at) + '">' +
-            I('clock', 14) + '<span class="grow">' + R.esc(L(c.label)) + '</span>' +
-            '<span class="pop-hint">' + R.esc(R.fmtDate(S.iso(d)) + ' ' + R.fmtTime(d)) + '</span></button>';
+            I('clock', 14) + '<span class="grow">' + R.esc(sbase + ' · ' + (c.id === 'week' ? sday : '') + R.fmtTime(d)) + '</span></button>';
         });
         sh += '<div class="pop-note">' + R.esc(L('รายการจะซ่อนไว้ แล้วกลับมาเป็นรายการใหม่ตามเวลาที่เลือก')) + '</div>';
         openPop(el, sh);
@@ -14230,6 +14326,7 @@
     state: state, S: S, R: R, L: L, I: I, esc: esc,
     renderAll: renderAll, renderViewBody: renderViewBody, renderTopbar: renderTopbar, refreshView: refreshView,
     openModal: openModal, closeModal: closeModal, toast: toast,
+    quickParse: quickParse, quickHint: quickHint,
     askText: askText, askConfirm: askConfirm, askChoice: askChoice, openPop: openPop, closePops: closePops,
     denyToast: denyToast, downloadText: downloadText, safeFileName: safeFileName,
     confirmReveal: confirmReveal, confirmRevealNew: confirmRevealNew,     // ถามก่อนให้คนนอกโปรเจกต์ปิดเห็นงาน

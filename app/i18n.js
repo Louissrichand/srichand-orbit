@@ -2753,6 +2753,21 @@
     'ยังไม่มีอีเมลให้เพิ่ม': 'No emails to add', 'สรุปการเพิ่มสมาชิก': 'Members added',
     'เพิ่มแล้ว {n} คน': 'Added [n|{n} person|{n} people]', 'ข้าม (มีอยู่แล้วหรือซ้ำ) {n} รายการ': 'Skipped (already exist or duplicate): {n}',
     'อีเมลไม่ถูกต้อง {n} รายการ': 'Invalid emails: {n}',
+    // Pre-pilot A
+    'พิมพ์ @ชื่อ #เซกชัน หรือวันที่ (พรุ่งนี้ ศุกร์ 5 ธ.ค.) ต่อท้ายชื่องานได้': 'Add @name, #section or a date (tomorrow, Fri, 5 Dec) after the task name',
+    'พิมพ์วันที่ (พรุ่งนี้ ศุกร์ 5 ธ.ค.) ต่อท้ายชื่องานได้': 'Add a date (tomorrow, Fri, 5 Dec) after the task name',
+    'ยังไม่มีงานในเซกชันนี้': 'No tasks in this section yet',
+    'มติ': 'Decisions', 'บันทึกประชุม {d}': 'Meeting notes {d}', 'ส่งสไลด์ @ชื่อ ศุกร์': 'Send slides @name Fri',
+    'บันทึกประชุมครั้งใหม่': 'New meeting notes',
+    'ยกงานที่ยังไม่เสร็จไปประชุมครั้งหน้า…': 'Carry open tasks to the next meeting…',
+    'ยกงานที่ยังไม่เสร็จไปประชุมครั้งหน้า': 'Carry open tasks to the next meeting',
+    'เลือกเซกชันที่จะยกงานที่ยังไม่เสร็จออกมา งานจะติดแท็ก “ยกมาจาก {d}” และย้อนกลับได้ในครั้งเดียว': 'Pick the sections to take open tasks from. They get the tag “Carried over from {d}” and it can be undone in one step',
+    'ยกไปที่เซกชัน': 'Move them to section', 'จะยกงาน {n} งาน': 'Will carry [n|{n} task|{n} tasks]',
+    'ไม่มีงานที่ยังไม่เสร็จในเซกชันที่เลือก': 'No open tasks in the selected sections',
+    'ยกงาน': 'Carry over', 'ยก {n} งานแล้ว': 'Carried over [n|{n} task|{n} tasks]',
+    'ตั้งวันประชุมครั้งถัดไป…': 'Set next meeting date…', 'วันประชุมครั้งถัดไป': 'Next meeting date',
+    'ตั้งวันประชุมครั้งถัดไปเป็น {d} แล้ว': 'Next meeting set to {d}', 'เลือกวันที่ก่อน': 'Pick a date first',
+    'สร้าง “{t}” แล้ว': 'Created “{t}”',
   };
 
   /* ข้อความที่เก็บไว้ในบันทึก/การแจ้งเตือนเก่าเป็นคีย์ไทยเดิมที่เรียกเซกชันว่า "คอลัมน์"
