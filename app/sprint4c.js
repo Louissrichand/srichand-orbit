@@ -141,6 +141,7 @@
       api.renderAll();
       var h = '<h2>' + esc(L('สรุปการเพิ่มสมาชิก')) + '</h2><ul class="bi-sum">' +
         '<li>' + esc(L('เพิ่มแล้ว {n} คน', { n: res.added.length })) + '</li>' +
+        (res.teamsCreated.length ? '<li>' + esc(L('สร้างทีมใหม่ {n} ทีม', { n: res.teamsCreated.length })) + ': <em>' + esc(res.teamsCreated.slice(0, 8).join(', ')) + '</em></li>' : '') +
         '<li>' + esc(L('ข้าม (มีอยู่แล้วหรือซ้ำ) {n} รายการ', { n: res.dup.length })) + (res.dup.length ? ': <em>' + esc(res.dup.slice(0, 8).join(', ')) + '</em>' : '') + '</li>' +
         '<li>' + esc(L('อีเมลไม่ถูกต้อง {n} รายการ', { n: res.bad.length })) + (res.bad.length ? ': <em>' + esc(res.bad.slice(0, 8).join(', ')) + '</em>' : '') + '</li></ul>' +
         '<div class="modal-acts"><button class="btn btn-primary" data-act="close-modal">' + esc(L('ปิด')) + '</button></div>';

@@ -110,7 +110,7 @@
     { id: 'at_risk',   label: 'เสี่ยง',       color: '#f5a623' },
     { id: 'off_track', label: 'หลุดแผน',     color: '#e8384f' },
     { id: 'on_hold',   label: 'พักไว้ก่อน',   color: '#4186e0' },
-    { id: 'complete',  label: 'เสร็จสมบูรณ์', color: '#37c5ab', done: true },
+    { id: 'complete',  label: 'เสร็จแล้ว', color: '#37c5ab', done: true },
     { id: 'dropped',   label: 'ยกเลิกแล้ว',   color: '#9ca0a8', done: true }
   ];
 
@@ -504,7 +504,7 @@
     d.projects.forEach(function (p) {
       if (!p.visibility) p.visibility = 'org';   // ของเดิมทุกโปรเจกต์เปิดให้ทุกคน
       if (!('locked' in p)) p.locked = false;
-      if (!('baseline' in p)) p.baseline = null; // เส้นฐานของ Gantt ยังไม่เคยตั้ง
+      if (!('baseline' in p)) p.baseline = null; // แผนเดิมของ Gantt ยังไม่เคยตั้ง
       if (!('owner' in p)) p.owner = null;
       if (!('dueOn' in p)) p.dueOn = null;
       if (!p.depShift) p.depShift = { mode: 'consume', scope: 'downstream' };
@@ -1237,7 +1237,7 @@
     return Math.abs(daysBetween(t.startOn, t.dueOn)) + 1;
   }
 
-  /* ---------- เส้นฐาน (baseline) ----------
+  /* ---------- แผนเดิม (baseline) ----------
    *
    * เก็บวันที่ของทุกงานไว้ ณ วันที่กดตั้ง ไว้เทียบว่าตอนนี้หลุดจากแผนเดิมไปเท่าไร
    * เก็บที่ตัวโปรเจกต์ ไม่ใช่ที่มุมมอง เพราะเป็นข้อเท็จจริงร่วมของทีม
@@ -1246,7 +1246,7 @@
   function setBaseline(projectId) {
     var p = project(projectId);
     if (!p) return false;
-    snapshot('ตั้งเส้นฐาน');
+    snapshot('บันทึกแผนเดิม');
     var map = {};
     tasksInProject(projectId).forEach(function (x) {
       var t = x.task;
@@ -1262,14 +1262,14 @@
   function clearBaseline(projectId) {
     var p = project(projectId);
     if (!p || !p.baseline) return false;
-    snapshot('ลบเส้นฐาน');
+    snapshot('ลบแผนเดิม');
     p.baseline = null;
     audit('project.baselineClear', p.name);
     commit();
     return true;
   }
 
-  /** วันตามเส้นฐานของงานหนึ่ง คืน null ถ้างานนี้ยังไม่อยู่ในเส้นฐาน */
+  /** วันตามแผนเดิมของงานหนึ่ง คืน null ถ้างานนี้ยังไม่อยู่ในแผนเดิม */
   function baselineOf(projectId, taskId) {
     var p = project(projectId);
     if (!p || !p.baseline) return null;
@@ -1300,7 +1300,7 @@
   ];
 
   var DEP_SHIFT = [
-    { id: 'consume',  label: 'กินระยะห่าง',
+    { id: 'consume',  label: 'ขยับเฉพาะเมื่อวันชนกัน',
       desc: 'ขยับงานที่รออยู่เฉพาะตอนที่วันชนกันจริง ระยะห่างที่เว้นไว้ทำหน้าที่เป็นกันชน' },
     { id: 'maintain', label: 'รักษาระยะห่าง',
       desc: 'ขยับงานที่พึ่งพากันด้วยระยะเท่ากับที่งานต้นทางขยับ ระยะห่างเดิมคงอยู่เท่าเดิม' },
@@ -2421,7 +2421,7 @@
     { id: 'list',      label: 'รายการ',   icon: 'menu',       desc: 'ตารางงาน จัดกลุ่มและลากสลับลำดับได้' },
     { id: 'board',     label: 'บอร์ด',    icon: 'grid',       desc: 'คัมบัง ลากงานข้ามคอลัมน์' },
     { id: 'timeline',  label: 'ไทม์ไลน์', icon: 'bars',       desc: 'วางแผนงานตามช่วงเวลา' },
-    { id: 'gantt',     label: 'Gantt',    icon: 'subtask',    desc: 'ลำดับก่อนหลังและเส้นฐาน' },
+    { id: 'gantt',     label: 'Gantt',    icon: 'subtask',    desc: 'ลำดับก่อนหลังและแผนเดิม' },
     { id: 'calendar',  label: 'ปฏิทิน',   icon: 'calendar',   desc: 'ดูตามกำหนดส่งรายเดือน' },
     { id: 'dashboard', label: 'สรุปผล',   icon: 'chart',      desc: 'ตัวเลขรวมและความคืบหน้า' },
     { id: 'messages',  label: 'ประกาศ',    icon: 'send',       desc: 'เรื่องของทั้งโปรเจกต์ที่ไม่ได้ผูกกับงานชิ้นไหน' },
@@ -4063,7 +4063,7 @@
 
   function missingRequiredFields(taskId) {
     var t = task(taskId);
-    if (!t) return [];
+    if (!t || t.parentId) return []; /* เฉพาะงานหลัก ไม่รวมงานย่อย */
     var out = [];
     (index().memByTask[rootOf(t).id] || []).forEach(function (m) {
       var p = project(m.projectId);
@@ -4077,7 +4077,7 @@
   }
   function setRequiredFields(projectId, ids) {
     var p = project(projectId);
-    if (!p || !can('structure') || !canInProject(projectId, 'edit')) return false;
+    if (!p || !canStructureProject(projectId)) return false;
     var valid = (ids || []).filter(function (fid) { var d = (p.fields || []).filter(function (f) { return f.id === fid; })[0]; return d && d.type !== 'id' && d.type !== 'formula'; });
     snapshot('ตั้งฟิลด์ที่ต้องกรอกก่อนทำเสร็จ');
     p.requiredFields = valid;
@@ -5466,7 +5466,7 @@
 
   function archiveProject(id, archived) {
     var p = project(id);
-    if (!p) return;
+    if (!p || !canStructureProject(id)) return;
     p.archived = !!archived;
     commit();
   }
@@ -5836,7 +5836,7 @@
 
   function addField(projectId, field) {
     var p = project(projectId);
-    if (!p) return null;
+    if (!p || !canStructureProject(projectId)) return null;
     snapshot('เพิ่มฟิลด์');
     var nf = normalizeFieldDef({
       id: uid('f'), name: String(field.name || 'ฟิลด์ใหม่').slice(0, 80),
@@ -5862,7 +5862,7 @@
    *  ค่าของงานที่ยังอยู่ในโปรเจกต์อื่นที่ใช้ฟิลด์เดียวกันไม่ถูกลบ */
   function deleteField(projectId, fieldId) {
     var p = project(projectId);
-    if (!p) return;
+    if (!p || !canStructureProject(projectId)) return;
     var at = -1;
     p.fields.forEach(function (f, i) { if (f.id === fieldId) at = i; });
     if (at < 0) return;
@@ -5888,6 +5888,21 @@
   }
 
   /* Sprint 4b — รวมฟิลด์ซ้ำ: ย้ายค่าของ A ไป B เฉพาะงานที่ B ยังว่าง แล้วลบ A (เฉพาะผู้ดูแล, ชนิดเดียวกัน, ไม่ใช่ฟิลด์คลัง) */
+  /** Pre-pilot B — ดูก่อนรวมฟิลด์: ค่าที่จะย้าย กับค่าที่จะหายเพราะฟิลด์ปลายทางมีค่าอยู่แล้ว (ไม่เปลี่ยนข้อมูล) */
+  function mergeFieldsPreview(projectId, fromId, intoId) {
+    var isEmpty = function (v) { return v === null || v === undefined || v === '' || (Array.isArray(v) && !v.length); };
+    var out = { move: 0, drop: 0, dropNames: [] };
+    db.fieldValues.forEach(function (v) {
+      if (v.fieldId !== fromId || isEmpty(v.value)) return;
+      var tgt = db.fieldValues.filter(function (x) { return x.taskId === v.taskId && x.fieldId === intoId; })[0];
+      if (!tgt || isEmpty(tgt.value)) { out.move++; return; }
+      out.drop++;
+      var t = task(v.taskId);
+      if (t && out.dropNames.length < 5) out.dropNames.push(t.name);
+    });
+    return out;
+  }
+
   function mergeFields(projectId, fromId, intoId) {
     var p = project(projectId);
     if (!p || !isAdmin(db.currentUserId) || fromId === intoId) return false;
@@ -6577,6 +6592,14 @@
     return out;
   }
 
+  /** Pre-pilot B — แก้โครงสร้างโปรเจกต์ (ตั้งค่า ฟิลด์ ฟิลด์ที่ต้องกรอก อัตโนมัติ นำเข้า เก็บเข้าคลัง)
+   *  = เจ้าของโปรเจกต์ ผู้ดูแลโปรเจกต์ หรือผู้ดูแลระบบ · สมาชิกทั่วไปยังเพิ่ม/แก้งาน คอมเมนต์ และเพิ่ม/เปลี่ยนชื่อเซกชันได้ */
+  function canStructureProject(projectId) {
+    var p = project(projectId);
+    if (!p || !isActive() || !can('structure')) return false;
+    return can('manage') || p.owner === db.currentUserId || canInProject(projectId, 'admin');
+  }
+
   /** เพิ่มคนเป็นสมาชิกโปรเจกต์ได้ไหม (หน้าต่างสมาชิก และตัวเลือก "เพิ่มเป็นสมาชิก" ในหน้าต่างถามก่อนมอบงาน)
    *
    * เดิมให้เฉพาะผู้ดูแลระบบ ทั้งที่คำอธิบายสิทธิ์ "ผู้ดูแลโปรเจกต์" บอกว่าจัดการสมาชิกได้ หน้าต่างก็โชว์ปุ่มให้
@@ -6639,7 +6662,7 @@
   /** เปลี่ยนบทบาท — ห้ามเหลือศูนย์ผู้ดูแล ไม่งั้นไม่มีใครเข้าหน้าผู้ดูแลได้อีก */
   /* Sprint 4 — แก้ชื่อที่แสดงของสมาชิก (ผู้ดูแลระบบ) ใช้กับชื่อที่เป็นอีเมลซึ่งขึ้นเต็มตามงาน/ความเห็นทุกที่ */
   /* Sprint 4 — หัวหน้าของสมาชิก (ผู้ดูแลระบบตั้ง) ใช้เลือกผู้รับโอนงานให้อัตโนมัติตอนปิดบัญชี */
-  /* Sprint 4 — เตือนงานเงียบ (ทำงานฝั่งเครื่อง เฉพาะตอนมีคนเปิด Orbit อยู่ — ยังไม่มีเซิร์ฟเวอร์รันให้ตลอดเวลา)
+  /* Sprint 4 — เตือนงานไม่มีความเคลื่อนไหว (ทำงานฝั่งเครื่อง เฉพาะตอนมีคนเปิด Orbit อยู่ — ยังไม่มีเซิร์ฟเวอร์รันให้ตลอดเวลา)
    * โปรเจกต์ที่ตั้ง staleDays = N: งานที่ยังไม่เสร็จและไม่มีความเคลื่อนไหวจากคนเกิน N วัน → แจ้งผู้รับผิดชอบให้อัปเดตสถานะ
    * เกิน 2N วัน → เพิ่มเจ้าของโปรเจกต์เป็นผู้ติดตามด้วย แต่ละขั้นทำครั้งเดียว (t.stale) งานกลับมาเคลื่อนไหวแล้วเริ่มนับใหม่
    * บันทึกของระบบเองมี sys:1 ไม่นับเป็นความเคลื่อนไหว (ไม่งั้นเตือนแล้วงานกลายเป็น "ไม่เงียบ" ทันที) */
@@ -6652,20 +6675,20 @@
     });
     return last;
   }
-  /** Sprint 4b — เซกชันที่งานเงียบเกิน 30 วันจะถูกย้ายไป (null = ไม่ย้าย) */
+  /** Sprint 4b — เซกชันที่งานไม่มีความเคลื่อนไหวเกิน 30 วันจะถูกย้ายไป (null = ไม่ย้าย) */
   function setStaleMoveTo(projectId, sectionId) {
     var p = project(projectId);
-    if (!p || !can('structure') || !canInProject(projectId, 'edit')) return false;
+    if (!p || !canStructureProject(projectId)) return false;
     if (sectionId && !section(projectId, sectionId)) return false;
-    snapshot('ตั้งเตือนงานเงียบ');
+    snapshot('ตั้งเตือนงานไม่มีความเคลื่อนไหว');
     p.staleMoveTo = sectionId || null;
     commit();
     return true;
   }
   function setStaleDays(projectId, days) {
     var p = project(projectId);
-    if (!p || !can('structure') || !canInProject(projectId, 'edit')) return false;
-    snapshot('ตั้งเตือนงานเงียบ');
+    if (!p || !canStructureProject(projectId)) return false;
+    snapshot('ตั้งเตือนงานไม่มีความเคลื่อนไหว');
     p.staleDays = Math.max(0, Math.min(365, parseInt(days, 10) || 0));
     commit();
     return true;
@@ -7585,14 +7608,14 @@
 
   var CSV_TARGETS = [
     { id: 'ignore',        label: 'ไม่นำเข้า' },
-    { id: 'name',          label: 'ชื่องาน',               names: ['Name', 'Task Name', 'Task', 'ชื่องาน', 'ชื่อ'] },
-    { id: 'notes',         label: 'รายละเอียด',            names: ['Notes', 'Description', 'รายละเอียด'] },
-    { id: 'section',       label: 'เซกชัน (เซกชัน)',       names: ['Section/Column', 'Section', 'Column', 'เซกชัน', 'เซกชัน'] },
-    { id: 'assignee',      label: 'ผู้รับผิดชอบ',           names: ['Assignee', 'ผู้รับผิดชอบ'] },
-    { id: 'assigneeEmail', label: 'อีเมลผู้รับผิดชอบ',       names: ['Assignee Email'] },
+    { id: 'name',          label: 'ชื่องาน',               names: ['Name', 'Task Name', 'Task', 'ชื่องาน', 'ชื่อ', 'งาน', 'หัวข้อ', 'ชื่อเรื่อง'] },
+    { id: 'notes',         label: 'รายละเอียด',            names: ['Notes', 'Description', 'รายละเอียด', 'หมายเหตุ', 'คำอธิบาย'] },
+    { id: 'section',       label: 'เซกชัน (เซกชัน)',       names: ['Section/Column', 'Section', 'Column', 'เซกชัน', 'คอลัมน์', 'หมวด', 'สถานะ'] },
+    { id: 'assignee',      label: 'ผู้รับผิดชอบ',           names: ['Assignee', 'ผู้รับผิดชอบ', 'ผู้รับงาน'] },
+    { id: 'assigneeEmail', label: 'อีเมลผู้รับผิดชอบ',       names: ['Assignee Email', 'อีเมลผู้รับผิดชอบ'] },
     { id: 'collaborators', label: 'ผู้ร่วมงาน (ผู้ติดตาม)', names: ['Collaborators', 'Followers', 'ผู้ติดตาม', 'ผู้ร่วมงาน'] },
-    { id: 'start',         label: 'วันเริ่ม',               names: ['Start Date', 'วันเริ่ม'] },
-    { id: 'due',           label: 'กำหนดส่ง',              names: ['Due Date', 'กำหนดส่ง'] },
+    { id: 'start',         label: 'วันเริ่ม',               names: ['Start Date', 'วันเริ่ม', 'เริ่ม', 'วันที่เริ่ม'] },
+    { id: 'due',           label: 'กำหนดส่ง',              names: ['Due Date', 'กำหนดส่ง', 'วันครบกำหนด', 'วันที่ส่ง', 'ครบกำหนด'] },
     { id: 'priority',      label: 'ความสำคัญ',             names: ['Priority', 'ความสำคัญ'] },
     { id: 'type',          label: 'ชนิดงาน',               names: ['Type', 'ชนิดงาน'] },
     { id: 'tags',          label: 'แท็ก',                  names: ['Tags', 'แท็ก'] },
@@ -7612,7 +7635,12 @@
     var used = {};
     var guess = head.map(function (h) {
       var hl = String(h || '').trim().toLowerCase();
-      if (!hl || hl === 'task id') return 'ignore';
+      if (!hl || hl === 'task id' || hl === 'รหัสงาน') return 'ignore';
+      /* ฟิลด์ที่ชื่อตรงเป๊ะ (ภาษาไทย) ชนะคำพ้องของคอลัมน์มาตรฐาน เช่น ฟิลด์ "สถานะ" */
+      var fx = /[฀-๿]/.test(hl) ? ((p && p.fields) || []).filter(function (x) {
+        return x.type !== 'id' && x.name.trim().toLowerCase() === hl;
+      })[0] : null;
+      if (fx) return 'field:' + fx.id;
       for (var k = 0; k < CSV_TARGETS.length; k++) {
         var c = CSV_TARGETS[k];
         if (c.names && !used[c.id] && c.names.some(function (n) { return n.toLowerCase() === hl; })) {
@@ -7657,6 +7685,7 @@
     var p = project(projectId);
     if (!p) throw new Error('ไม่พบโปรเจกต์');
     /* Sprint 1B — นำเข้า = สร้างงานหลายงานในโปรเจกต์ ต้องผ่านด่านเดียวกับการเพิ่มงาน */
+    if (!canStructureProject(projectId)) throw new Error('การนำเข้าไฟล์ทำได้เฉพาะเจ้าของหรือผู้ดูแลโปรเจกต์');
     if (!canCreateTask(projectId)) throw new Error('คุณไม่มีสิทธิ์เพิ่มงานในโปรเจกต์นี้');
     var rows = parseCsv(text);
     if (rows.length < 2) throw new Error('ไฟล์ว่างหรือไม่มีบรรทัดข้อมูล');
@@ -8094,7 +8123,7 @@
     var p = project(projectId);
     if (!p || !can('write') || !canInProject(projectId, 'edit')) return false;
     if (isoDate && !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(isoDate)) return false;
-    snapshot('ตั้งวันประชุมถัดไป');
+    snapshot('ตั้งวันประชุมครั้งถัดไป');
     p.nextMeeting = isoDate || null;
     commit();
     return true;
@@ -8859,7 +8888,7 @@
   /** แก้อัตโนมัติของโปรเจกต์ได้ไหม — คนที่แก้โครงสร้างโปรเจกต์นั้นได้ (งานของฉัน = ตัวเอง) */
   function canEditAutos(pid) {
     if (pid === '@me') return isActive();
-    return !!project(pid) && can('structure') && canInProject(pid, 'edit');
+    return canStructureProject(pid);
   }
 
   /** สร้างหรือแก้ (มี id อยู่แล้ว = แทนของเดิม) คืนตัวที่บันทึก หรือ null */
@@ -9750,7 +9779,7 @@
       sections: o.secs.map(function (n, i) { return { id: 'bs_' + id + '_' + i, name: n }; }),
       fields: (o.fields || []).map(function (f, i) {
         return normalizeFieldDef({ id: 'bf_' + id + '_' + i, name: f[0], type: f[1],
-          options: f[2] || [], format: f[3] || null });
+          options: f[2] || [], format: f[3] || null, desc: f[4] || '' });
       }),
       roles: (o.roles || []).map(function (n, i) { return { k: 'r' + i, name: n, user: null, text: true }; }),
       types: (o.types || []).map(function (ty, i) {
@@ -9903,10 +9932,10 @@
       { id: 'npd', icon: '🧴', color: '#e8384f', name: L('พัฒนาสินค้าใหม่ (เครื่องสำอาง)'),
         desc: L('ตั้งแต่ไอเดียถึงวันเปิดตัว: พัฒนาสูตร ทดสอบ จดแจ้ง อย. บรรจุภัณฑ์ และผลิตล็อตแรก พร้อมจุดอนุมัติ 4 จุด'),
         secs: [L('ไอเดียและคอนเซ็ปต์'), L('พัฒนาสูตร'), L('ทดสอบความคงตัว (Stability)'), L('SPF และความปลอดภัย'), L('บรรจุภัณฑ์และอาร์ตเวิร์ก'), L('จดแจ้ง อย.'), L('ผลิตล็อตแรก'), L('วันเปิดตัว')],
-        fields: [['SKU', 'text'],
-                 [L('ต้นทุนต่อชิ้น (บาท)'), 'number', [], { kind: 'currency', currency: 'THB', unit: '', decimals: 2 }],
-                 [L('สถานะ อย.'), 'select', [L('ยังไม่ยื่น'), L('ยื่นแล้ว'), L('ได้รับเลขจดแจ้ง')]],
-                 ['Actual Start Date', 'date'], ['Actual Finish Date', 'date']],
+        fields: [['SKU', 'text', [], null, L('รหัสสินค้า (Stock Keeping Unit) ใช้อ้างอิงสินค้าตัวนี้ในคลังและยอดขาย')],
+                 [L('ต้นทุนต่อชิ้น (บาท)'), 'number', [], { kind: 'currency', currency: 'THB', unit: '', decimals: 2 }, L('ต้นทุนผลิตโดยประมาณต่อหนึ่งชิ้น ไม่รวมค่าการตลาดและค่าขนส่ง')],
+                 [L('สถานะ อย.'), 'select', [L('ยังไม่ยื่น'), L('ยื่นแล้ว'), L('ได้รับเลขจดแจ้ง')], null, L('ความคืบหน้าการจดแจ้งเครื่องสำอางกับ อย.')],
+                 [L('วันเริ่มจริง'), 'date', [], null, L('วันที่เริ่มทำงานจริง ใช้เทียบกับแผน')], [L('วันเสร็จจริง'), 'date', [], null, L('วันที่ทำงานเสร็จจริง ใช้เทียบกับแผน')]],
         roles: [L('R&D'), L('QA'), L('Regulatory'), L('Packaging'), L('ทีมการตลาด')],
         tasks: [
           [L('สรุปคอนเซ็ปต์และกลุ่มเป้าหมาย'), 0, 4, 0, 7],
@@ -13012,7 +13041,7 @@
     deleteProject: deleteProject, duplicateProject: duplicateProject, projectFirstDate: projectFirstDate,
     setProjectStatus: setProjectStatus, statusLog: statusLog, archiveProject: archiveProject,
     addSection: addSection, renameSection: renameSection,
-    setStaleMoveTo: setStaleMoveTo, mergeFields: mergeFields, deleteSection: deleteSection, moveSection: moveSection, addSections: addSections, reorderSection: reorderSection,
+    setStaleMoveTo: setStaleMoveTo, mergeFields: mergeFields, mergeFieldsPreview: mergeFieldsPreview, deleteSection: deleteSection, moveSection: moveSection, addSections: addSections, reorderSection: reorderSection,
     addField: addField, renameField: renameField, deleteField: deleteField,
     colWidth: colWidth, setColWidth: setColWidth, resetColWidths: resetColWidths,
     saveView: saveView, deleteSavedView: deleteSavedView,
@@ -13155,7 +13184,7 @@
   var X4A = {
     TEAM_PRIVACY: TEAM_PRIVACY, TEAM_RES_MAX: TEAM_RES_MAX, TEAM_PIN_MAX: TEAM_PIN_MAX,
     teams: teams, team: team, teamRole: teamRole, isTeamMember: isTeamMember, canSeeTeam: canSeeTeam,
-    canManageTeam: canManageTeam, visibleTeams: visibleTeams, myTeams: myTeams, teamsOfUser: teamsOfUser,
+    canStructureProject: canStructureProject, canManageTeam: canManageTeam, visibleTeams: visibleTeams, myTeams: myTeams, teamsOfUser: teamsOfUser,
     createTeam: createTeam, updateTeam: updateTeam, deleteTeam: deleteTeam, addTeamMember: addTeamMember,
     setTeamRole: setTeamRole, removeTeamMember: removeTeamMember, joinTeam: joinTeam,
     answerTeamRequest: answerTeamRequest, toggleTeamPin: toggleTeamPin, addTeamResource: addTeamResource,
@@ -14863,7 +14892,7 @@
   /* ---------- Sprint 4c - เพิ่มสมาชิกหลายคนพร้อมกัน (อีเมลทีละบรรทัด / CSV) ----------
    * rows [{email, name, team}] -> { added:[], dup:[], bad:[] } ใช้ addUser/emailProblem ชุดเดิม ย้อนกลับได้ทีเดียว */
   function bulkAddUsers(rows, role) {
-    var out = { added: [], dup: [], bad: [] };
+    var out = { added: [], dup: [], bad: [], teamsCreated: [] };
     if (!isAdmin()) { denied('members'); return out; }
     var seen = {};
     batch('เพิ่มสมาชิกหลายคน', null, function () {
@@ -14881,6 +14910,10 @@
         var tn = String(r.team || '').trim().toLowerCase();
         if (tn) {
           var tm = (db.teams || []).filter(function (x) { return String(x.name || '').trim().toLowerCase() === tn; })[0];
+          if (!tm) {
+            tm = createTeam({ name: String(r.team).trim() });
+            if (tm) out.teamsCreated.push(tm.name);
+          }
           if (tm) addTeamMember(tm.id, u.id, 'member');
         }
       });
