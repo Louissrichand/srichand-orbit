@@ -5747,3 +5747,10 @@ label.pf-pick-row { cursor: pointer; }
 .smp-card { align-items: center; }
 .smp-card .btn { margin-left: auto; flex: none; white-space: nowrap; }
 .smp-pill { background: var(--accent-soft, #eef0ff); color: var(--accent, #5b50e6); }
+
+/* Inline add */
+.card.tr-new { padding: 8px; }
+.card.tr-new .tr-new-input { width: 100%; max-width: none; }
+@media (max-width: 700px) {
+  .tr-new-input { font-size: 16px; min-height: 40px; }
+}
