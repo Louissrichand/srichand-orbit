@@ -5124,7 +5124,8 @@
     synced:   ['cloudCheck', 'ซิงก์แล้ว',         'ok'],
     offline:  ['cloudOff',   'ออฟไลน์',           'warn'],
     conflict: ['alert',      'ข้อมูลชนกัน',        'bad'],
-    error:    ['alert',      'ซิงก์ไม่สำเร็จ',     'bad']
+    error:    ['alert',      'ซิงก์ไม่สำเร็จ',     'bad'],
+    expired:  ['signIn',     'เข้าสู่ระบบใหม่',     'warn']   // งานยังอยู่ในเครื่อง รอส่งหลังเข้าสู่ระบบ
   };
 
   function syncAgo(ts) {
@@ -5162,7 +5163,13 @@
     h += '<div class="pop-note">' + esc(global.OrbitCloud.describeTarget()) + '</div>';
     if (s.error) h += '<div class="pop-note bad">' + esc(L(s.error)) + '</div>';
 
-    if (s.status === 'conflict') {
+    if (s.status === 'expired') {
+      /* หมดอายุ: บอกให้ชัดว่างานไม่หาย แค่ยังไม่ได้ส่งขึ้น แล้วให้ปุ่มเดียวที่แก้ได้ */
+      h += '<div class="pop-note">' + (s.dirty
+        ? L('งานที่แก้ล่าสุดเก็บไว้ในเครื่องนี้แล้ว จะส่งขึ้นส่วนกลางให้ทันทีหลังเข้าสู่ระบบ')
+        : L('ระหว่างนี้จะไม่เห็นงานใหม่ของเพื่อนร่วมทีม')) + '</div>';
+      h += '<button data-act="reauth">' + I('signIn') + '<span>' + L('เข้าสู่ระบบอีกครั้ง') + '</span></button>';
+    } else if (s.status === 'conflict') {
       h += '<div class="pop-note bad">' +
         L('มีคนแก้ข้อมูลชุดเดียวกันพร้อมกับเรา ต้องเลือกว่าจะเก็บชุดไหน') + '</div>';
       h += '<button data-act="sync-export-mine">' + I('archive') +

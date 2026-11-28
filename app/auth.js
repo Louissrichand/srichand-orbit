@@ -85,6 +85,8 @@
 
   function signIn() {
     if (!app) return Promise.reject(new Error('ยังไม่ได้ตั้งค่าการเข้าสู่ระบบ'));
+    /* เคยล็อกอินในเครื่องนี้แล้ว (แค่หมดอายุ) ใช้บัญชีเดิมเลย ไม่ต้องเลือกบัญชีซ้ำ */
+    if (account) return reauth();
     return app.loginRedirect({ scopes: SCOPES, prompt: 'select_account' });
   }
 
@@ -93,17 +95,47 @@
     return app.logoutRedirect({ account: account, postLogoutRedirectUri: redirectUri() });
   }
 
-  /** โทเคนสำหรับเรียก Graph — เงียบก่อน ถ้าไม่ได้ค่อยพาไปล็อกอินใหม่ */
+  /* การเข้าสู่ระบบหมดอายุแบบที่ต้องให้คนกดเข้าสู่ระบบอีกครั้ง
+   * ตั๋วต่ออายุของแอปแบบ SPA ใช้ได้ราว 24 ชั่วโมง พอหมด MSAL จะลองต่ออายุเงียบ ๆ ผ่าน iframe
+   * ถ้าเบราว์เซอร์บล็อกคุกกี้ของเว็บอื่น (Safari, Chrome แบบเข้ม, เบราว์เซอร์ในแอป) จะรอจนหมดเวลา (timed_out)
+   * ทั้งหมดนี้แก้ด้วยการเข้าสู่ระบบใหม่เท่านั้น จึงรวมเป็นเรื่องเดียว ไม่โชว์รหัส error ดิบให้คนอ่าน */
+  var RELOGIN_CODES = ['timed_out', 'monitor_window_timeout', 'block_iframe_reload', 'login_required',
+    'interaction_required', 'consent_required', 'no_tokens_found', 'invalid_grant', 'no_account_error'];
+
+  function needsSignIn(e) {
+    if (!e) return false;
+    if (global.msal && e instanceof global.msal.InteractionRequiredAuthError) return true;
+    return RELOGIN_CODES.indexOf(e.errorCode) >= 0 || RELOGIN_CODES.indexOf(e.subError) >= 0;
+  }
+
+  function expiredError(cause) {
+    var err = new Error('การเข้าสู่ระบบหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง');
+    err.authExpired = true;
+    err.cause = cause;
+    return err;
+  }
+
+  /** โทเคนสำหรับเรียก Graph — เงียบก่อน
+   *
+   * ต่ออายุไม่ได้ก็ไม่พาไปหน้าล็อกอินเองกลางคัน (เดิมทำแบบนั้น งานที่ยังไม่ได้ส่งขึ้นจะหาย
+   * เพราะกลับมาแล้วแอปโหลดของกลางทับ) โยน error ที่ติดป้าย authExpired ให้ตัวซิงก์ตัดสินใจ
+   * ตัวซิงก์จะจำไว้ว่ามีงานค้างส่ง แล้วให้คนกด "เข้าสู่ระบบอีกครั้ง" เอง */
   function token() {
-    if (!app || !account) return Promise.reject(new Error('ยังไม่ได้เข้าสู่ระบบ'));
+    if (!app || !account) return Promise.reject(expiredError(null));
     return app.acquireTokenSilent({ scopes: SCOPES, account: account })
       .then(function (r) { return r.accessToken; })
       .catch(function (e) {
-        if (e instanceof global.msal.InteractionRequiredAuthError) {
-          return app.acquireTokenRedirect({ scopes: SCOPES, account: account });
-        }
+        if (needsSignIn(e)) throw expiredError(e);
         throw e;
       });
+  }
+
+  /** เข้าสู่ระบบอีกครั้งด้วยบัญชีเดิม ไม่ต้องเลือกบัญชีใหม่ถ้า Microsoft ยังจำได้ */
+  function reauth() {
+    if (!app) return Promise.reject(new Error('ยังไม่ได้ตั้งค่าการเข้าสู่ระบบ'));
+    var hint = account ? account.username : '';
+    try { if (hint) global.localStorage.setItem('orbit.auth.hint', hint); } catch (e) { /* ไม่มีที่เก็บ */ }
+    return app.loginRedirect(hint ? { scopes: SCOPES, loginHint: hint } : { scopes: SCOPES, prompt: 'select_account' });
   }
 
   /** ข้อมูลผู้ใช้ที่ล็อกอินอยู่ แปลงเป็นรูปแบบที่ Orbit ใช้ */
@@ -125,6 +157,8 @@
     unavailableReason: unavailableReason,
     init: init,
     signIn: signIn,
+    reauth: reauth,
+    needsSignIn: needsSignIn,
     signOut: signOut,
     token: token,
     profile: profile,
