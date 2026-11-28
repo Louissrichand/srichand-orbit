@@ -185,6 +185,8 @@
       priority: attrs.priority || 'none',
       completed: !!attrs.completed,
       completedAt: attrs.completedAt || null,
+      completedBy: attrs.completedBy || null,          // Sprint 3 — ใครกดทำเสร็จ (ข้อมูลเก่าเป็น null ไม่เดา)
+      slips: attrs.slips || 0,                         // Sprint 3 — จำนวนครั้งที่เลื่อนกำหนดส่งรวดเดียว (ดู slipOverdue) 0 = ไม่เคยเลื่อน
       parentId: attrs.parentId || null,
       tags: attrs.tags || [],
       followers: attrs.followers || (attrs.assigneeId ? [attrs.assigneeId] : []),
@@ -573,7 +575,7 @@
       });
     });
     d.trash = purgeOldTrash(d.trash || []);
-    /* v9 — งานของฉันแบบมีเซกชัน กล่องข้อความแบบบุ๊กมาร์ก หน้าแรกที่จัดเองได้
+    /* v9 — งานของฉันแบบมีเซกชัน กล่องแจ้งเตือนแบบบุ๊กมาร์ก หน้าแรกที่จัดเองได้
      *   task.assignedAt / assignedBy   ได้รับมอบหมายเมื่อไร โดยใคร (งานเก่า = null ถือว่าเห็นแล้ว)
      *   notification.bookmarked / actorId
      *   personal[userId]  ของส่วนตัวแต่ละคน เก็บในข้อมูลกลางเพื่อให้ตามไปทุกเครื่อง
@@ -1461,6 +1463,35 @@
    * ให้คะแนนแทนการกรองล้วน ๆ ชื่อที่ตรงเป๊ะต้องมาก่อนงานที่บังเอิญมีคำนั้นในรายละเอียด
    * และงานที่ทำเสร็จแล้วถูกลดคะแนนให้ไปอยู่ท้าย เพราะคนค้นหามักหาสิ่งที่ยังทำอยู่
    */
+  /* Sprint 3 — ค้นในหน้าเอกสารและข้อความโปรเจกต์ (นอกจากงาน)
+   * เห็นเฉพาะของโปรเจกต์ที่คนค้นเข้าถึงได้ (visibleProjects) กับหน้าเดี่ยวที่ตัวเองเห็น (myPages)
+   * ค้นแบบข้อความตรง ๆ ไม่รองรับตัวดำเนินการเหมือนค้นงาน */
+  function searchDocs(q) {
+    var needle = String(q || '').trim().toLowerCase();
+    if (!needle) return [];
+    function hit(s) { return plainText(s, true).toLowerCase().indexOf(needle) >= 0; }
+    /* ข้อความตัวอย่างรอบคำที่ค้นเจอ (ไม่มี = ค้นเจอที่ชื่ออย่างเดียว) */
+    function snip(text) {
+      var p = plainText(text, true).replace(/\s+/g, ' '), i = p.toLowerCase().indexOf(needle);
+      if (i < 0) return '';
+      var a = Math.max(0, i - 30), e = Math.min(p.length, i + needle.length + 60);
+      return (a ? '…' : '') + p.slice(a, e) + (e < p.length ? '…' : '');
+    }
+    var out = [];
+    visibleProjects().forEach(function (p) {
+      (p.pages || []).forEach(function (pg) {
+        if (hit(pg.title) || hit(pg.body)) out.push({ kind: 'page', id: pg.id, title: pg.title || '', project: p, snip: snip(pg.body) });
+      });
+      (p.messages || []).forEach(function (m) {
+        if (hit(m.title) || hit(m.body)) out.push({ kind: 'message', id: m.id, title: m.title || String(m.body || '').split('\n')[0].slice(0, 60), project: p, snip: snip(m.body) });
+      });
+    });
+    myPages().forEach(function (pg) {
+      if (hit(pg.title) || hit(pg.body)) out.push({ kind: 'page', id: pg.id, title: pg.title || '', project: null, snip: snip(pg.body) });
+    });
+    return out.slice(0, 30);
+  }
+
   function search(q) {
     /* 2c — ตัวค้นหาตัวเดียวกับค้นหาขั้นสูง (searchAdv) รองรับ "วลี" a | b -คำ คำ* ( ) และรหัสงาน */
     return searchAdv({ q: q, limit: 60 });
@@ -1594,7 +1625,7 @@
   /* ======================================================================
    * ของส่วนตัวของแต่ละคน (ชิ้นงาน 2a)
    *
-   * งานของฉัน (เซกชัน ลำดับ มุมมอง) หน้าแรก (วิดเจ็ต) กล่องข้อความ (เรียง ความหนาแน่น)
+   * งานของฉัน (เซกชัน ลำดับ มุมมอง) หน้าแรก (วิดเจ็ต) กล่องแจ้งเตือน (เรียง ความหนาแน่น)
    * และสมุดโน้ต เก็บใน db.personal[userId] ไม่ใช่ localStorage
    * เพราะในโหมดทีมคนเดียวกันเปิดจากหลายเครื่อง ของที่จัดไว้ต้องตามไปด้วย
    * เก็บแต่รหัสกับตัวเลข ไม่คัดลอกตัวงาน ไฟล์กลางจึงโตตามจำนวนงานที่จัดเท่านั้น
@@ -2127,7 +2158,7 @@
     return { days: list, week: week, prevWeek: prev, month: month };
   }
 
-  /* ---------- กล่องข้อความ ---------- */
+  /* ---------- กล่องแจ้งเตือน ---------- */
 
   /** การแจ้งเตือนของงานที่เห็นไม่ได้แล้ว (งานส่วนตัวของคนอื่น โปรเจกต์ปิดที่ถูกเอาออก) ไม่แสดง */
   function notifVisible(n) {
@@ -2168,7 +2199,7 @@
                      comment: 20, message: 15, status: 15, newtask: 10, activity: 0 };
 
   /**
-   * รายการในกล่องข้อความ
+   * รายการในกล่องแจ้งเตือน
    * @param opts { tab: activity|bookmarks|archive, from, project, mention, toMe, byMe, unread,
    *               sort: new|relevance }
    */
@@ -2256,7 +2287,7 @@
   /* ---------- ห้ามรบกวน ----------
    * prefs.dnd = { until: ISO|null, from: 'HH:MM'|null, to: 'HH:MM'|null }
    * ยังสร้างการแจ้งเตือนตามปกติ แค่ไม่ขึ้นตัวเลขแดงที่แถบซ้ายและไม่เด้งข้อความ
-   * เปิดกล่องข้อความดูเองเมื่อไรก็เห็นครบ ไม่มีอะไรหาย */
+   * เปิดกล่องแจ้งเตือนดูเองเมื่อไรก็เห็นครบ ไม่มีอะไรหาย */
   function dndOf(userId) {
     var u = user(userId || db.currentUserId);
     var d = u && u.prefs && u.prefs.dnd;
@@ -2359,7 +2390,7 @@
   ];
 
   var GROUPS = [
-    { id: 'section',  label: 'คอลัมน์' },
+    { id: 'section',  label: 'เซกชัน' },
     { id: 'assignee', label: 'ผู้รับผิดชอบ' },
     { id: 'priority', label: 'ความสำคัญ' },
     { id: 'due',      label: 'ช่วงกำหนดส่ง' },
@@ -2630,7 +2661,7 @@
   var FILTER_BUILTIN = [
     { id: 'assignee',    label: 'ผู้รับผิดชอบ',  kind: 'person' },
     { id: 'createdBy',   label: 'สร้างโดย',      kind: 'person' },
-    { id: 'section',     label: 'คอลัมน์',       kind: 'select' },
+    { id: 'section',     label: 'เซกชัน',       kind: 'select' },
     { id: 'priority',    label: 'ความสำคัญ',    kind: 'select' },
     { id: 'type',        label: 'ชนิดงาน',      kind: 'select' },
     { id: 'cstatus',     label: 'สถานะ (ชนิดงาน)', kind: 'select' },
@@ -2666,7 +2697,7 @@
    * ใช้ projectId = '*' กับ filterFields / filterField / filterChoices */
   var SEARCH_BUILTIN = [
     { id: 'project',    label: 'โปรเจกต์',          kind: 'multi' },
-    { id: 'psection',   label: 'คอลัมน์ (เซกชัน)',   kind: 'multi' },
+    { id: 'psection',   label: 'เซกชัน (เซกชัน)',   kind: 'multi' },
     { id: 'assignedBy', label: 'มอบหมายโดย',        kind: 'person' },
     { id: 'followers',  label: 'ผู้ติดตาม',          kind: 'multi' },
     { id: 'attachment', label: 'มีไฟล์แนบ',         kind: 'bool' },
@@ -3274,6 +3305,22 @@
     return true;
   }
 
+  /* Sprint 3 — บันทึกค่าเก่า→ใหม่ของฟิลด์กำหนดเอง
+   * ลงเฉพาะตอน "แก้ค่าที่มีอยู่" (ตั้งค่าครั้งแรกตอนสร้างงานไม่ลง ไม่งั้นงานใหม่ทุกชิ้นมีบรรทัดรกเต็ม)
+   * และไม่แจ้งเตือนใคร (logQuiet) ต่างจากฟิลด์ที่เปิด "แจ้งเมื่อค่าเปลี่ยน" ซึ่งยังแจ้งเหมือนเดิม */
+  function fvShown(def, val) {
+    return val == null ? '' : [].concat(val).map(function (x) {
+      var who = def && def.type === 'person' ? user(x) : null;
+      return who ? who.name : x;
+    }).join(', ');
+  }
+  function logQuiet(taskId, key, params) {
+    var st = { id: uid('st'), taskId: taskId, actorId: db.currentUserId, type: 'log', text: key, params: params || null,
+               createdAt: new Date().toISOString() };
+    if (autoCtx) { st.auto = 1; if (autoCtx.a && autoCtx.a.name) st.rule = String(autoCtx.a.name).slice(0, 60); }
+    db.stories.push(st);
+  }
+
   /** ใส่ค่าฟิลด์โดยไม่ snapshot/commit — ทางเดียวที่ค่าฟิลด์เปลี่ยน (ช่องในรายการ แผงงาน แก้หลายงาน
    *  ลากลงกลุ่ม อัตโนมัติ) ลงประวัติเมื่อฟิลด์เปิด "แจ้งเมื่อค่าเปลี่ยน" หรือ opts.log แล้วปลุกอัตโนมัติ
    *  @returns true ถ้าค่าเปลี่ยนจริง */
@@ -3295,7 +3342,11 @@
         var who = def.type === 'person' ? user(x) : null;
         return who ? who.name : x;
       }).join(', ');
-      log(taskId, empty ? 'ล้างค่า {f}' : 'ตั้ง {f} เป็น {v}', { f: def.name, v: shown });
+      if (fv && !empty) log(taskId, 'เปลี่ยน {f} จาก {a} เป็น {b}', { f: def.name, a: fvShown(def, fv.value), b: shown });
+      else log(taskId, empty ? 'ล้างค่า {f}' : 'ตั้ง {f} เป็น {v}', { f: def.name, v: shown });
+    } else if (def && fv && !(opts && opts.noLog)) {
+      if (empty) logQuiet(taskId, 'ล้างค่า {f} (เดิม {a})', { f: def.name, a: fvShown(def, fv.value) });
+      else logQuiet(taskId, 'เปลี่ยน {f} จาก {a} เป็น {b}', { f: def.name, a: fvShown(def, fv.value), b: fvShown(def, value) });
     }
     if (fv) {
       if (empty) db.fieldValues = db.fieldValues.filter(function (v) { return v !== fv; });
@@ -3430,7 +3481,7 @@
   /* ชนิดของการแจ้งเตือน ผู้ใช้ปิดเป็นรายชนิดได้จากหน้าตั้งค่า
    *
    * ที่ต้องแยกชนิด เพราะคนที่ติดตามงานเยอะจะโดนถล่มด้วยรายการเล็ก ๆ น้อย ๆ
-   * จนเลิกอ่านกล่องข้อความไปเลย ซึ่งแย่กว่าไม่มีกล่องข้อความตั้งแต่แรก
+   * จนเลิกอ่านกล่องแจ้งเตือนไปเลย ซึ่งแย่กว่าไม่มีกล่องแจ้งเตือนตั้งแต่แรก
    */
   var NOTIFY_KINDS = [
     { id: 'assigned', label: 'มีคนมอบหมายงานให้ฉัน',
@@ -3459,7 +3510,7 @@
     { id: 'milestone', label: 'หมุดหมายสำเร็จในโปรเจกต์ที่ติดตาม',
       desc: 'เมื่อมีคนทำหมุดหมายของโปรเจกต์ที่ติดตามเสร็จ' },
     /* Sprint 2B — บันทึกเวลา/ตั้งเวลาประมาณ ปิดไว้เป็นค่าเริ่มต้น (def: false)
-     * ผลทดสอบกับผู้ใช้: ผู้ติดตามได้ "ลงเวลา 1m" "ตั้งเวลาประมาณ 4h" ทั้งวันจนกล่องข้อความไม่มีใครอ่าน
+     * ผลทดสอบกับผู้ใช้: ผู้ติดตามได้ "ลงเวลา 1m" "ตั้งเวลาประมาณ 4h" ทั้งวันจนกล่องแจ้งเตือนไม่มีใครอ่าน
      * คนที่อยากรู้จริง (หัวหน้าที่ดูชั่วโมงงาน) เปิดเองได้ที่ตั้งค่า */
     { id: 'timelog',  label: 'บันทึกเวลาและเวลาประมาณ',
       desc: 'มีคนลงเวลาหรือเปลี่ยนเวลาประมาณในงานที่ติดตาม (ปิดไว้เป็นค่าเริ่มต้น)', def: false }
@@ -3529,7 +3580,7 @@
   }
 
   /**
-   * @param extra { story, ref } — Sprint 2B ความเห็นที่ทำให้เกิดการแจ้งเตือน (กล่องข้อความโชว์เนื้อหาและพาไปที่ความเห็นนั้น)
+   * @param extra { story, ref } — Sprint 2B ความเห็นที่ทำให้เกิดการแจ้งเตือน (กล่องแจ้งเตือนโชว์เนื้อหาและพาไปที่ความเห็นนั้น)
    */
   function notify(taskId, text, exceptUserId, extraUserIds, kind, excludeIds,
                   key, params, actor, extra) {
@@ -3546,7 +3597,7 @@
       /* Sprint 2B — ผ่านตัวรวมกลุ่ม (pushNotif) ทุกครั้ง ไม่ push ตรง */
       pushNotif({
         userId: target, taskId: taskId, text: text,
-        /* เก็บคีย์ไว้ด้วยเมื่อมี กล่องข้อความจะได้แปลตอนอ่าน
+        /* เก็บคีย์ไว้ด้วยเมื่อมี กล่องแจ้งเตือนจะได้แปลตอนอ่าน
          * ไม่ใช่ค้างภาษาของคนที่ทำให้เกิดการแจ้งเตือน */
         key: key || null, params: params || null,
         actorName: actor ? actor.name : null, actorId: actor ? actor.id : null,
@@ -3585,7 +3636,7 @@
       pushNotif({
         userId: target, taskId: taskId,
         /* ประกาศของโปรเจกต์ไม่มีงานให้ชี้ เก็บรหัสโปรเจกต์ไว้แทน
-         * กล่องข้อความจะได้พาไปที่หน้าประกาศ ไม่ใช่ขึ้นว่างานถูกลบแล้ว */
+         * กล่องแจ้งเตือนจะได้พาไปที่หน้าประกาศ ไม่ใช่ขึ้นว่างานถูกลบแล้ว */
         projectId: (extra && extra.projectId) || null,
         route: (extra && extra.route) || null,
         text: fill(key, params), kind: kind || null,
@@ -3613,7 +3664,7 @@
       type: 'log', text: key, params: params || null,
       createdAt: new Date().toISOString()
     };
-    if (autoCtx) st.auto = 1;          // 3a — ทำโดยอัตโนมัติ (ประวัติขึ้น ⚡)
+    if (autoCtx) { st.auto = 1; if (autoCtx.a && autoCtx.a.name) st.rule = String(autoCtx.a.name).slice(0, 60); }         // 3a — ทำโดยอัตโนมัติ (ประวัติขึ้น ⚡)
     db.stories.push(st);
     var actor = me();
     /* ข้อความแจ้งเตือนก็ต้องแปลตอนอ่านเหมือนกัน จึงส่งคีย์กับค่าไปด้วย
@@ -3723,6 +3774,92 @@
     return t;
   }
 
+  /* ---------- Sprint 3 — พิมพ์เร็ว: "@ชื่อ" กับวันที่แบบไทยในชื่องาน ----------
+   * พิมพ์ "ส่งใบเสนอราคา @สมชาย พรุ่งนี้" ในช่องเพิ่มงาน → ชื่องาน "ส่งใบเสนอราคา" มอบให้สมชาย กำหนดส่งพรุ่งนี้
+   * ตั้งใจให้ระวังไว้ก่อน: @ชื่อ ต้องตรงกับคนเดียวที่เข้าโปรเจกต์ได้เท่านั้น (ไม่ตรงหรือซ้ำ = คงข้อความเดิม ไม่เดา)
+   * และถ้าตัดแล้วชื่องานว่าง ก็ไม่แยกอะไรเลย ชื่องานเดิมจึงไม่มีทางหายไป
+   * วันที่รู้จัก: วันนี้ พรุ่งนี้ มะรืน สัปดาห์หน้า วันจันทร์…วันอาทิตย์ 15 ธ.ค. / 15 ธันวาคม / 15/12
+   * (ปีไม่ได้พิมพ์ = ครั้งถัดไปที่ยังไม่ผ่าน) */
+  var QA_DOW = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+  var QA_MON_FULL = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+                     'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+  var QA_MON_SHORT = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+  function quickAdd(text, projectId, noSection) {
+    var orig = String(text == null ? '' : text).trim();
+    var out = { name: orig };
+    if (!orig) return out;
+    var rest = ' ' + orig + ' ';
+    var assignee = null, due = null, secId = null, t0 = today();
+    var am = rest.match(/\s@(\S+)/);
+    if (am) {
+      var q = am[1].toLowerCase();
+      var hits = (db.users || []).filter(function (u) {
+        return u && u.name && !u.disabled && u.active !== false && u.name.toLowerCase().indexOf(q) === 0 &&
+          (!projectId || !!projectAccess(projectId, u.id));
+      });
+      if (hits.length === 1) { assignee = hits[0].id; rest = rest.replace(am[0], ' '); }
+    }
+    /* "#เซกชัน" ในบรรทัด = ใส่งานในเซกชันนั้น (ชื่อขึ้นต้นตรงและมีอันเดียวเท่านั้น) ไม่เจอ = คงข้อความเดิม */
+    var pj = projectId && !noSection ? project(projectId) : null;
+    var sm = pj ? rest.match(/\s#(\S+)/) : null;
+    if (sm) {
+      var sq = sm[1].toLowerCase();
+      var secHits = (pj.sections || []).filter(function (x) { return String(x.name).toLowerCase().indexOf(sq) === 0; });
+      if (secHits.length === 1) { secId = secHits[0].id; rest = rest.replace(sm[0], ' '); }
+    }
+    function take(re, fn) {
+      if (due) return;
+      var x = rest.match(re);
+      if (!x) return;
+      var v = fn(x);
+      if (v) { due = v; rest = rest.replace(x[0], ' '); }
+    }
+    take(/มะรืน(?:นี้)?/, function () { return addDays(t0, 2); });
+    take(/พรุ่งนี้|\btomorrow\b/i, function () { return addDays(t0, 1); });
+    take(/วันนี้|\btoday\b/i, function () { return t0; });
+    take(/สัปดาห์หน้า|อาทิตย์หน้า|\bnext week\b/i, function () { return addDays(t0, 7); });
+    /* วันในสัปดาห์: "วันศุกร์" / "ศุกร์นี้" / "ศุกร์หน้า" (ไม่มี "วัน" ต้องมี นี้/หน้า กำกับ ไม่งั้น "พระจันทร์" ฯลฯ โดนตัด)
+     * "หน้า" = สัปดาห์ถัดไป นอกนั้นคือวันนั้นที่จะถึงก่อน (ชื่อวันตรงกับวันนี้ = สัปดาห์หน้า วันนี้ใช้คำว่า "วันนี้") */
+    var dowAlt = QA_DOW.join('|').replace('พฤหัสบดี', 'พฤหัสบดี|พฤหัส');
+    function dowDate(idx, nextWeek) {
+      var dow0 = new Date(t0 + 'T00:00:00').getDay();
+      if (nextWeek) return addDays(addDays(t0, ((8 - dow0) % 7) || 7), (idx + 6) % 7);
+      var diff = (idx - dow0 + 7) % 7;
+      return addDays(t0, diff === 0 ? 7 : diff);
+    }
+    function thDowIdx(nm) { return QA_DOW.indexOf(nm === 'พฤหัส' ? 'พฤหัสบดี' : nm); }
+    take(new RegExp('วัน(' + dowAlt + ')(หน้า|นี้)?|(' + dowAlt + ')(หน้า|นี้)'), function (x) {
+      return dowDate(thDowIdx(x[1] || x[3]), (x[2] || x[4]) === 'หน้า');
+    });
+    /* อังกฤษ: ชื่อเต็ม หรือย่อ 3 ตัว (ยกเว้น Sun/Sat ที่ชนกับชื่อคน/บริษัทบ่อย ต้องเขียนเต็ม) */
+    var EN_DOW = { sunday: 0, monday: 1, mon: 1, tuesday: 2, tue: 2, tues: 2, wednesday: 3, wed: 3, thursday: 4, thu: 4, thur: 4, thurs: 4, friday: 5, fri: 5, saturday: 6 };
+    take(/\b(?:(next)\s+)?(sunday|monday|mon|tuesday|tues|tue|wednesday|wed|thursday|thurs|thur|thu|friday|fri|saturday)\b/i, function (x) {
+      return dowDate(EN_DOW[x[2].toLowerCase()], !!x[1]);
+    });
+    var monAlt = QA_MON_FULL.concat(QA_MON_SHORT).map(function (s) { return s.split('.').join('[.]'); }).join('|');
+    function mkDate(d, mo) {
+      d = +d; mo = +mo;
+      if (d < 1 || d > 31 || mo < 1 || mo > 12) return null;
+      var y = new Date(t0 + 'T00:00:00').getFullYear();
+      var c = new Date(y, mo - 1, d);
+      if (c.getMonth() !== mo - 1) return null;              // 31 ก.พ. ฯลฯ — ไม่มีวันนี้จริง
+      if (iso(c) < t0) c = new Date(y + 1, mo - 1, d);
+      return c.getMonth() === mo - 1 ? iso(c) : null;
+    }
+    take(new RegExp('([0-9]{1,2}) *(' + monAlt + ')'), function (x) {
+      var mi = QA_MON_FULL.indexOf(x[2]); if (mi < 0) mi = QA_MON_SHORT.indexOf(x[2]);
+      return mkDate(x[1], mi + 1);
+    });
+    take(/\s(\d{1,2})\/(\d{1,2})(?![\d\/])/, function (x) { return mkDate(x[1], x[2]); });
+    var name = rest.replace(/\s{2,}/g, ' ').trim();
+    if (!name || (!assignee && !due && !secId)) return out;               // ไม่เจออะไร หรือเหลือชื่อว่าง = ไม่แตะ
+    out.name = name;
+    if (assignee) out.assigneeId = assignee;
+    if (due) out.dueOn = due;
+    if (secId) out.sectionId = secId;
+    return out;
+  }
+
   function createTask(attrs, projectId, sectionId) {
     /* Sprint 1B — ด่านกลาง (canCreateTask) ไม่ผ่าน = ไม่สร้าง คืน null ให้ผู้เรียกเช็ก */
     if (!canCreateTask(projectId, attrs && attrs.parentId)) return denied('create');
@@ -3740,7 +3877,10 @@
     if (!canCreateTask(projectId, parentId)) { denied('create'); return []; }
     snapshot('สร้าง {n} งาน', { n: list.length });
     var out = list.map(function (n) {
-      return createTaskRaw({ name: n, parentId: parentId || null }, projectId, sectionId);
+      /* Sprint 3 — วางหลายบรรทัด: แต่ละบรรทัดแยก @ชื่อ/วันที่ให้เหมือนพิมพ์ทีละงาน */
+      var attrs = quickAdd(n, projectId, !!parentId);
+      attrs.parentId = parentId || null;
+      return createTaskRaw(attrs, projectId, attrs.sectionId || sectionId);
     });
     commit();
     return out;
@@ -3929,6 +4069,7 @@
     if ('type' in patch && t.ctype && !(opts && opts.keepCtype)) { patch.ctype = null; patch.cstatus = null; }
     if ('completed' in patch && patch.completed !== t.completed) {
       patch.completedAt = patch.completed ? today() : null;
+      patch.completedBy = patch.completed ? (db.currentUserId || null) : null;   // Sprint 3 — ระบบอัตโนมัติ/ไล่ตามคนที่ปลุกกฎ ซึ่งเป็นคนที่เห็นในบันทึกเดียวกัน
       log(id, patch.completed ? 'ทำงานนี้เสร็จแล้ว' : 'เปิดงานนี้อีกครั้ง');
       autoFire('completed', id, { v: !!patch.completed });
       /* 3b — ติ๊กเสร็จ/เปิดใหม่ของงานที่มีชนิดกำหนดเอง ย้ายไปสถานะแรกที่ "นับว่าเสร็จ" (หรือไม่นับ) ให้ตรงกัน */
@@ -3970,8 +4111,14 @@
       /* คนที่เพิ่งได้รับงานไม่ต้องได้บรรทัด "มอบหมายให้ X" ซ้ำอีก
        * เพราะจะได้บรรทัดเจาะจงว่า "มอบหมายงาน … ให้คุณ" อยู่แล้ว
        * ถ้าไม่กัน คนที่เคยติดตามงานนี้อยู่แล้วจะเห็นสองบรรทัดสำหรับเรื่องเดียวกัน */
-      log(id, u ? (asAppr ? 'ขออนุมัติจาก {who}' : 'มอบหมายให้ {who}') : 'ยกเลิกผู้รับผิดชอบ', u ? { who: u.name } : null,
-        patch.assigneeId ? [patch.assigneeId] : null);
+      /* Sprint 3 — เปลี่ยนมือบันทึกค่าเก่า→ใหม่ ("จาก สมชาย เป็น มานี") ไม่ใช่แค่ "มอบหมายให้ มานี" */
+      var prevU = t.assigneeId ? user(t.assigneeId) : null;
+      if (u && prevU && !asAppr) {
+        log(id, 'เปลี่ยนผู้รับผิดชอบจาก {a} เป็น {b}', { a: prevU.name, b: u.name }, patch.assigneeId ? [patch.assigneeId] : null);
+      } else {
+        log(id, u ? (asAppr ? 'ขออนุมัติจาก {who}' : 'มอบหมายให้ {who}') : 'ยกเลิกผู้รับผิดชอบ', u ? { who: u.name } : null,
+          patch.assigneeId ? [patch.assigneeId] : null);
+      }
       if (patch.assigneeId && t.followers.indexOf(patch.assigneeId) < 0) {
         t.followers.push(patch.assigneeId);
       }
@@ -4026,7 +4173,10 @@
     }
     if ('priority' in patch && patch.priority !== t.priority) {
       var pn = PRIORITIES.filter(function (x) { return x.id === patch.priority; })[0];
-      log(id, 'ตั้งความสำคัญเป็น {p}', { p: pn ? pn.label : patch.priority });
+      /* Sprint 3 — บันทึกค่าเก่า→ใหม่ ("จาก สูง เป็น ด่วน") เดิมเห็นแค่ค่าใหม่ ไม่รู้ว่าเปลี่ยนจากอะไร ข้อมูลเก่ายังใช้คีย์เดิมอ่านได้ */
+      var po = PRIORITIES.filter(function (x) { return x.id === t.priority; })[0];
+      if (po && t.priority && t.priority !== 'none') log(id, 'เปลี่ยนความสำคัญจาก {a} เป็น {b}', { a: po.label, b: pn ? pn.label : patch.priority });
+      else log(id, 'ตั้งความสำคัญเป็น {p}', { p: pn ? pn.label : patch.priority });
     }
     if ('type' in patch && (patch.type !== t.type || (t.ctype && patch.ctype === null)) && !(opts && opts.noTypeLog)) {
       var tn = TASK_TYPES.filter(function (x) { return x.id === patch.type; })[0];
@@ -4414,6 +4564,7 @@
     var wasOpen = !d.completed;
     d.completed = true;
     d.completedAt = today();
+    d.completedBy = db.currentUserId || null;
     log(dupId, 'ปิดเป็นงานซ้ำของ “{t}”', { t: m.name }, watchers);
     log(masterId, 'รวมงานซ้ำ “{t}” เข้ามา', { t: d.name });
     addedTags.forEach(function (x) { log(masterId, 'เพิ่มแท็ก {t}', { t: x }); });
@@ -4573,7 +4724,10 @@
     var from = m.sectionId;
     if (moved) {
       var s = section(m.projectId, sectionId);
-      if (s) log(m.taskId, 'ย้ายไปคอลัมน์ {c}', { c: s.name });
+      /* Sprint 3 — บันทึกค่าเก่า→ใหม่ พร้อมชื่อโปรเจกต์ (งานอยู่ได้หลายโปรเจกต์ "ย้ายไป X" เฉย ๆ ไม่รู้ว่าโปรเจกต์ไหน) */
+      var fromSec = from ? section(m.projectId, from) : null, secProj = project(m.projectId);
+      if (s && fromSec && secProj) log(m.taskId, 'ย้ายจากเซกชัน {a} ไป {c} (โปรเจกต์ {p})', { a: fromSec.name, c: s.name, p: secProj.name });
+      else if (s) log(m.taskId, 'ย้ายไปเซกชัน {c}', { c: s.name });
     }
     m.sectionId = sectionId;
     if (position != null) m.position = position;
@@ -4780,14 +4934,14 @@
     /* คนที่ถูกพูดถึงกับคนที่แค่ติดตาม ต้องแยกชนิดกัน
      * เพราะคนปิด "ความเห็นใหม่" ทิ้งได้ แต่ไม่มีใครอยากพลาดตอนถูกเรียกชื่อ */
     /* Sprint 2B — ทุกการแจ้งเตือนของความเห็นจำรหัสความเห็นไว้ (story)
-     * กล่องข้อความจะโชว์เนื้อความสองบรรทัดแรก และกดแล้วพาไปที่ความเห็นนั้นพร้อมไฮไลต์ */
+     * กล่องแจ้งเตือนจะโชว์เนื้อความสองบรรทัดแรก และกดแล้วพาไปที่ความเห็นนั้นพร้อมไฮไลต์ */
     var sx = { story: s.id };
     if (mentioned.length) {
       notifyOnly(taskId, mentioned, 'พูดถึงคุณในความเห็น', 'mention', null, false, sx);
     }
     if (parent) {
       /* คำตอบในเธรดแจ้งเฉพาะคนที่อยู่ในบทสนทนานั้น ไม่กระจายไปหาผู้ติดตามทั้งงาน
-       * งานที่มีคนติดตามยี่สิบคน ถ้าทุกคำตอบสั้น ๆ เด้งหาทุกคน กล่องข้อความจะไม่มีใครอ่าน */
+       * งานที่มีคนติดตามยี่สิบคน ถ้าทุกคำตอบสั้น ๆ เด้งหาทุกคน กล่องแจ้งเตือนจะไม่มีใครอ่าน */
       var inThread = [parent.actorId];
       repliesOf(parent.id).forEach(function (r) {
         if (inThread.indexOf(r.actorId) < 0) inThread.push(r.actorId);
@@ -4800,7 +4954,7 @@
         db.currentUserId, [], 'comment', mentioned, 'แสดงความเห็นในงาน “{t}”', { t: t.name }, actor, sx);
     }
     logConnected(taskId, '', clean);
-    if (autoCtx) s.auto = 1;            // 3a — ความเห็นที่อัตโนมัติเขียน
+    if (autoCtx) { s.auto = 1; if (autoCtx.a && autoCtx.a.name) s.rule = String(autoCtx.a.name).slice(0, 60); }           // 3a — ความเห็นที่อัตโนมัติเขียน
     autoFire('comment', taskId, { story: s.id });
     commit();
     return s;
@@ -5226,7 +5380,7 @@
     if (p.statusLog.length > 30) p.statusLog = p.statusLog.slice(-30);
     var watchers = projectWatchers(id, 'status');
     if (watchers.length) {
-      /* Sprint 2B — ref = รายการในประวัติสถานะ กล่องข้อความโชว์สถานะกับบรรทัดแรกได้โดยไม่ต้องเปิดโปรเจกต์ */
+      /* Sprint 2B — ref = รายการในประวัติสถานะ กล่องแจ้งเตือนโชว์สถานะกับบรรทัดแรกได้โดยไม่ต้องเปิดโปรเจกต์ */
       notifyOnly(null, watchers, 'อัปเดตสถานะของ {p}', 'status', { p: p.name }, false,
         { projectId: id, route: 'p-overview', ref: psId });
     }
@@ -5353,6 +5507,7 @@
       copy.parentId = parentNew || null;
       copy.completed = false;
       copy.completedAt = null;
+      copy.completedBy = null;
       /* งานขออนุมัติ ผลอนุมัติเป็นตัวเปิด/ปิดงาน (Sprint 1B) — สำเนาเริ่มใหม่ยังไม่เสร็จ ต้องกลับไปรออนุมัติด้วย
        * เดิมคงผลเดิมไว้ สำเนาจึงโชว์ ✕ "ไม่อนุมัติ" / ✓ "อนุมัติแล้ว" บนงานที่ยังไม่เสร็จ */
       if (copy.type === 'approval') copy.approval = 'pending';
@@ -5436,7 +5591,7 @@
   function addSection(projectId, name) {
     var p = project(projectId);
     if (!p) return null;
-    snapshot('เพิ่มคอลัมน์');           // 2c — เดิมเพิ่มแล้วย้อนกลับไม่ได้
+    snapshot('เพิ่มเซกชัน');           // 2c — เดิมเพิ่มแล้วย้อนกลับไม่ได้
     var s = { id: uid('s'), name: name || 'คอลัมน์ใหม่' };
     p.sections.push(s);
     commit();
@@ -5445,7 +5600,7 @@
 
   function renameSection(projectId, sectionId, name) {
     var s = section(projectId, sectionId);
-    if (s && s.name !== name) { snapshot('เปลี่ยนชื่อคอลัมน์'); s.name = name; commit(); }
+    if (s && s.name !== name) { snapshot('เปลี่ยนชื่อเซกชัน'); s.name = name; commit(); }
   }
 
   function deleteSection(projectId, sectionId) {
@@ -5499,7 +5654,7 @@
       projects: false, deps: false, dates: keep.dates, fields: keep.fields };
     var name = String(o.name || '').trim().slice(0, 120) || (src.name + ' ' + L('(สำเนา)'));
     var roots = tasksInSection(projectId, sectionId).map(function (x) { return x.task; });
-    snapshot('ทำสำเนาคอลัมน์ “{s}”', { s: src.name });
+    snapshot('ทำสำเนาเซกชัน “{s}”', { s: src.name });
     var ns = { id: uid('s'), name: name };
     /* ในโปรเจกต์เดิมวางต่อจากคอลัมน์ต้นฉบับ โปรเจกต์อื่นวางท้ายสุด */
     var at = toPid === projectId ? dest.sections.indexOf(src) + 1 : dest.sections.length;
@@ -5956,6 +6111,29 @@
     return true;
   }
 
+  /* Sprint 3 — ภาษาเริ่มต้นขององค์กร (ผู้ดูแลระบบตั้ง) ใช้กับคนที่ยังไม่เคยเลือกภาษาเอง ค่าของแต่ละคนยังชนะเสมอ */
+  function setOrgLang(lang) {
+    if (!isAdmin() || (lang !== 'th' && lang !== 'en')) return false;
+    snapshot('ตั้งภาษาเริ่มต้น');
+    db.settings = db.settings || {};
+    db.settings.orgLang = lang;
+    audit('settings.orgLang', lang === 'en' ? 'English' : 'ไทย');
+    commit();
+    return true;
+  }
+
+  /* Sprint 3 — ค่าเริ่มต้นความเป็นส่วนตัวของโปรเจกต์ใหม่ทั้งองค์กร (ผู้ดูแลระบบตั้ง) 'private' = ช่อง "ใครเห็น" ในหน้าสร้างโปรเจกต์เริ่มที่ปิด
+   * คนสร้างยังเลือกเองได้ทุกครั้ง ไม่แตะโปรเจกต์ที่มีอยู่แล้ว */
+  function setOrgPrivacy(v) {
+    if (!isAdmin() || (v !== 'org' && v !== 'private')) return false;
+    snapshot('ตั้งความเป็นส่วนตัวเริ่มต้น');
+    db.settings = db.settings || {};
+    db.settings.orgPrivacy = v;
+    audit('settings.orgPrivacy', v === 'private' ? 'ปิด' : 'เปิดให้ทั้งองค์กร');
+    commit();
+    return true;
+  }
+
   function setProjectLocked(projectId, locked) {
     var p = project(projectId);
     if (!p) return false;
@@ -6126,7 +6304,7 @@
     /* ไม่ผ่าน updateTask เพราะข้อความแจ้งต้องถึงผู้อนุมัติ ("ขออนุมัติจากคุณ")
      * ไม่ใช่ถึงคนขอแบบผลอนุมัติทั่วไป */
     t.approval = 'pending';
-    if (t.completed) { t.completed = false; t.completedAt = null; }
+    if (t.completed) { t.completed = false; t.completedAt = null; t.completedBy = null; }
     log(taskId, 'ส่งงานนี้ขออนุมัติอีกครั้ง', null, t.assigneeId ? [t.assigneeId] : null);
     if (t.assigneeId) notifyOnly(taskId, [t.assigneeId], 'ส่ง “{t}” ขออนุมัติจากคุณอีกครั้ง', 'assigned', { t: t.name });
     autoFire('approval', taskId, { v: 'pending' });
@@ -6397,7 +6575,7 @@
     });
 
     /* แจ้งครั้งเดียวสำหรับทั้งชุด ไม่ใช่ยิงทีละงาน
-     * คนที่รับช่วงงานสามสิบงานไม่ควรเจอสามสิบแถวในกล่องข้อความ */
+     * คนที่รับช่วงงานสามสิบงานไม่ควรเจอสามสิบแถวในกล่องแจ้งเตือน */
     if (to) {
       notifyOnly(list[0].id, [to.id],
         'โอนงานที่ยังไม่เสร็จ {n} งาน จาก {who} มาให้คุณ', 'assigned',
@@ -7007,6 +7185,10 @@
     var parts = [t.name, plainText(t.notes, true), (t.tags || []).join(' ')];
     var u = i.user[t.assigneeId];
     if (u) parts.push(u.name);
+    /* Sprint 3 — ค้นเจอจากข้อความในความเห็นด้วย (คนมักจำว่า "มีคนพูดเรื่องนี้ในงานไหน" มากกว่าชื่องาน) */
+    (i.storyByTask[t.id] || []).forEach(function (s) {
+      if (s.type === 'comment' && s.text) parts.push(plainText(s.text, true));
+    });
     (i.memByTask[rootOf(t).id] || []).forEach(function (m) {
       var p = i.project[m.projectId];
       if (p) parts.push(p.name);
@@ -7176,7 +7358,7 @@
     { id: 'ignore',        label: 'ไม่นำเข้า' },
     { id: 'name',          label: 'ชื่องาน',               names: ['Name', 'Task Name', 'Task', 'ชื่องาน', 'ชื่อ'] },
     { id: 'notes',         label: 'รายละเอียด',            names: ['Notes', 'Description', 'รายละเอียด'] },
-    { id: 'section',       label: 'คอลัมน์ (เซกชัน)',       names: ['Section/Column', 'Section', 'Column', 'คอลัมน์', 'เซกชัน'] },
+    { id: 'section',       label: 'เซกชัน (เซกชัน)',       names: ['Section/Column', 'Section', 'Column', 'เซกชัน', 'เซกชัน'] },
     { id: 'assignee',      label: 'ผู้รับผิดชอบ',           names: ['Assignee', 'ผู้รับผิดชอบ'] },
     { id: 'assigneeEmail', label: 'อีเมลผู้รับผิดชอบ',       names: ['Assignee Email'] },
     { id: 'collaborators', label: 'ผู้ร่วมงาน (ผู้ติดตาม)', names: ['Collaborators', 'Followers', 'ผู้ติดตาม', 'ผู้ร่วมงาน'] },
@@ -7558,8 +7740,8 @@
     return r && (!r.taskId || task(r.taskId)) ? r : null;
   }
 
-  /* Sprint 1B — คำขอสิทธิ์เป็นรายการในกล่องข้อความของเจ้าของ (มีปุ่มให้สิทธิ์/ปฏิเสธในแถวนั้นเลย)
-   * เดิมสร้างเป็นงานมอบหมายให้เจ้าของ ได้สองรายการในกล่องข้อความ (มอบหมาย + สร้างงาน)
+  /* Sprint 1B — คำขอสิทธิ์เป็นรายการในกล่องแจ้งเตือนของเจ้าของ (มีปุ่มให้สิทธิ์/ปฏิเสธในแถวนั้นเลย)
+   * เดิมสร้างเป็นงานมอบหมายให้เจ้าของ ได้สองรายการในกล่องแจ้งเตือน (มอบหมาย + สร้างงาน)
    * ชื่องานติดภาษาของคนขอ และค้างอยู่ในงานของฉันของผู้ดูแล ปนกับงานจริง
    * ตอนนี้เก็บแค่ { userId, at, note } ที่โปรเจกต์ ข้อความแจ้งเก็บเป็นคีย์ แปลตามภาษาคนอ่าน */
   function requestAccess(projectId, note) {
@@ -7581,7 +7763,7 @@
     return { ok: true, owner: owner };
   }
 
-  /** คำขอจากรายการในกล่องข้อความ — ยังรอตอบอยู่และคนที่เปิดดูตอบได้ไหม */
+  /** คำขอจากรายการในกล่องแจ้งเตือน — ยังรอตอบอยู่และคนที่เปิดดูตอบได้ไหม */
   function accessRequestFor(n) {
     if (!n || n.kind !== 'access' || !n.projectId || !n.actorId) return null;
     var r = pendingRequest(n.projectId, n.actorId);
@@ -7672,6 +7854,33 @@
     return batch('เพิ่ม {n} งานเข้าโปรเจกต์', { n: list.length }, function () {
       list.forEach(function (id) { addTaskToProject(id, projectId, sectionId); });
       return list.length;
+    });
+  }
+
+  /* Sprint 3 — เลื่อนงานที่เลยกำหนดไปวันเดียวกันรวดเดียว (ประชุมรอบหน้า) และนับ "เลื่อนมาแล้ว N ครั้ง" ต่องาน
+   * คนเห็นว่างานไหนถูกเลื่อนซ้ำ ๆ (≥3 ครั้งไฮไลต์) เรื่องที่ค้างเพราะไม่มีใครทำจริงจะไม่หายเงียบ ๆ
+   * ย้อนกลับครั้งเดียว วันที่เปลี่ยนผ่าน updateTask จึงลงบันทึกของแต่ละงานตามปกติ */
+  /** วันประชุมถัดไปของโปรเจกต์ (ISO หรือ null) ใช้เป็นตัวเลือกแรกตอนเลื่อนงานเลยกำหนด */
+  function setNextMeeting(projectId, isoDate) {
+    var p = project(projectId);
+    if (!p || !can('write') || !canInProject(projectId, 'edit')) return false;
+    if (isoDate && !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(isoDate)) return false;
+    snapshot('ตั้งวันประชุมถัดไป');
+    p.nextMeeting = isoDate || null;
+    commit();
+    return true;
+  }
+
+  function slipOverdue(projectId, newDate) {
+    if (!project(projectId) || !newDate || !can('write') || !canInProject(projectId, 'edit')) return 0;
+    var t0 = today();
+    var ids = tasksInProject(projectId).filter(function (x) {
+      return !x.task.completed && x.task.dueOn && x.task.dueOn < t0;
+    }).map(function (x) { return x.task.id; });
+    if (!ids.length) return 0;
+    return batch('เลื่อนงานเลยกำหนดไปรอบถัดไป', null, function () {
+      ids.forEach(function (id) { updateTask(id, { dueOn: newDate, slips: (task(id).slips || 0) + 1 }); });
+      return ids.length;
     });
   }
 
@@ -7780,7 +7989,7 @@
   /* time: ตรวจตามเวลา  manual: กดรันเอง  personal: ใช้ในงานของฉันได้ */
   var AUTO_TRIGGERS = [
     { id: 'added',       label: 'งานถูกเพิ่มเข้าโปรเจกต์', match: always },
-    { id: 'moved',       label: 'งานถูกย้ายเข้าคอลัมน์',
+    { id: 'moved',       label: 'งานถูกย้ายเข้าเซกชัน',
       match: function (tr, ev) { return !tr.sec || ev.info.sec === tr.sec; } },
     { id: 'completed',   label: 'งานทำเสร็จ / เปิดใหม่', personal: true,
       match: function (tr, ev) { return (tr.v !== false) === !!ev.info.v; } },
@@ -7939,11 +8148,11 @@
   }
 
   var AUTO_ACTIONS = [
-    { id: 'section', label: 'ย้ายไปคอลัมน์', task: true, run: function (a, ctx) {
+    { id: 'section', label: 'ย้ายไปเซกชัน', task: true, run: function (a, ctx) {
       var t = needTask(ctx), p = ctx.p;
       var m = p && db.memberships.filter(function (x) { return x.taskId === t.id && x.projectId === p.id; })[0];
       if (!m) throw autoErr('งานไม่ได้อยู่ในโปรเจกต์นี้');
-      if (!section(p.id, a.sec)) throw autoErr('คอลัมน์ปลายทางถูกลบไปแล้ว');
+      if (!section(p.id, a.sec)) throw autoErr('เซกชันปลายทางถูกลบไปแล้ว');
       if (m.sectionId !== a.sec) setSectionRaw(m, a.sec, nextPosition(p.id, a.sec));
     } },
     { id: 'complete', label: 'ทำเครื่องหมายเสร็จ / เปิดใหม่', task: true, run: function (a, ctx) {
@@ -9326,6 +9535,18 @@
           [L('อบรมทีมขาย'), 2, 2, 10, 15],
           [L('วันเปิดตัว'), 3, 0, null, 20, 'milestone', 'urgent']
         ], deps: [[6, 4], [6, 5], [4, 2]], autos: [doneSec(3)] },
+      /* Sprint 3 — เทมเพลตประชุม: วาระ → งานที่ต้องตามต่อ → ยกยอดไปครั้งหน้า → เสร็จแล้ว
+       * งานที่ยังค้างย้ายไป "ยกยอดไปครั้งหน้า" ด้วยการย้ายเซกชัน แล้วคัดลอกโปรเจกต์/สร้างรอบใหม่จากเทมเพลตต่อได้ */
+      { id: 'meeting', icon: '🗓️', color: '#14aaf5', name: L('ประชุมประจำสัปดาห์'),
+        desc: L('วาระ มติ และงานที่ต้องตามต่อ — เขียนงานแบบ “ส่งสไลด์ @ชื่อ ศุกร์” ได้เลย'),
+        secs: [L('วาระ'), L('งานที่ต้องตามต่อ'), L('ยกยอดไปครั้งหน้า'), L('เสร็จแล้ว')], view: 'board',
+        fields: [],
+        roles: [L('ประธาน'), L('เลขา')],
+        tasks: [
+          [L('ทบทวนงานค้างจากครั้งที่แล้ว'), 0, null, 0, 0],
+          [L('อัปเดตความคืบหน้าแต่ละฝ่าย'), 0, null, 0, 0],
+          [L('สรุปมติและมอบหมายงาน'), 0, null, 0, 0]
+        ], autos: [doneSec(3)] },
       { id: 'design', icon: '🎨', color: '#e362e3', name: L('คำขอฝ่ายออกแบบ'),
         desc: L('รับคำของานออกแบบจากทุกฝ่ายผ่านฟอร์มเดียว แล้วติดตามจนส่งมอบ'),
         secs: [L('คำขอใหม่'), L('กำลังออกแบบ'), L('รอตรวจ'), L('ส่งมอบแล้ว')], view: 'board',
@@ -9743,7 +9964,7 @@
     var watchers = projectWatchers(pid, 'status');
     if (watchers.length) {
       notifyOnly(null, watchers, 'อัปเดตสถานะของ {p}', 'status', { p: p.name }, false,
-        { projectId: pid, route: 'p-overview', ref: entry.id });      // Sprint 2B — โชว์สถานะ+บรรทัดแรกในกล่องข้อความ
+        { projectId: pid, route: 'p-overview', ref: entry.id });      // Sprint 2B — โชว์สถานะ+บรรทัดแรกในกล่องแจ้งเตือน
     }
     closeRemindTask(p);
     commit();
@@ -10024,7 +10245,7 @@
     ['bar', 'แท่ง'], ['stack', 'แท่งซ้อน'], ['group', 'แท่งกลุ่ม'], ['line', 'เส้น'], ['burnup', 'เบิร์นอัพ'],
     ['burndown', 'เบิร์นดาวน์'], ['donut', 'โดนัท'], ['number', 'ตัวเลข'], ['lollipop', 'อมยิ้ม'], ['text', 'ข้อความ']
   ];
-  var DASH_X = [['assignee', 'ผู้รับผิดชอบ'], ['section', 'คอลัมน์'], ['priority', 'ความสำคัญ'], ['type', 'ชนิดงาน'],
+  var DASH_X = [['assignee', 'ผู้รับผิดชอบ'], ['section', 'เซกชัน'], ['priority', 'ความสำคัญ'], ['type', 'ชนิดงาน'],
     ['cstatus', 'สถานะ (ชนิดงาน)'], ['completed', 'เสร็จ/ยังไม่เสร็จ'], ['period', 'ช่วงเวลา']];
   var DASH_UNITS = [['day', 'วัน'], ['week', 'สัปดาห์'], ['month', 'เดือน']];
   var DASH_DATES = [['completedOn', 'วันที่ทำเสร็จ'], ['created', 'วันที่สร้าง'], ['due', 'กำหนดส่ง']];
@@ -10053,7 +10274,7 @@
       { id: 'dw_d3', kind: 'number', title: 'เลยกำหนด', y: 'count', filters: [{ f: 'due', op: 'overdue', v: null }, { f: 'completed', op: 'no', v: null }] },
       { id: 'dw_d4', kind: 'donut', title: 'ความคืบหน้ารวม', x: 'completed' },
       { id: 'dw_d5', kind: 'stack', title: 'งานตามผู้รับผิดชอบ', x: 'assignee', split: 'completed' },
-      { id: 'dw_d6', kind: 'bar', title: 'งานตามคอลัมน์', x: 'section' },
+      { id: 'dw_d6', kind: 'bar', title: 'งานตามเซกชัน', x: 'section' },
       { id: 'dw_d7', kind: 'burnup', title: 'เบิร์นอัพ', unit: 'week', n: 8, full: true }
     ].map(normalizeWidget);
   }
@@ -10569,6 +10790,29 @@
   function myPages() {
     return (db.pages || []).filter(function (x) { return !x.notepad && (!x.private || x.owner === db.currentUserId); });
   }
+  /* Sprint 3 — หน้าของโปรเจกต์ที่คนนี้เห็นทั้งหมด (ไว้แสดงในรายการหน้ารวม พร้อมป้ายโปรเจกต์) */
+  function visibleProjectPages() {
+    var out = [];
+    visibleProjects().forEach(function (p) { (p.pages || []).forEach(function (pg) { out.push(pg); }); });
+    return out;
+  }
+  /** ย้ายหน้าเดี่ยวเข้าโปรเจกต์ (หน้าที่เคยเป็นส่วนตัวกลายเป็นของโปรเจกต์ ต้องผ่านด่านสิทธิ์แก้ทั้งหน้าและโปรเจกต์) */
+  function movePageToProject(id, projectId) {
+    var l = pageLoc(id), p = project(projectId);
+    if (!l || l.project || l.page.notepad || !p) return false;
+    if (!canEditPage(id) || !can('write') || !canInProject(projectId, 'edit')) return false;
+    if ((p.pages || []).length >= PAGE_MAX) return false;
+    snapshot('ย้ายหน้าเข้าโปรเจกต์');
+    db.pages = db.pages.filter(function (x) { return x !== l.page; });
+    delete l.page.owner;
+    l.page.private = false;
+    p.pages = p.pages || [];
+    p.pages.push(l.page);
+    audit('page.move', l.page.title || '—', p.name);
+    commit();
+    return true;
+  }
+
   function notepadPage(userId) {
     userId = userId || db.currentUserId;
     return (db.pages || []).filter(function (x) { return x.notepad && x.owner === userId; })[0] || null;
@@ -10761,7 +11005,9 @@
         s = s.slice(0, at) + s.slice(at + tag.length);
         return true;
       });
-      return { name: s.replace(/\s+/g, ' ').trim().slice(0, 300), assigneeId: who, src: src };
+      /* Sprint 3 — บรรทัดจากบันทึกประชุมอย่าง "ส่งสไลด์ @สมชาย ศุกร์" เก็บวันที่ไทยและ @ชื่อสั้นด้วย (ตัวเดียวกับช่องเพิ่มงาน) */
+      var qa = quickAdd(s.replace(/\s+/g, ' ').trim(), null);
+      return { name: qa.name.slice(0, 300), assigneeId: who || qa.assigneeId || null, dueOn: qa.dueOn || null, src: src };
     }).filter(function (x) { return x.name; }).slice(0, 100);
   }
   /** สร้างงานหลายชิ้นจากหน้าเอกสารในครั้งเดียว (ย้อนกลับได้ทีเดียว) — projectId ว่าง = งานส่วนตัวในงานของฉัน
@@ -10782,7 +11028,7 @@
       /* งานในโปรเจกต์ที่ไม่มี @ชื่อ ปล่อยว่างไว้ให้ทีมรับ งานส่วนตัวต้องเป็นของเรา ไม่งั้นหาไม่เจอในงานของฉัน */
       var who = x.assigneeId && user(x.assigneeId) ? x.assigneeId : (p ? null : db.currentUserId);
       /* ใส่ผู้รับผิดชอบเป็นผู้ติดตามหลังสร้าง ไม่งั้นเขาได้ทั้ง "สร้างงานนี้" และ "มอบหมายให้คุณ" ซ้ำสองข้อความ */
-      var t = createTaskRaw({ name: String(x.name).trim().slice(0, 300), notes: notes, assigneeId: who, followers: [] },
+      var t = createTaskRaw({ name: String(x.name).trim().slice(0, 300), notes: notes, assigneeId: who, dueOn: x.dueOn || null, followers: [] },
         p ? p.id : null, sec ? sec.id : null);
       if (who && t.followers.indexOf(who) < 0) t.followers.push(who);
       if (who && who !== db.currentUserId) notifyOnly(t.id, [who], 'มอบหมายงาน “{t}” ให้คุณ', 'assigned', { t: t.name });
@@ -11557,7 +11803,7 @@
     if (/^pf_/.test(id)) return { route: 'portfolio:' + id + ':messages' };
     return { projectId: id };
   }
-  /** ชื่อของปลายทางในกล่องข้อความ (route ของ 4a) */
+  /** ชื่อของปลายทางในกล่องแจ้งเตือน (route ของ 4a) */
   function routeLabel(r) {
     var m = /^(team|portfolio|goal):([^:]+)/.exec(String(r || ''));
     if (!m) return null;
@@ -12328,7 +12574,7 @@
     });
     return '﻿' + rows.map(function (r) { return r.map(q).join(','); }).join('\r\n');
   }
-  /** เตือนเจ้าของเป้าหมายที่ยังเปิดอยู่ให้อัปเดตสถานะ — ไม่ได้อัปเดตเกิน 7 วัน เตือนสัปดาห์ละครั้ง (dedupe ในกล่องข้อความ)
+  /** เตือนเจ้าของเป้าหมายที่ยังเปิดอยู่ให้อัปเดตสถานะ — ไม่ได้อัปเดตเกิน 7 วัน เตือนสัปดาห์ละครั้ง (dedupe ในกล่องแจ้งเตือน)
    *  และบันทึกจุดกราฟความคืบหน้าของวันนี้ (เงียบ ๆ ไม่เป็นจุดย้อนกลับ) */
   function checkGoalReminders(opts) {
     if (!db || !isActive() || !(db.goals || []).length) return 0;
@@ -12401,7 +12647,7 @@
     setBaseline: setBaseline, clearBaseline: clearBaseline, baselineOf: baselineOf,
     sortItems: sortItems, projectStats: projectStats,
 
-    createTask: createTask, createTasks: createTasks, updateTask: updateTask, deleteTask: deleteTask,
+    quickAdd: quickAdd, searchDocs: searchDocs, createTask: createTask, createTasks: createTasks, updateTask: updateTask, deleteTask: deleteTask,
     deleteTasks: deleteTasks, duplicateTask: duplicateTask, moveTask: moveTask,
     DUP_KEYS: DUP_KEYS, assignCopies: assignCopies, mergeDuplicate: mergeDuplicate,
     createFollowUp: createFollowUp, setParent: setParent, promoteSubtask: promoteSubtask,
@@ -12433,7 +12679,7 @@
     markRead: markRead, markAllRead: markAllRead,
     archiveNotification: archiveNotification, archiveAll: archiveAll,
 
-    /* 2a — งานส่วนตัว งานของฉัน กล่องข้อความ หน้าแรก */
+    /* 2a — งานส่วนตัว งานของฉัน กล่องแจ้งเตือน หน้าแรก */
     rootOf: rootOf, isPrivate: isPrivate,
     MT_RECENT: MT_RECENT, MT_GROUPS: MT_GROUPS, MT_SORTS: MT_SORTS, NOTEPAD_MAX: NOTEPAD_MAX,
     personalOf: personalOf, mtTasks: mtTasks, mtGroups: mtGroups, mtSectionOf: mtSectionOf,
@@ -12524,7 +12770,7 @@
     accessRequestFor: accessRequestFor,
     canAnswerAccess: canAnswerAccess, answerAccess: answerAccess, accessOwner: accessOwner,
     convertToProject: convertToProject,
-    bulkAddToProject: bulkAddToProject, bulkMoveSection: bulkMoveSection, bulkSetField: bulkSetField,
+    setNextMeeting: setNextMeeting, setOrgLang: setOrgLang, setOrgPrivacy: setOrgPrivacy, slipOverdue: slipOverdue, bulkAddToProject: bulkAddToProject, bulkMoveSection: bulkMoveSection, bulkSetField: bulkSetField,
     bulkAddFollowers: bulkAddFollowers, bulkAddTag: bulkAddTag, bulkDependOn: bulkDependOn,
     bulkMerge: bulkMerge,
 
@@ -12587,7 +12833,7 @@
   var X3C2 = {
     PAGE_MAX: PAGE_MAX, PAGE_VERSIONS: PAGE_VERSIONS, PAGE_IMG_BYTES: PAGE_IMG_BYTES,
     pageLoc: pageLoc, canSeePage: canSeePage, canEditPage: canEditPage, canCommentPage: canCommentPage,
-    projectPages: projectPages, myPages: myPages, notepadPage: notepadPage, ensureNotepadPage: ensureNotepadPage,
+    projectPages: projectPages, myPages: myPages, visibleProjectPages: visibleProjectPages, movePageToProject: movePageToProject, notepadPage: notepadPage, ensureNotepadPage: ensureNotepadPage,
     createPage: createPage, savePage: savePage, restorePageVersion: restorePageVersion, deletePage: deletePage,
     setPagePrivate: setPagePrivate, addPageImage: addPageImage, pageImgMap: pageImgMap,
     addPageComment: addPageComment, replyPageComment: replyPageComment, resolvePageComment: resolvePageComment,
@@ -13873,7 +14119,7 @@
 
   /* ====================== Sprint 2B — การแจ้งเตือน ศูนย์อนุมัติ การติดตามโปรเจกต์ ======================
    *
-   * ผลทดสอบกับผู้ใช้: กล่องข้อความ "เสียงดังแต่อ่านไม่รู้เรื่อง" และหางานรออนุมัติไม่เจอ
+   * ผลทดสอบกับผู้ใช้: กล่องแจ้งเตือน "เสียงดังแต่อ่านไม่รู้เรื่อง" และหางานรออนุมัติไม่เจอ
    * การกระทำเดียวได้หลายรายการ (มอบหมาย + ตั้งวัน + แก้รายละเอียด = 3, ส่งฟอร์ม = 3, ขออนุมัติ = 5)
    *
    * รูปข้อมูลที่เพิ่ม (SCHEMA 19) ทุกช่องไม่บังคับ ไม่มี = แบบเดิม

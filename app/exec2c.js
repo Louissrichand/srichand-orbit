@@ -323,7 +323,7 @@
           return '<tr><td>◆ ' + esc(t.name) + '</td><td class="' + (t.dueOn && t.dueOn < td ? 'bad' : '') + '">' + esc(t.dueOn ? fmtDate(t.dueOn) : '—') + '</td></tr>';
         }).join('') + '</tbody></table></section>';
     }
-    h += '<section><h2>' + esc(L('ความคืบหน้าตามคอลัมน์')) + '</h2><table class="ps-tbl"><tbody>' + p.sections.map(function (sec) {
+    h += '<section><h2>' + esc(L('ความคืบหน้าตามเซกชัน')) + '</h2><table class="ps-tbl"><tbody>' + p.sections.map(function (sec) {
       var inS = S.tasksInProject(pid).filter(function (x) { return x.membership.sectionId === sec.id; });
       var dn = inS.filter(function (x) { return x.task.completed; }).length;
       var pc = inS.length ? Math.round(dn * 100 / inS.length) : 0;

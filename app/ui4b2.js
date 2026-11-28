@@ -174,7 +174,7 @@
     function bnOn() { return !!S.pref('browserNotify'); }
     function bnPerm() { var N = NotifAPI(); return N ? N.permission : 'unsupported'; }
     function bnText(n) {
-      /* Sprint 1C — ใช้ตัวเดียวกับกล่องข้อความ วันที่ดิบ 2026-11-28 กลายเป็น "28 พ.ย." ตามภาษาคนอ่าน */
+      /* Sprint 1C — ใช้ตัวเดียวกับกล่องแจ้งเตือน วันที่ดิบ 2026-11-28 กลายเป็น "28 พ.ย." ตามภาษาคนอ่าน */
       if (global.Render && global.Render.notifText) return global.Render.notifText(n);
       var body = n.key ? L(n.key, n.params || undefined) : (n.text || '');
       return (n.actorName ? n.actorName + ' ' : '') + body;
@@ -204,7 +204,7 @@
             state.route = { type: 'inbox' };
             if (n.taskId && S.task(n.taskId) && S.canSeeTask(n.taskId)) {
               api.openTask(n.taskId);
-              /* Sprint 2B — ความเห็น/การพูดถึง พาไปที่ความเห็นนั้นเหมือนกดจากกล่องข้อความ */
+              /* Sprint 2B — ความเห็น/การพูดถึง พาไปที่ความเห็นนั้นเหมือนกดจากกล่องแจ้งเตือน */
               var sp = S.notifParts ? S.notifParts(n).filter(function (p) { return p.story; })[0] : null;
               var st = sp ? S.story(sp.story) : null;
               if (st && !st.deleted && st.taskId === n.taskId) {
@@ -218,7 +218,7 @@
           };
         } catch (e) { /* บางเบราว์เซอร์ให้ใช้ได้เฉพาะผ่าน service worker */ }
       });
-      if (fresh.length > 3) { try { new N('Orbit', { body: L('และอีก {n} รายการในกล่องข้อความ', { n: fresh.length - 3 }), tag: 'orbit-more' }); } catch (e2) {} }
+      if (fresh.length > 3) { try { new N('Orbit', { body: L('และอีก {n} รายการในกล่องแจ้งเตือน', { n: fresh.length - 3 }), tag: 'orbit-more' }); } catch (e2) {} }
       return show.length;
     }
     S.onChange(bnCheck);
@@ -230,7 +230,7 @@
       var perm = bnPerm(), on = bnOn() && perm === 'granted';
       var desc = perm === 'unsupported' ? L('เบราว์เซอร์นี้ไม่รองรับการแจ้งเตือน')
         : perm === 'denied' ? L('เบราว์เซอร์บล็อกการแจ้งเตือนของ Orbit อยู่ — อนุญาตในตั้งค่าของเว็บไซต์ก่อน')
-        : L('เด้งบนเครื่องเมื่อมีรายการใหม่เข้ากล่องข้อความ เฉพาะตอนเปิด Orbit ค้างไว้ในแท็บ ไม่เด้งช่วงห้ามรบกวน และใช้ชนิดที่เลือกไว้ด้านบน');
+        : L('เด้งบนเครื่องเมื่อมีรายการใหม่เข้ากล่องแจ้งเตือน เฉพาะตอนเปิด Orbit ค้างไว้ในแท็บ ไม่เด้งช่วงห้ามรบกวน และใช้ชนิดที่เลือกไว้ด้านบน');
       return '<label class="opt-lbl">' + L('แจ้งเตือนของเบราว์เซอร์') + '</label>' +
         '<div class="opt-toggle"><div class="grow"><b>' + esc(L('แจ้งเตือนบนเดสก์ท็อป/มือถือ')) + '</b><em>' + esc(desc) + '</em></div>' +
         '<button class="switch' + (on ? ' on' : '') + '" data-act="bn-toggle" role="switch" aria-checked="' + (on ? 'true' : 'false') + '"' +

@@ -2,12 +2,12 @@
  *
  * ผลทดสอบกับ "พนักงานใหม่ที่ใช้มือถือ" บอกว่าจอมือถือเป็นแค่หน้าคอมที่ถูกบีบ
  * ไฟล์นี้รวมของที่ทำให้มือถือใช้ได้จริงไว้ที่เดียว (ส่วนหน้าตาอยู่ท้าย styles.css "Sprint 2A: มือถือ")
- *   - แถบนำทางล่าง (หน้าแรก งานของฉัน + สร้างงาน กล่องข้อความ ค้นหา) — นิ้วโป้งเอื้อมถึง ไม่ต้องเปิดเมนูซ้าย
+ *   - แถบนำทางล่าง (หน้าแรก งานของฉัน + สร้างงาน กล่องแจ้งเตือน ค้นหา) — นิ้วโป้งเอื้อมถึง ไม่ต้องเปิดเมนูซ้าย
  *   - สร้างงานด่วนพร้อมปุ่มกำหนดส่ง วันนี้/พรุ่งนี้/สัปดาห์หน้า
  *   - ช่องค้นหาด้านบนเหลือแว่นขยาย แตะแล้วกางเต็มแถว (ชื่อหน้าไม่ถูกเบียดจนเหลือตัวเดียว)
  *   - โหมดเลือกหลายงาน: กดค้างที่แถว หรือปุ่ม "เลือก" (ช่องติ๊กเล็ก ๆ ข้างวงกลมทำเสร็จกดพลาดบ่อย จึงซ่อนไว้)
  *   - ย้ายเซกชัน/คอลัมน์โดยไม่ต้องลาก (แถบแก้หลายงาน เมนู ⋯ ของงาน และปุ่ม ⋯ ท้ายแถวงานของฉัน)
- *   - เมนู ⋯ ของกล่องข้อความและงานของฉัน แท็บที่ล้นจอเลื่อนไปหาแท็บที่เลือกเอง
+ *   - เมนู ⋯ ของกล่องแจ้งเตือนและงานของฉัน แท็บที่ล้นจอเลื่อนไปหาแท็บที่เลือกเอง
  *   - Gantt/ไทม์ไลน์บอกว่าดูบนคอมสะดวกกว่า พร้อมปุ่มสลับไปรายการ
  *   - iPhone ไม่มีปุ่มติดตั้งแอป — บอกวิธี "แชร์ → เพิ่มไปยังหน้าจอโฮม" ครั้งเดียว
  * โหลดก่อน main.js แบบเดียวกับ ui4b.js แล้วเสียบเข้าแอปผ่าน window.OrbitExt
@@ -90,7 +90,7 @@
         bnavItem('go', ' data-route="mytasks"', 'checkCircle', L('งานของฉัน'), r.type === 'mytasks') +
         (canAdd ? '<button class="m2a-bn m2a-bn-add" data-act="m2a-quick-add" aria-label="' + esc(L('สร้างงาน')) + '">' +
           '<span class="m2a-bn-plus">' + I('plus', 22) + '</span></button>' : '') +
-        bnavItem('go', ' data-route="inbox"', 'bell', L('กล่องข้อความ'), r.type === 'inbox', badge) +
+        bnavItem('go', ' data-route="inbox"', 'bell', L('กล่องแจ้งเตือน'), r.type === 'inbox', badge) +
         bnavItem('m2a-search', '', 'search', L('ค้นหา'), r.type === 'search');
       syncBnav();
     }
@@ -329,7 +329,7 @@
       var r = state.route || {};
       if (r.type === 'project' && S.project(r.id) && S.canArrangeIn(r.id)) {
         /* จอกว้างมีอยู่แล้วในเมนู "เพิ่มเติม" — ปุ่มนี้เห็นเฉพาะจอสัมผัส/มือถือที่ลากไม่สะดวก */
-        return '<button class="m2a-touch-only" data-act="bulk-section">' + I('grid', 12) + ' ' + L('ย้ายไปคอลัมน์…') + '</button>';
+        return '<button class="m2a-touch-only" data-act="bulk-section">' + I('grid', 12) + ' ' + L('ย้ายไปเซกชัน…') + '</button>';
       }
       if (r.type === 'mytasks') {
         var v = S.personalOf().mt.view;
@@ -532,7 +532,7 @@
             mtSecButtons('m2a-mt-move', rt.id, S.mtSectionOf(rt));
           if (mtg.projects.length) {
             rh += '<div class="pop-sep"></div><button data-act="m2a-move-sec" data-id="' + esc(rt.id) + '">' + I('grid', 14) +
-              '<span class="grow">' + esc(L('ย้ายคอลัมน์ในโปรเจกต์…')) + '</span></button>';
+              '<span class="grow">' + esc(L('ย้ายเซกชันในโปรเจกต์…')) + '</span></button>';
           }
           rh += '<div class="pop-sep"></div><button data-act="open-task" data-id="' + esc(rt.id) + '">' + I('arrowRight', 14) +
             '<span class="grow">' + esc(L('เปิดงาน')) + '</span></button>';

@@ -59,7 +59,7 @@
     api.projView('workload', function (pid) { return wlBody({ kind: 'project', id: pid }); });
     api.pfView('workload', function (pfid) { return wlBody({ kind: 'portfolio', id: pfid }); });
 
-    /* ลิงก์จากกล่องข้อความ ts:<id> และ report:<id> */
+    /* ลิงก์จากกล่องแจ้งเตือน ts:<id> และ report:<id> */
     api.openRoute(function (r) {
       var m = /^(ts|report):(.+)$/.exec(String(r || ''));
       if (!m) return false;

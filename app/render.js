@@ -89,7 +89,7 @@
     return Math.abs(y - cy) <= 50 ? global.I18N.yearShort(y) : String(global.I18N.year(y));
   }
 
-  /* Sprint 1C — วันที่ดิบ 2026-11-28 ในข้อความที่คนอ่าน (กล่องข้อความ บันทึก) แปลงตามภาษาคนอ่าน
+  /* Sprint 1C — วันที่ดิบ 2026-11-28 ในข้อความที่คนอ่าน (กล่องแจ้งเตือน บันทึก) แปลงตามภาษาคนอ่าน
    * ค่าแทนที่เก็บเป็นรูปมาตรฐานเพื่อเทียบได้ จัดรูปตอนแสดงเท่านั้น (สลับภาษาแล้วเปลี่ยนตาม) */
   function dateParams(p) {
     if (!p) return p;
@@ -106,7 +106,7 @@
       return pre + fmtDate(d);
     });
   }
-  /** ข้อความของการแจ้งเตือน (กล่องข้อความ และแจ้งเตือนของเบราว์เซอร์) วันที่ตามภาษาคนอ่าน */
+  /** ข้อความของการแจ้งเตือน (กล่องแจ้งเตือน และแจ้งเตือนของเบราว์เซอร์) วันที่ตามภาษาคนอ่าน */
   function notifText(n) {
     if (!n.key) return legacyNotifText(n);
     /* Sprint 2B — รายการที่รวมหลายเรื่องของคนเดียวกันในงานเดียวกัน ต่อกันด้วย " · "
@@ -132,17 +132,18 @@
   }
   /* Sprint 2B — บันทึกบางคีย์เก็บ "ป้าย" ภาษาไทยเป็นค่าแทนที่ (สถานะอนุมัติ ความสำคัญ ชนิดงาน การทำซ้ำ)
    * แปลค่านั้นตอนแสดงด้วย ไม่งั้นภาษาอังกฤษขึ้น "set the approval to “อนุมัติแล้ว”" */
-  var LABEL_PARAMS = { 'เปลี่ยนสถานะอนุมัติเป็น “{s}”': 's', 'ตั้งความสำคัญเป็น {p}': 'p',
+  var LABEL_PARAMS = { 'เปลี่ยนสถานะอนุมัติเป็น “{s}”': 's', 'ตั้งความสำคัญเป็น {p}': 'p', 'เปลี่ยนความสำคัญจาก {a} เป็น {b}': 'a,b',
                        'เปลี่ยนชนิดงานเป็น {p}': 'p', 'ตั้งให้ทำซ้ำ {f}': 'f' };
   function labelParams(key, p) {
     var k = LABEL_PARAMS[key];
-    if (!p || !k || typeof p[k] !== 'string') return p;
+    if (!p || !k) return p;
+    var ks = k.split(',');                                   // Sprint 3 — หลายค่าในประโยคเดียว ("จาก {a} เป็น {b}")
     var out = {};
-    Object.keys(p).forEach(function (x) { out[x] = x === k ? L(p[x]) : p[x]; });
+    Object.keys(p).forEach(function (x) { out[x] = ks.indexOf(x) >= 0 && typeof p[x] === 'string' ? L(p[x]) : p[x]; });
     return out;
   }
   /* Sprint 2B — ข้อมูลเก่าที่เก็บเป็นประโยคไทยสำเร็จรูป ("สมชาย แสดงความเห็น") ลองแปลส่วนหลังชื่อคน
-   * คนใช้ภาษาอังกฤษจะได้ไม่เห็นภาษาไทยปนกลางกล่องข้อความ (ประโยคที่ไม่มีคำแปลคงเดิม) */
+   * คนใช้ภาษาอังกฤษจะได้ไม่เห็นภาษาไทยปนกลางกล่องแจ้งเตือน (ประโยคที่ไม่มีคำแปลคงเดิม) */
   function legacyNotifText(n) {
     var tx = String(n.text == null ? '' : n.text);
     var who = n.actorName && tx.indexOf(n.actorName + ' ') === 0 ? n.actorName : null;
@@ -345,7 +346,7 @@
       /* ห้ามรบกวน — ไม่ขึ้นตัวเลขแดง แต่บอกด้วยไอคอนพระจันทร์ว่ากำลังพักอยู่ ไม่ใช่ว่าไม่มีอะไรเข้า */
       p += section('',
         go('home', route.type === 'home', 'home', 'หน้าแรก') +
-        go('inbox', route.type === 'inbox', 'bell', 'กล่องข้อความ',
+        go('inbox', route.type === 'inbox', 'bell', 'กล่องแจ้งเตือน',
           dnd ? '<span class="sb-dnd" title="' + L('ห้ามรบกวนอยู่') + '">' + I('moon', 13) + '</span>'
               : (unread ? '<span class="count alert">' + unread + '</span>' : '')) +
         go('mytasks', route.type === 'mytasks', 'checkCircle', 'งานของฉัน', mineCount ? '<span class="count">' + mineCount + '</span>' : '') +
@@ -434,6 +435,7 @@
         (S.isAdmin() ? go('admin', route.type === 'admin', 'shield', 'ผู้ดูแลระบบ') : '') +
         go('trash', route.type === 'trash', 'trash', 'ถังขยะ') +
         item(false, 'data-act="show-shortcuts"', I('keyboard'), L('คีย์ลัด')) +
+        item(false, 'data-act="show-glossary"', I('note'), L('ช่วยเหลือและศัพท์')) +
         (global.OrbitPWA && global.OrbitPWA.canInstall() ? '<button class="sb-item sb-install" data-act="pwa-install" title="' +
           esc(L('ติดตั้งเป็นแอปบนเครื่องนี้ เปิดได้จากหน้าจอหลัก')) + '">' + I('install') + '<span class="grow">' + L('ติดตั้ง Orbit') + '</span>' +
           '<span class="sb-x" data-act="pwa-dismiss" title="' + esc(L('ไม่ต้องแสดงอีก')) + '">' + I('close', 11) + '</span></button>' : ''));
@@ -501,11 +503,13 @@
        * ดีกว่าโชว์พนักงานทั้งบริษัทซึ่งไม่ได้บอกอะไร */
       var ppl = projectPeople(p.id);
       if (ppl.length) {
-        h += '<button class="tb-people" data-act="manage-members" title="' +
-          esc(ppl.map(function (m) { return m.user.name; }).join(', ')) + '">';
+        /* Sprint 3 — คนที่เพิ่ม/ถอดสมาชิกไม่ได้ เห็นรูปสมาชิกอย่างเดียว ไม่ใช่ปุ่มที่กดแล้วโดนปฏิเสธ */
+        var pplTitle = esc(ppl.map(function (m) { return m.user.name; }).join(', '));
+        h += S.canAddMembers(p.id) ? '<button class="tb-people" data-act="manage-members" title="' + pplTitle + '">'
+                                   : '<span class="tb-people ro" title="' + pplTitle + '">';
         ppl.slice(0, 4).forEach(function (m) { h += avatar(m.user, 'sm'); });
         if (ppl.length > 4) h += '<span class="tb-more">+' + (ppl.length - 4) + '</span>';
-        h += '</button>';
+        h += (S.canAddMembers(p.id) ? '</button>' : '</span>');
       }
 
       /* คำอธิบายโปรเจกต์ไม่อยู่บนแถบบนแล้ว
@@ -543,7 +547,7 @@
     } else if (route.type === 'mytasks') {
       h += '<div class="tb-title">' + I('checkCircle', 20) + ' ' + L('งานของฉัน') + '</div>';
     } else if (route.type === 'inbox') {
-      h += '<div class="tb-title">' + I('bell', 20) + ' ' + L('กล่องข้อความ') + '</div>';
+      h += '<div class="tb-title">' + I('bell', 20) + ' ' + L('กล่องแจ้งเตือน') + '</div>';
     } else if (route.type === 'calendar') {
       h += '<div class="tb-title">' + I('calendar', 20) + ' ' + L('ปฏิทินรวม') + '</div>';
     } else if (route.type === 'pages') {
@@ -611,7 +615,7 @@
       h += '<button class="btn m2a-hide" data-act="inbox-archive-all" title="' + L('เก็บทั้งหมด') + '">' +
         I('archive', 14) + '<span class="hide-sm">' + L('เก็บทั้งหมด') + '</span></button>';
       h += '<button class="btn btn-ghost m2a-only m2a-inbox-more' + (dndOn ? ' btn-dnd-on' : '') +
-        '" data-act="m2a-inbox-menu" title="' + esc(L('เมนูกล่องข้อความ')) + '" aria-label="' + esc(L('เมนูกล่องข้อความ')) + '">' +
+        '" data-act="m2a-inbox-menu" title="' + esc(L('เมนูกล่องแจ้งเตือน')) + '" aria-label="' + esc(L('เมนูกล่องแจ้งเตือน')) + '">' +
         (dndOn ? I('moon', 15) : I('more')) + '</button>';
     } else if (route.type === 'portfolio') {
       h += followBtn('portfolio', route.id);          // Sprint 2B
@@ -903,6 +907,8 @@
       /* chip-due — จอแคบดึงกำหนดส่งขึ้นหน้าแถวที่สอง (Sprint 2A) เพราะเป็นป้ายที่คนมองหาก่อน */
       h += '<span class="chip chip-due' + dueClass(t.dueOn, t.completed) + '">' + fmtDate(t.dueOn) +
         (t.dueTime ? ' ' + esc(t.dueTime) : '') + '</span>';
+      /* Sprint 3 — เลื่อนมาแล้ว N ครั้ง (≥3 ไฮไลต์) */
+      if (t.slips) h += '<span class="chip chip-slip' + (t.slips >= 3 ? ' hot' : '') + '">' + esc(L('เลื่อนมาแล้ว {n} ครั้ง', { n: t.slips })) + '</span>';
     }
     return h;
   }
@@ -1357,7 +1363,7 @@
     }
     if (bySection && canStruct) {
       h += '<div style="padding:10px 24px 60px"><button class="add-row" data-act="add-section">' +
-        I('plus', 14) + ' ' + L('เพิ่มคอลัมน์') + '</button></div>';
+        I('plus', 14) + ' ' + L('เพิ่มเซกชัน') + '</button></div>';
     }
     h += '</div>';
     return h;
@@ -1428,7 +1434,7 @@
         h += '</div>';
       });
       if (by === 'section' && canStruct) {
-        h += '<button class="col-new" data-act="add-section">' + L('+ เพิ่มคอลัมน์') + '</button>';
+        h += '<button class="col-new" data-act="add-section">' + L('+ เพิ่มเซกชัน') + '</button>';
       }
       return h + '</div>';
     }
@@ -2181,7 +2187,8 @@
 
     // สถานะโปรเจกต์
     h += '<div class="panel"><h3>' + L('สถานะโปรเจกต์') +
-      '<button class="btn btn-sm" data-act="update-status" style="float:right">' + L('อัปเดตสถานะ') + '</button></h3>';
+      /* Sprint 3 — ปุ่มแก้สถานะ เฉพาะคนที่แก้โครงสร้างโปรเจกต์ได้ (ไม่งั้นกดแล้วโดนปฏิเสธ) */
+      (S.can('structure') && S.canInProject(p.id, 'edit') ? '<button class="btn btn-sm" data-act="update-status" style="float:right">' + L('อัปเดตสถานะ') + '</button>' : '') + '</h3>';
     if (p.status) {
       var st = projectState(p.status.state);
       var by = S.user(p.status.by);
@@ -2251,7 +2258,7 @@
     h += '</div>';
 
     // ตามคอลัมน์
-    h += '<div class="panel"><h3>' + L('ตามคอลัมน์') + '</h3>';
+    h += '<div class="panel"><h3>' + L('ตามเซกชัน') + '</h3>';
     p.sections.forEach(function (sec) {
       h += bar(sec.name, s.bySection[sec.id] || 0, s.total, p.color);
     });
@@ -2352,7 +2359,7 @@
       L('เรียง') + (ns ? ' <b class="vtb-n">' + ns + '</b>' : '') + '</button>';
     h += '<button class="vtb-btn' + (grp ? ' on' : '') + '" data-act="pfv-opts" data-page="group">' + I('grid', 14) + ' ' +
       L('จัดกลุ่ม') + '</button>';
-    h += '<button class="vtb-btn" data-act="pfv-opts" data-page="cols">' + I('menu', 14) + ' ' + L('คอลัมน์') + '</button>';
+    h += '<button class="vtb-btn" data-act="pfv-opts" data-page="cols">' + I('menu', 14) + ' ' + L('เซกชัน') + '</button>';
     if (cs) h += '<button class="vtb-btn" data-act="pff-manage" data-id="' + esc(f.id) + '">' + I('hash', 14) + ' ' + L('ฟิลด์') + '</button>';
     h += '<span class="grow"></span>';
     if (cs && ui.sv && ui.dirty) {
@@ -3638,7 +3645,7 @@
     var n = S.autoForSection(pid, secId).length;
     if (!n && !canStruct) return '';
     return '<button class="btn btn-sm btn-ghost sec-bolt' + (n ? ' on' : '') + '" data-act="auto-sec" data-section="' +
-      esc(secId) + '" title="' + esc(n ? L('อัตโนมัติของคอลัมน์นี้ {n} รายการ', { n: n }) : L('เพิ่มอัตโนมัติให้คอลัมน์นี้')) + '">' +
+      esc(secId) + '" title="' + esc(n ? L('อัตโนมัติของเซกชันนี้ {n} รายการ', { n: n }) : L('เพิ่มอัตโนมัติให้เซกชันนี้')) + '">' +
       I('bolt', 13) + (n > 1 ? '<span class="sec-bolt-n">' + n + '</span>' : '') + '</button>';
   }
 
@@ -4015,7 +4022,7 @@
     return h + '</div>';
   }
 
-  /* ---------- กล่องข้อความ ----------
+  /* ---------- กล่องแจ้งเตือน ----------
    * ui = { tab, f: { from, project, mention, toMe, byMe, unread } }
    * การเรียงกับความหนาแน่นจำไว้ต่อคน (personal.inbox) ตัวกรองอยู่แค่ในหน้าจอ */
   /* Sprint 2B — แท็บ "รออนุมัติจากฉัน" ต่อจากกิจกรรม (ผลทดสอบ: หางานรออนุมัติไม่เจอ) */
@@ -4208,7 +4215,7 @@
       t.assigneeId === S.db.currentUserId && S.canApprove(t.id);
   }
 
-  /** ปุ่มตัดสินในแถว — ใช้ทั้งกล่องข้อความ แท็บรออนุมัติ และวิดเจ็ตหน้าแรก */
+  /** ปุ่มตัดสินในแถว — ใช้ทั้งกล่องแจ้งเตือน แท็บรออนุมัติ และวิดเจ็ตหน้าแรก */
   function approvalBtns(t) {
     var a = ' data-id="' + esc(t.id) + '"';
     return '<span class="apv-acts">' +
@@ -4238,7 +4245,7 @@
       '</div>' + (S.canApprove(t.id) ? approvalBtns(t) : '') + '</div>';     // canApprove — บทบาทดูอย่างเดียวไม่เห็นปุ่ม
   }
 
-  /** แท็บ "รออนุมัติจากฉัน" ในกล่องข้อความ */
+  /** แท็บ "รออนุมัติจากฉัน" ในกล่องแจ้งเตือน */
   function approvalsHub() {
     var list = S.approvalsWaiting();
     var h = '<p class="apv-note">' + I('check', 14) + '<span>' +
@@ -4450,6 +4457,20 @@
    * ผลลัพธ์เป็นรายการหรือปฏิทิน
    * opts = { conds, mode: list|calendar, anchor, panel, calMode }
    */
+  /* Sprint 3 — ผลค้นหาที่ไม่ใช่งาน: หน้าเอกสารและข้อความโปรเจกต์ (ลิงก์ตรงไปที่หน้า/แท็บข้อความ) */
+  function searchDocsBlock(docs) {
+    if (!docs.length) return '';
+    var h = '<div class="list-wrap sdocs"><div class="bucket-head">' + L('หน้าและข้อความ') + ' <span class="n">' + docs.length + '</span></div>';
+    docs.forEach(function (d) {
+      var href = d.kind === 'page' ? '#/page/' + d.id : '#/project/' + d.project.id + '/messages';
+      h += '<a class="sdoc" href="' + esc(href) + '">' + I(d.kind === 'page' ? 'note' : 'send', 15) +
+        '<span class="nm">' + esc(d.title || L('ไม่มีชื่อ')) + '</span><span class="sub">' +
+        (d.kind === 'page' ? L('หน้าเอกสาร') : L('ข้อความโปรเจกต์')) + (d.project ? ' · ' + esc(d.project.name) : '') + '</span>' +
+        (d.snip ? '<span class="snip">' + esc(d.snip) + '</span>' : '') + '</a>';
+    });
+    return h + '</div>';
+  }
+
   function searchView(q, sel, opts) {
     opts = opts || {};
     var conds = opts.conds || [];
@@ -4459,6 +4480,7 @@
         L('พิมพ์คำค้น หรือเพิ่มเงื่อนไขเพื่อค้นหางานทุกโปรเจกต์ที่คุณเห็น') + searchHelp() + '</div></div>';
     }
     var res = S.searchAdv({ q: q, conds: conds });
+    var docs = (opts.mode !== 'calendar' && !conds.length) ? S.searchDocs(q) : [];
     if (opts.mode === 'calendar') {
       var dated = res.filter(function (t) { return t.dueOn || t.startOn; });
       var un = res.filter(function (t) { return !t.dueOn && !t.startOn; });
@@ -4468,6 +4490,7 @@
         sideTitle: L('ไม่มีวัน'), addable: false
       }) + '</div>';
     }
+    if (!res.length && docs.length) return h + searchDocsBlock(docs) + '</div>';
     if (!res.length) {
       return h + '<div class="empty"><div class="big">🔍</div>' +
         (q ? L('ไม่พบงานที่ตรงกับ “') + esc(q) + '”' : L('ไม่พบงานที่ตรงเงื่อนไข')) + '</div></div>';
@@ -4478,7 +4501,7 @@
     res.forEach(function (t) {
       h += taskRow(t, { showProject: true, selectable: true, selected: !!sel[t.id] });
     });
-    h += '</div></div>';
+    h += '</div>' + searchDocsBlock(docs) + '</div>';
     return h;
   }
 
@@ -4698,6 +4721,12 @@
 
     h += '<textarea class="dw-title' + (t.completed ? ' done' : '') +
       '" data-act="edit-title" rows="1">' + esc(t.name) + '</textarea>';
+    /* Sprint 3 — "ทำเสร็จโดย X · วันที่" (งานเก่าที่ไม่มีคนทำ ไม่โชว์ ไม่เดา) */
+    if (t.completed && t.completedBy) {
+      var cbU = S.user(t.completedBy);
+      if (cbU) h += '<div class="dw-doneby">' + I('check', 13) + '<span>' + esc(L('ทำเสร็จโดย {who}', { who: cbU.name })) +
+        (t.completedAt ? ' · ' + esc(fmtDate(String(t.completedAt).slice(0, 10))) : '') + '</span></div>';
+    }
     /* Sprint 1B — บอกตั้งแต่เปิดงานว่าแก้ไม่ได้ ไม่ต้องลองแก้ก่อนแล้วค่อยรู้ */
     if (!S.can('write', t.id)) {
       var roLbl = S.can('comment', t.id) ? 'แสดงความเห็นได้' : 'ดูอย่างเดียว';
@@ -4890,7 +4919,7 @@
         /* 3a — กดชื่อคอลัมน์เพื่อย้าย (ผ่าน S.moveTask อัตโนมัติ "ย้ายเข้าคอลัมน์" จึงทำงาน)
          * แก้งานไม่ได้ = ชื่อคอลัมน์เป็นข้อความเฉย ๆ (ย้ายคอลัมน์ก็คือแก้งาน) */
         (sec ? ' · ' + (canW ? '<button class="chip-sec" data-act="dw-sec" data-id="' + esc(t.id) + '" data-project="' +
-          esc(x.project.id) + '" title="' + esc(L('ย้ายไปคอลัมน์อื่น')) + '">' + esc(sec.name) + ' ' +
+          esc(x.project.id) + '" title="' + esc(L('ย้ายไปเซกชันอื่น')) + '">' + esc(sec.name) + ' ' +
           I('chevronDown', 10) + '</button>' : '<span class="chip-sec ro">' + esc(sec.name) + '</span>') : '') +
         (homes.length > 1 && canW ? '<button data-act="unhome" data-id="' + esc(t.id) +
           '" data-project="' + esc(x.project.id) + '" title="' +
@@ -5324,7 +5353,7 @@
           (s.editedAt ? '<span class="cmt-edited" title="' + esc(fmtExact(s.editedAt)) + '">' +
             L('(แก้ไขแล้ว)') + '</span>' : '') +
           (s.pinned ? '<span class="cmt-pin">' + I('flag', 11) + L('ปักหมุด') + '</span>' : '') +
-          (s.auto ? '<span class="auto-tag" title="' + esc(L('เขียนโดยอัตโนมัติ')) + '">' + I('bolt', 11) + L('โดยอัตโนมัติ') + '</span>' : '') +
+          (s.auto ? '<span class="auto-tag" title="' + esc(L('เขียนโดยอัตโนมัติ')) + '">' + I('bolt', 11) + L('โดยอัตโนมัติ') + (s.rule ? ': ' + esc(s.rule) : '') + '</span>' : '') +
           '<span class="grow"></span>' +
           '<button class="cmt-more" data-act="comment-menu" data-story="' + esc(s.id) +
           '" title="' + L('ตัวเลือกความเห็น') + '">' + I('more', 14) + '</button></div>';
@@ -5384,8 +5413,8 @@
         h += commentHtml(s, false);
       } else {
         h += '<div class="story log">' + avatar(actor, 'sm') +
-          '<div class="txt">' + esc(actor ? actor.name : '?') + ' ' + esc(storyText(s)) +
-          (s.auto ? ' <span class="auto-tag" title="' + esc(L('ทำโดยอัตโนมัติ')) + '">' + I('bolt', 11) + L('โดยอัตโนมัติ') + '</span>' : '') +
+          '<div class="txt">' + esc(actor ? actor.name : L('ระบบ')) + ' ' + esc(storyText(s)) +
+          (s.auto ? ' <span class="auto-tag" title="' + esc(L('ทำโดยอัตโนมัติ')) + '">' + I('bolt', 11) + L('โดยอัตโนมัติ') + (s.rule ? ': ' + esc(s.rule) : '') + '</span>' : '') +
           whenTag(s.createdAt) + '</div></div>';
       }
     });
@@ -5615,6 +5644,13 @@
     h += '<button class="gate-alt" data-act="use-local">' +
       L('ลองใช้แบบเครื่องเดียวก่อน (ข้อมูลไม่แชร์กับทีม)') + '</button>';
 
+    /* Sprint 3 — เลือกภาษาได้ตั้งแต่หน้านี้ (ก่อนเข้าระบบยังไม่มีตั้งค่าส่วนตัวให้เลือก) */
+    h += '<div class="gate-lang" role="group" aria-label="Language">' +
+      ['th', 'en'].map(function (c) {
+        return '<button data-act="gate-lang" data-v="' + c + '" class="' + (global.I18N.getLang() === c ? 'on' : '') + '">' +
+          (c === 'th' ? 'ไทย' : 'English') + '</button>';
+      }).join('') + '</div>';
+
     h += '<div class="gate-foot">' + I('shield', 14) + '<span>' +
       L('ข้อมูลเก็บอยู่ใน Microsoft 365 ของบริษัทเท่านั้น ไม่ผ่านเซิร์ฟเวอร์อื่น') +
       '</span></div>';
@@ -5665,6 +5701,7 @@
     'project.duplicate': 'ได้คัดลอกโปรเจกต์',
     'project.delete': 'ได้ลบโปรเจกต์',
     'project.visibility': 'ได้เปลี่ยนความเป็นส่วนตัวของ',
+    'page.move': 'ได้ย้ายหน้าเข้าโปรเจกต์',
     'project.lock': 'ได้ล็อกรายชื่อสมาชิกของ',
     'project.unlock': 'ได้ปลดล็อกรายชื่อสมาชิกของ',
     'project.member': 'ได้ตั้งสิทธิ์ในโปรเจกต์',
@@ -5673,7 +5710,7 @@
     'project.viewOn': 'ได้เปิดมุมมองในโปรเจกต์',
     'project.viewOff': 'ได้ปิดมุมมองในโปรเจกต์',
     'project.view': 'ได้บันทึกแท็บมุมมองในโปรเจกต์',
-    'section.duplicate': 'ได้ทำสำเนาคอลัมน์ในโปรเจกต์',
+    'section.duplicate': 'ได้ทำสำเนาเซกชันในโปรเจกต์',
     'project.baseline': 'ได้ตั้งเส้นฐานของ',
     'project.baselineClear': 'ได้ลบเส้นฐานของ',
     'project.import': 'ได้นำเข้างานเข้าโปรเจกต์',
@@ -5704,6 +5741,8 @@
     'team.member': 'ได้เพิ่มสมาชิกทีม', 'team.member-remove': 'ได้ถอดสมาชิกออกจากทีม', 'team.join': 'ได้เข้าร่วมทีม',
     'project.team': 'ได้แชร์โปรเจกต์ให้ทีม', 'portfolio.nest': 'ได้ใส่พอร์ตโฟลิโอย่อย',
     'goal.create': 'ได้สร้างเป้าหมาย', 'goal.delete': 'ได้ลบเป้าหมาย', 'goal.close': 'ได้ปิดเป้าหมาย',
+    'settings.orgLang': 'ได้ตั้งภาษาเริ่มต้นขององค์กรเป็น',
+    'settings.orgPrivacy': 'ได้ตั้งความเป็นส่วนตัวเริ่มต้นของโปรเจกต์ใหม่เป็น',
     'settings.goals': 'ได้เปลี่ยนการตั้งค่าเป้าหมาย',
     /* 4b */
     'user.capacity': 'ได้ตั้งความจุงาน', 'time.submit': 'ได้ส่งไทม์ชีต', 'time.recall': 'ได้ดึงไทม์ชีตกลับ',
@@ -6027,8 +6066,8 @@
     var msEdit = canW && !!(ui2.ms && ui2.ms[p.id]);
     h += '<section class="ovw-card"><h3>' + I('diamond', 13) + ' ' + L('หมุดหมาย') +
       '<span class="ovw-acts"><span class="segmented sm"><button data-act="ms-show" data-id="' + esc(p.id) + '" data-v="open" class="' +
-      (all ? '' : 'on') + '">' + L('ยังไม่ถึง') + '</button><button data-act="ms-show" data-id="' + esc(p.id) + '" data-v="all" class="' +
-      (all ? 'on' : '') + '">' + L('ทั้งหมด') + '</button></span>' +
+      (all ? '' : 'on') + '"' + (S.can('structure') && canW ? '' : ' disabled') + '>' + L('ยังไม่ถึง') + '</button><button data-act="ms-show" data-id="' + esc(p.id) + '" data-v="all" class="' +
+      (all ? 'on' : '') + '"' + (S.can('structure') && canW ? '' : ' disabled') + '>' + L('ทั้งหมด') + '</button></span>' +
       (canW ? '<button class="as-link" data-act="ms-add" data-id="' + esc(p.id) + '">+ ' + L('เพิ่ม') + '</button>' : '') +
       (canW && ms.length ? '<button class="as-link ovw-edit-btn" data-act="ms-edit" data-id="' + esc(p.id) + '">' +
         (msEdit ? I('check', 12) + ' ' + L('เสร็จ') : I('pencil', 12) + ' ' + L('แก้ไข')) + '</button>' : '') + '</span></h3>';
@@ -6049,7 +6088,7 @@
   function ovwExtraSide(p) {
     var pfs = S.portfoliosOfProject(p.id).filter(function (f) { return !S.portfolioHidden || !S.portfolioHidden(f.id); });
     var h = '<section class="ovw-card"><h3>' + L('อยู่ในพอร์ตโฟลิโอ') +
-      (S.can('structure') ? '<button class="as-link" data-act="add-to-portfolio" data-id="' + esc(p.id) + '">+ ' + L('เพิ่ม') + '</button>' : '') + '</h3>';
+      (S.can('structure') && S.canInProject(p.id, 'edit') ? '<button class="as-link" data-act="add-to-portfolio" data-id="' + esc(p.id) + '">+ ' + L('เพิ่ม') + '</button>' : '') + '</h3>';
     if (!pfs.length) h += '<div class="ovw-empty">' + L('ยังไม่ได้อยู่ในพอร์ตโฟลิโอไหน') + '</div>';
     pfs.forEach(function (f) {
       var st = f.status ? projectState(f.status.state) : null;
@@ -6106,7 +6145,7 @@
     var canEdit = S.canEditDash(projectId);
     var h = '<div class="dashb"><div class="dashb-bar"><b>' + L('แดชบอร์ด') + '</b><span class="dashb-n">' +
       esc(L('{n}/{max} วิดเจ็ต', { n: list.length, max: S.DASH_MAX })) + '</span><span class="grow"></span>' +
-      '<button class="btn btn-sm" data-act="update-status">' + L('อัปเดตสถานะ') + '</button>' +
+      (S.can('structure') && S.canInProject(projectId, 'edit') ? '<button class="btn btn-sm" data-act="update-status">' + L('อัปเดตสถานะ') + '</button>' : '') +
       (canEdit ? '<button class="btn btn-sm btn-primary" data-act="dash-add"' + (list.length >= S.DASH_MAX ? ' disabled' : '') + '>' +
         I('plus', 13) + ' ' + L('เพิ่มวิดเจ็ต') + '</button>' : '') + '</div>';
     h += '<div class="dashb-grid">';
@@ -6192,7 +6231,7 @@
     var by = S.user(x.editedBy || x.by);
     var open = x.comments.filter(function (c) { return !c.resolved; });
     var done = x.comments.filter(function (c) { return c.resolved; });
-    var h = '<div class="pg" data-page="' + esc(id) + '"><div class="pg-main">';
+    var h = '<div class="pg' + (S.pref('pgFull') ? ' nosd' : '') + '" data-page="' + esc(id) + '"><div class="pg-main">';
     h += '<div class="pg-head"><span class="pg-icon">' + esc(x.icon || '📄') + '</span>' +
       (canEdit && !x.notepad ? '<input class="pg-title" data-act="pg-title" data-id="' + esc(id) + '" value="' + esc(x.title) +
         '" placeholder="' + esc(L('ไม่มีชื่อ')) + '" maxlength="200">'
@@ -6201,11 +6240,13 @@
       (l.project ? '<span class="chip"><span class="swatch" style="background:' + esc(l.project.color) + '"></span>' + esc(l.project.name) + '</span>' : '') +
       '<em>' + esc(L('แก้ล่าสุดโดย {u} · {w}', { u: by ? by.name : '—', w: fmtWhen(x.editedAt || x.at) })) + '</em>' +
       '<span class="grow"></span>';
+    h += '<button class="btn btn-sm btn-ghost" data-act="pg-side-toggle" title="' + esc(L('ซ่อน/แสดงแผงความเห็น (เขียนเต็มความกว้าง)')) + '">' + I(S.pref('pgFull') ? 'expand' : 'shrink', 13) + '</button>';   // Sprint 3
     if (canC) {
       h += '<button class="btn btn-sm btn-ghost" data-act="pg-comment" data-id="' + esc(id) + '" title="' +
         esc(L('เลือกข้อความในหน้าแล้วกดเพื่อแสดงความเห็น')) + '">' + I('send', 13) + '<span class="hide-sm"> ' + L('ความเห็น') + '</span></button>';
     }
-    h += '<button class="btn btn-sm btn-ghost" data-act="pg-task" data-id="' + esc(id) + '" title="' +
+    if (!l.project && !x.notepad && S.canEditPage(id)) h += '<button class="btn btn-sm btn-ghost" data-act="pg-move" data-id="' + esc(id) + '">' + L('ย้ายเข้าโปรเจกต์…') + '</button>';   // Sprint 3
+    if (l.project ? S.canCreateTask(l.project.id) : S.can('write')) h += '<button class="btn btn-sm btn-ghost" data-act="pg-task" data-id="' + esc(id) + '" title="' +
       esc(L('เลือกข้อความในหน้าแล้วกดเพื่อสร้างงาน')) + '">' + I('checkCircle', 13) + '<span class="hide-sm"> ' + L('สร้างงาน') + '</span></button>';
     h += '<button class="btn btn-sm btn-ghost" data-act="pg-versions" data-id="' + esc(id) + '" title="' + esc(L('ประวัติเวอร์ชัน')) + '">' +
       I('repeat', 13) + '<span class="hide-sm"> ' + esc(L('{n} เวอร์ชัน', { n: x.versions.length })) + '</span></button>';
@@ -6251,7 +6292,7 @@
 
   /** รายการหน้า + หน้าที่เลือก (scope = รหัสโปรเจกต์ หรือ '' = หน้าเดี่ยว) */
   function pagesView(scope, pageId, ui) {
-    var list = scope ? S.projectPages(scope) : S.myPages();
+    var list = scope ? S.projectPages(scope) : S.myPages().concat(S.visibleProjectPages());   // Sprint 3 — รายการหน้ารวมมีหน้าของโปรเจกต์ด้วย (ติดป้ายโปรเจกต์)
     var canNew = scope ? (S.can('write') && S.canInProject(scope, 'edit')) : S.isActive();
     if (!pageId && list.length) pageId = list[0].id;
     var h = '<div class="pgv"><nav class="pgv-list"><div class="pgv-head"><b>' + (scope ? L('หน้าของโปรเจกต์') : L('หน้าเอกสาร')) + '</b>' +
@@ -6260,9 +6301,10 @@
     if (!list.length) h += '<div class="ovw-empty">' + (scope ? L('ยังไม่มีหน้า เก็บบรีฟ สรุปประชุม หรือคู่มือของโปรเจกต์ไว้ที่นี่')
       : L('ยังไม่มีหน้า สร้างหน้าส่วนตัวหรือหน้าที่แชร์ให้ทั้งองค์กรได้')) + '</div>';
     list.forEach(function (x) {
+      var xl = scope ? null : S.pageLoc(x.id), xp = xl && xl.project ? xl.project : null;
       h += '<button class="pgv-item' + (x.id === pageId ? ' on' : '') + '" data-act="pg-open" data-id="' + esc(x.id) + '"' +
-        (scope ? ' data-project="' + esc(scope) + '"' : '') + '><span class="em">' + esc(x.icon || '📄') + '</span><span class="grow">' +
-        esc(x.title || L('ไม่มีชื่อ')) + '</span>' + (x.private ? I('lock', 11) : '') +
+        (scope ? ' data-project="' + esc(scope) + '"' : (xp ? ' data-project="' + esc(xp.id) + '"' : '')) + '><span class="em">' + esc(x.icon || '📄') + '</span><span class="grow">' +
+        esc(x.title || L('ไม่มีชื่อ')) + '</span>' + (xp ? '<span class="pgv-proj">' + esc(xp.name) + '</span>' : '') + (x.private ? I('lock', 11) : '') +
         (x.comments.filter(function (c) { return !c.resolved; }).length ? '<span class="count">' +
           x.comments.filter(function (c) { return !c.resolved; }).length + '</span>' : '') + '</button>';
     });

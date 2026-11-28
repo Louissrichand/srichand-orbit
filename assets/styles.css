@@ -5571,3 +5571,37 @@ body.print-preview .print-sheet { display: block; width: 210mm; min-height: 297m
   .bulkbar .bulk-acts { gap: 5px; }
   .bulkbar button, .bulkbar select { padding: 0 10px; font-size: 12.5px; }
 }
+
+/* Sprint 3 — สลับภาษาไทย/English ที่หน้าเข้าสู่ระบบ */
+.gate-lang { display: inline-flex; gap: 2px; padding: 2px; margin: 14px auto 0; border: 1px solid var(--line); border-radius: 999px; }
+.gate-lang button { padding: 4px 12px; border-radius: 999px; font-size: 12.5px; color: var(--fg-soft); }
+.gate-lang button.on { background: var(--fg); color: var(--bg); font-weight: 600; }
+.gate-card .gate-lang { display: flex; width: max-content; }
+
+/* Sprint 3 — ผลค้นหาหน้า/ข้อความ */
+.sdocs { padding-top: 0; }
+.sdoc { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 9px 8px; border-bottom: 1px solid var(--line); color: var(--fg); text-decoration: none; }
+.sdoc:hover { background: var(--bg-sunk); }
+.sdoc .nm { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sdoc .sub { flex: none; font-size: 12.5px; color: var(--fg-faint); }
+
+/* Sprint 3 — ทัวร์แนะนำ */
+.tour-body { font-size: 15px; line-height: 1.6; margin: 8px 0 14px; }
+.tour-step { font-size: 12.5px; color: var(--fg-faint); margin: 0 0 4px; }
+.pgt-row .pgt-due { flex: none; font-size: 12.5px; color: var(--fg-soft); margin-left: 8px; }
+.dw-doneby { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--fg-soft); margin: 2px 0 8px; }
+.chip-slip { background: var(--bg-sunk); color: var(--fg-soft); }
+.chip-slip.hot { background: #fde8e8; color: #b3261e; font-weight: 600; }
+.pop .pop-filter { display: block; width: calc(100% - 16px); margin: 6px 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); font-size: 13px; }
+.inline-add-hint { font-size: 12.5px; color: var(--fg-soft); margin: -2px 0 6px 2px; }
+
+/* Sprint 3 — สิ่งที่ดูอย่างเดียว: ไม่ชี้ว่ากดได้ */
+.ro, .ro[disabled] { cursor: default; }
+button.check.ro { opacity: .55; }
+.td-edit.ro:hover { background: transparent; }
+span.tb-people.ro { pointer-events: none; }
+.sdoc .snip { flex: 1 0 100%; font-size: 12.5px; color: var(--fg-faint); padding-left: 25px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pgv-item .pgv-proj { flex: none; font-size: 11.5px; color: var(--fg-faint); max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg.nosd .pg-side { display: none; }
+.pg.nosd .pg-main { max-width: none; }
+.pg.nosd { grid-template-columns: minmax(0, 1fr); }
