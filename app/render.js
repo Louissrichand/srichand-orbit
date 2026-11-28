@@ -4621,7 +4621,7 @@
       h += '<option value="' + p.id + '">' + esc(L(p.label)) + '</option>';
     });
     h += '</select>';
-    h += '<button data-act="bulk-due">' + L('ตั้งกำหนดส่ง') + '</button>';
+    h += '<button class="bulk-desk" data-act="bulk-due">' + L('ตั้งกำหนดส่ง') + '</button>';
     h += '<button data-act="bulk-more">' + L('เพิ่มเติม') + ' ' + I('chevronDown', 12) + '</button>';
     h += '<button data-act="bulk-delete">' + L('ลบ') + '</button>';
     /* ผลรวมของฟิลด์ตัวเลขในงานที่เลือก (ฟิลด์ของโปรเจกต์ที่งานอยู่) */

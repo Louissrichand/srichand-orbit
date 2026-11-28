@@ -5075,6 +5075,7 @@
       ['/', L('ไปที่ช่องค้นหา')],
       ['Esc', L('ปิดหน้าต่าง / แผงรายละเอียด')],
       ['Ctrl + Z', L('ย้อนกลับการกระทำล่าสุด')],
+      ['Ctrl + Shift + Z', L('ทำซ้ำสิ่งที่เพิ่งย้อนกลับ')],
       ['Ctrl + Enter', L('ส่งความเห็น / ประกาศ (เมื่อเคอร์เซอร์อยู่ในช่องพิมพ์)')],
       ['? / Ctrl + /', L('เปิดหน้าคีย์ลัดนี้')],
       ['Tab + H', L('ไปหน้าแรก')],
@@ -5623,7 +5624,7 @@
       return '<button data-act="' + act + '"' + (extra || '') + '>' + I(icon, 14) + '<span class="grow">' + label + '</span></button>';
     }
     /* QA-A — มือถือ: ปุ่มที่ซ่อนจากแถบหลัก (.bulk-desk) ย้ายมารวมในเมนูนี้ */
-    h += '<div class="qa-mob-only">' + item('bulk-reopen', 'repeat', L('เปิดใหม่')) +
+    h += '<div class="qa-mob-only">' + item('bulk-due', 'calendar', L('ตั้งกำหนดส่ง')) + item('bulk-reopen', 'repeat', L('เปิดใหม่')) +
       '<select data-act="bulk-assignee" aria-label="' + R.esc(L('มอบหมายให้…')) + '"><option value="">' + L('มอบหมายให้…') + '</option>' +
       S.db.users.map(function (u) { return '<option value="' + R.esc(u.id) + '">' + R.esc(u.name) + '</option>'; }).join('') + '</select>' +
       '<select data-act="bulk-priority" aria-label="' + R.esc(L('ความสำคัญ…')) + '"><option value="">' + L('ความสำคัญ…') + '</option>' +
@@ -14295,7 +14296,7 @@
         S.snoozeChoices().forEach(function (c) {
           var d = new Date(c.at);
           /* Pre-pilot A — หนึ่งบรรทัดต่อหนึ่งตัวเลือก "อีก 1 ชั่วโมง · 15:35" (ไม่ซ้ำเวลา 9:00/09:00) */
-          var sbase = String(L(c.label)).replace(/\s*\([^)]*\d{1,2}:\d{2}\)\s*$/, '').replace(/\s*\d{1,2}:\d{2}\s*$/, '');
+          var sbase = String(L(c.label)).replace(/\s*\([^)]*\d{1,2}:\d{2}\)\s*$/, '').replace(/\s*\d{1,2}:\d{2}\s*$/, '').replace(/[,，\s]+$/, '');
           var sday = S.iso(d) === S.today() ? '' : (R.fmtDate(S.iso(d)) + ' ');
           sh += '<button data-act="notif-snooze-set" data-ids="' + R.esc(ids) + '" data-at="' + R.esc(c.at) + '">' +
             I('clock', 14) + '<span class="grow">' + R.esc(sbase + ' · ' + (c.id === 'week' ? sday : '') + R.fmtTime(d)) + '</span></button>';
