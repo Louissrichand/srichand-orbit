@@ -2344,8 +2344,9 @@
       h += item('reset-cols', 'arrowLeft', L('คืนความกว้างคอลัมน์เดิม'));
     }
     h += '<div class="pop-sep"></div>';
-    if (canStruct && canCreate) h += item('import-csv', 'archive', L('นำเข้างานจาก CSV'));
+    if (canStruct && canCreate) h += item('import-csv', 'archive', L('นำเข้างานจาก CSV / Excel'));
     h += item('export-csv', 'send', L('ส่งออกเป็น CSV'));
+    h += item('export-xlsx', 'send', L('ส่งออกเป็น Excel (.xlsx)'));          // Sprint 4c
     h += item('time-csv', 'send', L('ส่งออกเวลาที่บันทึก (CSV)'));          // 3c
     h += item('export-json', 'send', L('ส่งออกเป็น JSON'));
     h += item('export-ics', 'calendar', L('ดาวน์โหลดปฏิทิน .ics'));
@@ -6277,13 +6278,20 @@
   function pickCsvFile(projectId) {
     var inp = document.createElement('input');
     inp.type = 'file';
-    inp.accept = '.csv,text/csv';
+    inp.accept = '.csv,.xlsx,.xls,text/csv';          // Sprint 4c - รับ Excel ด้วย
     inp.addEventListener('change', function () {
       var f = inp.files[0];
       if (!f) return;
       if (f.size > 5 * 1024 * 1024) { toast(L('ไฟล์ใหญ่เกิน 5 MB')); return; }
       /* 2c — ดูก่อนนำเข้า: จับคู่คอลัมน์ เลือกการเข้ารหัส แล้วค่อยกดนำเข้า */
       state.csv = { pid: projectId, file: f, text: '', enc: 'utf-8', map: null };
+      if (/\.xlsx?$/i.test(f.name) && global.Orbit4c) {          // Sprint 4c - Excel: แปลงเป็น CSV แล้วใช้ตัวจับคู่คอลัมน์เดิม
+        var xc = state.csv;
+        toast(L('กำลังอ่านไฟล์ Excel…'));
+        global.Orbit4c.xlsxToCsv(f, function (txt) { xc.text = txt; xc.map = null; openModal(csvMapModal(), true); },
+          function () { state.csv = null; toast(L('อ่านไฟล์ Excel ไม่สำเร็จ ลองบันทึกเป็น CSV UTF-8 แทน')); });
+        return;
+      }
       readCsvFile('utf-8');
     });
     inp.click();
@@ -9912,14 +9920,7 @@
                     : L('เลือกผู้อนุมัติก่อน แล้วผู้อนุมัติจึงตัดสินได้'));
           break;
         }
-        var apV = el.dataset.v, apId = id;
-        if (apV === 'rejected') {
-          askConfirm(L('ปฏิเสธ “{t}”?', { t: apT.name }),
-            L('งานจะถูกปิดเป็น “ไม่อนุมัติ” และแจ้งคนขอทันที ถ้าแค่อยากให้แก้บางจุด ใช้ “ขอแก้ไข” แทน'),
-            function () { S.updateTask(apId, { approval: 'rejected' }); }, { ok: L('ปฏิเสธ') });
-          break;
-        }
-        S.updateTask(id, { approval: apV });
+        apvDecide(id, el.dataset.v);       // 4c - ผ่านตัวตัดสินกลาง (ลงประวัติ + หลายผู้อนุมัติ)
         break;
       }
       case 'approval-resubmit':
@@ -14168,13 +14169,13 @@
     if (v === 'rejected') {
       askConfirm(L('ปฏิเสธ “{t}”?', { t: nm }),
         L('งานจะถูกปิดเป็น “ไม่อนุมัติ” และแจ้งคนขอทันที ถ้าแค่อยากให้แก้บางจุด ใช้ “ขอแก้ไข” แทน'),
-        function () { S.updateTask(tid, { approval: 'rejected' }); done('ปฏิเสธแล้ว: {t}'); }, { ok: L('ปฏิเสธ') });
+        function () { S.decideApproval(tid, 'rejected'); done('ปฏิเสธแล้ว: {t}'); }, { ok: L('ปฏิเสธ') });
       return;
     }
     if (v === 'changes') {
       askText(L('ขอแก้ไขงาน “{t}”', { t: nm }), '', function (note) {
         S.batch('ขอแก้ไข “{t}”', { t: nm.slice(0, 60) }, function () {
-          S.updateTask(tid, { approval: 'changes' });
+          S.decideApproval(tid, 'changes', note);
           if (note) S.addComment(tid, note);
         });
         done('ขอแก้ไขแล้ว: {t}');
@@ -14182,8 +14183,8 @@
            note: L('ข้อความนี้จะลงเป็นความเห็นในงาน คนขอได้รับแจ้งพร้อมผลอนุมัติ') });
       return;
     }
-    S.updateTask(tid, { approval: 'approved' });
-    done('อนุมัติแล้ว: {t}');
+    S.decideApproval(tid, v === 'pending' ? 'pending' : 'approved');
+    done(v === 'pending' ? 'กลับไปรออนุมัติ: {t}' : 'อนุมัติแล้ว: {t}');
   }
 
   /* เลื่อนเตือน — ถึงเวลาแล้วกลับมาเป็นรายการใหม่ ตรวจตอนเปิดแอปและทุกนาทีที่เปิดค้างไว้ (ไม่มีเซิร์ฟเวอร์ปลุก) */
@@ -14194,6 +14195,10 @@
   /* Sprint 4 — เตือนงานเงียบ ตรวจตอนเปิดแอปและทุกชั่วโมง (เฉพาะโปรเจกต์ที่ตั้งไว้) */
   function runStale() { try { S.runStaleCheck(); } catch (err) { console.error('ตรวจงานเงียบไม่สำเร็จ', err); } }
   setTimeout(runStale, 6000);
+  /* Sprint 4c - เตือนฉันต่องาน */
+  function runRemind() { try { S.runReminders(); } catch (err) { console.error('เตือนงานไม่สำเร็จ', err); } }
+  setTimeout(runRemind, 3000);
+  setInterval(runRemind, 30 * 1000);
   setInterval(runStale, 60 * 60 * 1000);
   setInterval(runSnoozeWake, 60 * 1000);
 

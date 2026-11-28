@@ -4214,7 +4214,7 @@
   /** งานขออนุมัติที่รอฉันตัดสินอยู่ตอนนี้ไหม (ปุ่มอนุมัติในแถว) */
   function waitingMyApproval(t) {
     return !!t && t.type === 'approval' && !t.completed && (t.approval || 'pending') === 'pending' &&
-      t.assigneeId === S.db.currentUserId && S.canApprove(t.id);
+      S.approverIds(t).indexOf(S.db.currentUserId) >= 0 && !(t.approvalVotes && t.approvalVotes[S.db.currentUserId]) && S.canApprove(t.id);
   }
 
   /** ปุ่มตัดสินในแถว — ใช้ทั้งกล่องแจ้งเตือน แท็บรออนุมัติ และวิดเจ็ตหน้าแรก */
@@ -4815,6 +4815,7 @@
       else if (t.approval === 'changes') apHint = L('{who} ขอให้แก้ไข — แก้แล้วกด “ส่งขออนุมัติอีกครั้ง”', { who: apName });
       else apHint = L('ตัดสินโดย {who}', { who: apName });
       if (apHint) h += '<div class="fld-hint">' + apHint + '</div>';
+      if (window.Orbit4c) h += window.Orbit4c.approvalPanel(t);       // Sprint 4c - ผู้อนุมัติหลายคน + ประวัติ
       h += '</div></div>';
     }
 
@@ -4896,6 +4897,7 @@
       h += '</div></div>';
     }
 
+    if (window.Orbit4c) h += window.Orbit4c.reminderRow(t);          // Sprint 4c - เตือนฉัน
     h += '<div class="fld"><label>' + L('ความสำคัญ') + '</label><div class="val picker">' +
       '<button class="picker-btn" data-act="pick-priority">' +
       '<span class="swatch" style="width:9px;height:9px;border-radius:50%;display:inline-block;background:' +
@@ -5818,7 +5820,8 @@
     h += '<section class="admin-sec"><h3>' + L('สมาชิกและสิทธิ์') +
       '<span class="admin-count">' + db.users.length + ' ' + L('คน') + '</span>' +
       '<button class="btn btn-sm btn-primary" data-act="add-user">' + I('plus', 13) + ' ' +
-      L('เพิ่มสมาชิกใหม่') + '</button></h3>';
+      L('เพิ่มสมาชิกใหม่') + '</button>' +
+      '<button class="btn btn-sm" data-act="bulk-invite">' + I('upload', 13) + ' ' + L('เพิ่มหลายคน') + '</button></h3>';
 
     if (team) {
       h += '<div class="admin-demo">' + I('alert', 15) + '<div>' +

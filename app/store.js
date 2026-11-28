@@ -4269,6 +4269,8 @@
       }
     }
 
+    if ('assigneeId' in patch && !('approvers' in patch) && t.approvers) patch.approvers = null;    // 4c - เปลี่ยนผู้อนุมัติทางช่องเดี่ยว = กลับเป็นคนเดียว
+    if (patch.approval === 'pending') t.approvalVotes = {};
     Object.keys(patch).forEach(function (k) { t[k] = patch[k]; });
     if (t.type !== 'approval') t.approval = null;
     else if (!t.approval) t.approval = 'pending';
@@ -6326,7 +6328,14 @@
     var t = task(taskId);
     if (!t || t.type !== 'approval') return false;
     if (!can('write')) return false;                   // ดูอย่างเดียว/ปิดบัญชี กดอะไรไม่ได้เลย
-    return !!t.assigneeId && t.assigneeId === db.currentUserId;
+    return approverIds(t).indexOf(db.currentUserId) >= 0;     // Sprint 4c - ผู้อนุมัติหลายคน
+  }
+
+  /** Sprint 4c - ผู้อนุมัติของงาน: หลายคนเก็บใน t.approvers (คนแรก = ผู้รับผิดชอบ) งานเก่าไม่มีฟิลด์นี้ = ผู้รับผิดชอบคนเดียว */
+  function approverIds(t) {
+    if (!t) return [];
+    var a = (t.approvers || []).filter(function (u) { return user(u); });
+    return a.length ? a : (t.assigneeId ? [t.assigneeId] : []);
   }
 
   /** ข้อความแจ้งคนที่เพิ่งได้รับงาน — งานขออนุมัติบอกว่า "ขออนุมัติจากคุณ" */
@@ -6353,10 +6362,11 @@
     snapshot('ส่งขออนุมัติอีกครั้ง');
     /* ไม่ผ่าน updateTask เพราะข้อความแจ้งต้องถึงผู้อนุมัติ ("ขออนุมัติจากคุณ")
      * ไม่ใช่ถึงคนขอแบบผลอนุมัติทั่วไป */
-    t.approval = 'pending';
+    t.approval = 'pending'; t.approvalVotes = {};
     if (t.completed) { t.completed = false; t.completedAt = null; t.completedBy = null; }
-    log(taskId, 'ส่งงานนี้ขออนุมัติอีกครั้ง', null, t.assigneeId ? [t.assigneeId] : null);
-    if (t.assigneeId) notifyOnly(taskId, [t.assigneeId], 'ส่ง “{t}” ขออนุมัติจากคุณอีกครั้ง', 'assigned', { t: t.name });
+    var apvIds = approverIds(t);
+    log(taskId, 'ส่งงานนี้ขออนุมัติอีกครั้ง', null, apvIds);
+    if (apvIds.length) notifyOnly(taskId, apvIds, 'ส่ง “{t}” ขออนุมัติจากคุณอีกครั้ง', 'assigned', { t: t.name });
     autoFire('approval', taskId, { v: 'pending' });
     commit();
     return t;
@@ -14524,7 +14534,8 @@
   function approvalsWaiting(userId) {
     var who = userId || db.currentUserId;
     return db.tasks.filter(function (t) {
-      return t.type === 'approval' && !t.completed && t.assigneeId === who &&
+      return t.type === 'approval' && !t.completed && approverIds(t).indexOf(who) >= 0 &&
+        !(t.approvalVotes && t.approvalVotes[who]) &&
         (t.approval || 'pending') === 'pending' && canSeeTask(t.id);
     }).sort(function (a, b) {
       var x = a.dueOn || '9999-99-99', y = b.dueOn || '9999-99-99';
@@ -14605,5 +14616,143 @@
     pfFollowing: pfFollowing, setPfFollow: setPfFollow, pfFollowers: pfFollowers
   };
   Object.keys(X2B).forEach(function (k) { global.Store[k] = X2B[k]; });
+
+  /* ---------- Sprint 4c — ผู้อนุมัติหลายคน + ประวัติการอนุมัติ ----------
+   * t.approvers [userId] · t.approvalMode 'all'|'any' · t.approvalVotes {userId: decision รอบนี้} · t.approvalTrail [{u,d,at,note}]
+   * ไม่มีฟิลด์เหล่านี้ = ผู้อนุมัติคนเดียว (ผู้รับผิดชอบ) ทำงานเหมือนเดิมทุกอย่าง ไม่ต้องเพิ่ม SCHEMA */
+  function approvalMode(t) { return t && t.approvalMode === 'any' ? 'any' : 'all'; }
+
+  function setApprovers(taskId, ids, mode) {
+    var t = task(taskId);
+    if (!t || t.type !== 'approval' || !can('write', taskId)) return denied('approval');
+    ids = (ids || []).filter(function (u, i, a) { return user(u) && a.indexOf(u) === i; });
+    if (!ids.length) return false;
+    var before = approverIds(t);
+    snapshot('เปลี่ยนผู้อนุมัติ');
+    t.approvers = ids.length > 1 ? ids : null;
+    t.approvalMode = mode === 'any' ? 'any' : 'all';
+    t.assigneeId = ids[0];
+    if (!t.assignedAt || before[0] !== ids[0]) t.assignedAt = new Date().toISOString();
+    t.assignedBy = db.currentUserId;
+    t.approvalVotes = {};
+    var fresh = ids.filter(function (u) { return before.indexOf(u) < 0; });
+    log(taskId, 'ตั้งผู้อนุมัติ {n} คน', { n: ids.length });
+    if (fresh.length) notifyOnly(taskId, fresh, 'ขออนุมัติ “{t}” จากคุณ', 'assigned', { t: t.name });
+    commit();
+    return t;
+  }
+
+  /** ตัดสินงานขออนุมัติ — ลงประวัติ แล้วสรุปผลรวมตามโหมด (ทุกคน / คนใดคนหนึ่ง) */
+  function decideApproval(taskId, v, note) {
+    var t = task(taskId);
+    if (!t || !canApprove(taskId)) return denied('approval');
+    if (v === 'pending') { updateTask(taskId, { approval: 'pending' }); return t; }
+    if (['approved', 'changes', 'rejected'].indexOf(v) < 0) return false;
+    var me0 = db.currentUserId, ids = approverIds(t);
+    snapshot('เปลี่ยนผลอนุมัติของ “{t}”', { t: String(t.name || '').slice(0, 60) });
+    t.approvalVotes = t.approvalVotes || {};
+    t.approvalVotes[me0] = v;
+    t.approvalTrail = (t.approvalTrail || []).concat([{ u: me0, d: v, at: new Date().toISOString(), note: String(note || '').slice(0, 500) }]).slice(-100);
+    var all = approvalMode(t) === 'all' && ids.length > 1, res = v;
+    if (all && v === 'approved') {
+      res = ids.every(function (u) { return t.approvalVotes[u] === 'approved'; }) ? 'approved' : 'pending';
+    }
+    if (res === 'pending') {
+      var st = APPROVAL_STATES.filter(function (x) { return x.id === v; })[0];
+      var askers = [t.createdBy].concat(t.followers || []).filter(function (u, i, a) { return u && u !== me0 && a.indexOf(u) === i; });
+      log(taskId, 'ลงมติ “{s}” ในการอนุมัติ ({k}/{n})', {
+        s: st.label, k: ids.filter(function (u) { return t.approvalVotes[u] === 'approved'; }).length, n: ids.length }, askers);
+      commit();
+      return t;
+    }
+    if (res === t.approval) { commit(); return t; }
+    updateTask(taskId, { approval: res }, { quiet: true });
+    return t;
+  }
+
+  /* ---------- Sprint 4c — เตือนฉันต่องาน ----------
+   * t.reminders [{id,u,at,done}] ทุกคนเห็นเฉพาะของตัวเอง ถึงเวลาแล้ว (ตอนเปิดแอปอยู่) แจ้งคนตั้ง */
+  function myReminders(taskId) {
+    var t = task(taskId);
+    return ((t && t.reminders) || []).filter(function (r) { return r.u === db.currentUserId && !r.done; });
+  }
+  function reminderChoices(taskId) {
+    var t = task(taskId), now = new Date();
+    var out = [{ id: 'hour', label: 'อีก 1 ชั่วโมง', at: new Date(now.getTime() + 3600000).toISOString() }];
+    var tm = new Date(now); tm.setDate(tm.getDate() + 1); tm.setHours(9, 0, 0, 0);
+    out.push({ id: 'tomorrow', label: 'พรุ่งนี้ 9:00', at: tm.toISOString() });
+    if (t && t.dueOn) {
+      var d = new Date(t.dueOn + 'T09:00:00'); d.setDate(d.getDate() - 1);
+      if (d.getTime() > now.getTime()) out.push({ id: 'before', label: 'วันก่อนครบกำหนด 9:00', at: d.toISOString() });
+    }
+    return out;
+  }
+  function addReminder(taskId, atIso) {
+    var t = task(taskId), at = Date.parse(atIso);
+    if (!t || !isActive() || !canSeeTask(taskId) || !(at > Date.now())) return false;
+    snapshot('ตั้งเตือนงาน');
+    t.reminders = (t.reminders || []).filter(function (r) { return !r.done; });
+    t.reminders.push({ id: uid('rm'), u: db.currentUserId, at: new Date(at).toISOString(), done: false });
+    commit();
+    return true;
+  }
+  function removeReminder(taskId, rid) {
+    var t = task(taskId);
+    if (!t || !t.reminders) return false;
+    snapshot('ลบการเตือน');
+    t.reminders = t.reminders.filter(function (r) { return !(r.id === rid && r.u === db.currentUserId); });
+    commit();
+    return true;
+  }
+  /** เรียกตอนเปิดแอปและทุกนาที — แจ้งเตือนของฉันที่ถึงเวลา */
+  function runReminders() {
+    var now = Date.now(), n = 0, me0 = db && db.currentUserId;
+    if (!me0) return 0;
+    db.tasks.forEach(function (t) {
+      (t.reminders || []).forEach(function (r) {
+        if (r.done || r.u !== me0 || Date.parse(r.at) > now) return;
+        r.done = true; n++;
+        if (canSeeTask(t.id)) pushNotif({ userId: me0, taskId: t.id, key: 'เตือนตามที่ตั้งไว้: “{t}”', params: { t: t.name }, kind: 'due', dedupe: 'rm:' + r.id });
+      });
+    });
+    if (n) commit();
+    return n;
+  }
+
+  /* ---------- Sprint 4c - เพิ่มสมาชิกหลายคนพร้อมกัน (อีเมลทีละบรรทัด / CSV) ----------
+   * rows [{email, name, team}] -> { added:[], dup:[], bad:[] } ใช้ addUser/emailProblem ชุดเดิม ย้อนกลับได้ทีเดียว */
+  function bulkAddUsers(rows, role) {
+    var out = { added: [], dup: [], bad: [] };
+    if (!isAdmin()) { denied('members'); return out; }
+    var seen = {};
+    batch('เพิ่มสมาชิกหลายคน', null, function () {
+      (rows || []).forEach(function (r) {
+        var em = String(r.email || '').trim(), key = em.toLowerCase();
+        if (!em) return;
+        var prob = emailProblem(em);
+        if (prob) { (prob.key.indexOf('มีอยู่แล้ว') >= 0 ? out.dup : out.bad).push(em); return; }
+        if (seen[key]) { out.dup.push(em); return; }
+        seen[key] = 1;
+        var nm = String(r.name || '').trim() || em.split('@')[0];
+        var u = addUser({ name: nm, email: em, role: role || 'member' });
+        if (!u) { out.bad.push(em); return; }
+        out.added.push(u);
+        var tn = String(r.team || '').trim().toLowerCase();
+        if (tn) {
+          var tm = (db.teams || []).filter(function (x) { return String(x.name || '').trim().toLowerCase() === tn; })[0];
+          if (tm) addTeamMember(tm.id, u.id, 'member');
+        }
+      });
+    });
+    return out;
+  }
+
+  var X4C = {
+    parseCsv: parseCsv, bulkAddUsers: bulkAddUsers, approverIds: approverIds, approvalMode: approvalMode, setApprovers: setApprovers, decideApproval: decideApproval,
+    myReminders: myReminders, reminderChoices: reminderChoices, addReminder: addReminder, removeReminder: removeReminder,
+    runReminders: runReminders
+  };
+  Object.keys(X4C).forEach(function (k) { global.Store[k] = X4C[k]; });
+
 
 })(window);
