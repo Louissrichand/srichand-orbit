@@ -6137,7 +6137,7 @@
     h += '<div class="field" style="margin-top:14px"><label>' + L('โอนให้ใคร') + '</label>' +
       '<select id="hoTo">';
     staff.forEach(function (x) {
-      h += '<option value="' + R.esc(x.id) + '">' + R.esc(x.name) +
+      h += '<option value="' + R.esc(x.id) + '"' + (x.id === u.managerId ? ' selected' : '') + '>' + R.esc(x.name) + (x.id === u.managerId ? ' (' + L('หัวหน้า') + ')' : '') +
         (x.title ? ' — ' + R.esc(x.title) : '') + '</option>';
     });
     if (showGuests && guests.length) {
@@ -8483,7 +8483,7 @@
       'dup-section', 'do-dup-section']);
     put('write', ['carry-over', 'slip-overdue', 'pg-move', 'set-next-meeting']);
     put('structure', ['required-fields', 'save-required-fields']);
-    put('manage', ['fix-user-name']);        // Sprint 4 — เฉพาะผู้ดูแลระบบ        // Sprint 4
+    put('manage', ['fix-user-name', 'set-manager']);        // Sprint 4 — เฉพาะผู้ดูแลระบบ        // Sprint 4
     put('manage', ['set-org-lang', 'set-org-privacy']);       // Sprint 3 — เฉพาะผู้ดูแลระบบ        // Sprint 3 — ย้ายงานระหว่างเซกชัน = แก้งาน ไม่ใช่แก้โครงสร้าง
     put('write:task', ['set-cover', 'clear-cover', 'cell-set-priority']);
     put('create', ['tl-new']);
@@ -12129,6 +12129,16 @@
       }
 
       /* --- บทบาทในหน้าผู้ดูแล --- */
+      case 'set-manager': {        // Sprint 4 — ผู้ดูแลระบบตั้งหัวหน้าของสมาชิก
+        var smU = S.user(id), smId = id;
+        if (!smU) break;
+        var smChoices = S.db.users.filter(function (x) { return x.id !== smId && x.active !== false && x.role !== 'viewer' && x.role !== 'guest'; }).slice(0, 14).map(function (x) {
+          return { label: x.name, run: function () { if (S.setManager(smId, x.id)) toast(L('ตั้งหัวหน้าแล้ว')); } };
+        });
+        smChoices.push({ label: L('ไม่มีหัวหน้า'), run: function () { if (S.setManager(smId, null)) toast(L('ตั้งหัวหน้าแล้ว')); } });
+        askChoice(L('หัวหน้าของ {n}', { n: smU.name }), L('ใช้เลือกผู้รับโอนงานให้อัตโนมัติตอนปิดบัญชี'), smChoices);
+        break;
+      }
       case 'fix-user-name': {        // Sprint 4 — ผู้ดูแลระบบแก้ชื่อที่แสดง (ชื่อที่เป็นอีเมล)
         var fnU = S.user(id), fnId = id;
         if (!fnU) break;

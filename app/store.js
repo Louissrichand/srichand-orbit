@@ -6558,6 +6558,17 @@
 
   /** เปลี่ยนบทบาท — ห้ามเหลือศูนย์ผู้ดูแล ไม่งั้นไม่มีใครเข้าหน้าผู้ดูแลได้อีก */
   /* Sprint 4 — แก้ชื่อที่แสดงของสมาชิก (ผู้ดูแลระบบ) ใช้กับชื่อที่เป็นอีเมลซึ่งขึ้นเต็มตามงาน/ความเห็นทุกที่ */
+  /* Sprint 4 — หัวหน้าของสมาชิก (ผู้ดูแลระบบตั้ง) ใช้เลือกผู้รับโอนงานให้อัตโนมัติตอนปิดบัญชี */
+  function setManager(userId, managerId) {
+    var u = user(userId), m = managerId ? user(managerId) : null;
+    if (!u || !isAdmin() || (managerId && !m) || managerId === userId) return false;
+    snapshot('ตั้งหัวหน้า');
+    u.managerId = m ? m.id : null;
+    audit('user.manager', u.name, m ? m.name : '—');
+    commit();
+    return true;
+  }
+
   function setUserName(userId, name) {
     var u = user(userId), nm = String(name || '').trim().slice(0, 80);
     if (!u || !isAdmin() || !nm || nm === u.name) return false;
@@ -12859,7 +12870,7 @@
     accessRequestFor: accessRequestFor,
     canAnswerAccess: canAnswerAccess, answerAccess: answerAccess, accessOwner: accessOwner,
     convertToProject: convertToProject,
-    setUserName: setUserName, subRollup: subRollup, missingRequiredFields: missingRequiredFields, setRequiredFields: setRequiredFields, setNextMeeting: setNextMeeting, setOrgLang: setOrgLang, setOrgPrivacy: setOrgPrivacy, slipOverdue: slipOverdue, bulkAddToProject: bulkAddToProject, bulkMoveSection: bulkMoveSection, bulkSetField: bulkSetField,
+    setManager: setManager, setUserName: setUserName, subRollup: subRollup, missingRequiredFields: missingRequiredFields, setRequiredFields: setRequiredFields, setNextMeeting: setNextMeeting, setOrgLang: setOrgLang, setOrgPrivacy: setOrgPrivacy, slipOverdue: slipOverdue, bulkAddToProject: bulkAddToProject, bulkMoveSection: bulkMoveSection, bulkSetField: bulkSetField,
     bulkAddFollowers: bulkAddFollowers, bulkAddTag: bulkAddTag, bulkDependOn: bulkDependOn,
     bulkMerge: bulkMerge,
 

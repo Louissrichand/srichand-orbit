@@ -2672,6 +2672,8 @@
     'งานย่อยครบแล้ว — ปิดงานหลัก “{t}” ได้': 'All subtasks are done — you can close “{t}”',
     'มีสมาชิก {n} คนที่ชื่อที่แสดงเป็นอีเมล': '[n|1 member has|{n} members have] an email address as the display name', 'แก้ชื่อ': 'Fix name',
     'ชื่อที่แสดงของ {e}': 'Display name for {e}', 'ใส่ชื่อ ไม่ใช่อีเมล': 'Enter a name, not an email address', 'แก้ชื่อแล้ว': 'Name updated', 'เช่น สมชาย ใจดี': 'e.g. Somchai Jaidee',
+    'หัวหน้า': 'Manager', 'หัวหน้า: {m}': 'Manager: {m}', 'ตั้งหัวหน้า': 'Set manager', 'ตั้งหัวหน้าแล้ว': 'Manager set', 'ไม่มีหัวหน้า': 'No manager',
+    'หัวหน้าของ {n}': 'Manager of {n}', 'ใช้เลือกผู้รับโอนงานให้อัตโนมัติตอนปิดบัญชี': 'Used to pre-select who takes over their tasks when the account is closed',
     /* Sprint 3 — อภิธานศัพท์ */
     'ศัพท์ที่ใช้ใน Orbit': 'Orbit glossary',
     'กลุ่มงานที่ทำเรื่องเดียวกัน มีเซกชัน สมาชิก และมุมมองของตัวเอง': 'A group of work on one topic, with its own sections, members and views',

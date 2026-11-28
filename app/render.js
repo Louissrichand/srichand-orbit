@@ -5846,7 +5846,10 @@
       h += '<span class="admin-who">' + avatar(u) +
         '<span><b>' + esc(u.name) + (isMe ? ' <i>' + L('(คุณ)') + '</i>' : '') +
         (off ? '<span class="pill-off">' + L('ปิดใช้งาน') + '</span>' : '') + '</b>' +
-        '<em>' + esc(u.email || '—') + authTag(u) + '</em></span></span>';
+        '<em>' + esc(u.email || '—') + authTag(u) + '</em>' +
+        /* Sprint 4 — หัวหน้า (ใช้เลือกผู้รับโอนงานตอนปิดบัญชีให้อัตโนมัติ) */
+        '<em><button class="as-link" data-act="set-manager" data-id="' + esc(u.id) + '">' +
+        esc(u.managerId && S.user(u.managerId) ? L('หัวหน้า: {m}', { m: S.user(u.managerId).name }) : L('ตั้งหัวหน้า')) + '</button></em></span></span>';
 
       h += '<span><button class="role-pill' + (u.role === 'admin' ? ' is-admin' : '') +
         '" data-act="pick-role" data-id="' + esc(u.id) + '">' +
