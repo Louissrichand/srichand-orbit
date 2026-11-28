@@ -358,6 +358,7 @@
       var blocked = !t.completed && S.isBlocked(t.id);
       var color = barColor(t, p, colorBy);
       var dim = q && !hit(t) ? ' g-dim' : '';
+      var wdur = R.s4bWorkDays ? R.s4bWorkDays(s[0], s[1]) : null;   // 4b
 
       /* เส้นฐานวาดไว้ใต้แท่งจริง เห็นทั้งสองเส้นพร้อมกันจึงรู้ว่าเลื่อนไปกี่วัน */
       if (showBase) {

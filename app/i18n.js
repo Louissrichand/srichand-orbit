@@ -2709,6 +2709,10 @@
     'วันปิยมหาราช': 'Chulalongkorn Day', 'ชดเชยวันพ่อแห่งชาติ': 'Father\'s Day (substitute)', 'วันรัฐธรรมนูญ': 'Constitution Day',
     'วันสิ้นปี': 'New Year\'s Eve', 'ชดเชยวันมาฆบูชา': 'Makha Bucha (substitute)', 'ชดเชยวันแรงงาน': 'Labour Day (substitute)',
     'วันวิสาขบูชา': 'Visakha Bucha', 'ชดเชยวันปิยมหาราช': 'Chulalongkorn Day (substitute)',
+    'เลื่อนขึ้น': 'Move up', 'เลื่อนลง': 'Move down', 'เพิ่มหลายเซกชัน…': 'Add several sections…', 'เพิ่มหลายเซกชัน': 'Add several sections',
+    'วางหรือพิมพ์ชื่อเซกชัน บรรทัดละหนึ่งเซกชัน': 'Paste or type section names, one per line', 'เช่น\nรอดำเนินการ\nกำลังทำ\nตรวจงาน': 'e.g.\nTo do\nIn progress\nReview',
+    'เพิ่มทั้งหมด': 'Add all', 'ยังไม่ได้ใส่ชื่อเซกชัน': 'No section names entered', 'เพิ่ม {n} เซกชันแล้ว': 'Added {n} sections',
+    'ลากเพื่อเรียงลำดับเซกชัน': 'Drag to reorder sections', 'ย้ายลำดับเซกชันแล้ว': 'Section order changed',
   };
 
   /* ข้อความที่เก็บไว้ในบันทึก/การแจ้งเตือนเก่าเป็นคีย์ไทยเดิมที่เรียกเซกชันว่า "คอลัมน์"

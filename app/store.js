@@ -5681,6 +5681,29 @@
   }
 
 
+
+  /* Sprint 4b — เพิ่มหลายเซกชันรวดเดียว (ย้อนกลับครั้งเดียว) และย้ายไปตำแหน่งที่ลากไปวาง */
+  function addSections(projectId, names) {
+    var p = project(projectId);
+    names = (names || []).map(function (x) { return String(x).trim(); }).filter(Boolean).slice(0, 100);
+    if (!p || !names.length) return [];
+    snapshot('เพิ่มหลายเซกชัน');
+    var out = names.map(function (n) { var s = { id: uid('s'), name: n.slice(0, 120) }; p.sections.push(s); return s; });
+    commit();
+    return out;
+  }
+  function reorderSection(projectId, sectionId, toIndex) {
+    var p = project(projectId);
+    if (!p) return false;
+    var i = -1;
+    p.sections.forEach(function (s, idx) { if (s.id === sectionId) i = idx; });
+    toIndex = Math.max(0, Math.min(p.sections.length - 1, toIndex));
+    if (i < 0 || i === toIndex) return false;
+    snapshot('ย้ายลำดับเซกชัน');
+    p.sections.splice(toIndex, 0, p.sections.splice(i, 1)[0]);
+    commit();
+    return true;
+  }
   /* ---------- 2b — ทำสำเนาคอลัมน์ รูปปก และเพิ่มงานต่อจากแถว ---------- */
 
   var SEC_DUP_KEYS = ['assignee', 'dates', 'notes', 'subtasks', 'tags', 'followers', 'attachments', 'fields'];
@@ -12864,7 +12887,7 @@
     deleteProject: deleteProject, duplicateProject: duplicateProject, projectFirstDate: projectFirstDate,
     setProjectStatus: setProjectStatus, statusLog: statusLog, archiveProject: archiveProject,
     addSection: addSection, renameSection: renameSection,
-    deleteSection: deleteSection, moveSection: moveSection,
+    deleteSection: deleteSection, moveSection: moveSection, addSections: addSections, reorderSection: reorderSection,
     addField: addField, renameField: renameField, deleteField: deleteField,
     colWidth: colWidth, setColWidth: setColWidth, resetColWidths: resetColWidths,
     saveView: saveView, deleteSavedView: deleteSavedView,

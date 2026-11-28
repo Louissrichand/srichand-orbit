@@ -3409,6 +3409,7 @@
     if (S.can('structure')) {
       h += '<button data-act="add-section">' + I('grid', 15) +
         '<span class="grow">' + L('เพิ่มเซกชัน') + '</span></button>';
+      h += '<button data-act="s4b-bulk-sec">' + I('plus', 15) + '<span class="grow">' + L('เพิ่มหลายเซกชัน…') + '</span></button>';
       h += '<div class="pop-sep"></div>';
       h += '<button data-act="import-csv" data-id="' + R.esc(projectId) + '">' +
         I('arrowUp', 15) + '<span class="grow">' + L('นำเข้างานจาก CSV') + '</span></button>';
@@ -9413,6 +9414,9 @@
         if (smSec && canSt) {
           smh += '<div class="pop-sep"></div>' +
             '<button data-act="rename-section" data-section="' + esc(smSec) + '">' + I('pencil', 14) + ' ' + L('เปลี่ยนชื่อ') + '</button>' +
+            '<button data-act="move-section" data-delta="-1" data-section="' + esc(smSec) + '">' + I('arrowUp', 14) + ' ' + L('เลื่อนขึ้น') + '</button>' +
+            '<button data-act="move-section" data-delta="1" data-section="' + esc(smSec) + '">' + I('arrowDown', 14) + ' ' + L('เลื่อนลง') + '</button>' +
+            '<button data-act="s4b-bulk-sec">' + I('plus', 14) + ' ' + L('เพิ่มหลายเซกชัน…') + '</button>' +
             '<button data-act="dup-section" data-section="' + esc(smSec) + '">' + I('copy', 14) + ' ' + L('ทำสำเนาเซกชัน…') + '</button>' +
             '<button data-act="delete-section" data-section="' + esc(smSec) + '">' + I('trash', 14) + ' ' + L('ลบคอลัมน์') + '</button>';
         }

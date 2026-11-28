@@ -5631,3 +5631,9 @@ span.tb-people.ro { pointer-events: none; }
 .ps-gantt .pg-pstart, .ps-gantt .pg-today { position: absolute; top: 0; bottom: 0; width: 0; text-decoration: none; }
 .ps-gantt .pg-pstart { border-left: 1.5px dashed var(--accent); }
 .ps-gantt .pg-today { border-left: 1.5px solid var(--danger); }
+[data-s4b-sec] { cursor: grab; }
+.s4b-dragging { opacity: .5; }
+.tbl-sec.s4b-drop-b { box-shadow: 0 -2px 0 0 var(--accent); }
+.tbl-sec.s4b-drop-a { box-shadow: 0 2px 0 0 var(--accent); }
+.col-head.s4b-drop-b { box-shadow: -3px 0 0 0 var(--accent); }
+.col-head.s4b-drop-a { box-shadow: 3px 0 0 0 var(--accent); }

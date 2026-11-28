@@ -152,7 +152,82 @@
   /* ====================== ลงทะเบียนการกระทำ ====================== */
   global.OrbitExt = global.OrbitExt || [];
   global.OrbitExt.push(function (api) {
+    var st = api.state;
+    api.needs('structure', ['s4b-bulk-sec', 's4b-bulk-ok']);
+
+    /* ----- เซกชัน: ลากสลับลำดับ (เดสก์ท็อป) — บนจอสัมผัสใช้ เลื่อนขึ้น/ลง ในเมนู ⋯ ----- */
+    var secDrag = null;
+    function canStruct() { return st.route && st.route.type === 'project' && S.can('structure') && S.canInProject(st.route.id, 'edit'); }
+    api.after(function ($v) {
+      if (!canStruct()) return;
+      Array.prototype.forEach.call($v.querySelectorAll('.tbl-sec[data-section], .col-head'), function (h) {
+        var b = h.matches('.tbl-sec') ? h : h.querySelector('[data-act="move-section"][data-section]');
+        var id = h.matches('.tbl-sec') ? h.dataset.section : (b && b.dataset.section);
+        if (!id) return;
+        h.setAttribute('draggable', 'true');
+        h.setAttribute('data-s4b-sec', id);
+        h.title = h.title || L('ลากเพื่อเรียงลำดับเซกชัน');
+      });
+    });
+    function clearMarks() {
+      Array.prototype.forEach.call(document.querySelectorAll('.s4b-drop-b,.s4b-drop-a,.s4b-dragging'), function (x) {
+        x.classList.remove('s4b-drop-b', 's4b-drop-a', 's4b-dragging');
+      });
+    }
+    document.addEventListener('dragstart', function (e) {
+      var h = e.target.closest ? e.target.closest('[data-s4b-sec]') : null;
+      if (!h || (e.target.closest && e.target.closest('[data-id]:not([data-s4b-sec])'))) return;
+      secDrag = { id: h.dataset.s4bSec, el: h };
+      h.classList.add('s4b-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', 'section:' + secDrag.id); } catch (err) { /* ie */ }
+    });
+    function overHead(e) {
+      return secDrag && e.target.closest ? e.target.closest('[data-s4b-sec]') : null;
+    }
+    document.addEventListener('dragover', function (e) {
+      var h = overHead(e);
+      if (!h || h.dataset.s4bSec === secDrag.id) return;
+      e.preventDefault();
+      clearMarks(); secDrag.el.classList.add('s4b-dragging');
+      var r = h.getBoundingClientRect();
+      var horiz = h.matches('.col-head');
+      var before = horiz ? (e.clientX < r.left + r.width / 2) : (e.clientY < r.top + r.height / 2);
+      h.classList.add(before ? 's4b-drop-b' : 's4b-drop-a');
+    });
+    document.addEventListener('drop', function (e) {
+      var h = overHead(e);
+      if (!h) return;
+      e.preventDefault();
+      var p = S.project(st.route.id), id = secDrag.id, tid = h.dataset.s4bSec;
+      var before = h.classList.contains('s4b-drop-b');
+      clearMarks(); secDrag = null;
+      if (!p || id === tid) return;
+      var ids = p.sections.map(function (s) { return s.id; }).filter(function (x) { return x !== id; });
+      var at = ids.indexOf(tid) + (before ? 0 : 1);
+      if (S.reorderSection(p.id, id, at)) api.toast(L('ย้ายลำดับเซกชันแล้ว'), L('ย้อนกลับ'), 'undo');
+    });
+    document.addEventListener('dragend', function () { secDrag = null; clearMarks(); });
+
     api.act(function (act, el) {
+      if (act === 's4b-bulk-sec') {
+        api.closePops();
+        api.openModal('<h2>' + esc(L('เพิ่มหลายเซกชัน')) + '</h2><p class="prj-note">' + esc(L('วางหรือพิมพ์ชื่อเซกชัน บรรทัดละหนึ่งเซกชัน')) +
+          '</p><div class="field"><textarea id="s4bBulk" rows="8" placeholder="' + esc(L('เช่น\nรอดำเนินการ\nกำลังทำ\nตรวจงาน')) + '"></textarea></div>' +
+          '<div class="modal-acts"><button class="btn" data-act="close-modal">' + esc(L('ยกเลิก')) + '</button>' +
+          '<button class="btn btn-primary" data-act="s4b-bulk-ok">' + esc(L('เพิ่มทั้งหมด')) + '</button></div>');
+        setTimeout(function () { var t = document.getElementById('s4bBulk'); if (t) t.focus(); }, 30);
+        return true;
+      }
+      if (act === 's4b-bulk-ok') {
+        var ta = document.getElementById('s4bBulk');
+        var names = ta ? ta.value.split(/\r?\n/).map(function (x) { return x.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim(); }).filter(Boolean) : [];
+        if (!names.length) { api.toast(L('ยังไม่ได้ใส่ชื่อเซกชัน')); return true; }
+        var made = S.addSections(st.route.id, names);
+        api.closeModal();
+        api.toast(L('เพิ่ม {n} เซกชันแล้ว', { n: made.length }), L('ย้อนกลับ'), 'undo');
+        return true;
+      }
       if (act === 's4b-print-gantt') {
         var h = printGanttHtml(el.dataset.id);
         if (!h) { api.toast(L('ยังไม่มีงานที่มีวันที่ให้พิมพ์')); return true; }
