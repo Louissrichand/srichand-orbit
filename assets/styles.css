@@ -5823,3 +5823,9 @@ label.pf-pick-row { cursor: pointer; }
 .tb-tabs::-webkit-scrollbar { display: none; }
 .sb-signin { height: auto; line-height: 1.35; padding-top: 7px; padding-bottom: 7px; }
 .sb-signin .grow { white-space: normal; overflow: visible; }
+/* Inline add */
+.card.tr-new { padding: 8px; }
+.card.tr-new .tr-new-input { width: 100%; max-width: none; }
+@media (max-width: 700px) {
+  .tr-new-input { font-size: 16px; min-height: 40px; }
+}

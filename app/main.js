@@ -3229,23 +3229,76 @@
 
   /* ---------- เพิ่มงานต่อจากแถว (Enter / Shift+Enter ในรายการ) ---------- */
   function addNear(refId, above) {
-    var row = $view.querySelector('.tr[data-id="' + refId + '"]:not(.sub)');
-    if (!row || state.route.type !== 'project') return false;
+    if (state.route.type !== 'project') return false;
+    var row = $view.querySelector('.tr[data-id="' + refId + '"]:not(.sub), .card[data-id="' + refId + '"]');
+    if (!row) return false;
+    return openAddRow(row.parentNode, above ? row : row.nextSibling, { refId: refId, above: !!above, secId: null });
+  }
+
+  /* Inline add — ปุ่ม "+ เพิ่มงาน" ในโปรเจกต์ = แทรกแถว/การ์ดว่างบนสุดของเซกชันแรก พิมพ์ได้เลย (เหมือน Asana)
+   * คืน false = แทรกไม่ได้ (ให้ผู้เรียกใช้หน้าต่างถามชื่อแทน) */
+  function addTop(retry) {
+    var pid = state.route.id, p = S.project(pid);
+    if (state.route.type !== 'project' || !p) return false;
+    if (!S.canCreateTask(pid)) { denyToast(); return true; }
+    var vw = state.route.view || 'list';
+    if (vw !== 'list' && vw !== 'board') {
+      state.route.view = 'list';
+      delete state.route.sv;
+      renderAll();
+      vw = 'list';
+    }
+    var host = vw === 'board'
+      ? $view.querySelector('.col:not(.folded) > .col-body')
+      : $view.querySelector('.sec-body');
+    if (!host) {
+      if (retry) return false;
+      var cv = viewFor(pid);                  // เซกชันแรกถูกย่ออยู่ — ขยายแล้วลองใหม่
+      if (cv.collapsed) { delete cv.collapsed[p.sections[0].id]; delete cv.collapsed._; }
+      if (cv.bCollapsed) { delete cv.bCollapsed[p.sections[0].id]; delete cv.bCollapsed._; }
+      renderAll();
+      return addTop(true);
+    }
+    var first = host.querySelector('.tr[data-id]:not(.sub), .card[data-id]');
+    return openAddRow(host, host.firstChild, {
+      refId: first ? first.getAttribute('data-id') : null, above: true,
+      secId: host.getAttribute('data-section') || p.sections[0].id
+    });
+  }
+
+  function openAddRow(parent, before, o) {
     var old = $view.querySelector('.tr-new');
     if (old) old.parentNode.removeChild(old);
     var pid = state.route.id;
+    var isCard = parent.classList.contains('col-body');
     var box = document.createElement('div');
-    box.className = 'tr tr-new';
-    box.innerHTML = '<div class="td td-name"><span class="sub-caret-sp"></span>' +
-      '<input class="cell-input tr-new-input" placeholder="' + esc(L('ชื่องาน แล้วกด Enter')) + '"></div>';
-    row.parentNode.insertBefore(box, above ? row : row.nextSibling);
+    box.className = (isCard ? 'card' : 'tr') + ' tr-new';
+    box.innerHTML = (isCard ? '' : '<div class="td td-name"><span class="sub-caret-sp"></span>') +
+      '<input class="cell-input tr-new-input inline-add-input" placeholder="' +
+      esc(L('ชื่องาน แล้วกด Enter (วางหลายบรรทัด = หลายงาน)')) + '">' + (isCard ? '' : '</div>');
+    parent.insertBefore(box, before);
     var inp = box.querySelector('input');
+    inp.dataset.project = pid;
+    var refSec = o.secId;
+    if (!refSec && o.refId) {
+      var mm = S.projectsOfTask(o.refId).filter(function (x) { return x.project.id === pid; })[0];
+      refSec = mm && mm.membership.sectionId;
+    }
+    inp.dataset.section = refSec || '';
     inp.focus();
+    var narrow = global.matchMedia && global.matchMedia('(max-width:700px)').matches;
+    try { box.scrollIntoView({ block: narrow ? 'center' : 'nearest' }); } catch (e) { /* ignore */ }
     var done = false;
     function finish() {
       if (done) return;
       done = true;
       if (box.parentNode) box.parentNode.removeChild(box);
+    }
+    function save(v) {
+      var q = S.quickAdd(v, pid);
+      return (o.refId && !q.sectionId)
+        ? S.createTaskNear(q, pid, o.refId, !!o.above)
+        : S.createTask(q, pid, q.sectionId || refSec || S.project(pid).sections[0].id);
     }
     inp.addEventListener('keydown', function (ev) {
       ev.stopPropagation();
@@ -3255,14 +3308,21 @@
       var v = inp.value.trim();
       if (!v) { finish(); return; }
       done = true;
-      var t = S.createTaskNear(S.quickAdd(v, pid, true), pid, refId, !!above);
+      var t = save(v);
       if (t) {
         state.cursor = t.id;
         state.reopenNear = { ref: t.id, above: false };
         resumeNear();
       } else { done = false; finish(); }     // Sprint 1B — ถูกปฏิเสธ เก็บช่องพิมพ์ทิ้ง ไม่ค้างไว้
     });
-    inp.addEventListener('blur', function () { setTimeout(finish, 0); });
+    inp.addEventListener('blur', function () {
+      if (done) return;
+      var v = inp.value.trim();
+      if (!v) { setTimeout(finish, 0); return; }
+      done = true;                            // คลิกที่อื่น/Tab ทั้งที่มีข้อความ = บันทึก
+      var t = save(v);
+      if (t) state.cursor = t.id; else { done = false; finish(); }
+    });
     return true;
   }
 
@@ -10015,6 +10075,7 @@
       case 'quick-add': {
         var qp = S.project(state.route.id);
         if (!qp) break;
+        if (addTop()) break;               // Inline add — พิมพ์ในรายการเลย; หน้าต่างถามชื่อเหลือไว้เป็นทางสำรอง
         var qaCtx = { projectId: qp.id, sectionId: qp.sections[0].id };
         askText(L('ชื่องานใหม่'), '', function (v) {
           if (!v) return;
