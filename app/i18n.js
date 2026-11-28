@@ -2582,7 +2582,24 @@
     'ติดตามพอร์ตโฟลิโอ': 'Follow portfolio',
     'เลิกติดตามพอร์ตโฟลิโอ': 'Unfollow portfolio',
     'ติดตามพอร์ตโฟลิโอนี้แล้ว — ได้แจ้งเตือนเมื่อมีอัปเดตสถานะ': 'Following this portfolio — you’ll be notified about status updates',
-    'ติดตามโปรเจกต์นี้แล้ว — ได้แจ้งเตือนอัปเดตสถานะ งานใหม่ และหมุดหมายที่สำเร็จ': 'Following this project — you’ll be notified about status updates, new tasks and completed milestones'
+    'ติดตามโปรเจกต์นี้แล้ว — ได้แจ้งเตือนอัปเดตสถานะ งานใหม่ และหมุดหมายที่สำเร็จ': 'Following this project — you’ll be notified about status updates, new tasks and completed milestones',
+    /* Sprint 3 — อภิธานศัพท์ */
+    'ศัพท์ที่ใช้ใน Orbit': 'Orbit glossary',
+    'กลุ่มงานที่ทำเรื่องเดียวกัน มีเซกชัน สมาชิก และมุมมองของตัวเอง': 'A group of work on one topic, with its own sections, members and views',
+    'หมวดย่อยในโปรเจกต์ เช่น ค้างอยู่ / กำลังทำ / เสร็จแล้ว (บนบอร์ดเห็นเป็นแถบตั้ง)': 'A sub-group inside a project, e.g. To do / Doing / Done (a vertical column on the board)',
+    'สิ่งที่ต้องทำหนึ่งอย่าง งานย่อยคือขั้นตอนเล็ก ๆ ข้างในงาน': 'One thing to do. A subtask is a small step inside a task',
+    'คนที่ต้องทำงานนั้น มีได้คนเดียวต่องาน': 'The person who has to do the task — one per task',
+    'คนที่ได้รับแจ้งเตือนเมื่องานเปลี่ยน แต่ไม่ได้เป็นคนทำ': 'People notified when the task changes, who are not doing it',
+    'จุดสำคัญของโปรเจกต์ ไม่มีระยะเวลา เช่น วันเปิดตัว': 'A key point in a project with no duration, e.g. launch day',
+    'งานที่รอให้ใครสักคนตัดสิน: อนุมัติ ขอให้แก้ไข หรือปฏิเสธ': 'A task waiting for someone to decide: approve, request changes or reject',
+    'ช่องข้อมูลเพิ่มเติมของงาน เช่น งบ ประเภท ลูกค้า': 'Extra data on a task, e.g. budget, type, customer',
+    'แบบฟอร์มรับเรื่อง กรอกแล้วกลายเป็นงานในโปรเจกต์': 'An intake form — each submission becomes a task in the project',
+    'ให้ระบบทำแทนเมื่อเกิดเหตุการณ์ เช่น ทำเสร็จแล้วย้ายไปเซกชันเสร็จแล้ว': 'Let Orbit act when something happens, e.g. move a task to Done when completed',
+    'รวมหลายโปรเจกต์ไว้ดูภาพรวมในที่เดียว': 'Several projects together for an overview in one place',
+    'ที่รวมเรื่องที่เกี่ยวกับคุณ: มอบหมาย พูดถึง ขออนุมัติ ใกล้ครบกำหนด': 'Everything about you: assignments, mentions, approval requests, due dates',
+    'จัดการสมาชิกและสิทธิ์ในโปรเจกต์นั้น (ลบโปรเจกต์ได้เฉพาะผู้ดูแลระบบ)': 'Manages members and access in that project (only an admin can delete a project)',
+    'ดูแลทั้งองค์กร: สมาชิก สิทธิ์ การลบโปรเจกต์ และบันทึกการทำงาน': 'Looks after the whole organization: members, access, deleting projects and the audit log',
+    'ใครเห็นโปรเจกต์นี้': 'Who can see this project',
   };
 
   /* ข้อความที่เก็บไว้ในบันทึก/การแจ้งเตือนเก่าเป็นคีย์ไทยเดิมที่เรียกเซกชันว่า "คอลัมน์"

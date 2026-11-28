@@ -2086,6 +2086,13 @@
       h += '<div class="field"><label>' + L('เซกชันเริ่มต้น (คั่นด้วยจุลภาค)') + '</label>' +
         '<input id="pSections" value="' + L('ค้างอยู่, กำลังทำ, รอตรวจ, เสร็จแล้ว') + '"></div>';
     }
+    /* Sprint 3 — เลือกความเป็นส่วนตัวตั้งแต่สร้าง (เดิมสร้างแล้วเปิดให้ทั้งองค์กรทันที ต้องตามไปปิดทีหลัง
+     * ซึ่งโปรเจกต์ที่ควรเป็นความลับเห็นกันได้ช่วงหนึ่ง) ค่าเริ่มต้นยังเป็นเปิดให้ทั้งองค์กรเหมือนเดิม */
+    if (!existing) {
+      h += '<div class="field"><label>' + L('ใครเห็นโปรเจกต์นี้') + '</label><select id="pVis">' +
+        '<option value="org">' + L('เปิดให้ทั้งองค์กร') + '</option>' +
+        '<option value="private">' + L('ปิด เห็นเฉพาะคนที่เชิญ') + '</option></select></div>';
+    }
     h += '<div class="field"><label>' + L('สี') + '</label><div class="swatch-pick" id="pColors">';
     S.PALETTE.forEach(function (c) {
       h += '<button type="button" data-color="' + c + '" class="' + (c === p.color ? 'on' : '') +
@@ -4978,6 +4985,32 @@
     rows.forEach(function (r) {
       h += '<div class="sc"><kbd>' + R.esc(r[0]) + '</kbd><span class="d">' +
         R.esc(r[1]) + '</span></div>';
+    });
+    h += '</div><div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
+    return h;
+  }
+
+  /* Sprint 3 — อภิธานศัพท์: คำที่ Orbit ใช้ อธิบายสั้น ๆ ให้คนใหม่ (และคนที่ย้ายมาจาก Asana) เปิดอ่านได้จากเมนูซ้าย */
+  function glossaryModal() {
+    var rows = [
+      ['โปรเจกต์', 'Project', 'กลุ่มงานที่ทำเรื่องเดียวกัน มีเซกชัน สมาชิก และมุมมองของตัวเอง'],
+      ['เซกชัน', 'Section', 'หมวดย่อยในโปรเจกต์ เช่น ค้างอยู่ / กำลังทำ / เสร็จแล้ว (บนบอร์ดเห็นเป็นแถบตั้ง)'],
+      ['งาน / งานย่อย', 'Task / subtask', 'สิ่งที่ต้องทำหนึ่งอย่าง งานย่อยคือขั้นตอนเล็ก ๆ ข้างในงาน'],
+      ['ผู้รับผิดชอบ', 'Assignee', 'คนที่ต้องทำงานนั้น มีได้คนเดียวต่องาน'],
+      ['ผู้ติดตาม', 'Followers', 'คนที่ได้รับแจ้งเตือนเมื่องานเปลี่ยน แต่ไม่ได้เป็นคนทำ'],
+      ['หมุดหมาย', 'Milestone', 'จุดสำคัญของโปรเจกต์ ไม่มีระยะเวลา เช่น วันเปิดตัว'],
+      ['งานอนุมัติ', 'Approval task', 'งานที่รอให้ใครสักคนตัดสิน: อนุมัติ ขอให้แก้ไข หรือปฏิเสธ'],
+      ['ฟิลด์', 'Field', 'ช่องข้อมูลเพิ่มเติมของงาน เช่น งบ ประเภท ลูกค้า'],
+      ['ฟอร์ม', 'Form', 'แบบฟอร์มรับเรื่อง กรอกแล้วกลายเป็นงานในโปรเจกต์'],
+      ['กฎอัตโนมัติ', 'Automation rule', 'ให้ระบบทำแทนเมื่อเกิดเหตุการณ์ เช่น ทำเสร็จแล้วย้ายไปเซกชันเสร็จแล้ว'],
+      ['พอร์ตโฟลิโอ', 'Portfolio', 'รวมหลายโปรเจกต์ไว้ดูภาพรวมในที่เดียว'],
+      ['กล่องแจ้งเตือน', 'Inbox', 'ที่รวมเรื่องที่เกี่ยวกับคุณ: มอบหมาย พูดถึง ขออนุมัติ ใกล้ครบกำหนด'],
+      ['ผู้ดูแลโปรเจกต์', 'Project admin', 'จัดการสมาชิกและสิทธิ์ในโปรเจกต์นั้น (ลบโปรเจกต์ได้เฉพาะผู้ดูแลระบบ)'],
+      ['ผู้ดูแลระบบ', 'Admin', 'ดูแลทั้งองค์กร: สมาชิก สิทธิ์ การลบโปรเจกต์ และบันทึกการทำงาน']
+    ];
+    var h = '<h2>' + L('ศัพท์ที่ใช้ใน Orbit') + '</h2><div class="shortcuts">';
+    rows.forEach(function (r) {
+      h += '<div class="sc"><kbd>' + R.esc(global.I18N.getLang() === 'en' ? r[1] : r[0]) + '</kbd><span class="d">' + R.esc(L(r[2])) + '</span></div>';
     });
     h += '</div><div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
     return h;
@@ -10715,6 +10748,8 @@
           color: pickedColor(S.PALETTE[0]),
           sections: (secs && secs.length) ? secs : null
         });
+        var vSel = document.getElementById('pVis');
+        if (vSel && vSel.value === 'private') S.setProjectVisibility(np.id, 'private');   // Sprint 3 — คนสร้างเป็นผู้ดูแลอัตโนมัติ (อยู่ใน setProjectVisibility)
         closeModal();
         npToPortfolio(np); goProject(np.id);
         toast(L('สร้างโปรเจกต์แล้ว'));
@@ -12054,6 +12089,7 @@
 
       /* --- settings --- */
       case 'show-shortcuts': openModal(shortcutsModal(), true); break;
+      case 'show-glossary': openModal(glossaryModal(), true); break;      // Sprint 3 — ไม่แก้ข้อมูล จึงไม่อยู่ใน NEEDS
       case 'open-settings':
         closePops();
         state.setTab = el.dataset.tab || state.setTab || 'general';

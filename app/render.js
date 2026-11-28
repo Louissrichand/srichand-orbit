@@ -434,6 +434,7 @@
         (S.isAdmin() ? go('admin', route.type === 'admin', 'shield', 'ผู้ดูแลระบบ') : '') +
         go('trash', route.type === 'trash', 'trash', 'ถังขยะ') +
         item(false, 'data-act="show-shortcuts"', I('keyboard'), L('คีย์ลัด')) +
+        item(false, 'data-act="show-glossary"', I('note'), L('ศัพท์ที่ใช้ใน Orbit')) +
         (global.OrbitPWA && global.OrbitPWA.canInstall() ? '<button class="sb-item sb-install" data-act="pwa-install" title="' +
           esc(L('ติดตั้งเป็นแอปบนเครื่องนี้ เปิดได้จากหน้าจอหลัก')) + '">' + I('install') + '<span class="grow">' + L('ติดตั้ง Orbit') + '</span>' +
           '<span class="sb-x" data-act="pwa-dismiss" title="' + esc(L('ไม่ต้องแสดงอีก')) + '">' + I('close', 11) + '</span></button>' : ''));
