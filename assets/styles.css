@@ -5594,3 +5594,9 @@ body.print-preview .print-sheet { display: block; width: 210mm; min-height: 297m
 .chip-slip.hot { background: #fde8e8; color: #b3261e; font-weight: 600; }
 .pop .pop-filter { display: block; width: calc(100% - 16px); margin: 6px 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); font-size: 13px; }
 .inline-add-hint { font-size: 12.5px; color: var(--fg-soft); margin: -2px 0 6px 2px; }
+
+/* Sprint 3 — สิ่งที่ดูอย่างเดียว: ไม่ชี้ว่ากดได้ */
+.ro, .ro[disabled] { cursor: default; }
+button.check.ro { opacity: .55; }
+.td-edit.ro:hover { background: transparent; }
+span.tb-people.ro { pointer-events: none; }

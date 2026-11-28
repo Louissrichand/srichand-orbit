@@ -503,11 +503,13 @@
        * ดีกว่าโชว์พนักงานทั้งบริษัทซึ่งไม่ได้บอกอะไร */
       var ppl = projectPeople(p.id);
       if (ppl.length) {
-        h += '<button class="tb-people" data-act="manage-members" title="' +
-          esc(ppl.map(function (m) { return m.user.name; }).join(', ')) + '">';
+        /* Sprint 3 — คนที่เพิ่ม/ถอดสมาชิกไม่ได้ เห็นรูปสมาชิกอย่างเดียว ไม่ใช่ปุ่มที่กดแล้วโดนปฏิเสธ */
+        var pplTitle = esc(ppl.map(function (m) { return m.user.name; }).join(', '));
+        h += S.canAddMembers(p.id) ? '<button class="tb-people" data-act="manage-members" title="' + pplTitle + '">'
+                                   : '<span class="tb-people ro" title="' + pplTitle + '">';
         ppl.slice(0, 4).forEach(function (m) { h += avatar(m.user, 'sm'); });
         if (ppl.length > 4) h += '<span class="tb-more">+' + (ppl.length - 4) + '</span>';
-        h += '</button>';
+        h += (S.canAddMembers(p.id) ? '</button>' : '</span>');
       }
 
       /* คำอธิบายโปรเจกต์ไม่อยู่บนแถบบนแล้ว

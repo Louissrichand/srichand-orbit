@@ -405,6 +405,20 @@
 
   /* ---------- render ---------- */
 
+  /* Sprint 3 — ซ่อนสิ่งที่ "ดูเหมือนกดได้แต่จะโดนปฏิเสธ" ตามสิทธิ์
+   * คนที่ดูอย่างเดียว/แสดงความเห็นได้ เห็นช่องติ๊กและช่องแก้วันที่/ผู้รับผิดชอบ/ความสำคัญเหมือนคนแก้ได้ กดแล้วเด้ง "ไม่มีสิทธิ์"
+   * ทำที่เดียวหลังวาดหน้า (ใช้ S.can ตัวเดียวกับด่าน allowed) ไม่ต้องไล่แก้ทุกจุดที่ออกปุ่มพวกนี้ ช่องติ๊กเป็น disabled ช่องแก้ไม่มี data-act */
+  function dropDeniedAffordances(root) {
+    if (!root) return;
+    Array.prototype.forEach.call(root.querySelectorAll('[data-act="edit-cell"],[data-act="toggle"]'), function (el) {
+      var tid = el.dataset.id;
+      if (!tid || S.can('write', tid)) return;
+      el.classList.add('ro');
+      if (el.dataset.act === 'toggle') el.disabled = true;
+      else el.removeAttribute('data-act');
+    });
+  }
+
   function renderViewBody() {
     var r = state.route;
     var body = '';
@@ -512,6 +526,7 @@
     })();
     persistView();
     $view.innerHTML = body + R.bulkbar(state.sel);
+    dropDeniedAffordances($view);
     if (keepNote) {
       var nn = $view.querySelector('.hnote');
       if (nn) {
@@ -8567,6 +8582,7 @@
     else if (need === "members") {
       ok = S.canAddMembers(el.dataset.id || (state.route.type === "project" ? state.route.id : null));
     }
+    else if (act === 'new-project' || act === 'create-project') ok = S.can('structure');   // Sprint 3 — โปรเจกต์ใหม่ไม่เกี่ยวกับสิทธิ์ในโปรเจกต์ที่เปิดอยู่ (เดิมคนดูอย่างเดียวในโปรเจกต์หนึ่งสร้างโปรเจกต์ใหม่ไม่ได้)
     else if (need === "structure") {
       /* การแก้โครงสร้างเกิดขึ้นในบริบทของโปรเจกต์ที่เปิดอยู่
        * จึงต้องผ่านสิทธิ์ของโปรเจกต์นั้นด้วย ไม่ใช่แค่บทบาทระดับองค์กร */
