@@ -4034,6 +4034,16 @@
 
   /* Sprint 4 — ฟิลด์ที่โปรเจกต์กำหนดว่า "ต้องกรอกก่อนทำเสร็จ" (เช่น Actual Finish Date) ที่งานนี้ยังว่างอยู่ คืนรายชื่อฟิลด์ที่ขาด
    * ระบบอัตโนมัติไม่โดนกั้น (กฎตั้งค่าและปิดงานเองเป็นเจตนาของคนตั้งกฎ) งานอนุมัติปิดด้วยผลอนุมัติเสมอ */
+  /* Sprint 4 — ความคืบหน้างานย่อยแบบนับทุกชั้น (งานย่อยของงานย่อย) {done, total} ไม่นับตัวงานเอง */
+  function subRollup(taskId) {
+    var done = 0, total = 0;
+    (function walk(id, depth) {
+      if (depth > 8) return;
+      (subtasks(id) || []).forEach(function (s) { total++; if (s.completed) done++; walk(s.id, depth + 1); });
+    })(taskId, 0);
+    return { done: done, total: total };
+  }
+
   function missingRequiredFields(taskId) {
     var t = task(taskId);
     if (!t) return [];
@@ -4102,6 +4112,16 @@
       patch.completedBy = patch.completed ? (db.currentUserId || null) : null;   // Sprint 3 — ระบบอัตโนมัติ/ไล่ตามคนที่ปลุกกฎ ซึ่งเป็นคนที่เห็นในบันทึกเดียวกัน
       log(id, patch.completed ? 'ทำงานนี้เสร็จแล้ว' : 'เปิดงานนี้อีกครั้ง');
       autoFire('completed', id, { v: !!patch.completed });
+      /* Sprint 4 — งานย่อยตัวสุดท้ายของงานหลักเสร็จ → แจ้งผู้รับผิดชอบงานหลักว่าปิดงานหลักได้ (แจ้งครั้งเดียวต่องานหลัก) */
+      if (patch.completed && t.parentId) {
+        var par = task(t.parentId);
+        if (par && !par.completed && !par.subsDoneNotified && par.assigneeId &&
+            (subtasks(par.id) || []).every(function (x) { return x.id === t.id || x.completed; })) {
+          par.subsDoneNotified = true;
+          notifyOnly(par.id, [par.assigneeId], 'งานย่อยครบแล้ว — ปิดงานหลัก “{t}” ได้', 'activity', { t: par.name });
+        }
+      }
+
       /* 3b — ติ๊กเสร็จ/เปิดใหม่ของงานที่มีชนิดกำหนดเอง ย้ายไปสถานะแรกที่ "นับว่าเสร็จ" (หรือไม่นับ) ให้ตรงกัน */
       if (t.ctype && !(opts && opts.keepStatus)) {
         var cty = typeDef(t.ctype), cur = statusDef(t.cstatus);
@@ -6537,6 +6557,17 @@
   }
 
   /** เปลี่ยนบทบาท — ห้ามเหลือศูนย์ผู้ดูแล ไม่งั้นไม่มีใครเข้าหน้าผู้ดูแลได้อีก */
+  /* Sprint 4 — แก้ชื่อที่แสดงของสมาชิก (ผู้ดูแลระบบ) ใช้กับชื่อที่เป็นอีเมลซึ่งขึ้นเต็มตามงาน/ความเห็นทุกที่ */
+  function setUserName(userId, name) {
+    var u = user(userId), nm = String(name || '').trim().slice(0, 80);
+    if (!u || !isAdmin() || !nm || nm === u.name) return false;
+    snapshot('แก้ชื่อที่แสดง');
+    audit('user.rename', nm, u.name);
+    u.name = nm;
+    commit();
+    return true;
+  }
+
   function setRole(userId, newRole) {
     var u = user(userId);
     if (!u || !ROLE_CAPS[newRole]) return false;
@@ -12828,7 +12859,7 @@
     accessRequestFor: accessRequestFor,
     canAnswerAccess: canAnswerAccess, answerAccess: answerAccess, accessOwner: accessOwner,
     convertToProject: convertToProject,
-    missingRequiredFields: missingRequiredFields, setRequiredFields: setRequiredFields, setNextMeeting: setNextMeeting, setOrgLang: setOrgLang, setOrgPrivacy: setOrgPrivacy, slipOverdue: slipOverdue, bulkAddToProject: bulkAddToProject, bulkMoveSection: bulkMoveSection, bulkSetField: bulkSetField,
+    setUserName: setUserName, subRollup: subRollup, missingRequiredFields: missingRequiredFields, setRequiredFields: setRequiredFields, setNextMeeting: setNextMeeting, setOrgLang: setOrgLang, setOrgPrivacy: setOrgPrivacy, slipOverdue: slipOverdue, bulkAddToProject: bulkAddToProject, bulkMoveSection: bulkMoveSection, bulkSetField: bulkSetField,
     bulkAddFollowers: bulkAddFollowers, bulkAddTag: bulkAddTag, bulkDependOn: bulkDependOn,
     bulkMerge: bulkMerge,
 

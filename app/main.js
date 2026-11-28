@@ -8482,7 +8482,8 @@
     put('structure', ['sv-rename', 'sv-move', 'sv-update', 'sv-delete', 'tab-default',
       'dup-section', 'do-dup-section']);
     put('write', ['carry-over', 'slip-overdue', 'pg-move', 'set-next-meeting']);
-    put('structure', ['required-fields', 'save-required-fields']);        // Sprint 4
+    put('structure', ['required-fields', 'save-required-fields']);
+    put('manage', ['fix-user-name']);        // Sprint 4 — เฉพาะผู้ดูแลระบบ        // Sprint 4
     put('manage', ['set-org-lang', 'set-org-privacy']);       // Sprint 3 — เฉพาะผู้ดูแลระบบ        // Sprint 3 — ย้ายงานระหว่างเซกชัน = แก้งาน ไม่ใช่แก้โครงสร้าง
     put('write:task', ['set-cover', 'clear-cover', 'cell-set-priority']);
     put('create', ['tl-new']);
@@ -12128,6 +12129,15 @@
       }
 
       /* --- บทบาทในหน้าผู้ดูแล --- */
+      case 'fix-user-name': {        // Sprint 4 — ผู้ดูแลระบบแก้ชื่อที่แสดง (ชื่อที่เป็นอีเมล)
+        var fnU = S.user(id), fnId = id;
+        if (!fnU) break;
+        askText(L('ชื่อที่แสดงของ {e}', { e: fnU.name }), '', function (v) {
+          if (!v || /@/.test(v)) { toast(L('ใส่ชื่อ ไม่ใช่อีเมล')); return; }
+          if (S.setUserName(fnId, v)) toast(L('แก้ชื่อแล้ว'));
+        }, { ok: L('บันทึก'), placeholder: L('เช่น สมชาย ใจดี') });
+        break;
+      }
       case 'pick-role': {
         if (popIsOpenFor(el)) { closePops(); break; }
         var pu = S.user(id);
