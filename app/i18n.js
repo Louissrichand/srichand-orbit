@@ -2593,6 +2593,12 @@
     'กด / เพื่อค้นหางาน หน้า และข้อความ กด ? เพื่อดูคีย์ลัด ถ้าคำไหนไม่เข้าใจ เปิด “ศัพท์ที่ใช้ใน Orbit” จากเมนูซ้าย': 'Press / to search tasks, pages and messages. Press ? for shortcuts. If a term is unclear, open “Orbit glossary” in the left menu',
     'ขั้นที่ {a} จาก {b}': 'Step {a} of {b}', 'ข้ามทัวร์': 'Skip tour', '← ก่อนหน้า': '← Back', 'ถัดไป →': 'Next →',
     'เริ่มใช้งาน': 'Get started', 'ดูทัวร์แนะนำอีกครั้ง': 'Replay the tour',
+    'ประชุมประจำสัปดาห์': 'Weekly meeting',
+    'วาระ มติ และงานที่ต้องตามต่อ — เขียนงานแบบ “ส่งสไลด์ @ชื่อ ศุกร์” ได้เลย': 'Agenda, decisions and follow-ups — write tasks like “Send slides @Name Friday”',
+    'วาระ': 'Agenda', 'งานที่ต้องตามต่อ': 'Follow-ups', 'ยกยอดไปครั้งหน้า': 'Carry over to next time',
+    'ประธาน': 'Chair', 'เลขา': 'Secretary',
+    'ทบทวนงานค้างจากครั้งที่แล้ว': 'Review open items from last time', 'อัปเดตความคืบหน้าแต่ละฝ่าย': 'Progress updates from each team',
+    'สรุปมติและมอบหมายงาน': 'Summarize decisions and assign tasks',
     /* Sprint 3 — อภิธานศัพท์ */
     'ศัพท์ที่ใช้ใน Orbit': 'Orbit glossary',
     'กลุ่มงานที่ทำเรื่องเดียวกัน มีเซกชัน สมาชิก และมุมมองของตัวเอง': 'A group of work on one topic, with its own sections, members and views',

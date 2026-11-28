@@ -6858,7 +6858,8 @@
     items.forEach(function (x) {
       var u = x.assigneeId ? S.user(x.assigneeId) : null;
       h += '<div class="pgt-row">' + I('checkCircle', 14) + '<span class="grow" title="' + esc(x.name) + '">' + esc(x.name) + '</span>' +
-        (u ? R.avatar(u, 'sm') + '<span>' + esc(u.name) + '</span>' : '') + '</div>';
+        (u ? R.avatar(u, 'sm') + '<span>' + esc(u.name) + '</span>' : '') +
+        (x.dueOn ? '<span class="pgt-due">' + esc(R.fmtDate(x.dueOn)) + '</span>' : '') + '</div>';
     });
     h += '</div>';
     h += '<div class="field"><label>' + L('สร้างไว้ที่') + '</label><select id="pgtTarget">' +

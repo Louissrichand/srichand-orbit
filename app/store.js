@@ -9416,6 +9416,18 @@
           [L('อบรมทีมขาย'), 2, 2, 10, 15],
           [L('วันเปิดตัว'), 3, 0, null, 20, 'milestone', 'urgent']
         ], deps: [[6, 4], [6, 5], [4, 2]], autos: [doneSec(3)] },
+      /* Sprint 3 — เทมเพลตประชุม: วาระ → งานที่ต้องตามต่อ → ยกยอดไปครั้งหน้า → เสร็จแล้ว
+       * งานที่ยังค้างย้ายไป "ยกยอดไปครั้งหน้า" ด้วยการย้ายเซกชัน แล้วคัดลอกโปรเจกต์/สร้างรอบใหม่จากเทมเพลตต่อได้ */
+      { id: 'meeting', icon: '🗓️', color: '#14aaf5', name: L('ประชุมประจำสัปดาห์'),
+        desc: L('วาระ มติ และงานที่ต้องตามต่อ — เขียนงานแบบ “ส่งสไลด์ @ชื่อ ศุกร์” ได้เลย'),
+        secs: [L('วาระ'), L('งานที่ต้องตามต่อ'), L('ยกยอดไปครั้งหน้า'), L('เสร็จแล้ว')], view: 'board',
+        fields: [],
+        roles: [L('ประธาน'), L('เลขา')],
+        tasks: [
+          [L('ทบทวนงานค้างจากครั้งที่แล้ว'), 0, null, 0, 0],
+          [L('อัปเดตความคืบหน้าแต่ละฝ่าย'), 0, null, 0, 0],
+          [L('สรุปมติและมอบหมายงาน'), 0, null, 0, 0]
+        ], autos: [doneSec(3)] },
       { id: 'design', icon: '🎨', color: '#e362e3', name: L('คำขอฝ่ายออกแบบ'),
         desc: L('รับคำของานออกแบบจากทุกฝ่ายผ่านฟอร์มเดียว แล้วติดตามจนส่งมอบ'),
         secs: [L('คำขอใหม่'), L('กำลังออกแบบ'), L('รอตรวจ'), L('ส่งมอบแล้ว')], view: 'board',
@@ -10851,7 +10863,9 @@
         s = s.slice(0, at) + s.slice(at + tag.length);
         return true;
       });
-      return { name: s.replace(/\s+/g, ' ').trim().slice(0, 300), assigneeId: who, src: src };
+      /* Sprint 3 — บรรทัดจากบันทึกประชุมอย่าง "ส่งสไลด์ @สมชาย ศุกร์" เก็บวันที่ไทยและ @ชื่อสั้นด้วย (ตัวเดียวกับช่องเพิ่มงาน) */
+      var qa = quickAdd(s.replace(/\s+/g, ' ').trim(), null);
+      return { name: qa.name.slice(0, 300), assigneeId: who || qa.assigneeId || null, dueOn: qa.dueOn || null, src: src };
     }).filter(function (x) { return x.name; }).slice(0, 100);
   }
   /** สร้างงานหลายชิ้นจากหน้าเอกสารในครั้งเดียว (ย้อนกลับได้ทีเดียว) — projectId ว่าง = งานส่วนตัวในงานของฉัน
@@ -10872,7 +10886,7 @@
       /* งานในโปรเจกต์ที่ไม่มี @ชื่อ ปล่อยว่างไว้ให้ทีมรับ งานส่วนตัวต้องเป็นของเรา ไม่งั้นหาไม่เจอในงานของฉัน */
       var who = x.assigneeId && user(x.assigneeId) ? x.assigneeId : (p ? null : db.currentUserId);
       /* ใส่ผู้รับผิดชอบเป็นผู้ติดตามหลังสร้าง ไม่งั้นเขาได้ทั้ง "สร้างงานนี้" และ "มอบหมายให้คุณ" ซ้ำสองข้อความ */
-      var t = createTaskRaw({ name: String(x.name).trim().slice(0, 300), notes: notes, assigneeId: who, followers: [] },
+      var t = createTaskRaw({ name: String(x.name).trim().slice(0, 300), notes: notes, assigneeId: who, dueOn: x.dueOn || null, followers: [] },
         p ? p.id : null, sec ? sec.id : null);
       if (who && t.followers.indexOf(who) < 0) t.followers.push(who);
       if (who && who !== db.currentUserId) notifyOnly(t.id, [who], 'มอบหมายงาน “{t}” ให้คุณ', 'assigned', { t: t.name });
