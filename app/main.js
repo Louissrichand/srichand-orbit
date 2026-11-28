@@ -2251,6 +2251,7 @@
       h += item('dup-project', 'copy', L('คัดลอกโปรเจกต์'));
       h += item('pt-save', 'star', L('บันทึกเป็นเทมเพลตโปรเจกต์…'));
     }
+    if (S.can('write') && S.canInProject(projectId, 'edit')) h += item('slip-overdue', 'calendar', L('เลื่อนงานเลยกำหนดไปรอบถัดไป…'));   // Sprint 3
     h += '<div class="pop-sep"></div>';
     if (canStruct) {
       h += item('manage-fields', 'filter', L('จัดการฟิลด์'));
@@ -8372,7 +8373,7 @@
      * ส่วนตัวกรอง เรียง จัดกลุ่ม คอลัมน์ การ์ด และปฏิทินเป็นมุมมองของแต่ละคน จำลง db.personal */
     put('structure', ['sv-rename', 'sv-move', 'sv-update', 'sv-delete', 'tab-default',
       'dup-section', 'do-dup-section']);
-    put('write', ['carry-over']);        // Sprint 3 — ย้ายงานระหว่างเซกชัน = แก้งาน ไม่ใช่แก้โครงสร้าง
+    put('write', ['carry-over', 'slip-overdue']);        // Sprint 3 — ย้ายงานระหว่างเซกชัน = แก้งาน ไม่ใช่แก้โครงสร้าง
     put('write:task', ['set-cover', 'clear-cover', 'cell-set-priority']);
     put('create', ['tl-new']);
     put('self', [
@@ -9303,6 +9304,24 @@
             '<button data-act="carry-over" data-section="' + esc(smSec) + '">' + I('arrowRight', 14) + ' ' + L('ยกงานค้างไปเซกชัน…') + '</button>';
         }
         openPop(el, smh);
+        break;
+      }
+      /* Sprint 3 — เลื่อนงานที่เลยกำหนดไปวันเดียวกันรวดเดียว นับจำนวนครั้งที่เลื่อนต่องาน */
+      case 'slip-overdue': {
+        closePops();
+        var spPid = state.route.id, spT = S.today();
+        var spN = S.tasksInProject(spPid).filter(function (x) { return !x.task.completed && x.task.dueOn && x.task.dueOn < spT; }).length;
+        if (!spN) { toast(L('ไม่มีงานที่เลยกำหนด')); break; }
+        var spDow = new Date(spT + 'T00:00:00').getDay();
+        var spMon = S.addDays(spT, ((8 - spDow) % 7) || 7);              // วันจันทร์ถัดไป
+        askChoice(L('เลื่อนงานเลยกำหนดไปวันไหน'), L('{n} งานที่เลยกำหนดจะถูกเลื่อน และนับว่าเลื่อนแล้วหนึ่งครั้ง', { n: spN }), [
+          [L('พรุ่งนี้'), S.addDays(spT, 1)], [L('วันจันทร์หน้า'), spMon], [L('อีก 7 วัน'), S.addDays(spT, 7)]
+        ].map(function (o) {
+          return { label: o[0] + (R.fmtDate(o[1]) !== o[0] ? ' · ' + R.fmtDate(o[1]) : ''), run: function () {
+            var moved = S.slipOverdue(spPid, o[1]);
+            if (moved) toast(L('เลื่อน {n} งานแล้ว', { n: moved }), L('ย้อนกลับ'), 'undo');
+          } };
+        }));
         break;
       }
       /* Sprint 3 — ยกงานค้าง: ย้ายงานที่ยังไม่เสร็จในเซกชันนี้ไปเซกชันอื่นรวดเดียว (เช่น ประชุมครั้งก่อน → ครั้งนี้)

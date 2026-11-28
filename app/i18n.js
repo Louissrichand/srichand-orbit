@@ -2604,6 +2604,12 @@
     '{n} งานที่ยังไม่เสร็จจะถูกย้ายไป': '[n|1 open task|{n} open tasks] will be moved',
     'ย้าย {n} งานไป “{s}” แล้ว': 'Moved [n|1 task|{n} tasks] to “{s}”',
     'แชร์ให้ทีม (ไม่บังคับ)': 'Share with a team (optional)', 'ไม่แชร์ให้ทีม': 'Don’t share with a team',
+    'ทำเสร็จโดย {who}': 'Completed by {who}',
+    'เลื่อนงานเลยกำหนดไปรอบถัดไป…': 'Push overdue tasks to the next round…', 'ไม่มีงานที่เลยกำหนด': 'No overdue tasks',
+    'เลื่อนงานเลยกำหนดไปวันไหน': 'Push overdue tasks to which day?',
+    '{n} งานที่เลยกำหนดจะถูกเลื่อน และนับว่าเลื่อนแล้วหนึ่งครั้ง': '[n|1 overdue task|{n} overdue tasks] will be pushed and counted as slipped once',
+    'พรุ่งนี้': 'Tomorrow', 'วันจันทร์หน้า': 'Next Monday', 'อีก 7 วัน': 'In 7 days',
+    'เลื่อน {n} งานแล้ว': 'Pushed [n|1 task|{n} tasks]', 'เลื่อนมาแล้ว {n} ครั้ง': 'Slipped {n}×',
     /* Sprint 3 — อภิธานศัพท์ */
     'ศัพท์ที่ใช้ใน Orbit': 'Orbit glossary',
     'กลุ่มงานที่ทำเรื่องเดียวกัน มีเซกชัน สมาชิก และมุมมองของตัวเอง': 'A group of work on one topic, with its own sections, members and views',

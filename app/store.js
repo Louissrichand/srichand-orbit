@@ -185,6 +185,8 @@
       priority: attrs.priority || 'none',
       completed: !!attrs.completed,
       completedAt: attrs.completedAt || null,
+      completedBy: attrs.completedBy || null,          // Sprint 3 — ใครกดทำเสร็จ (ข้อมูลเก่าเป็น null ไม่เดา)
+      slips: attrs.slips || 0,                         // Sprint 3 — จำนวนครั้งที่เลื่อนกำหนดส่งรวดเดียว (ดู slipOverdue) 0 = ไม่เคยเลื่อน
       parentId: attrs.parentId || null,
       tags: attrs.tags || [],
       followers: attrs.followers || (attrs.assigneeId ? [attrs.assigneeId] : []),
@@ -4015,6 +4017,7 @@
     if ('type' in patch && t.ctype && !(opts && opts.keepCtype)) { patch.ctype = null; patch.cstatus = null; }
     if ('completed' in patch && patch.completed !== t.completed) {
       patch.completedAt = patch.completed ? today() : null;
+      patch.completedBy = patch.completed ? (db.currentUserId || null) : null;   // Sprint 3 — ระบบอัตโนมัติ/ไล่ตามคนที่ปลุกกฎ ซึ่งเป็นคนที่เห็นในบันทึกเดียวกัน
       log(id, patch.completed ? 'ทำงานนี้เสร็จแล้ว' : 'เปิดงานนี้อีกครั้ง');
       autoFire('completed', id, { v: !!patch.completed });
       /* 3b — ติ๊กเสร็จ/เปิดใหม่ของงานที่มีชนิดกำหนดเอง ย้ายไปสถานะแรกที่ "นับว่าเสร็จ" (หรือไม่นับ) ให้ตรงกัน */
@@ -4500,6 +4503,7 @@
     var wasOpen = !d.completed;
     d.completed = true;
     d.completedAt = today();
+    d.completedBy = db.currentUserId || null;
     log(dupId, 'ปิดเป็นงานซ้ำของ “{t}”', { t: m.name }, watchers);
     log(masterId, 'รวมงานซ้ำ “{t}” เข้ามา', { t: d.name });
     addedTags.forEach(function (x) { log(masterId, 'เพิ่มแท็ก {t}', { t: x }); });
@@ -5439,6 +5443,7 @@
       copy.parentId = parentNew || null;
       copy.completed = false;
       copy.completedAt = null;
+      copy.completedBy = null;
       /* งานขออนุมัติ ผลอนุมัติเป็นตัวเปิด/ปิดงาน (Sprint 1B) — สำเนาเริ่มใหม่ยังไม่เสร็จ ต้องกลับไปรออนุมัติด้วย
        * เดิมคงผลเดิมไว้ สำเนาจึงโชว์ ✕ "ไม่อนุมัติ" / ✓ "อนุมัติแล้ว" บนงานที่ยังไม่เสร็จ */
       if (copy.type === 'approval') copy.approval = 'pending';
@@ -6212,7 +6217,7 @@
     /* ไม่ผ่าน updateTask เพราะข้อความแจ้งต้องถึงผู้อนุมัติ ("ขออนุมัติจากคุณ")
      * ไม่ใช่ถึงคนขอแบบผลอนุมัติทั่วไป */
     t.approval = 'pending';
-    if (t.completed) { t.completed = false; t.completedAt = null; }
+    if (t.completed) { t.completed = false; t.completedAt = null; t.completedBy = null; }
     log(taskId, 'ส่งงานนี้ขออนุมัติอีกครั้ง', null, t.assigneeId ? [t.assigneeId] : null);
     if (t.assigneeId) notifyOnly(taskId, [t.assigneeId], 'ส่ง “{t}” ขออนุมัติจากคุณอีกครั้ง', 'assigned', { t: t.name });
     autoFire('approval', taskId, { v: 'pending' });
@@ -7762,6 +7767,22 @@
     return batch('เพิ่ม {n} งานเข้าโปรเจกต์', { n: list.length }, function () {
       list.forEach(function (id) { addTaskToProject(id, projectId, sectionId); });
       return list.length;
+    });
+  }
+
+  /* Sprint 3 — เลื่อนงานที่เลยกำหนดไปวันเดียวกันรวดเดียว (ประชุมรอบหน้า) และนับ "เลื่อนมาแล้ว N ครั้ง" ต่องาน
+   * คนเห็นว่างานไหนถูกเลื่อนซ้ำ ๆ (≥3 ครั้งไฮไลต์) เรื่องที่ค้างเพราะไม่มีใครทำจริงจะไม่หายเงียบ ๆ
+   * ย้อนกลับครั้งเดียว วันที่เปลี่ยนผ่าน updateTask จึงลงบันทึกของแต่ละงานตามปกติ */
+  function slipOverdue(projectId, newDate) {
+    if (!project(projectId) || !newDate || !can('write') || !canInProject(projectId, 'edit')) return 0;
+    var t0 = today();
+    var ids = tasksInProject(projectId).filter(function (x) {
+      return !x.task.completed && x.task.dueOn && x.task.dueOn < t0;
+    }).map(function (x) { return x.task.id; });
+    if (!ids.length) return 0;
+    return batch('เลื่อนงานเลยกำหนดไปรอบถัดไป', null, function () {
+      ids.forEach(function (id) { updateTask(id, { dueOn: newDate, slips: (task(id).slips || 0) + 1 }); });
+      return ids.length;
     });
   }
 
@@ -12628,7 +12649,7 @@
     accessRequestFor: accessRequestFor,
     canAnswerAccess: canAnswerAccess, answerAccess: answerAccess, accessOwner: accessOwner,
     convertToProject: convertToProject,
-    bulkAddToProject: bulkAddToProject, bulkMoveSection: bulkMoveSection, bulkSetField: bulkSetField,
+    slipOverdue: slipOverdue, bulkAddToProject: bulkAddToProject, bulkMoveSection: bulkMoveSection, bulkSetField: bulkSetField,
     bulkAddFollowers: bulkAddFollowers, bulkAddTag: bulkAddTag, bulkDependOn: bulkDependOn,
     bulkMerge: bulkMerge,
 

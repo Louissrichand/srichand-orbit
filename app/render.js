@@ -904,6 +904,8 @@
       /* chip-due — จอแคบดึงกำหนดส่งขึ้นหน้าแถวที่สอง (Sprint 2A) เพราะเป็นป้ายที่คนมองหาก่อน */
       h += '<span class="chip chip-due' + dueClass(t.dueOn, t.completed) + '">' + fmtDate(t.dueOn) +
         (t.dueTime ? ' ' + esc(t.dueTime) : '') + '</span>';
+      /* Sprint 3 — เลื่อนมาแล้ว N ครั้ง (≥3 ไฮไลต์) */
+      if (t.slips) h += '<span class="chip chip-slip' + (t.slips >= 3 ? ' hot' : '') + '">' + esc(L('เลื่อนมาแล้ว {n} ครั้ง', { n: t.slips })) + '</span>';
     }
     return h;
   }
@@ -4714,6 +4716,12 @@
 
     h += '<textarea class="dw-title' + (t.completed ? ' done' : '') +
       '" data-act="edit-title" rows="1">' + esc(t.name) + '</textarea>';
+    /* Sprint 3 — "ทำเสร็จโดย X · วันที่" (งานเก่าที่ไม่มีคนทำ ไม่โชว์ ไม่เดา) */
+    if (t.completed && t.completedBy) {
+      var cbU = S.user(t.completedBy);
+      if (cbU) h += '<div class="dw-doneby">' + I('check', 13) + '<span>' + esc(L('ทำเสร็จโดย {who}', { who: cbU.name })) +
+        (t.completedAt ? ' · ' + esc(fmtDate(String(t.completedAt).slice(0, 10))) : '') + '</span></div>';
+    }
     /* Sprint 1B — บอกตั้งแต่เปิดงานว่าแก้ไม่ได้ ไม่ต้องลองแก้ก่อนแล้วค่อยรู้ */
     if (!S.can('write', t.id)) {
       var roLbl = S.can('comment', t.id) ? 'แสดงความเห็นได้' : 'ดูอย่างเดียว';
