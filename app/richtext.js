@@ -779,7 +779,7 @@
   function candidates(q) {
     var ql = q.toLowerCase().trim();
     var out = [];
-    (S.db.users || []).forEach(function (u) {
+    S.orgPeople().forEach(function (u) {
       if (u.active === false) return;
       if (!ql || u.name.toLowerCase().indexOf(ql) >= 0 ||
           (u.email || '').toLowerCase().indexOf(ql) === 0) out.push({ kind: 'user', id: u.id, name: u.name });

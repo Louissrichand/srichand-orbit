@@ -5743,3 +5743,7 @@ label.pf-pick-row { cursor: pointer; }
   .bulkbar .bulk-acts { gap: 2px; }
   .bulkbar { padding-right: 6px; }
 }
+/* QA-D */
+.smp-card { align-items: center; }
+.smp-card .btn { margin-left: auto; flex: none; white-space: nowrap; }
+.smp-pill { background: var(--accent-soft, #eef0ff); color: var(--accent, #5b50e6); }

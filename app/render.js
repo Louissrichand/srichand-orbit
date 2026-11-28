@@ -1869,7 +1869,7 @@
     var p = S.project(projectId);
     return S.projectMembers(projectId).map(function (m) {
       return { user: S.user(m.userId), access: m.access };
-    }).filter(function (x) { return x.user && x.user.active !== false; })
+    }).filter(function (x) { return x.user && x.user.active !== false && (!S.isTeamMode() || S.isRealMember(x.user)); })
       .sort(function (a, b) {
         if (a.user.id === p.owner) return -1;
         if (b.user.id === p.owner) return 1;
@@ -2040,7 +2040,7 @@
       }
       case 'person':
         h += '<select class="inp" data-act="ff-ans"' + d + '><option value="">' + L('เลือกคน') + '</option>' +
-          S.db.users.filter(function (u) { return u.active !== false; }).map(function (u) {
+          S.orgPeople().map(function (u) {
             return '<option value="' + esc(u.id) + '"' + (a === u.id ? ' selected' : '') + '>' + esc(u.name) + '</option>';
           }).join('') + '</select>';
         break;
@@ -2246,7 +2246,7 @@
     // ตามผู้รับผิดชอบ
     h += '<div class="panel"><h3>' + L('ตามผู้รับผิดชอบ') + '</h3>';
     var anyA = false;
-    S.db.users.forEach(function (u) {
+    S.orgPeople().forEach(function (u) {
       var a = s.byAssignee[u.id];
       if (!a) return;
       anyA = true;
@@ -4613,7 +4613,7 @@
     h += '<button data-act="bulk-complete">' + L('ทำเสร็จ') + '</button>';
     h += '<button class="bulk-desk" data-act="bulk-reopen">' + L('เปิดใหม่') + '</button>';
     h += '<select class="bulk-desk" data-act="bulk-assignee" aria-label="' + esc(L('มอบหมายให้…')) + '"><option value="">' + L('มอบหมายให้…') + '</option>';
-    S.db.users.forEach(function (u) {
+    S.orgPeople().forEach(function (u) {
       h += '<option value="' + esc(u.id) + '">' + esc(u.name) + '</option>';
     });
     h += '</select>';
@@ -5054,7 +5054,7 @@
       } else if (f.type === 'person') {
         s += '<select class="inp" data-act="edit-field" data-field="' + esc(f.id) +
           '"><option value="">—</option>';
-        S.db.users.forEach(function (usr) {
+        S.orgPeople().forEach(function (usr) {
           s += '<option value="' + esc(usr.id) + '"' + (v === usr.id ? ' selected' : '') +
             '>' + esc(usr.name) + '</option>';
         });
@@ -5749,6 +5749,7 @@
     'auth.denied': 'ถูกปฏิเสธการเข้าถึง',
     'user.add': 'ได้เพิ่มสมาชิก',
     'user.remove': 'ได้ลบสมาชิก',
+    'sample.clear': 'ได้ล้างข้อมูลตัวอย่าง',
     'user.role': 'ได้เปลี่ยนบทบาทของ',
     'user.disable': 'ได้ปิดใช้งานบัญชีของ',
     'user.enable': 'ได้เปิดใช้งานบัญชีของ',
@@ -5886,6 +5887,16 @@
           'ต้องเพิ่มหรือเอาออกจากไซต์ SharePoint ควบคู่กันเสมอ') + '</div></div>';
     }
 
+    /* QA-D — ข้อมูลตัวอย่างจากตอนเริ่มระบบ (ผู้ใช้/โปรเจกต์สมมติ) ที่ปนอยู่ในไฟล์กลางของทีม */
+    var smp = team ? S.sampleSummary() : null;
+    if (smp && (smp.users.length || smp.removable.length)) {
+      h += '<div class="admin-demo smp-card">' + I('alert', 15) + '<div><b>' +
+        esc(L('พบข้อมูลตัวอย่างจากตอนเริ่มระบบ: ผู้ใช้ {u} คน, โปรเจกต์ {p} โปรเจกต์',
+          { u: smp.users.length, p: smp.removable.length + smp.skipped.length })) + '</b><br>' +
+        esc(L('คนและงานสมมติเหล่านี้ไม่ใช่ข้อมูลจริงขององค์กร ล้างออกแล้วย้อนกลับได้')) + '</div>' +
+        '<button class="btn btn-sm btn-danger" data-act="clear-sample">' + esc(L('ล้างข้อมูลตัวอย่าง…')) + '</button></div>';
+    }
+
     /* Sprint 4 — ชื่อที่เป็นอีเมล (มักมาจากบัญชีองค์กรที่ไม่มีชื่อที่แสดง) ขึ้นเต็มตามงาน ความเห็น และการ์ด เตือนให้ผู้ดูแลแก้ */
     var emailNamed = db.users.filter(function (u) { return u.active !== false && /@/.test(String(u.name || '')); });
     if (emailNamed.length) {
@@ -5905,7 +5916,8 @@
 
       h += '<span class="admin-who">' + avatar(u) +
         '<span><b>' + esc(u.name) + (isMe ? ' <i>' + L('(คุณ)') + '</i>' : '') +
-        (off ? '<span class="pill-off">' + L('ปิดใช้งาน') + '</span>' : '') + '</b>' +
+        (off ? '<span class="pill-off">' + L('ปิดใช้งาน') + '</span>' : '') +
+        (u.sample ? '<span class="pill-off smp-pill">' + L('ตัวอย่าง') + '</span>' : '') + '</b>' +
         '<em>' + esc(u.email || '—') + authTag(u) + '</em>' +
         /* Sprint 4 — หัวหน้า (ใช้เลือกผู้รับโอนงานตอนปิดบัญชีให้อัตโนมัติ) */
         '<em><button class="as-link" data-act="set-manager" data-id="' + esc(u.id) + '">' +
