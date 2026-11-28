@@ -4906,3 +4906,647 @@ input.inp-bad, .field input.inp-bad { border-color: var(--danger) !important; bo
 /* บทบาทในโปรเจกต์ของคนที่ไม่ได้เป็นสมาชิกแล้ว */
 .ovw-role.gone b, .ovw-role.gone em { color: var(--fg-faint); }
 .ovw-role.gone .avatar { opacity: .5; }
+
+/* ---------- Sprint 2A: มือถือ ---------- */
+/* ทดสอบกับ "พนักงานใหม่ที่ใช้มือถือ" แล้วเจอว่าหน้ามือถือเป็นหน้าคอมที่ถูกบีบ ชื่องานถูกตัดเหลือไม่กี่ตัวอักษร
+ * ปุ่มเล็กกดพลาด และต้องเปิดเมนูซ้ายทุกครั้งที่จะไปหน้าอื่น ก้อนนี้รวมหน้าตามือถือทั้งหมดของ Sprint 2A ไว้ที่เดียว
+ * (การทำงานอยู่ใน app/mobile.js) — "มือถือ" = จอกว้างไม่เกิน 700px, "จอสัมผัส" = (hover: none)
+ * ใช้ token สีเดิมทั้งหมด ดาร์กโหมดจึงตามมาเอง */
+
+:root {
+  --m2a-bn-h: 58px;                                      /* ความสูงแถบนำทางล่าง (ไม่รวมขอบล่างของ iPhone) */
+  --m2a-safe-b: env(safe-area-inset-bottom, 0px);
+}
+
+/* viewport-fit=cover (index.html) ทำให้ iPhone แนวนอนวาดเลยเข้าไปใต้รอยบาก — เว้นขอบซ้ายขวาให้เนื้อหา */
+.app { padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
+.drawer { padding-right: env(safe-area-inset-right, 0px); }
+@media (max-width: 860px) { .sidebar { padding-left: env(safe-area-inset-left, 0px); } }
+
+/* ของที่มีเฉพาะมือถือ / ซ่อนบนมือถือ */
+.m2a-only, .m2a-touch-only, .search-x, .m2a-bnav, .dw-back, .dw-done-short { display: none; }
+
+/* ---- แถวงาน (ค้นหา แท็ก งานของฉัน): ป้ายเยอะแค่ไหนชื่องานก็ต้องเหลือที่ให้อ่าน ----
+ * เดิมกลุ่มป้ายไม่ยอมหด ชื่องานจึงถูกบีบจนเหลือ 0px ในผลค้นหา ตอนนี้กลุ่มป้ายกว้างได้ไม่เกิน 40% ของแถว
+ * (ชื่อได้ราว 60% เสมอ ป้ายน้อยชื่อก็ได้มากกว่านั้น) ป้ายที่ล้นถูกซ่อนจากฝั่งซ้าย (ชิดขวา)
+ * กำหนดส่งกับผู้รับผิดชอบที่อยู่ท้ายสุดจึงยังเห็นเสมอ */
+.row .meta { flex: 0 1 auto; min-width: 0; max-width: 40%; overflow: hidden; justify-content: flex-end; }
+.row .meta.m2a-cut {             /* mobile.js ใส่ให้เฉพาะแถวที่ป้ายล้นจริง */
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 22px); mask-image: linear-gradient(to right, transparent, #000 22px);
+}
+
+/* ปุ่ม ⋯ ท้ายแถวงานของฉัน (ย้ายเซกชันโดยไม่ต้องลาก) — จอเมาส์โผล่ตอนชี้ จอสัมผัสเห็นตลอด */
+.row-more {
+  flex: 0 0 auto; width: 28px; height: 28px; border-radius: 6px;
+  display: grid; place-items: center; color: var(--fg-faint); opacity: 0;
+}
+.row:hover .row-more, .row-more:focus-visible { opacity: 1; }
+.row-more:hover { background: var(--bg-inset); color: var(--fg); }
+
+/* ---- แผงงาน ---- */
+/* แผงที่ปิดอยู่เลื่อนออกนอกจอแต่เงายังล้นเข้ามาเป็นแถบจาง ๆ ที่ขอบขวา — ซ่อนทั้งแผงหลังเลื่อนออกเสร็จ
+ * (ซ่อนแล้วโปรแกรมอ่านหน้าจอกับปุ่ม Tab ก็ไม่ไปเจอปุ่มในแผงที่มองไม่เห็นด้วย) */
+.drawer { visibility: hidden; transition: transform .18s ease, visibility 0s linear .18s; }
+.drawer.open { visibility: visible; transition: transform .18s ease, visibility 0s linear 0s; }
+
+/* ปุ่ม "ทำเครื่องหมายว่าเสร็จ" เป็นปุ่มมีกรอบจริง (แบบ Asana) เดิมเป็นวงกลมกับข้อความสีเทา คนไม่รู้ว่ากดได้ */
+.dw-done-btn {
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  height: 30px; padding: 0 11px; border-radius: var(--radius);
+  border: 1px solid var(--line-strong); background: var(--bg); color: var(--fg-soft);
+  font-size: 13px; font-weight: 500; white-space: nowrap;
+}
+.dw-done-btn:hover { border-color: var(--ok); color: var(--ok); background: var(--ok-bg); }
+.dw-done-btn.on { border-color: var(--ok); background: var(--ok-bg); color: var(--ok); font-weight: 600; }
+.dw-done-btn[disabled] { cursor: default; opacity: .6; }
+.dw-done-btn[disabled]:hover { border-color: var(--line-strong); color: var(--fg-soft); background: var(--bg); }
+
+/* ---- แท็บที่ยาวเกินจอ: เงาจางที่ขอบบอกว่ายังเลื่อนได้ (mobile.js ใส่ m2a-fl / m2a-fr) ---- */
+.tb-tabs, .prj-tabs { scrollbar-width: thin; }
+.m2a-fl { -webkit-mask-image: linear-gradient(to right, transparent, #000 28px); mask-image: linear-gradient(to right, transparent, #000 28px); }
+.m2a-fr { -webkit-mask-image: linear-gradient(to left, transparent, #000 28px); mask-image: linear-gradient(to left, transparent, #000 28px); }
+.m2a-fl.m2a-fr {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+}
+
+/* ปุ่มเพิ่มงานที่ไม่มีปุ่มลูกศรคู่ (งานของฉัน) มุมขวาต้องมนด้วย เดิมตัดเหลี่ยมรอปุ่มที่ไม่มี */
+.vtb-add .btn:only-child { border-radius: var(--radius); }
+
+/* ---- แถบแก้หลายงาน: กล่องปุ่มคำสั่ง (จอกว้างหน้าตาเหมือนเดิม) ---- */
+.bulkbar .bulk-acts { display: contents; }
+/* แถบวางที่ left: 50% จึงกว้างได้แค่ครึ่งจอแล้วตัดเป็นสองแถว ทั้งที่จอยังเหลือที่ — ให้กว้างตามปุ่มจริง (ไม่เกินจอ) */
+.bulkbar { width: max-content; }
+
+/* ---- สร้างงานด่วน: ปุ่มกำหนดส่ง ---- */
+.m2a-qa-due { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 2px; }
+.m2a-chip {
+  display: inline-flex; align-items: center; gap: 5px; height: 34px; padding: 0 13px;
+  border-radius: 17px; border: 1px solid var(--line-strong); background: var(--bg);
+  color: var(--fg-soft); font-size: 13px; white-space: nowrap;
+}
+.m2a-chip:hover { border-color: var(--accent); color: var(--fg); }
+.m2a-chip.on { border-color: var(--accent); background: var(--accent-bg); color: var(--accent-dk); font-weight: 600; }
+.m2a-chip em { font-style: normal; font-size: 11.5px; opacity: .8; font-weight: 400; }
+
+/* ---- ย้ายไปเซกชัน (หน้าต่าง + เมนูลอย) ---- */
+.m2a-mv-task { margin: -8px 0 4px; font-weight: 600; color: var(--fg); overflow-wrap: anywhere; }
+.m2a-mv-h { display: flex; align-items: center; gap: 6px; margin: 14px 0 6px; font-size: 12.5px; font-weight: 700; color: var(--fg-soft); }
+.m2a-mv-list { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.m2a-mv-opt {
+  display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px;
+  text-align: left; font-size: 14px; color: var(--fg); border-top: 1px solid var(--line-soft); background: var(--bg-raise);
+}
+.m2a-mv-opt:first-child { border-top: 0; }
+.m2a-mv-opt:hover { background: var(--bg-sunk); }
+.m2a-mv-opt.on { color: var(--accent-dk); font-weight: 600; }
+.m2a-mv-ck { width: 16px; flex: none; display: inline-grid; place-items: center; color: var(--accent); }
+.pop .m2a-mv-opt { border-top: 0; min-height: 40px; background: none; }
+
+/* ---- แถบนำทางล่าง ---- */
+.m2a-bn {
+  flex: 1 1 0; min-width: 0; position: relative;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  padding: 6px 2px 4px; color: var(--fg-soft); font-size: 10.5px; line-height: 1.2;
+  -webkit-tap-highlight-color: transparent;
+}
+.m2a-bn.on { color: var(--accent); font-weight: 600; }
+.m2a-bn-ic { position: relative; display: grid; place-items: center; width: 44px; height: 28px; border-radius: 14px; transition: background .12s; }
+.m2a-bn.on .m2a-bn-ic { background: var(--accent-bg); }
+.m2a-bn-t { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m2a-bn-badge {
+  position: absolute; top: -3px; left: 25px; min-width: 17px; height: 17px; padding: 0 4px;
+  border-radius: 9px; background: var(--danger); color: #fff; font-size: 10px; font-weight: 700;
+  line-height: 17px; text-align: center; box-shadow: 0 0 0 2px var(--bg-raise);
+}
+.m2a-bn-dnd {
+  position: absolute; top: -2px; left: 27px; width: 16px; height: 16px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--bg-inset); color: var(--fg-soft);
+  box-shadow: 0 0 0 2px var(--bg-raise);
+}
+.m2a-bn-add { flex: 0 0 68px; }
+.m2a-bn-plus {
+  width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent); color: #fff; box-shadow: var(--shadow); transition: transform .1s;
+}
+.m2a-bn-add:active .m2a-bn-plus { transform: scale(.93); }
+
+/* ---- คำแนะนำลอย (Gantt บนมือถือ, ติดตั้งบน iPhone) ---- */
+.m2a-wide-note, .m2a-ios {
+  position: fixed; left: 12px; right: 12px; z-index: 46;
+  bottom: calc(12px + var(--m2a-safe-b));
+  display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px;
+  border-radius: 12px; background: var(--bg-raise); color: var(--fg);
+  border: 1px solid var(--line); box-shadow: var(--shadow-lg); font-size: 13px; line-height: 1.4;
+}
+body.m2a-bnav-on .m2a-wide-note, body.m2a-bnav-on .m2a-ios { bottom: calc(var(--m2a-bn-h) + var(--m2a-safe-b) + 10px); }
+.m2a-wide-note > svg { color: var(--warn-fg); flex: none; }
+.m2a-wide-note .btn { flex: none; }
+.m2a-wide-x {
+  flex: none; width: 34px; height: 34px; border-radius: 50%;
+  display: grid; place-items: center; color: var(--fg-soft);
+}
+.m2a-wide-x:hover { background: var(--bg-sunk); color: var(--fg); }
+.m2a-ios .grow { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.m2a-ios b { font-size: 13.5px; }
+.m2a-ios span { color: var(--fg-soft); }
+.m2a-ios span svg { vertical-align: -3px; color: var(--accent); }
+.m2a-ios .btn { flex: none; }
+
+/* ================= มือถือแนวตั้ง (≤ 700px) ================= */
+@media (max-width: 700px) {
+  .m2a-only { display: inline-flex; }
+  .m2a-hide { display: none !important; }
+  .bulkbar .m2a-touch-only { display: inline-flex; }
+
+  /* แถบนำทางล่าง — หลบขอบล่างของ iPhone และหายไปเองเมื่อแผงงาน/หน้าต่าง/แป้นพิมพ์เปิด (body.m2a-bnav-on) */
+  body.m2a-bnav-on .m2a-bnav {
+    display: flex; align-items: stretch; position: fixed; left: 0; right: 0; bottom: 0; z-index: 44;
+    height: calc(var(--m2a-bn-h) + var(--m2a-safe-b));
+    padding: 0 env(safe-area-inset-right, 0px) var(--m2a-safe-b) env(safe-area-inset-left, 0px);
+    background: var(--bg-raise); border-top: 1px solid var(--line); box-shadow: 0 -2px 12px rgba(0, 0, 0, .06);
+  }
+  /* เนื้อหาเลื่อนได้จบเหนือแถบล่าง ไม่มีแถวสุดท้ายถูกบัง */
+  body.m2a-bnav-on .main { padding-bottom: calc(var(--m2a-bn-h) + var(--m2a-safe-b)); }
+
+  /* ข้อความแจ้งลอยเหนือแถบล่าง (เดิมอยู่ที่ก้นจอ ทับแถบพอดี) */
+  .toast { max-width: calc(100vw - 24px); bottom: calc(16px + var(--m2a-safe-b)); }
+  body.m2a-bnav-on .toast { bottom: calc(var(--m2a-bn-h) + var(--m2a-safe-b) + 12px); }
+  .toast.above-bulk { bottom: calc(var(--m2a-safe-b) + var(--bulk-h, 52px) + 10px); }
+  body.m2a-bnav-on .toast.above-bulk { bottom: calc(var(--m2a-bn-h) + var(--m2a-safe-b) + var(--bulk-h, 52px) + 10px); }
+
+  /* ปุ่มเพิ่มงานบนแถบเครื่องมือเหลือแค่ + (ปุ่ม + บนแถบล่างก็เพิ่มเข้าโปรเจกต์นี้ได้) ปุ่ม "เลือก" กับค้นหาจะได้ไม่ล้นจอ */
+  .vtb-add .btn:first-child { font-size: 0; gap: 0; padding: 0 10px; }
+  .vtb .m2a-selbtn .m2a-selbtn-t { display: inline; }
+  .vtb .m2a-selbtn { gap: 5px; padding: 0 10px; }
+
+  /* ---- ซ่อนช่องติ๊กเลือกหลายงาน จนกว่าจะเข้าโหมดเลือก (กดค้าง / ปุ่ม "เลือก") ----
+   * ช่องติ๊กเล็ก ๆ ติดกับวงกลมทำเสร็จ คนกดพลาดไปทำงานเสร็จแทนการเลือก */
+  body:not(.m2a-sel) .selbox { display: none; }
+  body.m2a-sel .row, body.m2a-sel .tr, body.m2a-sel .card { -webkit-user-select: none; user-select: none; }
+
+  /* ---- แถบแก้หลายงาน: แผ่นเต็มความกว้างเหนือแถบล่าง ปุ่มเลื่อนแนวนอนได้ "ยกเลิก" อยู่ขวาสุดเสมอ ---- */
+  .bulkbar {
+    left: 0; right: 0; transform: none; max-width: none; width: auto;
+    bottom: var(--m2a-safe-b); padding: 8px 10px 8px 14px; gap: 8px;
+    flex-wrap: nowrap; border-radius: 14px 14px 0 0;
+    box-shadow: 0 -1px 0 var(--line), 0 -4px 18px rgba(0, 0, 0, .18);   /* เส้นบนช่วยแยกแผ่นออกจากพื้นหลังในดาร์กโหมด */
+  }
+  body.m2a-bnav-on .bulkbar { bottom: calc(var(--m2a-bn-h) + var(--m2a-safe-b)); }
+  body.m2a-dw .bulkbar { display: none; }
+  .bulkbar .n { flex: none; white-space: nowrap; }
+  .bulkbar .bulk-acts {
+    display: flex; flex: 1 1 auto; min-width: 0; gap: 6px; overflow-x: auto; scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(to left, transparent, #000 22px); mask-image: linear-gradient(to left, transparent, #000 22px);
+    padding-right: 18px;
+  }
+  .bulkbar .bulk-acts::-webkit-scrollbar { display: none; }
+  .bulkbar .bulk-acts > * { flex: none; white-space: nowrap; }
+  .bulkbar button, .bulkbar select { display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 0 12px; border-radius: 18px; }
+  .bulkbar .bulk-x { flex: none; background: var(--sidebar-hl); color: var(--sidebar-on); font-weight: 600; }
+}
+
+/* ================= จอเล็ก: มือถือแนวตั้ง (≤ 700px) และมือถือแนวนอน (จอสัมผัสที่สูงไม่ถึง 500px) =================
+ * แนวนอนกว้าง 800px ขึ้นไปแต่ยังเป็นมือถือ — ตารางเดิมตัดชื่องานเหลือไม่กี่ตัวอักษรเหมือนกัน จึงใช้การ์ด/แผงเต็มจอชุดเดียวกัน
+ * (แถบนำทางล่างไม่ใช้ในแนวนอน เพราะความสูงจอเหลือน้อยมาก) */
+@media (max-width: 700px), (pointer: coarse) and (max-height: 500px) {
+  /* ---- แถบบน ---- */
+  .topbar { padding: max(8px, env(safe-area-inset-top, 0px)) 12px 0; }
+  .tb-row { gap: 6px; min-height: 44px; }
+  .tb-title { font-size: 17px; gap: 6px; }
+  .tb-title .emoji { font-size: 17px; }
+  /* ชื่อหน้า/ชื่อโปรเจกต์ได้ที่ที่เหลือทั้งหมด (เดิมช่องค้นหาแย่งจนชื่อโปรเจกต์เหลือ "P") */
+  .tb-row > .tb-title { flex: 1 1 auto; max-width: none; }
+  .tb-row > div:not(.search):not(.tb-spacer) { flex: 1 1 auto; min-width: 0; }
+  .tb-row > div > .tb-title { min-width: 0; }
+  .tb-title .nm { flex: 0 1 auto; min-width: 48px; }
+  .tb-spacer { display: none; }
+  .tb-row .search { margin-left: auto; }                       /* หน้าที่ไม่มีชื่อ (หน้าแรก) ปุ่มยังอยู่ขวา */
+  .tb-people { display: none; }
+  /* ป้ายสถานะโปรเจกต์เหลือจุดสี (ข้อความยังอยู่ให้โปรแกรมอ่านหน้าจอ) */
+  .tb-title .status-pill { font-size: 0; gap: 3px; padding: 0 6px; height: 28px; }
+  .tb-title .status-pill.empty i { width: 9px; height: 9px; }
+  .tb-row > .btn { flex: none; padding-left: 8px; padding-right: 8px; }
+  .tb-row > .btn-ghost { width: 38px; justify-content: center; }
+  .tb-tabs { margin-top: 4px; scrollbar-width: none; }
+  .tb-tabs::-webkit-scrollbar { display: none; }
+
+  /* ช่องค้นหา: หุบเป็นแว่นขยาย แตะแล้วกางเต็มแถว (#topbar.m2a-sopen) */
+  .tb-row .search {
+    flex: 0 0 38px; width: 38px; height: 38px; padding: 0; justify-content: center;
+    border-radius: 50%; background: transparent; border-color: transparent; cursor: pointer;
+  }
+  .tb-row .search > svg { width: 18px; height: 18px; flex-basis: 18px; color: var(--fg-soft); }
+  .tb-row .search input, .tb-row .search .search-adv { display: none; }
+  .topbar.m2a-sopen .tb-row > :not(.search):not(.menu-btn) { display: none; }
+  .topbar.m2a-sopen .tb-row .search {
+    flex: 1 1 auto; width: auto; height: 40px; padding: 0 4px 0 14px; justify-content: flex-start;
+    border-radius: 20px; background: var(--bg-sunk); border-color: var(--line); cursor: auto;
+  }
+  .topbar.m2a-sopen .tb-row .search > svg { width: 15px; height: 15px; flex-basis: 15px; color: var(--fg-faint); }
+  .topbar.m2a-sopen .search input { display: block; min-width: 0; }
+  .topbar.m2a-sopen .search input::-webkit-search-cancel-button { -webkit-appearance: none; display: none; }   /* มีปุ่ม × ของเราแล้ว */
+  .topbar.m2a-sopen .search .search-x {
+    display: grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 50%; color: var(--fg-soft);
+  }
+
+  /* ---- แถบเครื่องมือของมุมมอง ---- */
+  .vtb { gap: 4px; padding: 6px 12px; scrollbar-width: none; }
+
+  /* ---- รายการในโปรเจกต์: ตารางกลายเป็นการ์ดสองบรรทัด ----
+   * บรรทัดแรก = วงกลมทำเสร็จ + ชื่องานเต็มความกว้าง (ตัดที่ 2 บรรทัด)
+   * บรรทัดสอง = กำหนดส่ง ผู้รับผิดชอบ และไอคอนเล็ก (งานย่อย ไฟล์แนบ ถูกบล็อก) ส่วนคอลัมน์อื่นซ่อน
+   * เดิมคอลัมน์ผู้รับผิดชอบ/วันที่กินที่จนชื่องานเหลือราว 10 ตัวอักษร */
+  .tbl-wrap { overflow-x: hidden; }
+  .tbl { width: 100%; min-width: 0; }
+  .tbl-head { display: none; }
+  .tbl .tr {
+    display: flex; flex-wrap: wrap; align-items: center; column-gap: 9px; row-gap: 3px;
+    padding: 9px 12px 10px 14px; min-height: 48px;
+  }
+  .tbl .tr > .td { display: none; }
+  .tbl .tr > .td-name { display: contents; }
+  .tbl .tr .nm {
+    flex: 1 1 0; min-width: 0; font-size: 14.5px; line-height: 1.4; white-space: normal;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere;
+  }
+  .tbl .tr::after { content: ''; order: 1; flex: 0 0 100%; height: 0; }            /* ตัดขึ้นบรรทัดสอง */
+  .tbl .tr::before { content: ''; order: 2; flex: 0 0 var(--m2a-ind, 26px); }        /* ย่อหน้าให้ตรงกับชื่อ */
+  .tbl .tr .cell-mini, .tbl .tr .appr-ic { order: 3; }
+  .tbl .tr > .td[data-cell="due"], .tbl .tr > .td[data-cell="assignee"] {
+    display: flex; order: 3; min-height: 0; padding: 0; gap: 5px; border: 0; background: none; box-shadow: none; overflow: visible;
+  }
+  .tbl .tr > .td[data-cell="due"] { order: 3; }
+  .tbl .tr > .td[data-cell="assignee"] { order: 4; margin-left: auto; }
+  .tbl .tr > .td .cell-empty { display: none; }
+  .tbl .tr .cell-txt { font-size: 12.5px; }
+  .tbl .tr .sub-caret-sp { display: none; }
+  .tbl .tr.sub { padding-left: calc(14px + var(--depth, 1) * 16px); }
+  .tbl .tr.tbl-foot { display: none; }
+  body.rownum .sec-body .td-name::before { display: none; }
+  .tbl-sec { width: auto; padding: 16px 12px 6px 36px; }
+  .tbl-sec .sec-acts { opacity: 1; margin-left: auto; }
+  .tbl-sec .sec-acts [data-act="move-section"], .tbl-sec .sec-acts [data-act="rename-section"] { display: none; }
+  .tbl-add { width: auto; padding: 2px 12px 8px; }
+
+  /* ---- แถวงาน (ค้นหา แท็ก งานของฉัน): ชื่อเต็มบรรทัดแรก ป้ายลงบรรทัดสอง (ไม่เกิน 2 แถว) ---- */
+  .list-wrap { padding-left: 10px; padding-right: 10px; }
+  .row { flex-wrap: wrap; column-gap: 10px; row-gap: 5px; padding: 10px 6px; }
+  .row .nm {
+    flex: 1 1 0; min-width: 0; white-space: normal; line-height: 1.4;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere;
+  }
+  .row .meta {
+    order: 2; flex: 0 0 100%; max-width: none; flex-wrap: wrap; justify-content: flex-start; align-items: center; gap: 5px;
+    padding-left: 34px; max-height: 50px; overflow: hidden;
+  }
+  .row .meta > :not(.avatar) { display: inline-flex; align-items: center; height: 22px; padding-top: 0; padding-bottom: 0; }
+  .row .meta.m2a-cut { -webkit-mask-image: none; mask-image: none; }
+  /* ผู้รับผิดชอบกับกำหนดส่งขึ้นหน้าแถวสอง — ป้ายที่ล้นเกินสองแถวถูกตัด แต่สองอย่างนี้ต้องเห็นเสมอ */
+  .row .meta .avatar { order: -2; }
+  .row .meta .chip-due { order: -1; }
+  .mt-list .row .meta { padding-left: 38px; }
+  .mt-list .row .meta .avatar { display: none; }              /* งานของฉัน — ผู้รับผิดชอบคือเราทุกแถว */
+  .mt-list .row .nm { flex: 1 1 0; }
+  .row-more { opacity: 1; width: 34px; height: 34px; margin: -6px -4px -6px 0; }
+
+  /* ---- กล่องข้อความ: ชื่องานในแถวอ่านได้ครบ (เดิมถูกตัดที่ 180px) ---- */
+  .inbox-wrap { padding-left: 10px; padding-right: 10px; }
+  .nrow { flex-wrap: wrap; }
+  .nrow .acts { opacity: 1; width: 100%; justify-content: flex-end; }
+  .inbox-wrap.dense .nrow .acts { width: auto; }
+  .nrow .sub { flex-wrap: wrap; row-gap: 2px; }
+  .nsub-where { max-width: 100%; white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+
+  /* ---- แผงงานเต็มจอ ---- */
+  .drawer, .drawer.wide { width: 100vw; max-width: none; border-left: 0; }
+  .dw-head { padding: max(6px, env(safe-area-inset-top, 0px)) 6px 6px 2px; gap: 2px; }
+  .dw-back {
+    display: inline-flex; align-items: center; gap: 2px; flex: none; height: 44px; padding: 0 10px 0 4px;
+    border-radius: var(--radius); color: var(--accent); font-size: 15px; font-weight: 600;
+  }
+  .dw-back svg { transform: scaleX(-1); }
+  .dw-back:active { background: var(--bg-sunk); }
+  .dw-done-full { display: none; }
+  .dw-done-short { display: inline; }
+  .dw-done-btn { height: 36px; padding: 0 12px; font-size: 13.5px; }
+  .dw-wide-btn, .dw-head .dw-x { display: none; }
+  .dw-body { padding: 14px 16px 24px; }
+  .dw-foot { padding-bottom: calc(12px + var(--m2a-safe-b)); }
+  .fld > label { flex-basis: 88px; }
+
+  /* ---- ปฏิทิน: "+1 อื่น ๆ" เหลือ "+1" ไม่ตัดบรรทัด ---- */
+  .calx-more-t { display: none; }
+  .calx-more { padding: 0 4px; white-space: nowrap; }
+
+  /* ---- Gantt: คอลัมน์ชื่องานติดซ้าย กว้างไม่เกินครึ่งจอ เหลือแค่ชื่องาน (วันที่ดูจากแท่งได้) ---- */
+  .g-left { max-width: 46vw; }
+  .g-lhead, .g-lrow { grid-template-columns: 20px minmax(0, 1fr); }
+  .g-lhead > :nth-child(n+3), .g-lrow > :nth-child(n+3):not(.g-addbtn) { display: none; }
+  .g-lrow .g-c-name .avatar { display: none; }
+}
+
+/* มือถือจอแคบ (≤ 420px): อีโมจิหน้าชื่อโปรเจกต์บนแถบบนเป็นของตกแต่ง — ยกที่ให้ชื่อโปรเจกต์อ่านได้ครบขึ้น */
+@media (max-width: 420px) {
+  .tb-row > div > .tb-title > .emoji { display: none; }
+}
+
+/* Gantt: ฝั่งชื่องานต้องติดซ้ายตอนเลื่อนดูวันถัดไป (ตั้งใจไว้ตั้งแต่แรก แต่กฎ position: relative
+ * ของที่จับปรับความกว้างที่มาทีหลังทับ sticky ไป) — sticky ก็เป็นกรอบอ้างอิงให้ที่จับได้เหมือนเดิม */
+.g-left { position: sticky; }
+
+/* ================= จอสัมผัส ================= */
+@media (hover: none) {
+  .row-more { opacity: 1; }
+  .bulkbar .m2a-touch-only { display: inline-flex; }
+  /* แท็บเลื่อนด้วยนิ้ว ไม่ต้องมีแถบเลื่อนเทาหนา ๆ ใต้แท็บ (เงาจางที่ขอบบอกว่ายังเลื่อนได้) */
+  .tb-tabs, .prj-tabs { scrollbar-width: none; }
+  .tb-tabs::-webkit-scrollbar, .prj-tabs::-webkit-scrollbar { display: none; }
+  /* คำใบ้คีย์ลัด (Tab+O, Ctrl+Z, Shift+Tab+F …) ไม่มีความหมายบนจอที่ไม่มีแป้นพิมพ์ (placeholder ตัดใน mobile.js) */
+  kbd, .toast-kbd { display: none !important; }
+  /* ปุ่มไอคอนบนหัวแผงงานและท้ายแถวกล่องข้อความกดโดนนิ้วได้ (หัวแผง 44px) */
+  .dw-head .dw-ic { min-width: 44px; height: 44px; justify-content: center; padding: 0 8px; }
+  .nrow .acts .btn { min-width: 40px; height: 36px; justify-content: center; }
+}
+@media (hover: none) and (pointer: coarse) {
+  /* พื้นที่แตะของปุ่มเล็กในแถวขยายออกเป็นราว 44px โดยตัวปุ่มที่เห็นยังเท่าเดิม (แถวไม่สูงขึ้น) */
+  .check, .selbox, .sec-caret, .sec-tog, .sub-caret { position: relative; }
+  .check::after, .sec-caret::after, .sec-tog::after, .sub-caret::after { content: ''; position: absolute; inset: -10px; }
+  .selbox::after { content: ''; position: absolute; inset: -9px -6px; }
+  .tbl .tr .check, .row .check { width: 26px; height: 26px; flex-basis: 26px; }
+  /* ช่องพิมพ์ตัวอักษร 16px ขึ้นไป — ต่ำกว่านี้ iPhone ซูมหน้าทั้งหน้าเข้าไปทุกครั้งที่แตะช่อง แล้วไม่ซูมกลับ */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+  select, textarea, .rte, [contenteditable="true"] { font-size: 16px; }
+  /* กดค้างที่แถวงาน = เลือก/ลาก ไม่ใช่เมนูคัดลอกข้อความของระบบ */
+  .row, .tr, .card { -webkit-touch-callout: none; }
+}
+
+/* ---------- Sprint 2C ---------- */
+/* มุมมองผู้บริหาร: การ์ดภาพรวมผู้บริหาร ถาม/ตอบใต้รายงานสถานะ หน้ากระดาษสำหรับพิมพ์ พอร์ตโฟลิโอแบบการ์ดบนจอแคบ */
+
+/* ปุ่มบนการ์ดตอนปรับแต่งหน้าแรกเพิ่ม "ย้ายไปบนสุด" อีกหนึ่งปุ่ม หัวการ์ดเว้นที่ให้ */
+@media (min-width: 1101px) { .hcard.hw-edit .hcard-head { padding-right: 190px; } }
+@media (max-width: 1100px) { .hcard.hw-edit .hcard-head { padding-right: 14px; padding-top: 34px; } }
+.hcard.hw-edit .hcard-head > .btn { display: none; }      /* ตอนจัดการ์ด ปุ่ม "ดูทั้งหมด" ไม่จำเป็นและเบียดชื่อการ์ดจนขึ้นสองบรรทัด */
+
+/* --- การ์ดภาพรวมผู้บริหาร --- */
+.xo { padding: 4px 6px 2px; display: flex; flex-direction: column; gap: 12px; }
+.xo-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.xo-kpi { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-raise); color: var(--fg); min-width: 0; }
+.xo-kpi b { font-size: 24px; line-height: 1.1; font-weight: 700; letter-spacing: -.02em; }
+.xo-kpi span { font-size: 12.5px; color: var(--fg-soft); }
+.xo-kpi em { position: absolute; top: 9px; right: 9px; color: var(--fg-faint); }
+button.xo-kpi { cursor: pointer; }
+button.xo-kpi:hover { border-color: var(--line-strong); background: var(--bg-sunk); }
+.xo-kpi.bad { border-color: var(--danger); background: var(--danger-bg); }
+.xo-kpi.bad b, .xo-kpi.bad span, .xo-kpi.bad em { color: var(--danger); }
+.xo-kpi.warn { border-color: var(--warn); background: var(--warn-bg); }
+.xo-kpi.warn b, .xo-kpi.warn span { color: var(--warn-fg); }
+.xo-kpi.ok b { color: var(--ok); }
+.xo-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px 14px; }
+.xo-sec { min-width: 0; }
+.xo-sec h4 { display: flex; align-items: center; gap: 6px; margin: 0 0 4px; padding: 0 4px; font-size: 12.5px; font-weight: 700;
+  color: var(--fg-soft); }
+.xo-sec h4 span { margin-left: auto; font-weight: 600; color: var(--fg-faint); }
+.xo-row { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; padding: 7px 6px; border-radius: var(--radius);
+  border-bottom: 1px solid var(--line-soft); color: var(--fg); min-width: 0; }
+.xo-row:hover { background: var(--bg-sunk); }
+.xo-row .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.xo-row b { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xo-row em { font-style: normal; font-size: 12px; color: var(--fg-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xo-row em.stale, .xo-row em .stale { color: var(--warn-fg); }
+.xo-row .chip { flex: none; }
+.xo-bad { color: var(--danger); font-weight: 600; }
+.chip.xo-over { background: var(--warn-bg); color: var(--warn-fg); font-weight: 600; }
+.xo-none { display: flex; align-items: center; gap: 6px; padding: 8px 6px; font-size: 12.5px; color: var(--fg-faint); }
+.xo-none svg { color: var(--ok); flex: none; }
+.xo-more { display: inline-flex; align-items: center; gap: 4px; margin: 4px 6px 0; font-size: 12.5px; color: var(--accent); }
+.xo-more:hover { text-decoration: underline; }
+.xo-foot { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--fg-faint); padding: 0 4px; }
+@media (max-width: 620px) {
+  .xo-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .xo-kpi b { font-size: 21px; }
+  .xo-row .status-pill { max-width: 96px; overflow: hidden; }
+}
+
+/* --- กิจกรรมล่าสุด (รวมบรรทัด + เฉพาะสถานะและการตัดสินใจ) --- */
+.status-pill.sm { height: 20px; padding: 0 7px; font-size: 11.5px; gap: 5px; vertical-align: middle; }
+.status-pill.sm i { width: 6px; height: 6px; }
+.hact-dec { display: inline-flex; vertical-align: -2px; margin-right: 4px; color: var(--ok); }
+.hact-more { font-size: 12px; color: var(--fg-faint); white-space: nowrap; }
+
+/* --- อะไรเปลี่ยนจากรอบก่อน --- */
+.stc { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin-top: 8px; font-size: 12.5px; color: var(--fg-soft); }
+.stc-k { font-size: 11.5px; font-weight: 600; color: var(--fg-faint); }
+.stc-tr { display: inline-flex; align-items: center; gap: 5px; }
+.stc-arrow { color: var(--fg-faint); }
+.stc-same { color: var(--fg-soft); }
+.stc-n { font-weight: 600; color: var(--fg-soft); }
+.stc-n.good { color: var(--ok); }
+.stc-n.bad { color: var(--danger); }
+.ovw-logrow .stc { margin-top: 4px; }
+
+/* --- ถาม/ตอบใต้รายงานสถานะ --- */
+.sthr { margin-top: 10px; border-top: 1px solid var(--line-soft); padding-top: 6px; }
+.sthr-tog { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px; margin-left: -6px; border-radius: 6px;
+  font-size: 12.5px; color: var(--fg-soft); }
+.sthr-tog:hover { background: var(--bg-sunk); color: var(--fg); }
+.sthr-tog em { font-style: normal; color: var(--fg-faint); }
+.sthr-ppl { display: inline-flex; }
+.sthr-ppl .avatar { width: 20px; height: 20px; font-size: 9px; margin-left: -4px; box-shadow: 0 0 0 2px var(--bg-raise); }
+.sthr-list .msg-reply .grow { min-width: 0; font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
+.sthr-box { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.sthr-box .rte-msg { min-height: 38px; }
+.sthr-hint { font-size: 11.5px; color: var(--fg-faint); }
+
+/* --- ภาพรวมโปรเจกต์: โหมดอ่านก่อน --- */
+.ovw-card h3 .ovw-edit-btn, .ovw-card h3 .x2c-print-link { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; flex: none; }
+.ovw-acts .ovw-edit-btn { margin-left: 4px; }
+.check.ro { cursor: default; }
+.check.ro:hover { border-color: var(--line-strong); color: transparent; }
+.check.ro.on:hover { border-color: var(--ok); color: #fff; }
+
+/* --- พอร์ตโฟลิโอ: ต้องจับตาก่อนกราฟ + การ์ดบนจอแคบ --- */
+.pf-watch { margin-top: 16px; }
+.pf-watch h3 { display: flex; align-items: center; gap: 6px; color: var(--warn-fg); }
+.pfx-cards { display: none; }
+@media (max-width: 900px) {
+  .pfx-scroll { display: none; }
+  .pfx-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+}
+.pfx-card { display: flex; flex-direction: column; gap: 8px; width: 100%; text-align: left; padding: 12px 14px;
+  border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--bg-raise); color: var(--fg); min-width: 0; }
+.pfx-card:hover { border-color: var(--line-strong); box-shadow: var(--shadow); }
+.pfx-card-top { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.pfx-card-top b { font-size: 14.5px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pfx-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 12.5px; color: var(--fg-soft); }
+.pfx-card-ok { display: inline-flex; align-items: center; gap: 4px; color: var(--ok); }
+.pfx-card-prog { display: flex; align-items: center; gap: 10px; }
+.pfx-card-prog .pf-bar { flex: 1; height: 8px; }
+.pfx-card-pct { font-size: 12.5px; font-weight: 600; color: var(--fg); white-space: nowrap; }
+
+/* --- รายงาน: เจาะดูวิดเจ็ต --- */
+.rp-click-row b.done { text-decoration: line-through; color: var(--fg-faint); }
+.rp-click-row .chip { flex: none; }
+
+/* --- ตั้งค่า: หน้าที่เปิดเมื่อเข้าแอป --- */
+.x2c-land { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.x2c-land label { font-size: 12.5px; color: var(--fg-soft); }
+.x2c-land .opt-select { max-width: 360px; }
+.x2c-land .opt-note { margin: 0; }
+
+/* --- หน้ากระดาษสำหรับพิมพ์ / บันทึก PDF ---
+ * บนจอซ่อนไว้ ตอนพิมพ์ (body.printing) ซ่อนทุกอย่างที่เหลือ
+ * body.print-preview แสดงหน้ากระดาษบนจอแบบเดียวกับที่จะพิมพ์ ไว้ตรวจหน้าตาโดยไม่ต้องเปิดกล่องพิมพ์
+ * สีเป็นชุดสว่างเสมอแม้ผู้ใช้ใช้ธีมมืด (ประกาศ token ทับที่ตัวหน้ากระดาษ) */
+.print-sheet {
+  display: none;
+  --bg: #ffffff; --bg-sunk: #f6f7f8; --bg-raise: #ffffff; --bg-inset: #eef0f2;
+  --fg: #1e1f21; --fg-soft: #55575a; --fg-faint: #85888e;
+  --line: #dcdcde; --line-soft: #ececed; --line-strong: #c8c8cb;
+  --accent: #B32240; --accent-dk: #8F1A33; --accent-bg: #FBEDF0;
+  --danger: #C2361F; --danger-bg: #FDECE8; --warn: #f5a623; --warn-bg: #fff4e0; --warn-fg: #a0620a;
+  --ok: #1f9e87; --ok-bg: #e4f7f3;
+  --chart-1: #796eff; --chart-2: #14aaf5; --chart-3: #37c5ab; --chart-4: #f5a623;
+  --chart-5: #fd612c; --chart-6: #aa62e3; --chart-7: #e362e3; --chart-8: #6d6e6f;
+  color-scheme: light; background: #fff; color: var(--fg); font-size: 10.5pt; line-height: 1.5;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.ps-doc { max-width: 186mm; margin: 0 auto; }
+.ps-head { border-bottom: 2px solid var(--accent); padding-bottom: 8px; margin-bottom: 12px; }
+.ps-brand { font-size: 9pt; font-weight: 700; color: var(--accent); letter-spacing: .08em; text-transform: uppercase; }
+.ps-head h1 { margin: 2px 0 2px; font-size: 18pt; line-height: 1.25; }
+.ps-sub { font-size: 10pt; color: var(--fg-soft); }
+.ps-meta { font-size: 8.5pt; color: var(--fg-faint); margin-top: 2px; }
+.print-sheet section { margin: 0 0 14px; }
+.print-sheet h2 { font-size: 12pt; margin: 0 0 6px; padding-bottom: 3px; border-bottom: 1px solid var(--line); break-after: avoid; page-break-after: avoid; }
+.ps-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.ps-kpi { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+.ps-kpi b { display: block; font-size: 15pt; line-height: 1.2; }
+.ps-kpi span { font-size: 8.5pt; color: var(--fg-soft); }
+.ps-kpi.bad b { color: var(--danger); }
+.ps-kpi.warn b { color: var(--warn-fg); }
+.ps-status { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+.ps-status-h { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.ps-status-h em { font-style: normal; font-size: 9pt; color: var(--fg-faint); margin-left: auto; }
+.ps-blk { margin-top: 6px; }
+.ps-blk h4 { margin: 0 0 2px; font-size: 9pt; text-transform: uppercase; letter-spacing: .04em; color: var(--fg-soft); }
+.ps-blk p, .ps-blk ul, .ps-blk ol { margin: 0 0 4px; }
+.ps-reply { font-size: 9.5pt; padding: 2px 0; }
+.ps-none { color: var(--fg-faint); font-size: 9.5pt; margin: 2px 0; }
+.ps-tbl { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+.ps-tbl th { text-align: left; font-size: 8.5pt; font-weight: 700; color: var(--fg-soft); border-bottom: 1.5px solid var(--line-strong); padding: 4px 6px; }
+.ps-tbl td { border-bottom: 1px solid var(--line-soft); padding: 4px 6px; vertical-align: top; }
+.ps-tbl thead { display: table-header-group; }
+.ps-tbl tr { break-inside: avoid; page-break-inside: avoid; }
+.ps-tbl .r { text-align: right; white-space: nowrap; }
+.print-sheet .bad { color: var(--danger); font-weight: 600; }
+.ps-barcell { white-space: nowrap; }
+.ps-bar { display: inline-block; width: 90px; height: 7px; border-radius: 4px; background: var(--line); overflow: hidden; vertical-align: middle; }
+.ps-bar i { display: block; height: 100%; background: var(--ok); }
+.ps-watch { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 5px 0; border-bottom: 1px solid var(--line-soft); break-inside: avoid; }
+.ps-watch-t { flex-basis: 100%; font-size: 9.5pt; color: var(--fg-soft); }
+.print-sheet .status-pill { height: 20px; font-size: 9pt; padding: 0 7px; }
+.ps-charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+.ps-chart { break-inside: avoid; page-break-inside: avoid; min-width: 0; margin: 0; }
+.ps-chart.full { grid-column: 1 / -1; }
+.ps-chart svg { width: 100%; height: auto; display: block; }
+@media print {
+  @page { size: A4; margin: 12mm; }
+  body.printing > *:not(.print-sheet) { display: none !important; }
+  body.printing .print-sheet { display: block !important; }
+  body.printing .ps-doc { max-width: none; }
+}
+body.print-preview { background: #d9dadd !important; overflow: auto !important; height: auto !important; }
+body.print-preview > *:not(.print-sheet) { display: none !important; }
+body.print-preview .print-sheet { display: block; width: 210mm; min-height: 297mm; margin: 16px auto; padding: 12mm; box-sizing: border-box;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, .18); }
+@media (max-width: 620px) {
+  /* แถบบนของมือถือแน่นอยู่แล้ว การพิมพ์ทำจากคอมพิวเตอร์ ซ่อนปุ่มพิมพ์บนจอเล็ก */
+  .x2c-print-btn { display: none; }
+  /* ต้องจับตา: ชื่อโปรเจกต์เต็มบรรทัด สถานะและงานเลยกำหนดลงบรรทัดถัดไป */
+  .pf-watch .pf-risk { flex-wrap: wrap; row-gap: 4px; }
+  .pf-watch .pf-risk .grow { flex-basis: calc(100% - 40px); }
+  .pf-watch .pf-risk .grow + * { margin-left: 30px; }
+}
+
+/* ---------- Sprint 2B ---------- */
+/* ตัวเลขบนแท็บ "รออนุมัติจากฉัน" และหัววิดเจ็ตหน้าแรก */
+.tab-n { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 2px;
+  border-radius: 9px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; line-height: 1; }
+.hcard-head .tab-n { margin-left: -2px; }
+/* แถวรวมกลุ่ม: ปุ่ม +N กางดูทีละรายการ แถวลูกเยื้องเข้า */
+.nrow-more { display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; padding: 0 6px; height: 19px;
+  border-radius: 10px; background: var(--bg-inset); color: var(--fg-soft); font-size: 11.5px; font-weight: 700;
+  vertical-align: 1px; cursor: pointer; }
+.nrow-more:hover, .nrow-more.on { background: var(--accent-bg); color: var(--accent); }
+/* แบบกะทัดรัดตัดข้อความยาวด้วย … แต่ปุ่ม +N ต้องเห็นเสมอ */
+.inbox-wrap.dense .nrow .txt { display: flex; align-items: center; }
+.inbox-wrap.dense .nrow .ntxt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inbox-wrap.dense .nrow-more { flex: none; }
+.nrow.nrow-sub { padding-left: 30px; background: var(--bg-sunk); }
+.nrow.nrow-sub.unread { background: var(--accent-bg); }
+.inbox-wrap.dense .nrow.nrow-sub { padding-left: 24px; }
+/* เนื้อความเห็น 1–2 บรรทัดแรก (ทั้งแบบละเอียดและกะทัดรัด) */
+.nrow-quote { margin-top: 4px; padding: 3px 0 3px 9px; border-left: 2px solid var(--line-strong);
+  font-size: 13px; line-height: 1.45; color: var(--fg-soft); white-space: pre-line; word-break: break-word;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.nrow-quote.one { -webkit-line-clamp: 1; line-clamp: 1; }
+.nrow-quote.gone { font-style: italic; color: var(--fg-faint); }
+.inbox-wrap.dense .nrow-quote { margin-top: 2px; padding-top: 1px; padding-bottom: 1px; font-size: 12.5px; }
+.nrow-status { display: flex; align-items: center; gap: 7px; margin-top: 4px; min-width: 0; font-size: 13px; color: var(--fg-soft); }
+.nrow-status .approval-pill { flex: none; }
+.nrow-status-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nrow-snz { display: flex; align-items: center; gap: 5px; color: var(--warn-fg); }
+.nrow .nact-snz.on { color: var(--warn-fg); }
+.nrow-apv { margin-top: 7px; }
+/* แถบ "เลื่อนเตือนไว้ n รายการ" */
+.inbox-snz { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; padding: 8px 12px; margin: 0 0 8px;
+  border-radius: var(--radius); background: var(--bg-sunk); color: var(--fg-soft); font-size: 13px; }
+.inbox-snz .grow { flex: 1; min-width: 160px; }
+.pop .pop-hint { flex: none; font-size: 12px; color: var(--fg-faint); }
+/* หน้าว่างที่บอกว่าทำอะไรต่อได้ */
+.inbox-empty { padding: 48px 20px; }
+.inbox-empty-t { font-size: 14.5px; color: var(--fg-soft); font-weight: 600; }
+.inbox-empty-s { max-width: 420px; margin: 6px auto 0; font-size: 13px; line-height: 1.5; }
+.inbox-empty-acts { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+/* ศูนย์อนุมัติ — แถวงาน + ปุ่มอนุมัติ/ขอแก้ไข/ปฏิเสธ */
+.apv-note { display: flex; align-items: center; gap: 7px; margin: 2px 0 10px; font-size: 13px; color: var(--fg-faint); }
+.apv-list { border-top: 1px solid var(--line-soft); }
+.apv-row { display: flex; align-items: flex-start; gap: 10px; padding: 11px 8px; border-bottom: 1px solid var(--line-soft);
+  cursor: pointer; }
+.apv-row:hover { background: var(--bg-sunk); }
+.apv-row.compact { padding: 8px 8px; border-bottom-color: transparent; border-radius: var(--radius); }
+.apv-av { flex: none; margin-top: 1px; }
+.apv-body { flex: 1; min-width: 0; }
+.apv-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.apv-sub { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-top: 2px; font-size: 12px; color: var(--fg-faint); }
+.apv-sub .hchip { max-width: 150px; }
+.apv-acts { display: inline-flex; flex: none; flex-wrap: wrap; gap: 6px; align-items: center; }
+.apv-acts .btn { white-space: nowrap; }
+.apv-acts .apv-no:hover { color: var(--danger); background: var(--danger-bg); }
+.apv-row.compact .apv-acts .btn-sm { height: 26px; padding: 0 8px; font-size: 12.5px; }
+.hcard .apv-row.compact .apv-acts { margin-top: 1px; }
+.hcard.half .apv-row.compact { flex-wrap: wrap; }
+.hcard.half .apv-row.compact .apv-acts { width: 100%; padding-left: 36px; }
+/* ปุ่มติดตามบนหัวโปรเจกต์/พอร์ตโฟลิโอ */
+.tb-follow { flex: none; }
+.tb-follow.on { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
+.tb-follow-n { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+  background: var(--bg-inset); color: var(--fg-soft); font-size: 11px; font-weight: 700; }
+.tb-follow.on .tb-follow-n { background: var(--accent); color: #fff; }
+@media (max-width: 620px) {
+  /* หัวโปรเจกต์บนมือถือเต็มอยู่แล้ว (ชื่อ ดาว สถานะ ค้นหา) — ติดตามจากเมนู ⋯ แทน */
+  .tb-follow { display: none; }
+  .apv-row { flex-wrap: wrap; }
+  .apv-row .apv-acts { width: 100%; padding-left: 36px; }
+  .nrow.nrow-sub { padding-left: 18px; }
+  .nrow-apv .apv-acts { width: 100%; }
+  /* แบบกะทัดรัดบนจอแคบ: ข้อความเต็มบรรทัด เวลากับปุ่มลงบรรทัดถัดไป (ปุ่มเพิ่มเป็นห้าปุ่มแล้ว ข้อความเหลือไม่กี่ตัวอักษร) */
+  .inbox-wrap.dense .nrow .body { flex: 1 1 calc(100% - 24px); }
+  .inbox-wrap.dense .nrow .nrow-when { margin-left: 18px; align-self: center; }
+  .inbox-wrap.dense .nrow .acts { margin-left: auto; }
+  .inbox-tabs { overflow-x: auto; scrollbar-width: none; }
+  .inbox-tabs::-webkit-scrollbar { display: none; }
+}

@@ -21,7 +21,8 @@
     openTaskId: null,
     calOffset: 0,
     /* กล่องข้อความ — แท็บและตัวกรองอยู่แค่ในหน้าจอ (การเรียงกับความหนาแน่นจำไว้ใน db.personal) */
-    inbox: { tab: 'activity', f: {} },
+    /* Sprint 2B — open: งานที่กางรายการรวมกลุ่มไว้ (taskId -> true)  snoozed: กำลังดูรายการที่เลื่อนเตือนไว้ */
+    inbox: { tab: 'activity', f: {}, open: {}, snoozed: false },
     /* งานของฉัน — เซกชันที่ยุบไว้ และวันที่ปฏิทินกำลังแสดง (มุมมอง/ตัวกรองจำไว้ใน db.personal) */
     mt: { collapsed: {}, calAnchor: null },
     home: { mine: 'upcoming', assigned: 'week', allProjects: false, edit: false },
@@ -2228,6 +2229,9 @@
     }
     h += '<div class="pop-sep"></div>';
     if (canStruct) h += item('update-status', 'flag', L('อัปเดตสถานะโปรเจกต์'));
+    /* Sprint 2B — ติดตาม/เลิกติดตามจากเมนูด้วย (จอแคบซ่อนปุ่มบนหัวโปรเจกต์ไว้ ไม่ให้เบียดชื่อกับสถานะ) */
+    h += item('follow-toggle', 'bell', S.projFollowing(projectId) ? L('เลิกติดตามโปรเจกต์') : L('ติดตามโปรเจกต์'),
+      ' data-kind="project"');
     h += item('proj-notify-menu', 'bell', L('การแจ้งเตือนของโปรเจกต์นี้'));
     h += item('copy-project-link', 'link', L('คัดลอกลิงก์โปรเจกต์'));
     if (canStruct) {
@@ -2281,6 +2285,9 @@
     h += '<button data-act="pf-add" data-pf="' + R.esc(pfId) + '">' + I('plus', 14) +
       '<span class="grow">' + L('เพิ่มโปรเจกต์เข้าพอร์ต') + '</span></button>';
     h += item('pf-status', 'flag', L('อัปเดตสถานะ'));
+    /* Sprint 2B — ติดตามพอร์ตโฟลิโอ (จอแคบใช้ทางนี้แทนปุ่มบนหัว) */
+    h += '<button data-act="follow-toggle" data-kind="portfolio"' + d + '>' + I('bell', 14) + '<span class="grow">' +
+      (S.pfFollowing(pfId) ? L('เลิกติดตามพอร์ตโฟลิโอ') : L('ติดตามพอร์ตโฟลิโอ')) + '</span></button>';
     h += '<div class="pop-sep"></div>';
     h += '<button class="danger" data-act="pf-delete"' + d + '>' + I('trash', 14) +
       '<span class="grow">' + L('ลบพอร์ตโฟลิโอ') + '</span></button>';
@@ -2693,6 +2700,8 @@
       (!canW ? '' : t.parentId
         ? item('promote-task', 'arrowUp', L('ย้ายออกเป็นงานหลัก'))
         : item('make-subtask', 'subtask', L('แปลงเป็นงานย่อยของ…'))) +
+      /* Sprint 2A — ย้ายคอลัมน์ในโปรเจกต์/เซกชันในงานของฉันได้โดยไม่ต้องลาก (จอสัมผัส) — mobile.js */
+      (global.OrbitMobile && global.OrbitMobile.canMoveSec(taskId) ? item('m2a-move-sec', 'grid', L('ย้ายไปเซกชัน…')) : '') +
       (t.recur && canW ? item('stop-recur', 'repeat', L('หยุดทำซ้ำ')) : '') +
       (canW ? item('save-template', 'star', L('บันทึกเป็นเทมเพลต')) : '') +
       (!t.parentId && canW ? item('to-project', 'grid', L('แปลงเป็นโปรเจกต์…')) : '') +
@@ -2749,7 +2758,7 @@
   function inboxOpts() {
     var f = state.inbox.f || {};
     return { tab: state.inbox.tab, from: f.from, project: f.project, mention: f.mention,
-             toMe: f.toMe, byMe: f.byMe, unread: f.unread,
+             toMe: f.toMe, byMe: f.byMe, unread: f.unread, snoozed: !!state.inbox.snoozed,   // Sprint 2B
              sort: S.personalOf().inbox.sort === 'relevance' ? 'relevance' : 'new' };
   }
 
@@ -2804,6 +2813,10 @@
       h += '<div class="pop-note strong">' + R.esc(L('สถานะงาน')) + '</div>';
       h += opt('show', 'open', L('งานที่ยังไม่เสร็จ')) + opt('show', 'done', L('งานที่เสร็จแล้ว')) +
         opt('show', 'all', L('งานทั้งหมด'));
+      /* Sprint 2B — งานขออนุมัติที่รอฉันตัดสิน (กดซ้ำเพื่อเอาออก) */
+      var nApv = S.approvalsWaiting().length;
+      h += '<div class="pop-sep"></div><div class="pop-note strong">' + R.esc(L('การอนุมัติ')) + '</div>';
+      h += opt('appr', '1', L('รออนุมัติจากฉัน') + (nApv ? ' (' + nApv + ')' : ''));
       h += '<div class="pop-sep"></div><div class="pop-note strong">' + R.esc(L('กำหนดส่ง')) + '</div>';
       S.DUE_FILTERS.forEach(function (d) { h += opt('due', d.id, L(d.label)); });
       h += '<div class="pop-sep"></div><div class="pop-note strong">' + R.esc(L('โปรเจกต์')) + '</div>';
@@ -5157,6 +5170,18 @@
     var nid = ids[i], n = S.notification(nid);
     if (!n) return false;
     if (!S.isActive()) { denyToast(); return true; }
+    /* Sprint 2B — แถวที่รวมหลายรายการ: I เก็บทั้งกลุ่ม U อ่าน/ยังไม่อ่านทั้งกลุ่ม (เหมือนปุ่มบนแถว) */
+    var grpIds = rows[i].dataset.group ? rows[i].dataset.group.split(',') : null;
+    if (grpIds && !n.archived && (k === 'i' || k === 'u')) {
+      if (k === 'i') {
+        state.inbox.cur = ids[i + 1] || ids[i - 1] || null;
+        S.archiveNotifs(grpIds);
+        toast(L('เก็บ {n} รายการแล้ว', { n: grpIds.length }), L('ย้อนกลับ'), 'undo');
+      } else {
+        S.setNotifsRead(grpIds, grpIds.some(function (x) { var q = S.notification(x); return q && !q.read; }));
+      }
+      return true;
+    }
     if (k === 'f') {
       var bm = S.toggleBookmark(nid);
       toast(bm ? L('บุ๊กมาร์กไว้แล้ว ดูได้ที่แท็บบุ๊กมาร์ก') : L('เอาบุ๊กมาร์กออกแล้ว'));
@@ -5714,6 +5739,7 @@
       h += '<label class="opt-lbl">' + L('หน้าที่เปิดเมื่อเข้าแอป') + '</label>' +
         segmented('set-landing', [['home', L('หน้าแรก')], ['mytasks', L('งานของฉัน')],
                                   ['inbox', L('กล่องข้อความ')]], S.pref('landing'));
+      if (R.landingPicker) h += R.landingPicker(S.pref('landing'));    // Sprint 2C — หรือพอร์ตโฟลิโอ/รายงานที่เปิดดูทุกเช้า
       h += '<div class="opt-sep"></div>';
       h += setToggle('set-shortcuts', L('เปิดใช้คีย์ลัด'), !!S.pref('shortcuts'),
         L('กด Tab ค้างแล้วตามด้วยตัวอักษร เพื่อข้ามไปหน้าต่าง ๆ ปิดไว้ถ้าพิมพ์ไทยแล้วชนกัน'));
@@ -5785,8 +5811,8 @@
       h += '<p class="prj-note">' +
         L('เลือกว่าเรื่องไหนควรขึ้นในกล่องข้อความ ปิดเรื่องที่ไม่สำคัญออก กล่องข้อความจะได้ยังน่าอ่าน') + '</p>';
       S.NOTIFY_KINDS.forEach(function (k) {
-        var on = !me || !me.prefs || !me.prefs.notify || !(k.id in me.prefs.notify)
-          ? true : !!me.prefs.notify[k.id];
+        /* Sprint 2B — ค่าเริ่มต้นตามชนิด (บันทึกเวลาปิดไว้ก่อน) อ่านจากที่เดียวกับตอนส่งจริง */
+        var on = me ? S.wantsNotify(me.id, k.id) : k.def !== false;
         h += setToggle('set-notify', L(k.label), on, k.desc ? L(k.desc) : '',
           ' data-kind="' + k.id + '"');
       });
@@ -8322,6 +8348,9 @@
     put('write:task', ['ms-due']);
     put('comment', ['msg-reply', 'msg-reply-del', 'msg-join', 'msg-file', 'msg-file-pick', 'msg-file-del', 'post-message']);
     put('self', ['crit-toggle']);
+    /* Sprint 2B — เลื่อนเตือน ติดตามโปรเจกต์/พอร์ตโฟลิโอ เป็นของส่วนตัว
+     * ตัดสินอนุมัติจากกล่องข้อความ/หน้าแรก ใช้กติกาเดียวกับ set-approval (store.canApprove ตัดสินคนเดียว) */
+    put('self', ['notif-snooze', 'notif-snooze-set', 'notif-unsnooze', 'follow-toggle', 'apv-set']);
     put('write', ['bulk-chain', 'shift-apply', 'shift-only']);
     /* 3c ส่วนที่ 2 — หน้าเอกสาร (store ตรวจสิทธิ์ของหน้า: หน้าของโปรเจกต์ = แก้โปรเจกต์ได้ หน้าเดี่ยว = เจ้าของ/ทุกคน)
      * เวลา: ประมาณ = แก้งานได้ บันทึกเวลา/จับเวลา = แสดงความเห็นได้ ตรวจรูป/อ้างอิง = แก้งานได้ */
@@ -8481,7 +8510,7 @@
          'view-menu', 'toggle-view', 'add-menu', 'react-menu',
          'add-tag', 'tag-search', 'sub-dates', 'sub-assign',
          'sub-start', 'sub-due', 'comment-menu', 'dw-field-multi',
-         'mt-filter', 'mt-sort', 'mt-group', 'inbox-filter', 'inbox-sort', 'dnd-menu',
+         'mt-filter', 'mt-sort', 'mt-group', 'inbox-filter', 'inbox-sort', 'dnd-menu', 'notif-snooze',
          'sec-menu', 'foot-menu', 'tab-menu', 'col-menu', 'bulk-more', 'bulk-section', 'cell-status'].indexOf(el.dataset.act) < 0) {
       if (!e.target.closest || !e.target.closest('.pop')) closePops();
     }
@@ -8502,6 +8531,7 @@
     if (act3c(act, el, e)) return;                // 3c
     if (act3c2(act, el, e)) return;
     if (act4a(act, el, e)) return;                // 4a
+    if (act2b(act, el, e)) return;                // Sprint 2B — กล่องข้อความ ศูนย์อนุมัติ ติดตาม
     for (var xa = 0; xa < EXT.acts.length; xa++) if (EXT.acts[xa](act, el, e)) return;   // 4b
 
     switch (act) {
@@ -10298,12 +10328,24 @@
       /* --- inbox --- */
       case 'inbox-tab':
         state.inbox.tab = el.dataset.tab || 'activity';
+        state.inbox.snoozed = false;                       // Sprint 2B
+        /* Sprint 2B — ปุ่ม "ดูทั้งหมด" ของวิดเจ็ตรออนุมัติบนหน้าแรก พาเข้ากล่องข้อความที่แท็บนั้น */
+        if (el.dataset.go && state.route.type !== 'inbox') {
+          state.route = { type: 'inbox' }; clearSel(); renderAll(); break;
+        }
         renderViewBody();
         break;
       case 'open-notif': {
-        S.markRead(id);
+        /* Sprint 2B — แถวที่รวมหลายรายการของงานเดียวกัน อ่านทั้งกลุ่ม */
+        if (el.dataset.group) S.setNotifsRead(el.dataset.group.split(','), true);
+        else S.markRead(id);
         var tid = el.dataset.task;
-        if (tid && S.task(tid)) { openTask(tid); break; }
+        if (tid && S.task(tid)) {
+          openTask(tid);
+          /* Sprint 2B — ความเห็น/การพูดถึง พาไปที่ความเห็นนั้นแล้วไฮไลต์ (ตัวเดียวกับลิงก์ความเห็นของ Sprint 1A) */
+          if (el.dataset.story && state.openTaskId === tid) { focusStory(el.dataset.story); renderDrawer(); }
+          break;
+        }
         /* สรุปรายสัปดาห์ไม่ได้ชี้งานชิ้นเดียว พาไปหน้างานของฉัน */
         if (el.dataset.route === 'mytasks') {
           state.route = { type: 'mytasks' }; clearSel(); renderAll(); break;
@@ -10315,7 +10357,14 @@
         if (npid && S.project(npid)) goProject(npid, el.dataset.route === 'p-overview' ? 'overview' : 'messages');
         break;
       }
-      case 'archive-notif': e.stopPropagation(); S.archiveNotification(id); break;
+      case 'archive-notif':
+        e.stopPropagation();
+        /* Sprint 2B — แถวรวมกลุ่ม เก็บทั้งกลุ่ม ย้อนกลับได้ */
+        if (el.dataset.group) {
+          var ag = S.archiveNotifs(el.dataset.group.split(','));
+          if (ag) toast(L('เก็บ {n} รายการแล้ว', { n: ag }), L('ย้อนกลับ'), 'undo');
+        } else S.archiveNotification(id);
+        break;
       case 'unarchive-notif': e.stopPropagation(); S.unarchiveNotification(id); break;
       case 'notif-bookmark': {
         e.stopPropagation();
@@ -10325,6 +10374,12 @@
       }
       case 'notif-read': {
         e.stopPropagation();
+        if (el.dataset.group) {          // Sprint 2B — ทั้งกลุ่ม: มีอันไหนยังไม่อ่าน = ทำเป็นอ่านทั้งหมด
+          var gids = el.dataset.group.split(',');
+          var anyUnread = gids.some(function (x) { var q = S.notification(x); return q && !q.read; });
+          S.setNotifsRead(gids, anyUnread);
+          break;
+        }
         var nr = S.notification(id);
         if (nr) S.setNotifRead(id, !nr.read);
         break;
@@ -10333,9 +10388,17 @@
         e.stopPropagation();
         if (S.task(id)) openModal(followUpModal(id));
         break;
-      case 'inbox-read-all': S.markAllRead(S.db.currentUserId); break;
+      case 'inbox-read-all': {
+        /* Sprint 2B — ไม่ถาม แต่ย้อนกลับได้จากกล่องข้อความด้านล่าง (หรือ Ctrl+Z) */
+        var nra = S.markAllRead(S.db.currentUserId);
+        toast(nra ? L('ทำเป็นอ่านแล้ว {n} รายการ', { n: nra }) : L('อ่านครบทุกรายการแล้ว'),
+          nra ? L('ย้อนกลับ') : null, nra ? 'undo' : null);
+        break;
+      }
       case 'inbox-archive-all': {
         if (state.inbox.tab === 'archive') { toast(L('รายการในแท็บนี้เก็บไว้แล้ว')); break; }
+        /* Sprint 2B — แท็บรออนุมัติเป็นรายการงาน ไม่ใช่การแจ้งเตือน ไม่มีอะไรให้เก็บ */
+        if (state.inbox.tab === 'approvals') { toast(L('ไม่มีรายการให้เก็บ')); break; }
         /* เก็บเฉพาะที่เห็นอยู่ตามแท็บและตัวกรอง ไม่ใช่ทุกอย่างที่ซ่อนอยู่หลังตัวกรอง */
         var allIds = S.inboxList(null, inboxOpts()).map(function (x) { return x.id; });
         if (!allIds.length) { toast(L('ไม่มีรายการให้เก็บ')); break; }
@@ -10482,6 +10545,7 @@
         var mpatch = {};
         mpatch[mk] = mval;
         if (mk === 'sort') mpatch.dir = (mval === mv0.sort && mval !== 'manual' && mv0.dir === 'asc') ? 'desc' : 'asc';
+        if (mk === 'appr' && String(mv0.appr || '') === mval) mpatch.appr = '';      // Sprint 2B — กดซ้ำ = เอาออก
         S.mtSetView(mpatch);
         var mp2 = el.closest('.pop');
         if (mp2 && mp2.dataset.kind) mp2.innerHTML = mtPop(mp2.dataset.kind);
@@ -10490,7 +10554,7 @@
       case 'mt-filter-clear':
         e.stopPropagation();
         closePops();
-        S.mtSetView({ show: 'open', due: 'any', project: '' });
+        S.mtSetView({ show: 'open', due: 'any', project: '', appr: '' });
         break;
       case 'mt-sort-clear':
         e.stopPropagation();
@@ -12012,8 +12076,7 @@
       case 'set-notify': {
         var nk = el.dataset.kind;
         var meN = S.me();
-        var was = !meN.prefs || !meN.prefs.notify || !(nk in meN.prefs.notify)
-          ? true : !!meN.prefs.notify[nk];
+        var was = S.wantsNotify(meN.id, nk);           // Sprint 2B — ค่าเริ่มต้นตามชนิด
         S.setNotifyPref(nk, !was);
         openModal(settingsModal('notify'), true);
         break;
@@ -13729,6 +13792,107 @@
     e.returnValue = '';
   });
 
+  /* ---------- Sprint 2B — กล่องข้อความ ศูนย์อนุมัติ ติดตามโปรเจกต์ ----------
+   * รวมคำสั่งใหม่ของชิ้นงานนี้ไว้ที่เดียว (เรียกจากตัวจัดการคลิกหลักก่อน switch) */
+  function act2b(act, el, e) {
+    var id = el.dataset.id;
+    switch (act) {
+      case 'notif-group': {
+        /* แถวที่รวมหลายรายการของงานเดียวกัน — กาง/ยุบ (จำไว้ระหว่างเปิดหน้าอยู่ ไม่ลงข้อมูล) */
+        var tk = el.dataset.task;
+        if (state.inbox.open[tk]) delete state.inbox.open[tk];
+        else state.inbox.open[tk] = true;
+        renderViewBody();
+        return true;
+      }
+      case 'notif-snooze': {
+        if (popIsOpenFor(el)) { closePops(); return true; }
+        var ids = el.dataset.group || id;
+        var sh = '<div class="pop-note strong">' + R.esc(L('เตือนอีกครั้ง…')) + '</div>';
+        S.snoozeChoices().forEach(function (c) {
+          var d = new Date(c.at);
+          sh += '<button data-act="notif-snooze-set" data-ids="' + R.esc(ids) + '" data-at="' + R.esc(c.at) + '">' +
+            I('clock', 14) + '<span class="grow">' + R.esc(L(c.label)) + '</span>' +
+            '<span class="pop-hint">' + R.esc(R.fmtDate(S.iso(d)) + ' ' + R.fmtTime(d)) + '</span></button>';
+        });
+        sh += '<div class="pop-note">' + R.esc(L('รายการจะซ่อนไว้ แล้วกลับมาเป็นรายการใหม่ตามเวลาที่เลือก')) + '</div>';
+        openPop(el, sh);
+        return true;
+      }
+      case 'notif-snooze-set': {
+        closePops();
+        var at = el.dataset.at, d2 = new Date(at);
+        if (S.snoozeNotifs(String(el.dataset.ids || '').split(','), at)) {
+          toast(L('เลื่อนเตือนไปถึง {t}', { t: R.fmtDate(S.iso(d2)) + ' ' + R.fmtTime(d2) }), L('ย้อนกลับ'), 'undo');
+        }
+        return true;
+      }
+      case 'notif-unsnooze':
+        if (S.unsnoozeNotifs([id])) toast(L('ย้ายกลับมาในกิจกรรมแล้ว'), L('ย้อนกลับ'), 'undo');
+        return true;
+      case 'inbox-snoozed':
+        state.inbox.snoozed = !state.inbox.snoozed;
+        renderViewBody();
+        return true;
+      case 'apv-set':
+        apvDecide(id, el.dataset.v);
+        return true;
+      case 'follow-toggle': {
+        closePops();                       // กดจากเมนู ⋯ (จอแคบ) ปิดเมนูด้วย
+        var isPf = el.dataset.kind === 'portfolio';
+        var on = isPf ? !S.pfFollowing(id) : !S.projFollowing(id);
+        if (isPf ? S.setPfFollow(id, on) : S.setProjFollow(id, on)) {
+          toast(!on ? L('เลิกติดตามแล้ว')
+            : isPf ? L('ติดตามพอร์ตโฟลิโอนี้แล้ว — ได้แจ้งเตือนเมื่อมีอัปเดตสถานะ')
+            : L('ติดตามโปรเจกต์นี้แล้ว — ได้แจ้งเตือนอัปเดตสถานะ งานใหม่ และหมุดหมายที่สำเร็จ'));
+        }
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** ตัดสินงานขออนุมัติจากแถวในกล่องข้อความ/หน้าแรก — ใช้ฟังก์ชันของ store ชุดเดียวกับแผงงาน
+   *  ปฏิเสธถามก่อน (งานปิดและแจ้งคนขอทันที) ขอแก้ไขถามว่าต้องแก้อะไร (ไม่บังคับ — ลงเป็นความเห็นในงาน) */
+  function apvDecide(tid, v) {
+    var t = S.task(tid);
+    if (!t) return;
+    if (!S.canApprove(tid)) {
+      var au = S.user(t.assigneeId);
+      toast(au ? L('เฉพาะผู้อนุมัติ ({who}) ที่ตัดสินงานนี้ได้', { who: au.name })
+               : L('เลือกผู้อนุมัติก่อน แล้วผู้อนุมัติจึงตัดสินได้'));
+      return;
+    }
+    var nm = t.name;
+    var done = function (key) { toast(L(key, { t: nm }), L('ย้อนกลับ'), 'undo'); };
+    if (v === 'rejected') {
+      askConfirm(L('ปฏิเสธ “{t}”?', { t: nm }),
+        L('งานจะถูกปิดเป็น “ไม่อนุมัติ” และแจ้งคนขอทันที ถ้าแค่อยากให้แก้บางจุด ใช้ “ขอแก้ไข” แทน'),
+        function () { S.updateTask(tid, { approval: 'rejected' }); done('ปฏิเสธแล้ว: {t}'); }, { ok: L('ปฏิเสธ') });
+      return;
+    }
+    if (v === 'changes') {
+      askText(L('ขอแก้ไขงาน “{t}”', { t: nm }), '', function (note) {
+        S.batch('ขอแก้ไข “{t}”', { t: nm.slice(0, 60) }, function () {
+          S.updateTask(tid, { approval: 'changes' });
+          if (note) S.addComment(tid, note);
+        });
+        done('ขอแก้ไขแล้ว: {t}');
+      }, { ok: L('ส่งขอแก้ไข'), placeholder: L('ต้องแก้อะไร (ไม่บังคับ)'),
+           note: L('ข้อความนี้จะลงเป็นความเห็นในงาน คนขอได้รับแจ้งพร้อมผลอนุมัติ') });
+      return;
+    }
+    S.updateTask(tid, { approval: 'approved' });
+    done('อนุมัติแล้ว: {t}');
+  }
+
+  /* เลื่อนเตือน — ถึงเวลาแล้วกลับมาเป็นรายการใหม่ ตรวจตอนเปิดแอปและทุกนาทีที่เปิดค้างไว้ (ไม่มีเซิร์ฟเวอร์ปลุก) */
+  function runSnoozeWake() {
+    try { S.wakeSnoozed(); } catch (err) { console.error('ปลุกรายการที่เลื่อนเตือนไม่สำเร็จ', err); }
+  }
+  setTimeout(runSnoozeWake, 2000);
+  setInterval(runSnoozeWake, 60 * 1000);
+
   /* ---------- 4b — ส่วนขยาย ----------
    * ไฟล์ที่โหลดก่อน main.js (ui4b.js) ใส่ฟังก์ชันเริ่มต้นไว้ใน window.OrbitExt
    * แล้วได้เครื่องมือชุดเดียวกับที่ main.js ใช้ (หน้าต่าง ถามผู้ใช้ ตารางสิทธิ์ เส้นทาง) ผ่าน api ด้านล่าง
@@ -13804,7 +13968,17 @@
     state.openTaskId = boot.taskId && S.task(boot.taskId) && S.canSeeTask(boot.taskId) ? boot.taskId : null;
     focusStory(boot.storyId);
   } else if (useLanding && land !== 'home') {
-    state.route = { type: land };
+    /* Sprint 2C — หน้าแรกเป็นพอร์ตโฟลิโอหรือรายงานที่เลือกไว้ได้ ('portfolio:<id>' / 'report:<id>')
+     * ของที่ถูกลบหรือหมดสิทธิ์เห็นแล้ว ตกกลับไปหน้าแรกเงียบ ๆ ไม่ใช่เปิดมาเจอหน้าว่าง */
+    var lm = /^(portfolio|report):(.+)$/.exec(String(land));
+    if (!lm) state.route = { type: land };
+    else if (lm[1] === 'portfolio' && S.portfolio(lm[2])) {
+      var lpf = S.portfolio(lm[2]);
+      state.route = lpf.defaultTab && S.pfSavedView(lpf.id, lpf.defaultTab)
+        ? { type: 'portfolio', id: lpf.id, view: 'list', sv: lpf.defaultTab } : { type: 'portfolio', id: lpf.id, view: 'list' };
+    } else if (lm[1] === 'report' && S.report(lm[2]) && S.canSeeReport(lm[2])) {
+      state.route = { type: 'report', id: lm[2] };
+    }
   }
   renderAll();
   noticeNewInbox();          // จำจำนวนที่ยังไม่อ่านตอนเปิดแอปไว้เป็นฐาน ไม่เด้งของเก่า

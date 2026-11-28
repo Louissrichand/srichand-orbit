@@ -5,6 +5,7 @@
  * dragleave / drop / dragend ชุดเดียวกับเมาส์ (DataTransfer ใช้ร่วมทั้งรอบ) ตัวจัดการลากเดิมใน main.js จึงทำงานเหมือนเดิม
  * เมาส์ไม่ผ่านไฟล์นี้เลย — ลากด้วยเมาส์ยังเป็นของเบราว์เซอร์ตามปกติ
  * กดค้างไม่ถึงครึ่งวินาทีแล้วขยับ = เลื่อนจอตามปกติ
+ * Sprint 2A — กดค้างแล้วปล่อยโดยไม่ขยับ = ส่ง orbit:longpress ให้ของชิ้นนั้น (mobile.js ใช้เข้าโหมดเลือกงาน)
  */
 (function (global) {
   'use strict';
@@ -65,7 +66,8 @@
     var src = e.target.closest && e.target.closest('[draggable="true"]');
     if (!src || e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
     cleanup();
-    st = { src: src, x: e.clientX, y: e.clientY, id: e.pointerId, on: false, over: null, dt: null, ghost: null };
+    st = { src: src, x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, moved: false,
+           id: e.pointerId, on: false, over: null, dt: null, ghost: null };
     st.timer = setTimeout(begin, HOLD);
   }, true);
 
@@ -77,6 +79,7 @@
     }
     e.preventDefault();
     st.x = e.clientX; st.y = e.clientY;
+    if (Math.abs(st.x - st.sx) + Math.abs(st.y - st.sy) > TOL) st.moved = true;
     st.ghost.style.left = (st.x - st.offX) + 'px';
     st.ghost.style.top = (st.y - st.offY) + 'px';
     var el = under(st.x, st.y);
@@ -103,6 +106,25 @@
     if (!st || e.pointerId !== st.id) return;
     if (!st.on) { cleanup(); return; }
     var x = e.clientX || st.x, y = e.clientY || st.y, src = st.src;
+    /* Sprint 2A — กดค้างแล้วปล่อยโดยไม่ขยับ = "กดค้าง" (เข้าโหมดเลือกงานบนมือถือ) ไม่ใช่การลาก
+     * ยกเลิกการลากด้วย dragend อย่างเดียว (ไม่มี drop ตัวจัดการลากเดิมเก็บกวาดเอง) แล้วส่ง orbit:longpress
+     * ให้ของที่กดค้าง mobile.js รับต่อ — กดค้างแล้วขยับนิ้วยังเป็นการลากย้ายเหมือนเดิม */
+    if (!cancel && !st.moved) {
+      fire(src, 'dragend', x, y);
+      var lp = null;
+      try { lp = new CustomEvent('orbit:longpress', { bubbles: true, detail: { x: x, y: y } }); } catch (er) { /* เบราว์เซอร์เก่า */ }
+      /* กลืนเฉพาะคลิกจริงที่ตามมาหลังปล่อยนิ้ว — คลิกที่สคริปต์สั่ง (เลือกแถว) ต้องผ่าน */
+      var sw = function (ev) {
+        if (ev.isTrusted === false) return;
+        ev.stopPropagation(); ev.preventDefault(); document.removeEventListener('click', sw, true);
+      };
+      document.addEventListener('click', sw, true);
+      setTimeout(function () { document.removeEventListener('click', sw, true); }, 400);
+      e.preventDefault();
+      cleanup();
+      if (lp && src.isConnected) src.dispatchEvent(lp);
+      return;
+    }
     var el = cancel ? null : under(x, y);
     if (el) {
       var okDrop = !fire(el, 'dragover', x, y);       // ตัวจัดการที่รับวางต้อง preventDefault ใน dragover

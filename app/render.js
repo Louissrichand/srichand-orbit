@@ -108,8 +108,50 @@
   }
   /** ข้อความของการแจ้งเตือน (กล่องข้อความ และแจ้งเตือนของเบราว์เซอร์) วันที่ตามภาษาคนอ่าน */
   function notifText(n) {
-    return n.key ? (n.actorName ? n.actorName + ' ' : '') + L(n.key, dateParams(n.params) || undefined)
-                 : localizeIso(n.text);
+    if (!n.key) return legacyNotifText(n);
+    /* Sprint 2B — รายการที่รวมหลายเรื่องของคนเดียวกันในงานเดียวกัน ต่อกันด้วย " · "
+     * "สมชาย มอบหมายงาน … ให้คุณ · ตั้งกำหนดส่ง 4 ธ.ค. · แก้ไขรายละเอียด" แปลทีละส่วนตามภาษาคนอ่าน */
+    var parts = S.notifParts ? S.notifParts(n) : [n];
+    /* ชื่องานขึ้นไปแล้วในส่วนก่อนหน้า ส่วนถัดไปใช้รูปสั้น ("… ขอแก้ไข “X” · แสดงความเห็นด้วย") ไม่ซ้ำชื่อยาว ๆ */
+    var named = null;
+    return (n.actorName ? n.actorName + ' ' : '') + parts.map(function (p) {
+      var t = p.params && p.params.t;
+      if (named && t === named && NOTIF_SHORT[p.key]) p = { key: NOTIF_SHORT[p.key], params: null, x: p.x };
+      else if (t && !named) named = t;
+      return notifPartText(p);
+    }).join(' · ');
+  }
+  var NOTIF_SHORT = {
+    'แสดงความเห็นในงาน “{t}”': 'แสดงความเห็นด้วย', 'ตอบกลับความเห็นในงาน “{t}”': 'ตอบกลับความเห็น',
+    'ขออนุมัติ “{t}” จากคุณ': 'ขออนุมัติงานนี้จากคุณ', 'มอบหมายงาน “{t}” ให้คุณ': 'มอบหมายงานนี้ให้คุณ',
+    'อนุมัติ “{t}” แล้ว': 'อนุมัติงานนี้แล้ว', 'ขอแก้ไข “{t}”': 'ขอแก้ไขงานนี้', 'ปฏิเสธ “{t}”': 'ปฏิเสธงานนี้'
+  };
+  function notifPartText(p) {
+    var s = p.key ? L(p.key, labelParams(p.key, dateParams(p.params)) || undefined) : localizeIso(L(String(p.text || '')));
+    return p.x > 1 ? s + ' ×' + p.x : s;
+  }
+  /* Sprint 2B — บันทึกบางคีย์เก็บ "ป้าย" ภาษาไทยเป็นค่าแทนที่ (สถานะอนุมัติ ความสำคัญ ชนิดงาน การทำซ้ำ)
+   * แปลค่านั้นตอนแสดงด้วย ไม่งั้นภาษาอังกฤษขึ้น "set the approval to “อนุมัติแล้ว”" */
+  var LABEL_PARAMS = { 'เปลี่ยนสถานะอนุมัติเป็น “{s}”': 's', 'ตั้งความสำคัญเป็น {p}': 'p',
+                       'เปลี่ยนชนิดงานเป็น {p}': 'p', 'ตั้งให้ทำซ้ำ {f}': 'f' };
+  function labelParams(key, p) {
+    var k = LABEL_PARAMS[key];
+    if (!p || !k || typeof p[k] !== 'string') return p;
+    var out = {};
+    Object.keys(p).forEach(function (x) { out[x] = x === k ? L(p[x]) : p[x]; });
+    return out;
+  }
+  /* Sprint 2B — ข้อมูลเก่าที่เก็บเป็นประโยคไทยสำเร็จรูป ("สมชาย แสดงความเห็น") ลองแปลส่วนหลังชื่อคน
+   * คนใช้ภาษาอังกฤษจะได้ไม่เห็นภาษาไทยปนกลางกล่องข้อความ (ประโยคที่ไม่มีคำแปลคงเดิม) */
+  function legacyNotifText(n) {
+    var tx = String(n.text == null ? '' : n.text);
+    var who = n.actorName && tx.indexOf(n.actorName + ' ') === 0 ? n.actorName : null;
+    if (!who) {
+      (S.db.users || []).forEach(function (u) {
+        if (!who && u.name && tx.indexOf(u.name + ' ') === 0) who = u.name;
+      });
+    }
+    return who ? who + ' ' + localizeIso(L(tx.slice(who.length + 1))) : localizeIso(L(tx));
   }
 
   function dueClass(isoStr, completed) {
@@ -161,7 +203,7 @@
    * แต่คนอ่านต้องการ "3 ก.ย." จึงจัดรูปตอนแสดง ไม่ใช่ตอนเก็บ
    * ถ้าจัดรูปตอนเก็บ พอสลับภาษาแล้วบันทึกเก่าจะยังเป็นภาษาที่เขียนไว้ตอนนั้น */
   function storyText(s) {
-    var p = dateParams(s.params);
+    var p = labelParams(s.text, dateParams(s.params));      // Sprint 2B — ป้ายสถานะ/ชนิดงานตามภาษาคนอ่าน
     return p ? L(s.text, p) : localizeIso(L(s.text));
   }
 
@@ -535,10 +577,14 @@
     h += '<div class="tb-spacer"></div>';
     h += saveChip();
     h += syncChip();
-    h += '<div class="search">' + ICON.search +
+    /* Sprint 2A — จอมือถือช่องค้นหาเหลือแว่นขยาย แตะแล้วกางเต็มแถว (mobile.js) ปุ่ม × ไว้หุบกลับ */
+    h += '<div class="search" role="search">' + ICON.search +
          '<input id="searchInput" type="search" placeholder="' + L('ค้นหางาน…  (/)') + '" value="' +
-         esc(route.type === 'search' ? route.q : '') + '">' +
-         '<button class="search-adv" data-act="adv-open" title="' + L('ค้นหาขั้นสูง') + '">' + I('filter', 13) + '</button></div>';
+         esc(route.type === 'search' ? route.q : '') + '" aria-label="' + esc(L('ค้นหางาน')) + '">' +
+         '<button class="search-adv" data-act="adv-open" title="' + L('ค้นหาขั้นสูง') + '" aria-label="' +
+         esc(L('ค้นหาขั้นสูง')) + '">' + I('filter', 13) + '</button>' +
+         '<button class="search-x" data-act="m2a-search-close" title="' + esc(L('ปิดช่องค้นหา')) + '" aria-label="' +
+         esc(L('ปิดช่องค้นหา')) + '">' + I('close', 13) + '</button></div>';
 
     if (route.type === 'project') {
       /* มุมมองที่มีแถบเครื่องมือ มีปุ่มเพิ่มงานอยู่ที่นั่นแล้ว
@@ -546,21 +592,29 @@
       if (VIEWS_WITH_TOOLBAR.indexOf(route.view) < 0 && S.canCreateTask(route.id)) {   // Sprint 1B
         h += '<button class="btn btn-primary" data-act="quick-add">' + L('+ เพิ่มงาน') + '</button>';
       }
+      h += followBtn('project', route.id);            // Sprint 2B — ติดตามโปรเจกต์ (เดิมซ่อนอยู่ใน ⋯)
       h += '<button class="btn btn-ghost" data-act="project-menu" data-id="' +
            esc(route.id) + '" title="' + L('เมนูโปรเจกต์') + '">' + I('more') + '</button>';
     } else if (route.type === 'mytasks') {
-      h += '<button class="btn btn-ghost" data-act="mt-ics" title="' + L('ดาวน์โหลดปฏิทิน .ics ของงานที่มีวัน') + '">' +
-        I('calendar', 14) + '<span class="hide-sm">.ics</span></button>';
+      /* Sprint 2A — ไอคอนปฏิทินตรงนี้ดูเหมือน "เปิดปฏิทิน" คนกดแล้วได้ไฟล์ดาวน์โหลดแทน
+       * ย้ายเข้าเมนู ⋯ พร้อมชื่อที่บอกตรง ๆ ว่าส่งออกไปแอปปฏิทิน (mobile.js m2a-mt-menu) */
+      h += '<button class="btn btn-ghost" data-act="m2a-mt-menu" title="' + esc(L('เมนูงานของฉัน')) + '" aria-label="' +
+        esc(L('เมนูงานของฉัน')) + '">' + I('more') + '</button>';
     } else if (route.type === 'inbox') {
       var dndOn = S.isDnd();
-      h += '<button class="btn' + (dndOn ? ' btn-dnd-on' : '') + '" data-act="dnd-menu" title="' +
+      /* Sprint 2A — จอมือถือสามปุ่มนี้ยุบเป็นเมนู ⋯ เดียว (m2a-hide / m2a-only) แถวบนจะได้เหลือที่ให้ชื่อหน้า */
+      h += '<button class="btn m2a-hide' + (dndOn ? ' btn-dnd-on' : '') + '" data-act="dnd-menu" title="' +
         L('ห้ามรบกวน') + '">' + I('moon', 14) + '<span class="hide-sm">' +
         (dndOn ? L('ห้ามรบกวนอยู่') : L('ห้ามรบกวน')) + '</span></button>';
-      h += '<button class="btn" data-act="inbox-read-all" title="' + L('อ่านทั้งหมด') + '">' +
+      h += '<button class="btn m2a-hide" data-act="inbox-read-all" title="' + L('อ่านทั้งหมด') + '">' +
         I('check', 14) + '<span class="hide-sm">' + L('อ่านทั้งหมด') + '</span></button>';
-      h += '<button class="btn" data-act="inbox-archive-all" title="' + L('เก็บทั้งหมด') + '">' +
+      h += '<button class="btn m2a-hide" data-act="inbox-archive-all" title="' + L('เก็บทั้งหมด') + '">' +
         I('archive', 14) + '<span class="hide-sm">' + L('เก็บทั้งหมด') + '</span></button>';
+      h += '<button class="btn btn-ghost m2a-only m2a-inbox-more' + (dndOn ? ' btn-dnd-on' : '') +
+        '" data-act="m2a-inbox-menu" title="' + esc(L('เมนูกล่องข้อความ')) + '" aria-label="' + esc(L('เมนูกล่องข้อความ')) + '">' +
+        (dndOn ? I('moon', 15) : I('more')) + '</button>';
     } else if (route.type === 'portfolio') {
+      h += followBtn('portfolio', route.id);          // Sprint 2B
       h += '<button class="btn btn-primary" data-act="pf-add" data-pf="' + esc(route.id) + '">' +
            L('+ เพิ่มเข้าพอร์ต') + '</button>';
       h += '<button class="btn btn-ghost" data-act="pf-menu" data-id="' + esc(route.id) +
@@ -730,6 +784,8 @@
     }
     h += '<button class="vtb-btn" data-act="g-options" title="' + L('ตัวเลือก') + '">' +
       I('settings', 14) + '<span>' + L('ตัวเลือก') + '</span></button>';
+    /* Sprint 2A — มือถือซ่อนช่องติ๊กเลือกหลายงาน (กันกดพลาดกับวงกลมทำเสร็จ) เข้าโหมดเลือกจากปุ่มนี้หรือกดค้างที่แถว */
+    if (kind === 'list' || kind === 'board') h += selectModeBtn();
 
     /* --- ค้นหา --- */
     if (view.q) {
@@ -753,6 +809,14 @@
     }
     h += '</div>';
     return h;
+  }
+
+  /** Sprint 2A — ปุ่ม "เลือก" บนแถบเครื่องมือ เห็นเฉพาะจอมือถือ (m2a-only) mobile.js สลับโหมดเลือกให้ */
+  function selectModeBtn() {
+    var on = !!(global.OrbitMobile && global.OrbitMobile.selecting());
+    return '<button class="vtb-btn m2a-only m2a-selbtn' + (on ? ' on' : '') + '" data-act="m2a-select-mode" title="' +
+      esc(on ? L('เลิกเลือก') : L('เลือกหลายงาน')) + '" aria-pressed="' + on + '">' + I('check', 14) +
+      '<span class="m2a-selbtn-t">' + (on ? L('เลิกเลือก') : L('เลือก')) + '</span></button>';
   }
 
   /* ---------- shared task pieces ---------- */
@@ -836,7 +900,8 @@
       if (!t.parentId && S.isPrivate(t.id)) h += privateChip();
     }
     if (t.dueOn) {
-      h += '<span class="chip' + dueClass(t.dueOn, t.completed) + '">' + fmtDate(t.dueOn) +
+      /* chip-due — จอแคบดึงกำหนดส่งขึ้นหน้าแถวที่สอง (Sprint 2A) เพราะเป็นป้ายที่คนมองหาก่อน */
+      h += '<span class="chip chip-due' + dueClass(t.dueOn, t.completed) + '">' + fmtDate(t.dueOn) +
         (t.dueTime ? ' ' + esc(t.dueTime) : '') + '</span>';
     }
     return h;
@@ -870,6 +935,11 @@
     }
     h += '<span class="nm">' + esc(t.name) + '</span>';
     h += '<span class="meta">' + badges(t, opts) + avatar(u, 'sm') + '</span>';
+    /* Sprint 2A — ปุ่ม ⋯ ท้ายแถว (งานของฉัน) ย้ายเซกชันได้โดยไม่ต้องลาก จอสัมผัสลากไม่สะดวก */
+    if (opts.rowMenu) {
+      h += '<button class="row-more" data-act="m2a-row-menu" data-id="' + esc(t.id) + '" title="' +
+        esc(L('ตัวเลือกของงาน')) + '" aria-label="' + esc(L('ตัวเลือกของงาน')) + '">' + I('more', 15) + '</button>';
+    }
     h += '</div>';
     return h;
   }
@@ -1691,7 +1761,9 @@
           '"><i style="background:' + st.color + '"></i>' + esc(L(st.label)) + '</span>' +
           '<div class="grow">' + (sl.title ? '<div class="t"><b>' + esc(sl.title) + '</b></div>' : '') +
           (sl.text ? '<div class="t">' + esc(S.plainText(sl.text).slice(0, 300)) + '</div>' : '') +
-          '<em>' + esc(by ? by.name : '—') + ' · ' + esc(fmtWhen(sl.at)) + '</em></div></div>';
+          '<em>' + esc(by ? by.name : '—') + ' · ' + esc(fmtWhen(sl.at)) + '</em>' +
+          /* Sprint 2C — รายงานเก่าก็บอกได้ว่าเปลี่ยนอะไร และถาม/ตอบต่อได้ */
+          global.Render.statusChangeHtml(p, sl) + global.Render.statusThread(p, sl, { full: false }) + '</div></div>';
       });
       h += '</div>';
     }
@@ -1701,7 +1773,8 @@
     /* --- คอลัมน์ขวา --- */
     h += '<div class="ovw-side">';
 
-    h += '<section class="ovw-card"><h3>' + L('ตอนนี้ถึงไหนแล้ว') + '</h3>';
+    h += '<section class="ovw-card"><h3>' + L('ตอนนี้ถึงไหนแล้ว') +
+      global.Render.printLink('project', p.id) + '</h3>';        // Sprint 2C — สรุปหน้าเดียวสำหรับประชุม
     h += '<div class="ovw-stats">' +
       '<div><b>' + s.total + '</b><em>' + L('งานทั้งหมด') + '</em></div>' +
       '<div><b>' + s.done + '</b><em>' + L('เสร็จแล้ว') + '</em></div>' +
@@ -1893,6 +1966,8 @@
       '22;color:' + st.color + '"><i style="background:' + st.color + '"></i>' + esc(L(st.label)) + '</span>' +
       '<div class="grow">' + (e.title ? '<b>' + esc(e.title) + '</b>' : '<b>' + L('รายงานสถานะ') + '</b>') +
       '<em title="' + esc(fmtExact(e.at)) + '">' + esc(by ? by.name : '—') + ' · ' + esc(fmtWhen(e.at)) + '</em></div></div>';
+    /* Sprint 2C — อะไรเปลี่ยนจากรอบก่อน (สถานะ งานเสร็จ งานเลยกำหนด) ไว้บนสุดเพราะเป็นสิ่งที่ผู้บริหารอ่านก่อน */
+    if (p && global.Render.statusChangeHtml) h += global.Render.statusChangeHtml(p, e);
     if (full && e.blocks && e.blocks.length) {
       e.blocks.forEach(function (b) {
         h += '<div class="sth-blk"><h4>' + esc(blockLabel(b)) + '</h4><div class="sth-txt">' + richText(b.text) + '</div></div>';
@@ -1901,6 +1976,8 @@
       h += '<div class="sth-txt">' + richText(e.text) + '</div>';
     }
     if (full) h += statusHlHtml(e.hl, e.period);
+    /* Sprint 2C — ถาม/ตอบใต้รายงาน (เก็บที่ e.replies) */
+    if (p && global.Render.statusThread) h += global.Render.statusThread(p, e, { full: full });
     return h + '</article>';
   }
 
@@ -2388,6 +2465,8 @@
     });
     h += '<span></span></div>';
     h += '</div></div>';
+    /* Sprint 2C — ตารางกว้าง ~1,360px อ่านบนแท็บเล็ต/มือถือไม่ได้ จอ ≤ 900px สลับเป็นการ์ดทีละโปรเจกต์ (CSS เลือกแสดง) */
+    h += global.Render.pfCards(f, all);
     h += '<div class="pfx-adds"><button class="pf-add" data-act="pf-add" data-pf="' + esc(f.id) + '">' + I('plus', 15) + ' ' +
       L('เพิ่มโปรเจกต์หรือพอร์ตโฟลิโอ') + '</button></div>';
     return h;
@@ -2405,7 +2484,7 @@
         L('อัปเดตสถานะ') + '</button>' : '') + '</h3>';
     var log = (f.statusLog || []).slice().reverse();
     if (!log.length) h += '<div class="ovw-empty">' + L('ยังไม่เคยอัปเดตสถานะ เล่าภาพรวมของทั้งพอร์ตโฟลิโอให้ทุกคนเห็นตรงกัน') + '</div>';
-    log.slice(0, 15).forEach(function (e) { h += statusEntryHtml(null, e, true); });
+    log.slice(0, 15).forEach(function (e) { h += statusEntryHtml(f, e, true); });   // Sprint 2C — ส่งพอร์ตโฟลิโอไปด้วย (ถาม/ตอบ + ที่เปลี่ยน)
     h += '</div></div>';
     h += '<div class="pfp-side"><div class="ovw-card"><h3>' + L('สถานะล่าสุดของโปรเจกต์') + '</h3>';
     if (!list.length) h += '<div class="ovw-empty">' + L('ยังไม่มีโปรเจกต์') + '</div>';
@@ -2490,7 +2569,27 @@
     });
     if (st.noStatus) { stCats.push({ key: '', label: L('ยังไม่รายงาน'), color: 'var(--fg-faint)' }); stVals.push([st.noStatus]); }
     var prog = list.slice(0, 20);
-    var h = '<div class="dash-cols" style="margin-top:16px">';
+    /* Sprint 2C — "ต้องจับตา" ขึ้นก่อนกราฟ (เดิมอยู่ล่างสุด บนแท็บเล็ตต้องเลื่อนผ่านกราฟสองอันกว่าจะเจอ)
+     * Sprint 1C — นิยามเดียวกับตัวเลข "ต้องจับตา" บนแถบสรุป (S.needsWatch) */
+    var h = '<div class="panel pf-watch"><h3>' + I('alert', 14) + ' ' + L('ต้องจับตา') + '</h3>';
+    var risky = list.filter(function (p) { return S.needsWatch(p); });
+    if (!risky.length) h += '<div class="pf-none">' + L('ยังไม่มีโปรเจกต์ที่น่าห่วง') + '</div>';
+    risky.forEach(function (p) {
+      var s = S.projectStats(p.id);
+      var stt = p.status ? projectState(p.status.state) : null;
+      var sAt = p.status ? S.statusAt(p) : null;
+      h += '<div class="pf-risk" data-act="go" data-route="project" data-id="' + esc(p.id) + '">' +
+        '<span class="em">' + esc(p.icon) + '</span>' +
+        '<span class="grow"><b>' + esc(p.name) + '</b>' +
+        (p.status && p.status.text ? '<em>' + esc(S.plainText(p.status.text)) + '</em>' : '') +
+        '<em>' + (sAt ? esc(L('รายงานล่าสุด {w}', { w: fmtWhen(sAt) })) : esc(L('ยังไม่เคยรายงานสถานะ'))) + '</em></span>' +
+        (stt ? '<span class="status-pill" style="background:' + stt.color + '22;color:' + stt.color +
+          '"><i style="background:' + stt.color + '"></i>' + esc(L(stt.label)) + '</span>' : '') +
+        (s.overdue ? '<span class="pf-bad">' + L('เลยกำหนด {n}', { n: s.overdue }) + '</span>' : '') +
+        '</div>';
+    });
+    h += '</div>';
+    h += '<div class="dash-cols" style="margin-top:16px">';
     h += '<div class="panel pf-chart"><h3>' + L('สัดส่วนสถานะโปรเจกต์') + '</h3>' + global.Charts.svg({ type: 'donut', cats: stCats,
       series: [{ key: 'v', label: L('โปรเจกต์') }], values: stVals, empty: L('ยังไม่มีข้อมูล'), h: 220 }) + '</div>';
     h += '<div class="panel pf-chart"><h3>' + L('งานเสร็จ/ค้างต่อโปรเจกต์') + '</h3>' + global.Charts.svg({ type: 'stack',
@@ -2516,24 +2615,6 @@
       h += bar(p.icon + ' ' + p.name, s.done, s.total || 1, p.color);
     });
     h += '<div class="bar-note">' + L('แท่ง = สัดส่วนงานที่เสร็จ เรียงจากช้าที่สุดขึ้นก่อน') + '</div></div>';
-
-    h += '<div class="panel"><h3>' + L('ต้องจับตา') + '</h3>';
-    /* Sprint 1C — นิยามเดียวกับตัวเลข "ต้องจับตา" บนแถบสรุป (S.needsWatch) */
-    var risky = list.filter(function (p) { return S.needsWatch(p); });
-    if (!risky.length) h += '<div class="pf-none">' + L('ยังไม่มีโปรเจกต์ที่น่าห่วง') + '</div>';
-    risky.forEach(function (p) {
-      var s = S.projectStats(p.id);
-      var stt = p.status ? projectState(p.status.state) : null;
-      h += '<div class="pf-risk" data-act="go" data-route="project" data-id="' + esc(p.id) + '">' +
-        '<span class="em">' + esc(p.icon) + '</span>' +
-        '<span class="grow"><b>' + esc(p.name) + '</b>' +
-        (p.status && p.status.text ? '<em>' + esc(p.status.text) + '</em>' : '') + '</span>' +
-        (stt ? '<span class="status-pill" style="background:' + stt.color + '22;color:' + stt.color +
-          '"><i style="background:' + stt.color + '"></i>' + esc(L(stt.label)) + '</span>' : '') +
-        (s.overdue ? '<span class="pf-bad">' + L('เลยกำหนด {n}', { n: s.overdue }) + '</span>' : '') +
-        '</div>';
-    });
-    h += '</div>';
 
     h += '<div class="panel"><h3>' + L('คนที่ถือโปรเจกต์') + '</h3>';
     var byOwner = {};
@@ -3153,6 +3234,9 @@
     if (edit) {
       h += '<div class="home-editbar">' + I('grip', 14) + '<span class="grow">' +
         L('ลากการ์ดเพื่อสลับที่ กดปุ่มบนการ์ดเพื่อย่อขยายหรือเอาออก') + '</span>' +
+        /* Sprint 2C — ชุดสำเร็จรูปสำหรับผู้บริหาร: ภาพรวมผู้บริหารขึ้นบนสุดเต็มแถว ตามด้วยอัปเดตสถานะ */
+        '<button class="btn btn-sm" data-act="home-w-exec" title="' + esc(L('ใส่การ์ดภาพรวมผู้บริหารไว้บนสุด ตามด้วยอัปเดตสถานะ')) + '">' +
+        I('gauge', 13) + ' ' + L('ใช้แบบผู้บริหาร') + '</button>' +
         '<button class="btn btn-sm btn-ghost" data-act="home-w-reset">' + L('คืนค่าเริ่มต้น') + '</button></div>';
     }
 
@@ -3190,8 +3274,11 @@
     var meUser = S.me();
     var o = null;
     var w = x.w;
+    if (w === 'approvals') o = homeApprovalsCard();      // Sprint 2B — วิดเจ็ต "รออนุมัติจากฉัน" (ฟังก์ชันของตัวเอง)
 
-    if (w === 'mine') {
+    if (w === 'exec') {
+      o = global.Render.execWidget();              // Sprint 2C (exec2c.js)
+    } else if (w === 'mine') {
       var mine = S.myTasks(S.db.currentUserId);
       var mineTab = st.mine || 'upcoming';
       var mineItems = mineTab === 'overdue' ? mine.overdue
@@ -3297,23 +3384,12 @@
           '<span><b>' + cs.month + '</b>' + L('30 วัน') + '</span></div>' + bars
       };
     } else if (w === 'activity') {
-      var acts = S.recentActivity(HOME_ROWS);
-      var ab = '';
-      if (!acts.length) ab = '<div class="hempty">' + L('ยังไม่มีกิจกรรม') + '</div>';
-      acts.forEach(function (a) {
-        ab += '<div class="hact" data-act="open-task" data-id="' + esc(a.story.taskId) + '">' +
-          avatar(a.actor, 'sm') +
-          '<span class="hact-body"><span class="hact-txt"><strong>' +
-          esc(a.actor ? a.actor.name : '?') + '</strong> ' +
-          esc(a.story.type === 'comment' ? L('แสดงความเห็น') : storyText(a.story)) + '</span>' +
-          '<span class="hact-sub" title="' + esc(fmtExact(a.story.createdAt)) + '">' +
-          esc(a.taskName || '') + ' · ' + esc(fmtWhen(a.story.createdAt)) +
-          '</span></span></div>';
-      });
+      /* Sprint 2C — รวมความเคลื่อนไหวของงานเดียวกันโดยคนเดียวกันเป็นบรรทัดเดียว + ตัวกรองเฉพาะสถานะและการตัดสินใจ (exec2c.js) */
       o = {
         title: hTitle(I('bell', 15), L('กิจกรรมล่าสุด')),
         action: '<button class="btn btn-sm btn-ghost" data-act="go" data-route="inbox">' + L('ดูทั้งหมด') + '</button>',
-        body: ab
+        tabs: global.Render.homeActTabs(),
+        body: global.Render.homeActivityBody(HOME_ROWS)
       };
     } else if (w === 'forms') {
       /* 3b — ฟอร์มที่เปิดรับอยู่ในโปรเจกต์ที่เห็นได้ กดเพื่อเปิดหน้าส่งฟอร์ม */
@@ -3340,6 +3416,9 @@
     if (edit) {
       o.tools = '<div class="hw-tools">' +
         '<span class="hw-grip" title="' + L('ลากเพื่อย้าย') + '">' + I('grip', 14) + '</span>' +
+        /* Sprint 2C — ผู้ทดสอบต้องกด "ย้ายขึ้น" 5 ครั้งเพื่อเอาการ์ดล่างสุดขึ้นบนสุด */
+        '<button data-act="home-w-top" data-i="' + i + '"' + (i === 0 ? ' disabled' : '') +
+        ' title="' + L('ย้ายไปบนสุด') + '" aria-label="' + L('ย้ายไปบนสุด') + '">' + I('toTop', 13) + '</button>' +
         '<button data-act="home-w-move" data-i="' + i + '" data-d="-1"' + (i === 0 ? ' disabled' : '') +
         ' title="' + L('ย้ายขึ้น') + '">' + I('arrowUp', 13) + '</button>' +
         '<button data-act="home-w-move" data-i="' + i + '" data-d="1"' + (i === n - 1 ? ' disabled' : '') +
@@ -3521,7 +3600,8 @@
   }
 
   function mtFilterCount(v) {
-    return (v.show !== 'open' ? 1 : 0) + (v.due && v.due !== 'any' ? 1 : 0) + (v.project ? 1 : 0);
+    return (v.show !== 'open' ? 1 : 0) + (v.due && v.due !== 'any' ? 1 : 0) + (v.project ? 1 : 0) +
+      (v.appr ? 1 : 0);                 // Sprint 2B — รออนุมัติจากฉัน
   }
 
   function mtToolbar(v) {
@@ -3549,6 +3629,7 @@
     var na = S.automations('@me').filter(function (a) { return a.on; }).length;
     h += '<button class="vtb-btn' + (na ? ' on' : '') + '" data-act="mt-auto" title="' + L('ระบบอัตโนมัติ') + '">' +
       I('bolt', 14) + '<span>' + L('ระบบอัตโนมัติ') + '</span>' + (na ? '<span class="vtb-n">' + na + '</span>' : '') + '</button>';
+    if (v.mode === 'list' || v.mode === 'board') h += selectModeBtn();     // Sprint 2A
     return h + '</div>';
   }
 
@@ -3630,7 +3711,7 @@
         h += '<div class="sec-body"' + (g.isSection ? ' data-section="' + esc(g.key) + '"' : '') + '>';
         g.items.forEach(function (t) {
           h += taskRow(t, { showProject: true, selectable: true, selected: !!sel[t.id], dots: true,
-                            sectionId: g.isSection ? g.key : '' });
+                            sectionId: g.isSection ? g.key : '', rowMenu: g.isSection });
         });
         if (g.isSection && !g.items.length) {
           h += '<div class="mt-empty">' + (g.special
@@ -3840,8 +3921,10 @@
       });
       hidden.forEach(function (cnt, i) {
         if (!cnt) return;
+        /* Sprint 2A — จอแคบช่องวันกว้างไม่ถึง 50px "+1 อื่น ๆ" ตัดบรรทัดจนอ่านไม่ออก เหลือ "+1" (คำเต็มอยู่ใน title) */
         h += '<button class="calx-more" data-act="calx-day" data-date="' + shown[i] + '" style="grid-column:' +
-          (i + 1) + ';grid-row:' + (rows + 2) + '">+' + cnt + ' ' + L('อื่น ๆ') + '</button>';
+          (i + 1) + ';grid-row:' + (rows + 2) + '" title="+' + cnt + ' ' + esc(L('อื่น ๆ')) + '">+' + cnt +
+          '<span class="calx-more-t"> ' + L('อื่น ๆ') + '</span></button>';
       });
       h += '</div>';
     }
@@ -3935,7 +4018,8 @@
   /* ---------- กล่องข้อความ ----------
    * ui = { tab, f: { from, project, mention, toMe, byMe, unread } }
    * การเรียงกับความหนาแน่นจำไว้ต่อคน (personal.inbox) ตัวกรองอยู่แค่ในหน้าจอ */
-  var INBOX_TABS = [['activity', 'กิจกรรม'], ['bookmarks', 'บุ๊กมาร์ก'], ['archive', 'เก็บถาวร']];
+  /* Sprint 2B — แท็บ "รออนุมัติจากฉัน" ต่อจากกิจกรรม (ผลทดสอบ: หางานรออนุมัติไม่เจอ) */
+  var INBOX_TABS = [['activity', 'กิจกรรม'], ['approvals', 'รออนุมัติจากฉัน'], ['bookmarks', 'บุ๊กมาร์ก'], ['archive', 'เก็บถาวร']];
   var INBOX_FLAGS = [['unread', 'ยังไม่อ่าน'], ['mention', '@พูดถึงฉัน'], ['toMe', 'มอบหมายให้ฉัน'],
                      ['byMe', 'ที่ฉันมอบหมาย']];
 
@@ -3952,18 +4036,23 @@
     var pref = S.personalOf().inbox;
     var sort = pref.sort === 'relevance' ? 'relevance' : 'new';
     var dense = !!pref.dense;
-    var list = S.inboxList(null, {
-      tab: tab, from: f.from, project: f.project, mention: f.mention,
-      toMe: f.toMe, byMe: f.byMe, unread: f.unread, sort: sort
-    });
+    var nAppr = S.approvalsWaiting().length;
 
     var h = '<div class="inbox-wrap' + (dense ? ' dense' : '') + '">';
     h += '<div class="tb-tabs inbox-tabs">';
     INBOX_TABS.forEach(function (x) {
       h += '<button class="tb-tab' + (tab === x[0] ? ' active' : '') + '" data-act="inbox-tab" data-tab="' +
-        x[0] + '">' + (x[0] === 'bookmarks' ? I('bookmark', 13) + ' ' : '') + L(x[1]) + '</button>';
+        x[0] + '">' + (x[0] === 'bookmarks' ? I('bookmark', 13) + ' ' : '') + L(x[1]) +
+        (x[0] === 'approvals' && nAppr ? '<span class="tab-n" title="' + esc(L('{n} งานรออนุมัติจากคุณ', { n: nAppr })) + '">' +
+          nAppr + '</span>' : '') + '</button>';
     });
     h += '</div>';
+    if (tab === 'approvals') return h + approvalsHub(dense) + '</div>';      // Sprint 2B
+
+    var list = S.inboxList(null, {
+      tab: tab, from: f.from, project: f.project, mention: f.mention,
+      toMe: f.toMe, byMe: f.byMe, unread: f.unread, sort: sort, snoozed: !!ui.snoozed
+    });
 
     var nf = inboxFilterCount(f);
     h += '<div class="inbox-tb">' +
@@ -4010,35 +4099,228 @@
         (until ? '<button class="btn btn-sm" data-act="dnd-off">' + L('เลิกพัก') + '</button>' : '') + '</div>';
     }
 
+    /* Sprint 2B — รายการที่เลื่อนเตือนไว้ ดูได้จากแถบนี้ (ไม่หายไปเงียบ ๆ จนลืมว่าเลื่อนอะไรไว้) */
+    var nSnz = tab === 'activity' ? S.snoozedCount() : 0;
+    if (ui.snoozed || nSnz) {
+      h += '<div class="inbox-snz">' + I('clock', 14) + '<span class="grow">' +
+        (ui.snoozed ? esc(L('รายการที่เลื่อนเตือนไว้ จะกลับมาเป็นรายการใหม่ตามเวลาที่เลือก'))
+                    : esc(L('เลื่อนเตือนไว้ {n} รายการ', { n: nSnz }))) + '</span>' +
+        '<button class="btn btn-sm" data-act="inbox-snoozed">' +
+        (ui.snoozed ? L('กลับไปกิจกรรม') : L('ดูรายการที่เลื่อนไว้')) + '</button></div>';
+    }
+
     if (!list.length) {
-      h += '<div class="empty"><div class="big">' + (tab === 'bookmarks' ? '🔖' : '📭') + '</div>' +
+      /* Sprint 2B — หน้าว่างบอกว่าทำอะไรต่อได้ ไม่ใช่แค่ "ไม่มีอะไร" */
+      var eAct = '';
+      if (nf) eAct = '<button class="btn btn-sm" data-act="inbox-filter-clear">' + L('ล้างตัวกรอง') + '</button>';
+      else if (tab === 'activity' && !ui.snoozed) {
+        eAct = (nAppr ? '<button class="btn btn-sm btn-primary" data-act="inbox-tab" data-tab="approvals">' +
+            esc(L('ดูงานรออนุมัติจากฉัน ({n})', { n: nAppr })) + '</button>' : '') +
+          '<button class="btn btn-sm" data-act="open-settings" data-tab="notify">' + I('settings', 13) + ' ' +
+          L('เลือกเรื่องที่จะแจ้งเตือน') + '</button>';
+      }
+      h += '<div class="empty inbox-empty"><div class="big">' + (tab === 'bookmarks' ? '🔖' : ui.snoozed ? '⏰' : '📭') + '</div>' +
+        '<div class="inbox-empty-t">' +
         (nf ? L('ไม่มีรายการที่ตรงกับตัวกรอง')
+          : ui.snoozed ? L('ไม่มีรายการที่เลื่อนเตือนไว้')
           : tab === 'archive' ? L('ยังไม่มีรายการที่เก็บไว้')
           : tab === 'bookmarks' ? L('ยังไม่มีรายการที่บุ๊กมาร์กไว้ กดรูปที่คั่นหนังสือบนรายการเพื่อเก็บไว้ดูทีหลัง')
-          : L('ไม่มีการแจ้งเตือนใหม่')) + '</div></div>';
+          : L('ไม่มีการแจ้งเตือนใหม่')) + '</div>' +
+        (!nf && tab === 'activity' && !ui.snoozed ? '<div class="inbox-empty-s">' +
+          L('เมื่อมีคนมอบหมายงาน @พูดถึงคุณ ขออนุมัติ หรือตอบความเห็นของคุณ จะขึ้นที่นี่') + '</div>' : '') +
+        (!nf && tab === 'archive' ? '<div class="inbox-empty-s">' +
+          L('กดรูปกล่องบนรายการ (หรือปุ่ม I) เพื่อเก็บรายการที่จัดการแล้ว') + '</div>' : '') +
+        (eAct ? '<div class="inbox-empty-acts">' + eAct + '</div>' : '') + '</div></div>';
       return h;
     }
 
-    list.forEach(function (n) { h += inboxRow(n, dense); });
+    /* Sprint 2B — รายการที่ติดกันของงานเดียวกันรวมเป็นแถวเดียว มีตัวเลข +N กดกางดูทีละรายการ */
+    var groups = [];
+    list.forEach(function (n) {
+      var g = groups[groups.length - 1];
+      if (g && n.taskId && g[0].taskId === n.taskId) g.push(n);
+      else groups.push([n]);
+    });
+    var open = ui.open || {};
+    groups.forEach(function (g) {
+      var isOpen = g.length > 1 && !!open[g[0].taskId];
+      h += inboxRow(g[0], dense, { group: g, open: isOpen });
+      if (isOpen) g.slice(1).forEach(function (n) { h += inboxRow(n, dense, { sub: true }); });
+    });
     return h + '</div>';
   }
 
-  function inboxRow(n, dense) {
+  /** Sprint 2B — เนื้อหาของรายการ: ความเห็น 1–2 บรรทัดแรก หรือสถานะ + บรรทัดแรกของรายงานสถานะ */
+  function notifPreview(n, dense) {
+    var parts = S.notifParts(n), seen = {}, out = '';
+    parts.forEach(function (p) {
+      if (!p.story || seen[p.story] || out) return;
+      seen[p.story] = true;
+      var st = S.story(p.story);
+      if (!st || st.type !== 'comment') return;
+      if (st.deleted) { out = '<div class="nrow-quote gone">' + esc(L('ความเห็นนี้ถูกลบแล้ว')) + '</div>'; return; }
+      var lines = S.plainText(st.text).split('\n').map(function (x) { return x.trim(); })
+        .filter(Boolean).slice(0, dense ? 1 : 2);
+      var txt = lines.join('\n');
+      if (txt.length > 240) txt = txt.slice(0, 240) + '…';
+      if (txt) out = '<div class="nrow-quote' + (dense ? ' one' : '') + '">' + esc(txt) + '</div>';
+    });
+    if (out) return out;
+    if (n.kind === 'status') {
+      var e = notifStatusEntry(n);
+      if (!e) return '';
+      var stt = projectState(e.state);
+      var first = String(e.title || '').trim() ||
+        (S.plainText(e.text || '').split('\n').map(function (x) { return x.trim(); }).filter(Boolean)[0] || '');
+      if (first.length > 200) first = first.slice(0, 200) + '…';
+      return '<div class="nrow-status"><span class="approval-pill" style="background:' + stt.color + '22;color:' + stt.color + '">' +
+        esc(L(stt.label)) + '</span>' + (first ? '<span class="nrow-status-t">' + esc(first) + '</span>' : '') + '</div>';
+    }
+    return '';
+  }
+
+  /** รายงานสถานะที่รายการนี้พูดถึง — มี ref ใช้ ref ไม่มี (ข้อมูลก่อน 2B) ใช้รายงานล่าสุดก่อนเวลาแจ้ง */
+  function notifStatusEntry(n) {
+    var host = n.projectId ? S.project(n.projectId) : null;
+    var m = /^portfolio:([^:]+)/.exec(String(n.route || ''));
+    if (!host && m) host = S.portfolio(m[1]);
+    var log = host && host.statusLog;
+    if (!log || !log.length) return null;
+    if (n.ref) return log.filter(function (e) { return e.id === n.ref; })[0] || null;
+    var lim = Date.parse(n.createdAt) + 60000, best = null;
+    log.forEach(function (e) {
+      var at = Date.parse(e.at);
+      if (!isNaN(at) && at <= lim && (!best || at >= Date.parse(best.at))) best = e;
+    });
+    return best;
+  }
+
+  /** ความเห็นแรกที่รายการนี้ชี้ (กดแล้วพาไปที่ความเห็น) */
+  function notifStory(n) {
+    var p = S.notifParts(n).filter(function (x) { return x.story; })[0];
+    var st = p ? S.story(p.story) : null;
+    return st && !st.deleted && st.taskId === n.taskId ? st.id : '';
+  }
+
+  /** งานขออนุมัติที่รอฉันตัดสินอยู่ตอนนี้ไหม (ปุ่มอนุมัติในแถว) */
+  function waitingMyApproval(t) {
+    return !!t && t.type === 'approval' && !t.completed && (t.approval || 'pending') === 'pending' &&
+      t.assigneeId === S.db.currentUserId && S.canApprove(t.id);
+  }
+
+  /** ปุ่มตัดสินในแถว — ใช้ทั้งกล่องข้อความ แท็บรออนุมัติ และวิดเจ็ตหน้าแรก */
+  function approvalBtns(t) {
+    var a = ' data-id="' + esc(t.id) + '"';
+    return '<span class="apv-acts">' +
+      '<button class="btn btn-sm btn-primary apv-ok" data-act="apv-set" data-v="approved"' + a + '>' + I('check', 13) +
+        '<span>' + L('อนุมัติ') + '</span></button>' +
+      '<button class="btn btn-sm apv-chg" data-act="apv-set" data-v="changes"' + a + '>' + L('ขอให้แก้ไข') + '</button>' +
+      '<button class="btn btn-sm btn-ghost apv-no" data-act="apv-set" data-v="rejected"' + a + '>' + L('ปฏิเสธ') + '</button>' +
+      '</span>';
+  }
+
+  /** แถวงานรออนุมัติหนึ่งงาน @param compact วิดเจ็ตหน้าแรก (ไม่มีบรรทัดรายละเอียด) */
+  function approvalRow(t, compact) {
+    var req = S.approvalRequester(t);
+    var pj = S.projectsOfTask(S.rootOf(t).id)[0];
+    var at = t.assignedAt || t.createdAt;
+    var note = compact ? '' : (S.plainText(t.notes || '').split('\n').map(function (x) { return x.trim(); }).filter(Boolean)[0] || '');
+    if (note.length > 160) note = note.slice(0, 160) + '…';
+    return '<div class="apv-row' + (compact ? ' compact' : '') + '" data-act="open-task" data-id="' + esc(t.id) + '">' +
+      '<span class="apv-av">' + avatar(req, 'sm') + '</span>' +
+      '<div class="apv-body"><div class="apv-name">' + esc(t.name) + '</div>' +
+      '<div class="apv-sub">' + esc(L('{who} ขออนุมัติจากคุณ', { who: req ? req.name : '?' })) +
+        (at ? ' · ' + whenTag(at, 'apv-when') : '') +
+        (t.dueOn ? ' · <span class="hdue' + dueClass(t.dueOn, false) + '">' + esc(L('ครบกำหนด {d}', { d: fmtDate(t.dueOn) })) + '</span>' : '') +
+        (pj ? ' <span class="hchip" style="background:' + esc(pj.project.color) + '22;color:' + esc(pj.project.color) + '">' +
+          esc(pj.project.name) + '</span>' : '') + '</div>' +
+      (note ? '<div class="nrow-quote one">' + esc(note) + '</div>' : '') +
+      '</div>' + (S.canApprove(t.id) ? approvalBtns(t) : '') + '</div>';     // canApprove — บทบาทดูอย่างเดียวไม่เห็นปุ่ม
+  }
+
+  /** แท็บ "รออนุมัติจากฉัน" ในกล่องข้อความ */
+  function approvalsHub() {
+    var list = S.approvalsWaiting();
+    var h = '<p class="apv-note">' + I('check', 14) + '<span>' +
+      L('งานขออนุมัติที่คุณเป็นผู้อนุมัติและยังไม่ได้ตัดสิน ครบกำหนดก่อนขึ้นก่อน') + '</span></p>';
+    if (!list.length) {
+      return h + '<div class="empty inbox-empty"><div class="big">✅</div><div class="inbox-empty-t">' +
+        L('ไม่มีงานรออนุมัติจากคุณ') + '</div><div class="inbox-empty-s">' +
+        L('เมื่อมีคนส่งงานขออนุมัติให้คุณ จะขึ้นที่นี่พร้อมปุ่มอนุมัติ ขอแก้ไข และปฏิเสธ') + '</div></div>';
+    }
+    h += '<div class="apv-list">';
+    list.forEach(function (t) { h += approvalRow(t, false); });
+    return h + '</div>';
+  }
+
+  /** วิดเจ็ตหน้าแรก "รออนุมัติจากฉัน" — แยกเป็นฟังก์ชันของตัวเอง ไม่แตะโครงหน้าแรก */
+  function homeApprovalsCard() {
+    var list = S.approvalsWaiting();
+    var body = '';
+    if (!list.length) body = '<div class="hempty">' + L('ไม่มีงานรออนุมัติจากคุณ') + '</div>';
+    list.slice(0, HOME_ROWS).forEach(function (t) { body += approvalRow(t, true); });
+    if (list.length > HOME_ROWS) body += '<div class="hmore">+' + (list.length - HOME_ROWS) + ' ' + L('อื่น ๆ') + '</div>';
+    return {
+      title: hTitle(I('check', 15), L('รออนุมัติจากฉัน')) + (list.length ? '<span class="tab-n">' + list.length + '</span>' : ''),
+      action: '<button class="btn btn-sm btn-ghost" data-act="inbox-tab" data-tab="approvals" data-go="1">' + L('ดูทั้งหมด') + '</button>',
+      body: body
+    };
+  }
+
+  /** ปุ่ม "ติดตาม" บนหัวโปรเจกต์/พอร์ตโฟลิโอ ชี้ค้างเห็นรายชื่อผู้ติดตาม */
+  function followBtn(kind, id) {
+    var isP = kind === 'project';
+    var on = isP ? S.projFollowing(id) : S.pfFollowing(id);
+    var list = isP ? S.projFollowers(id) : S.pfFollowers(id);
+    var names = list.map(function (u) { return u.name; });
+    var tip = (names.length ? L('ผู้ติดตาม {n} คน: {who}', { n: names.length, who: names.slice(0, 12).join(', ') + (names.length > 12 ? ' …' : '') })
+                            : L('ยังไม่มีผู้ติดตาม')) + '\n' +
+      (isP ? L('ติดตาม = ได้แจ้งเตือนเมื่อมีอัปเดตสถานะ งานใหม่ และหมุดหมายที่สำเร็จ')
+           : L('ติดตาม = ได้แจ้งเตือนเมื่อมีอัปเดตสถานะของพอร์ตโฟลิโอนี้'));
+    return '<button class="btn tb-follow' + (on ? ' on' : '') + '" data-act="follow-toggle" data-kind="' + kind +
+      '" data-id="' + esc(id) + '" aria-pressed="' + on + '" title="' + esc(tip) + '">' + I('bell', 14) +
+      '<span class="hide-sm">' + (on ? L('ติดตามอยู่') : L('ติดตาม')) + '</span>' +
+      (list.length ? '<span class="tb-follow-n">' + list.length + '</span>' : '') + '</button>';
+  }
+
+  /** @param o { group: [รายการในแถวนี้], open, sub } — Sprint 2B */
+  function inboxRow(n, dense, o) {
+    o = o || {};
+    var grp = o.group && o.group.length > 1 ? o.group : null;
     var t = n.taskId ? S.task(n.taskId) : null;
     /* ประกาศของโปรเจกต์ไม่มีงานให้ชี้ ต้องพาไปที่หน้าประกาศแทน */
     var np = (!t && n.projectId) ? S.project(n.projectId) : null;
     var actor = n.actorId ? S.user(n.actorId) : null;
-    var h = '<div class="nrow' + (n.read ? '' : ' unread') + (n.bookmarked ? ' marked' : '') +
-      '" data-act="open-notif" data-id="' + esc(n.id) + '" data-task="' + esc(n.taskId || '') + '"' +
+    var unread = grp ? grp.some(function (x) { return !x.read; }) : !n.read;
+    var snz = S.isSnoozed(n);
+    var sid = t ? notifStory(n) : '';
+    var h = '<div class="nrow' + (unread ? ' unread' : '') + (n.bookmarked ? ' marked' : '') + (o.sub ? ' nrow-sub' : '') +
+      (grp ? ' nrow-grp' : '') + '" data-act="open-notif" data-id="' + esc(n.id) + '" data-task="' + esc(n.taskId || '') + '"' +
+      (grp ? ' data-group="' + esc(grp.map(function (x) { return x.id; }).join(',')) + '"' : '') +
+      (sid ? ' data-story="' + esc(sid) + '"' : '') +
       (np ? ' data-project="' + esc(np.id) + '"' : '') +
       (n.route ? ' data-route="' + esc(n.route) + '"' : '') + '>';
-    h += n.read ? '<span class="nrow-dot"></span>' : '<span class="unread-dot"></span>';
+    h += unread ? '<span class="unread-dot"></span>' : '<span class="nrow-dot"></span>';
     if (!dense) h += '<span class="nrow-av">' + (actor ? avatar(actor, 'sm')
       : '<span class="nrow-sys">' + I(n.kind === 'due' || n.kind === 'overdue' ? 'calendar' : 'bell', 13) + '</span>') + '</span>';
     var ntxt = notifText(n);
     var where = t ? t.name : (np ? np.name : (n.route === 'mytasks' ? L('งานของฉัน')
       : (S.routeLabel(n.route) || L('(งานถูกลบแล้ว)'))));     // 4a — ทีม พอร์ตโฟลิโอ เป้าหมาย
-    h += '<div class="body"><div class="txt">' + esc(ntxt) + '</div>';
+    h += '<div class="body"><div class="txt"><span class="ntxt">' + esc(ntxt) + '</span>' +
+      (grp ? ' <button class="nrow-more' + (o.open ? ' on' : '') + '" data-act="notif-group" data-task="' + esc(n.taskId) +
+        '" title="' + esc(o.open ? L('ยุบ') : L('อีก {n} รายการของงานนี้', { n: grp.length - 1 })) + '">+' + (grp.length - 1) +
+        I(o.open ? 'arrowUp' : 'chevronDown', 11) + '</button>' : '') + '</div>';
+    h += notifPreview(n, dense);                         // Sprint 2B — เนื้อความเห็น / สถานะ
+    if (snz) {
+      h += '<div class="nrow-note nrow-snz">' + I('clock', 12) + ' ' +
+        esc(L('เตือนอีกครั้ง {t}', { t: fmtDate(S.iso(new Date(n.snoozeUntil))) + ' ' + fmtTime(new Date(n.snoozeUntil)) })) + '</div>';
+    } else if (n.wokeAt && !n.read) {
+      h += '<div class="nrow-note nrow-snz">' + I('clock', 12) + ' ' + esc(L('เตือนอีกครั้งตามที่เลื่อนไว้')) + '</div>';
+    }
+    /* Sprint 2B — ขออนุมัติจากฉันที่ยังรออยู่ ตัดสินได้จากแถวนี้เลย */
+    if (!o.sub && waitingMyApproval(t) && S.notifKinds(n).indexOf('assigned') >= 0) {
+      h += '<div class="nrow-apv">' + approvalBtns(t) + '</div>';
+    }
     /* Sprint 1B — คำขอสิทธิ์เข้าโปรเจกต์ ตอบได้จากแถวนี้เลย (ชุดปุ่มเดียวกับในแผงงานคำขอแบบเก่า)
      * ตอบไปแล้ว (โดยใครก็ตาม) ปุ่มหายเอง เหลือแต่ข้อความ */
     var areq = S.accessRequestFor(n);
@@ -4055,31 +4337,42 @@
           '" data-user="' + esc(areq.userId) + '">' + L('ปฏิเสธ') + '</button></div>';
       }
     } else if (n.kind === 'access') {
-      h += '<div class="nrow-note">' + esc(L('ตอบคำขอนี้แล้ว')) + '</div>';
+      /* Sprint 2B — บอกผลให้ชัด: ให้สิทธิ์ไปแล้ว หรือตอบไปแล้ว (ปฏิเสธ/ถอนคำขอ) */
+      var granted = n.projectId && n.actorId && S.project(n.projectId) && S.projectAccess(n.projectId, n.actorId);
+      h += '<div class="nrow-note">' + esc(granted ? L('ให้สิทธิ์เข้าโปรเจกต์แล้ว') : L('ตอบคำขอนี้แล้ว')) + '</div>';
     }
+    var at = S.notifAt(n);
     if (!dense) {
       var pj = t ? S.projectsOfTask(S.rootOf(t).id)[0] : null;
-      h += '<div class="sub" title="' + esc(fmtExact(n.createdAt)) + '">' +
+      h += '<div class="sub" title="' + esc(fmtExact(at)) + '">' +
         '<span class="nsub-where">' + esc(where) + '</span>' +
         (pj ? '<span class="hchip" style="background:' + esc(pj.project.color) + '22;color:' +
           esc(pj.project.color) + '">' + esc(pj.project.name) + '</span>'
           : (t && !t.parentId && S.isPrivate(t.id) ? privateChip() : '')) +
-        '<span class="nsub-when">' + esc(fmtWhen(n.createdAt)) + '</span></div>';
+        '<span class="nsub-when">' + esc(fmtWhen(at)) + '</span></div>';
     }
     h += '</div>';
-    if (dense) h += '<span class="nrow-when" title="' + esc(fmtExact(n.createdAt)) + '">' + esc(fmtWhen(n.createdAt)) + '</span>';
+    if (dense) h += '<span class="nrow-when" title="' + esc(fmtExact(at)) + '">' + esc(fmtWhen(at)) + '</span>';
+    /* แถวที่รวมหลายรายการ ปุ่มอ่าน/เก็บทำกับทั้งกลุ่ม (data-group) */
+    var gAttr = grp ? ' data-group="' + esc(grp.map(function (x) { return x.id; }).join(',')) + '"' : '';
     h += '<span class="acts">' +
       '<button class="btn btn-sm btn-ghost nact-mark' + (n.bookmarked ? ' on' : '') + '" data-act="notif-bookmark" data-id="' +
       esc(n.id) + '" title="' + (n.bookmarked ? L('เอาบุ๊กมาร์กออก') : L('บุ๊กมาร์ก')) + '">' +
       (n.bookmarked ? global.Icons.iconFilled('bookmark', 14) : I('bookmark', 14)) + '</button>' +
-      '<button class="btn btn-sm btn-ghost" data-act="notif-read" data-id="' + esc(n.id) + '" title="' +
-      (n.read ? L('ทำเป็นยังไม่อ่าน') : L('ทำเป็นอ่านแล้ว')) + '">' + I(n.read ? 'eye' : 'check', 14) + '</button>' +
+      '<button class="btn btn-sm btn-ghost" data-act="notif-read" data-id="' + esc(n.id) + '"' + gAttr + ' title="' +
+      (!unread ? L('ทำเป็นยังไม่อ่าน') : L('ทำเป็นอ่านแล้ว')) + '">' + I(!unread ? 'eye' : 'check', 14) + '</button>' +
+      /* Sprint 2B — เลื่อนเตือน (เก็บถาวรแล้วไม่ต้องเลื่อน) */
+      (n.archived ? '' : snz
+        ? '<button class="btn btn-sm btn-ghost nact-snz on" data-act="notif-unsnooze" data-id="' + esc(n.id) + '" title="' +
+          L('เลิกเลื่อน ให้กลับมาตอนนี้') + '">' + I('clock', 14) + '</button>'
+        : '<button class="btn btn-sm btn-ghost nact-snz" data-act="notif-snooze" data-id="' + esc(n.id) + '"' + gAttr + ' title="' +
+          L('เตือนอีกครั้ง…') + '">' + I('clock', 14) + '</button>') +
       (t ? '<button class="btn btn-sm btn-ghost" data-act="notif-followup" data-id="' + esc(t.id) + '" title="' +
         L('สร้างงานติดตามผล') + '">' + I('plus', 14) + '</button>' : '') +
       (n.archived
         ? '<button class="btn btn-sm btn-ghost" data-act="unarchive-notif" data-id="' + esc(n.id) + '" title="' +
           L('ย้ายกลับไปกิจกรรม') + '">' + I('arrowUp', 14) + '</button>'
-        : '<button class="btn btn-sm btn-ghost" data-act="archive-notif" data-id="' + esc(n.id) + '" title="' +
+        : '<button class="btn btn-sm btn-ghost" data-act="archive-notif" data-id="' + esc(n.id) + '"' + gAttr + ' title="' +
           L('เก็บ') + '">' + I('archive', 14) + '</button>') +
       '</span>';
     return h + '</div>';
@@ -4238,12 +4531,17 @@
     /* งานที่เลือกมีงานที่แก้ไม่ได้ (แสดงความเห็นได้/ดูอย่างเดียว) — ทุกคำสั่งแก้หลายงานจะโดนปฏิเสธทั้งชุด
      * (ด่าน allowed ใน main.js) ไม่ต้องโชว์ปุ่มเหล่านั้น เหลือคัดลอกลิงก์กับยกเลิกการเลือก */
     var canAll = ids.every(function (id) { return S.can('write', id); });
+    /* Sprint 2A — ปุ่มคำสั่งอยู่ในกล่อง .bulk-acts (จอกว้าง display: contents หน้าตาเหมือนเดิม
+     * จอมือถือเป็นแถบเลื่อนแนวนอน) ส่วน "ยกเลิก" แยกออกมาอยู่ท้ายสุดเสมอ ไม่ถูกเลื่อนหายไปนอกจอ */
+    var clear = '<button class="bulk-x" data-act="bulk-clear">' + L('ยกเลิก') + '</button>';
     if (!canAll) {
-      h += '<span class="bulk-ro">' + I('lock', 12) + ' ' + esc(L('มีงานที่คุณแก้ไม่ได้อยู่ในที่เลือก')) + '</span>';
-      h += '<button data-act="bulk-links">' + L('คัดลอกลิงก์') + '</button>';
-      h += '<button data-act="bulk-clear">' + L('ยกเลิก') + '</button>';
+      h += '<div class="bulk-acts"><span class="bulk-ro">' + I('lock', 12) + ' ' + esc(L('มีงานที่คุณแก้ไม่ได้อยู่ในที่เลือก')) + '</span>';
+      h += '<button data-act="bulk-links">' + L('คัดลอกลิงก์') + '</button></div>';
+      h += clear;
       return h + '</div>';
     }
+    h += '<div class="bulk-acts">';
+    if (global.Render.bulkExt) h += global.Render.bulkExt(ids) || '';     // Sprint 2A — ย้ายไปเซกชัน/คอลัมน์
     h += '<button data-act="bulk-complete">' + L('ทำเสร็จ') + '</button>';
     h += '<button data-act="bulk-reopen">' + L('เปิดใหม่') + '</button>';
     h += '<select data-act="bulk-assignee"><option value="">' + L('มอบหมายให้…') + '</option>';
@@ -4259,7 +4557,6 @@
     h += '<button data-act="bulk-due">' + L('ตั้งกำหนดส่ง') + '</button>';
     h += '<button data-act="bulk-more">' + L('เพิ่มเติม') + ' ' + I('chevronDown', 12) + '</button>';
     h += '<button data-act="bulk-delete">' + L('ลบ') + '</button>';
-    h += '<button data-act="bulk-clear">' + L('ยกเลิก') + '</button>';
     /* ผลรวมของฟิลด์ตัวเลขในงานที่เลือก (ฟิลด์ของโปรเจกต์ที่งานอยู่) */
     var tasks = ids.map(S.task).filter(Boolean);
     var nums = {}, order = [];
@@ -4278,7 +4575,7 @@
       h += '<span class="bulk-sum" title="' + esc(L('ผลรวมของงานที่เลือก')) + '">Σ ' + esc(f.name) + ' ' +
         esc(S.formatNumber(f, sum)) + '</span>';
     });
-    h += '</div>';
+    h += '</div>' + clear + '</div>';
     return h;
   }
 
@@ -4355,27 +4652,40 @@
     var canW = S.can('write', t.id), canC = S.can('comment', t.id);
 
     var h = '';
-    h += '<div class="dw-head">' + (canW ? checkbox(t) : checkbox(t).replace('<button ', '<button disabled ')) +
-      /* ข้อความข้างวงกลมกดได้เหมือนวงกลม (เดิมเป็นข้อความเฉย ๆ คนกดที่คำแล้วไม่เกิดอะไร) — แก้ไม่ได้ = ข้อความธรรมดา */
-      (canW
-        ? '<button class="dw-done-lbl" data-act="toggle" data-id="' + esc(t.id) + '">'
-        : '<span class="dw-done-lbl ro">') +
-      (t.completed ? L('ทำเสร็จแล้ว') : L('ทำเครื่องหมายว่าเสร็จ')) + (canW ? '</button>' : '</span>') +
+    /* Sprint 2A — หัวแผงงาน
+     *   ‹ กลับ     เห็นเฉพาะจอมือถือ (แผงเต็มจอ) ทางออกที่คนคุ้นจากแอปมือถือทุกตัว แทน × เล็ก ๆ ที่มุมขวา
+     *   ทำเสร็จ    เป็นปุ่มมีกรอบจริง (เดิมวงกลมกับข้อความเทา ๆ คนใหม่ไม่รู้ว่ากดได้) จอมือถือใช้คำสั้น
+     *   ขยาย      ใช้ไอคอนขยาย/ย่อ (เดิมลูกศรซ้าย ← คนเข้าใจว่า "ย้อนกลับ") ซ่อนบนมือถือเพราะเต็มจออยู่แล้ว
+     * ปุ่มไอคอนล้วนมี aria-label ให้โปรแกรมอ่านหน้าจอ (title อย่างเดียวจอสัมผัสไม่เห็นและอ่านไม่ครบ) */
+    var doneTxt = t.completed ? L('ทำเสร็จแล้ว') : L('ทำเครื่องหมายว่าเสร็จ');
+    var doneShort = t.completed ? L('เสร็จแล้ว') : L('ทำเสร็จ');
+    var wide = !!(opts && opts.wide);
+    var iconBtn = function (act, icon, label, extra, cls) {
+      return '<button class="btn btn-sm btn-ghost dw-ic' + (cls || '') + '" data-act="' + act + '"' + (extra || '') +
+        ' title="' + esc(label) + '" aria-label="' + esc(label) + '">' + icon + '</button>';
+    };
+    h += '<div class="dw-head">' +
+      '<button class="dw-back" data-act="close-drawer" aria-label="' + esc(L('กลับ')) + '">' + I('chevronRight', 16) +
+      '<span>' + L('กลับ') + '</span></button>' +
+      /* แก้ไม่ได้ = ปุ่มกดไม่ได้ (บอกสถานะอย่างเดียว) */
+      '<button class="dw-done-btn' + (t.completed ? ' on' : '') + '"' +
+      (canW ? ' data-act="toggle" data-id="' + esc(t.id) + '"' : ' disabled') +
+      ' aria-pressed="' + !!t.completed + '" title="' + esc(t.type === 'approval' && !t.completed
+        ? L('ปิดงานนี้ด้วยการอนุมัติหรือปฏิเสธของผู้อนุมัติ') : doneTxt) + '">' + I('check', 14) +
+      '<span class="dw-done-full">' + doneTxt + '</span><span class="dw-done-short">' + doneShort + '</span></button>' +
       '<div style="flex:1"></div>' +
-      '<button class="btn btn-sm btn-ghost" data-act="toggle-like" data-id="' + esc(t.id) +
-      '" title="' + L('ถูกใจ') + '" style="' + (liked ? 'color:var(--danger)' : '') + '"' + (canC ? '' : ' disabled') + '>' + I('heart') + ' ' +
+      '<button class="btn btn-sm btn-ghost dw-ic dw-like" data-act="toggle-like" data-id="' + esc(t.id) +
+      '" title="' + L('ถูกใจ') + '" aria-label="' + esc(L('ถูกใจ')) + '" aria-pressed="' + liked + '" style="' +
+      (liked ? 'color:var(--danger)' : '') + '"' + (canC ? '' : ' disabled') + '>' + I('heart') + ' ' +
       (t.likes.length || '') + '</button>' +
-      (canC ? '<button class="btn btn-sm btn-ghost" data-act="toggle-follow" data-id="' + esc(t.id) +
-      '" title="' + (following ? L('เลิกติดตาม') : L('ติดตาม')) + '">' +
-      I('bell') + '</button>' : '') +
+      (canC ? '<button class="btn btn-sm btn-ghost dw-ic" data-act="toggle-follow" data-id="' + esc(t.id) +
+      '" title="' + (following ? L('เลิกติดตาม') : L('ติดตาม')) + '" aria-label="' + esc(following ? L('เลิกติดตาม') : L('ติดตาม')) +
+      '" aria-pressed="' + following + '">' + I('bell') + '</button>' : '') +
       /* ขยายเต็มจอ สำหรับงานที่มีรายละเอียดยาวหรือคุยกันหลายสิบความเห็น
        * แผงข้างกว้างคงที่ อ่านสรุปประชุมที่มีหัวข้อย่อยสามชั้นแล้วตัดบรรทัดถี่มาก */
-      '<button class="btn btn-sm btn-ghost" data-act="toggle-wide" title="' +
-      (opts && opts.wide ? L('ย่อกลับ') : L('ขยายเต็มจอ')) + '">' +
-      I(opts && opts.wide ? 'arrowRight' : 'arrowLeft', 14) + '</button>' +
-      '<button class="btn btn-sm btn-ghost" data-act="task-menu" data-id="' + esc(t.id) +
-      '" title="' + L('เมนู') + '">' + I('more') + '</button>' +
-      '<button class="btn btn-sm btn-ghost" data-act="close-drawer" title="' + L('ปิด') + '">' + I('close', 13) + '</button></div>';
+      iconBtn('toggle-wide', I(wide ? 'shrink' : 'expand', 14), wide ? L('ย่อกลับ') : L('ขยายเต็มจอ'), '', ' dw-wide-btn') +
+      iconBtn('task-menu', I('more'), L('เมนู'), ' data-id="' + esc(t.id) + '"') +
+      iconBtn('close-drawer', I('close', 13), L('ปิด'), '', ' dw-x') + '</div>';
 
     h += '<div class="dw-body">';
 
@@ -5671,9 +5981,15 @@
     var h = '';
     /* บรีฟ — เอกสารสั้นของโปรเจกต์ (หัวข้อ ตาราง @อ้างถึง) แก้ในที่ บันทึกตอนออกจากช่อง */
     var by = S.user(p.briefBy);
+    /* Sprint 2C — เปิดมาเป็นโหมดอ่านก่อนเสมอ ผู้บริหารเลื่อน/คลิกอ่านแล้วเผลอพิมพ์ทับบรีฟ
+     * คนที่แก้ได้กด "แก้ไข" ก่อนถึงจะพิมพ์ได้ (สถานะนี้อยู่แค่ในหน้าจอ ไม่ได้บันทึก) */
+    var ui2 = global.Render.ui2c || {};
+    var briefEdit = can && !!(ui2.brief && ui2.brief[p.id]);
     h += '<section class="ovw-card ovw-brief"><h3>' + L('บรีฟโปรเจกต์') +
-      (p.briefAt ? '<em class="ovw-meta">' + esc(L('แก้ล่าสุดโดย {u} · {w}', { u: by ? by.name : '—', w: fmtWhen(p.briefAt) })) + '</em>' : '') + '</h3>';
-    if (can) {
+      (p.briefAt ? '<em class="ovw-meta">' + esc(L('แก้ล่าสุดโดย {u} · {w}', { u: by ? by.name : '—', w: fmtWhen(p.briefAt) })) + '</em>' : '') +
+      (can ? '<button class="as-link ovw-edit-btn" data-act="brief-edit" data-id="' + esc(p.id) + '">' +
+        (briefEdit ? I('check', 12) + ' ' + L('เสร็จ') : I('pencil', 12) + ' ' + L('แก้ไข')) + '</button>' : '') + '</h3>';
+    if (briefEdit) {
       h += '<div class="rte-wrap rte-brief-wrap">' + RT().toolbar('page', { image: false }) +
         '<div class="rte rte-brief rte-doc" contenteditable="true" spellcheck="true" data-blocks="1" data-save="brief" data-key="b:' +
         esc(p.id) + '" data-id="' + esc(p.id) + '" data-placeholder="' +
@@ -5707,15 +6023,20 @@
     var all = p.msShow === 'all';
     var ms = S.projectMilestones(p.id, all);
     var canW = S.can('write') && S.canInProject(p.id, 'edit');
+    /* Sprint 2C — วันที่และช่องติ๊กของหมุดหมายแก้ได้เฉพาะตอนกด "แก้ไข" (เดิมเป็นช่องวันที่ตลอด เผลอเลื่อนวันกันบ่อย) */
+    var msEdit = canW && !!(ui2.ms && ui2.ms[p.id]);
     h += '<section class="ovw-card"><h3>' + I('diamond', 13) + ' ' + L('หมุดหมาย') +
       '<span class="ovw-acts"><span class="segmented sm"><button data-act="ms-show" data-id="' + esc(p.id) + '" data-v="open" class="' +
       (all ? '' : 'on') + '">' + L('ยังไม่ถึง') + '</button><button data-act="ms-show" data-id="' + esc(p.id) + '" data-v="all" class="' +
       (all ? 'on' : '') + '">' + L('ทั้งหมด') + '</button></span>' +
-      (canW ? '<button class="as-link" data-act="ms-add" data-id="' + esc(p.id) + '">+ ' + L('เพิ่ม') + '</button>' : '') + '</span></h3>';
+      (canW ? '<button class="as-link" data-act="ms-add" data-id="' + esc(p.id) + '">+ ' + L('เพิ่ม') + '</button>' : '') +
+      (canW && ms.length ? '<button class="as-link ovw-edit-btn" data-act="ms-edit" data-id="' + esc(p.id) + '">' +
+        (msEdit ? I('check', 12) + ' ' + L('เสร็จ') : I('pencil', 12) + ' ' + L('แก้ไข')) + '</button>' : '') + '</span></h3>';
     if (!ms.length) h += '<div class="ovw-empty">' + L('ยังไม่มีหมุดหมาย หมุดหมายคือจุดสำคัญ เช่น ส่งแบบให้ลูกค้า หรือวันเปิดตัว') + '</div>';
     ms.forEach(function (t) {
-      var w = S.can('write', t.id);
-      h += '<div class="ms-row' + (t.completed ? ' done' : '') + '">' + checkbox(t) +
+      var w = msEdit && S.can('write', t.id);
+      h += '<div class="ms-row' + (t.completed ? ' done' : '') + '">' +
+        (w ? checkbox(t) : '<span class="check ro' + (t.completed ? ' on' : '') + ' milestone" aria-hidden="true"><span>' + ICON.check + '</span></span>') +
         '<button class="grow ms-nm" data-act="open-task" data-id="' + esc(t.id) + '">' + esc(t.name) + '</button>' +
         (w ? '<input type="date" class="ms-date' + dueClass(t.dueOn, t.completed) + '" data-act="ms-due" data-id="' + esc(t.id) +
           '" value="' + esc(t.dueOn || '') + '">'

@@ -324,8 +324,14 @@ CREATE TABLE dbo.notifications (
     id           BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
     user_id      UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.users(id) ON DELETE CASCADE,
     task_id      UNIQUEIDENTIFIER NULL REFERENCES dbo.tasks(id),
-    kind         VARCHAR(20)      NULL,     -- assigned | mention | comment | unblock | activity | message | approval | due | overdue | status | newtask
+    kind         VARCHAR(20)      NULL,     -- assigned | mention | comment | unblock | activity | message | approval | due | overdue | status | newtask | milestone | timelog (Sprint 2B)
     dedupe_key   VARCHAR(120)     NULL,     -- กันเตือนกำหนดส่งซ้ำ เช่น due1:<task>:<date>
+    /* Sprint 2B — รวมกลุ่ม/เนื้อหา/เลื่อนเตือน */
+    parts_json   NVARCHAR(MAX)    NULL,     -- ส่วนที่รวมเข้ามา (คนเดียวกัน งานเดียวกัน ภายใน 10 นาที) [{ key, params, kind, story, ref, x }]
+    story_id     UNIQUEIDENTIFIER NULL,     -- ความเห็นที่ทำให้เกิดรายการ (โชว์เนื้อหา + พาไปที่ความเห็น)
+    status_ref   VARCHAR(40)      NULL,     -- รายการในประวัติสถานะ (โชว์สถานะ + บรรทัดแรก)
+    snooze_until DATETIME2(0)     NULL,     -- เลื่อนเตือน ซ่อนจนถึงเวลานี้
+    woke_at      DATETIME2(0)     NULL,     -- กลับมาจากการเลื่อน (ใช้เรียงขึ้นบนสุด)
     actor_id     UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),   -- ใช้กับตัวกรอง "จากใคร" ในกล่องข้อความ
     project_id   UNIQUEIDENTIFIER NULL REFERENCES dbo.projects(id), -- ประกาศ/สถานะที่ไม่มีงานให้ชี้
     route        VARCHAR(20)      NULL,     -- mytasks | p-overview
@@ -1253,5 +1259,32 @@ CREATE TABLE dbo.project_embeds (
     created_by  UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
     created_at  DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME(),
     CONSTRAINT ck_embed_host CHECK (host IN ('gdocs','gdrive','figma','miro','loom','youtube','m365'))
+);
+GO
+
+/* ======================================================================
+ * Sprint 2C — มุมมองผู้บริหาร (SCHEMA 19 ของ app/store.js)
+ * ====================================================================== */
+
+/* ตัวเลข ณ ตอนรายงาน และที่เปลี่ยนจากรายงานครั้งก่อน คิดตอนโพสต์แล้วเก็บไว้เลย (ไม่คิดใหม่ตอนเปิดดู)
+ * snap = งานทั้งหมด/เสร็จ/เลยกำหนด  chg = สถานะครั้งก่อน + ส่วนต่างงานเสร็จ/เลยกำหนด */
+ALTER TABLE dbo.project_status_updates ADD
+    snap_total INT NULL, snap_done INT NULL, snap_overdue INT NULL,
+    prev_state VARCHAR(10) NULL, delta_done INT NULL, delta_overdue INT NULL;
+ALTER TABLE dbo.portfolio_status_updates ADD
+    snap_total INT NULL, snap_done INT NULL, snap_overdue INT NULL,
+    prev_state VARCHAR(10) NULL, delta_done INT NULL, delta_overdue INT NULL;
+GO
+
+/* ถาม/ตอบใต้รายงานสถานะ (statusLog[].replies ในแอป) — หนึ่งระดับ แจ้งคนเขียนรายงาน เจ้าของ คนที่เคยตอบ และคนที่ถูก @ */
+CREATE TABLE dbo.status_update_replies (
+    id            UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    project_update_id   BIGINT NULL REFERENCES dbo.project_status_updates(id) ON DELETE CASCADE,
+    portfolio_update_id BIGINT NULL REFERENCES dbo.portfolio_status_updates(id),
+    author_id     UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    body          NVARCHAR(MAX)    NOT NULL,   -- มาร์กดาวน์ย่อชุดเดียวกับความเห็น (@ชื่อ ได้)
+    created_at    DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT ck_sur_parent CHECK ((project_update_id IS NULL AND portfolio_update_id IS NOT NULL)
+                                 OR (project_update_id IS NOT NULL AND portfolio_update_id IS NULL))
 );
 GO

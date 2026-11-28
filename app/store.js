@@ -10,7 +10,10 @@
 
   var KEY = 'orbit.db.v4';
   var LEGACY_KEYS = ['orbit.db.v3', 'orbit.db.v2', 'orbit.db.v1', 'taskflow.db.v1'];   // ชื่อ/เวอร์ชันเดิม
-  var SCHEMA = 18;      // Sprint 1B — ถังขยะของความเห็น คำขอสิทธิ์แบบไม่สร้างงาน
+  /* Sprint 2 — 2B: การแจ้งเตือนรวมกลุ่ม (more) เลื่อนเตือน (snoozeUntil) ชี้ความเห็น (story)
+   *            2C: คำตอบใต้รายงานสถานะ (statusLog[].replies) และตัวเลขเทียบรอบก่อน (snap/chg)
+   * ทั้งสองเติมค่าเริ่มต้นใน migrate ทุกครั้งที่โหลด จึงใช้เลขรุ่นเดียวกันได้ */
+  var SCHEMA = 19;
 
   /* 4b — ค่าคงที่ที่ migrate() ใช้ (ต้องประกาศก่อน hydrate() ทำงาน) */
   var TIME_CATS_DEFAULT = ['งานลูกค้า', 'งานภายใน', 'ประชุม', 'อบรม'];
@@ -406,16 +409,20 @@
     byName[L('สรุปแนวทางแบรนด์ให้ทีมดีไซน์')].followers = ['u_nan', 'u_me'];
     byName[L('ตรวจข้อความโฆษณากับฝ่ายกฎหมาย')].followers = ['u_me', 'u_ploy'];
 
+    var seedStory = uid('st');
     stories.push({
-      id: uid('st'), taskId: byName[L('สรุปแนวทางแบรนด์ให้ทีมดีไซน์')].id,
+      id: seedStory, taskId: byName[L('สรุปแนวทางแบรนด์ให้ทีมดีไซน์')].id,
       actorId: 'u_nan', type: 'comment',
       text: L('ขอไฟล์โลโก้เวอร์ชัน vector ด้วยนะครับ @ฉัน'),
       createdAt: new Date().toISOString()
     });
+    /* Sprint 2B — เก็บเป็นคีย์ + คนทำ + ความเห็น (เดิมเป็นประโยคสำเร็จรูปตามภาษาตอนสร้างข้อมูลตัวอย่าง
+     * สลับเป็นไทยแล้วยังขึ้น "Somchai mentioned you in a comment") */
     notifications.push({
       id: uid('n'), userId: 'u_me',
       taskId: byName[L('สรุปแนวทางแบรนด์ให้ทีมดีไซน์')].id,
-      text: L('สมชาย พูดถึงคุณในความเห็น'),
+      text: L('สมชาย พูดถึงคุณในความเห็น'), key: 'พูดถึงคุณในความเห็น', params: null, kind: 'mention',
+      actorId: 'u_nan', actorName: L('สมชาย'), story: seedStory,
       createdAt: new Date().toISOString(), read: false, archived: false
     });
 
@@ -697,7 +704,19 @@
       p.accessRequests = (Array.isArray(p.accessRequests) ? p.accessRequests : []).filter(function (r) { return r && r.userId; });
       p.accessRequests.forEach(function (r) { if (!('note' in r)) r.note = null; });
     });
+    migrate2b(d);
     prunePersonal(d);
+    /* Sprint 2C (SCHEMA 19) — ผู้บริหารถาม/ตอบใต้รายงานสถานะได้ เก็บคำตอบติดไว้กับรายงานนั้นเลย
+     * (replies: [{ id, by, at, body }]) ไม่แยกเป็นตารางใหม่ ข้อมูลกลางเป็นก้อนเดียวจึงต้องเล็ก
+     * รายงานเก่าไม่มี snap/chg (ตัวเลข ณ ตอนรายงานและที่เปลี่ยนจากรอบก่อน) ปล่อยว่างไว้ หน้าจอบอกได้แค่สถานะที่เปลี่ยน */
+    var fixReplies = function (host) {
+      (host.statusLog || []).forEach(function (e) {
+        if (!e) return;
+        e.replies = Array.isArray(e.replies) ? e.replies.filter(function (r) { return r && r.id && r.by; }) : [];
+      });
+    };
+    d.projects.forEach(fixReplies);
+    (d.portfolios || []).forEach(fixReplies);
     /* Sprint 1C ตั้งกำหนดส่งรอบแรกให้ตอนตั้งทำซ้ำ (firstRecurDate) แต่งานทำซ้ำจากข้อมูลเก่าที่ไม่มีกำหนดส่ง
      * ยังไม่โผล่ในปฏิทินจนกว่าจะมีคนไปแก้ — ให้วันครบกำหนดรอบแรกตอนโหลด เฉพาะงานที่ยังไม่เสร็จ (ทำครั้งเดียว มีวันแล้วไม่แตะอีก) */
     d.tasks.forEach(function (t) {
@@ -1599,7 +1618,7 @@
 
   function defaultMtView() {
     return { mode: 'list', group: 'sections', sort: 'manual', dir: 'asc',
-             show: 'open', due: 'any', project: '', cal: 'week' };
+             show: 'open', due: 'any', project: '', cal: 'week', appr: '' };    // appr — Sprint 2B
   }
 
   function blankPersonal() {
@@ -1765,6 +1784,8 @@
       })) return false;
     }
     if (v.due && v.due !== 'any' && !matchesFilter(t, { due: v.due, showCompleted: true })) return false;
+    /* Sprint 2B — "รออนุมัติจากฉัน" งานขออนุมัติที่ยังไม่ได้ตัดสิน (ขอแก้ไขแล้วไม่นับ รอคนขอส่งกลับ) */
+    if (v.appr && !(t.type === 'approval' && !t.completed && (t.approval || 'pending') === 'pending')) return false;
     return true;
   }
 
@@ -2005,6 +2026,7 @@
 
   /* ---------- หน้าแรก ---------- */
   var HOME_WIDGETS = [
+    { id: 'exec',     label: 'ภาพรวมผู้บริหาร',     icon: 'gauge' },     // Sprint 2C — ตอบ "ตอนนี้อะไรถึงไหน" ในการ์ดเดียว
     { id: 'mine',     label: 'งานของฉัน',          icon: 'checkCircle' },
     { id: 'assigned', label: 'งานที่ฉันมอบหมาย',   icon: 'users' },
     { id: 'projects', label: 'โปรเจกต์ล่าสุด',     icon: 'grid' },
@@ -2021,6 +2043,9 @@
     { w: 'mine', full: false }, { w: 'projects', full: false },
     { w: 'assigned', full: false }, { w: 'activity', full: false }
   ];
+  /* Sprint 2B — วิดเจ็ต "รออนุมัติจากฉัน" (ปุ่มอนุมัติ/ขอแก้ไข/ปฏิเสธในแถว) เพิ่มแยกบรรทัด ไม่แตะรายการเดิม */
+  HOME_WIDGETS.push({ id: 'approvals', label: 'รออนุมัติจากฉัน', icon: 'check' });
+  HOME_DEFAULT.push({ w: 'approvals', full: false });   // คนที่ยังไม่เคยจัดหน้าแรกเห็นเลย (ผลทดสอบ: หางานรออนุมัติไม่เจอ)
 
   function cleanHome(list) {
     var ok = {}, seen = {};
@@ -2113,14 +2138,15 @@
   function inbox(userId, showArchived) {
     return db.notifications
       .filter(function (n) {
-        return n.userId === userId && (showArchived ? n.archived : !n.archived) && notifVisible(n);
+        return n.userId === userId && (showArchived ? n.archived : !n.archived) && notifVisible(n) && !isSnoozed(n);
       })
-      .sort(function (a, b) { return a.createdAt < b.createdAt ? 1 : -1; });
+      .sort(function (a, b) { return notifAt(a) < notifAt(b) ? 1 : -1; });
   }
 
   function unreadCount(userId) {
+    /* Sprint 2B — รายการที่เลื่อนเตือนไว้ไม่นับ จนกว่าจะถึงเวลาที่เลือก */
     return db.notifications.filter(function (n) {
-      return n.userId === userId && !n.archived && !n.read && notifVisible(n);
+      return n.userId === userId && !n.archived && !n.read && notifVisible(n) && !isSnoozed(n);
     }).length;
   }
 
@@ -2153,12 +2179,16 @@
     var fromU = opts.from ? user(opts.from) : null;
     var list = db.notifications.filter(function (n) {
       if (n.userId !== who || !notifVisible(n)) return false;
+      /* Sprint 2B — เลื่อนเตือนอยู่ = ซ่อนจากทุกแท็บ ยกเว้นตอนขอดูรายการที่เลื่อนไว้ (opts.snoozed) */
+      if (!!opts.snoozed !== isSnoozed(n)) return false;
       if (tab === 'bookmarks') { if (!n.bookmarked) return false; }
       else if (tab === 'archive') { if (!n.archived) return false; }
       else if (n.archived) return false;
       if (opts.unread && n.read) return false;
-      if (opts.mention && n.kind !== 'mention') return false;
-      if (opts.toMe && n.kind !== 'assigned') return false;
+      /* Sprint 2B — รายการที่รวมกลุ่มแล้วมีหลายชนิด ตัวกรองดูทุกส่วน ไม่ใช่แค่ส่วนแรก */
+      var ks = notifKinds(n);
+      if (opts.mention && ks.indexOf('mention') < 0) return false;
+      if (opts.toMe && ks.indexOf('assigned') < 0) return false;
       if (opts.byMe) {
         var t = n.taskId ? task(n.taskId) : null;
         if (!t || !t.assigneeId || t.assigneeId === who) return false;
@@ -2175,10 +2205,11 @@
         return (n.read ? 0 : 1000) + (INBOX_RANK[n.kind] || 0) + (n.bookmarked ? 5 : 0);
       };
       return list.sort(function (a, b) {
-        return (score(b) - score(a)) || (a.createdAt < b.createdAt ? 1 : -1);
+        return (score(b) - score(a)) || (notifAt(a) < notifAt(b) ? 1 : -1);
       });
     }
-    return list.sort(function (a, b) { return a.createdAt < b.createdAt ? 1 : -1; });
+    /* Sprint 2B — รายการที่เพิ่งกลับมาจากการเลื่อนเตือน (wokeAt) ขึ้นบนสุดเหมือนเพิ่งเข้ามา */
+    return list.sort(function (a, b) { return notifAt(a) < notifAt(b) ? 1 : -1; });
   }
 
   /** คนที่เคยทำให้เกิดการแจ้งเตือนถึงฉัน — ตัวเลือกของตัวกรอง "จากใคร" */
@@ -2260,7 +2291,9 @@
   var PROJ_NOTIFY = [
     { id: 'status',   label: 'อัปเดตสถานะของโปรเจกต์', desc: 'เมื่อมีคนรายงานสถานะ ตามแผน เสี่ยง หรือหลุดแผน' },
     { id: 'messages', label: 'ประกาศใหม่',          desc: 'เรื่องของทั้งโปรเจกต์ที่ไม่ได้ผูกกับงานชิ้นไหน' },
-    { id: 'newTasks', label: 'งานใหม่ในโปรเจกต์',    desc: 'ทุกครั้งที่มีงานถูกเพิ่มเข้าโปรเจกต์นี้' }
+    { id: 'newTasks', label: 'งานใหม่ในโปรเจกต์',    desc: 'ทุกครั้งที่มีงานถูกเพิ่มเข้าโปรเจกต์นี้' },
+    /* Sprint 2B — ส่วนหนึ่งของปุ่ม "ติดตาม" บนหัวโปรเจกต์ (สถานะ + งานใหม่ + หมุดหมาย) */
+    { id: 'milestones', label: 'หมุดหมายสำเร็จ',     desc: 'เมื่อมีคนทำหมุดหมายของโปรเจกต์นี้เสร็จ' }
   ];
 
   function projNotifyOf(projectId, userId) {
@@ -2273,7 +2306,8 @@
     return {
       status: 'status' in p ? !!p.status : member,
       messages: 'messages' in p ? !!p.messages : member,
-      newTasks: !!p.newTasks
+      newTasks: !!p.newTasks,
+      milestones: !!p.milestones           // Sprint 2B — ไม่เคยตั้ง = ปิด เหมือนงานใหม่
     };
   }
 
@@ -2301,7 +2335,8 @@
     if (!p || !t || t.parentId) return;
     autoFire('added', t.id, { projectId: projectId });   // 3a — งานเข้าโปรเจกต์ (สร้างใหม่หรือเพิ่มเข้ามา)
     var w = projectWatchers(projectId, 'newTasks');
-    if (w.length) notifyOnly(t.id, w, 'งานใหม่ “{t}” ใน {p}', 'newtask', { t: t.name, p: p.name });
+    /* Sprint 2B — ข้อความต่อท้ายชื่อคนได้ ("สมชาย เพิ่มงาน … ใน …") เดิม "สมชาย งานใหม่ …" อ่านไม่เป็นประโยค */
+    if (w.length) notifyOnly(t.id, w, 'เพิ่มงาน “{t}” ใน {p}', 'newtask', { t: t.name, p: p.name });
   }
 
   /* ---------- filter / sort / group ---------- */
@@ -3419,7 +3454,15 @@
     { id: 'status',   label: 'อัปเดตสถานะของโปรเจกต์',
       desc: 'โปรเจกต์ที่เปิดรับไว้ในเมนูโปรเจกต์ → การแจ้งเตือนของโปรเจกต์นี้' },
     { id: 'newtask',  label: 'งานใหม่ในโปรเจกต์ที่ติดตาม',
-      desc: 'เฉพาะโปรเจกต์ที่เปิด “งานใหม่ในโปรเจกต์” ไว้' }
+      desc: 'เฉพาะโปรเจกต์ที่เปิด “งานใหม่ในโปรเจกต์” ไว้' },
+    /* Sprint 2B — หมุดหมายสำเร็จของโปรเจกต์ที่กด “ติดตาม” ไว้ */
+    { id: 'milestone', label: 'หมุดหมายสำเร็จในโปรเจกต์ที่ติดตาม',
+      desc: 'เมื่อมีคนทำหมุดหมายของโปรเจกต์ที่ติดตามเสร็จ' },
+    /* Sprint 2B — บันทึกเวลา/ตั้งเวลาประมาณ ปิดไว้เป็นค่าเริ่มต้น (def: false)
+     * ผลทดสอบกับผู้ใช้: ผู้ติดตามได้ "ลงเวลา 1m" "ตั้งเวลาประมาณ 4h" ทั้งวันจนกล่องข้อความไม่มีใครอ่าน
+     * คนที่อยากรู้จริง (หัวหน้าที่ดูชั่วโมงงาน) เปิดเองได้ที่ตั้งค่า */
+    { id: 'timelog',  label: 'บันทึกเวลาและเวลาประมาณ',
+      desc: 'มีคนลงเวลาหรือเปลี่ยนเวลาประมาณในงานที่ติดตาม (ปิดไว้เป็นค่าเริ่มต้น)', def: false }
   ];
 
   /* ---------- เตือนกำหนดส่ง ----------
@@ -3446,11 +3489,10 @@
     function push(taskId, key, kind, params, dedupe, route) {
       if (have[dedupe] || !wantsNotify(uidMe, kind)) return;
       have[dedupe] = true;
-      db.notifications.push({
-        id: uid('n'), userId: uidMe, taskId: taskId, projectId: null,
+      pushNotif({                                   // Sprint 2B — ทางเดียวกับการแจ้งเตือนอื่น (มี snoozeUntil)
+        userId: uidMe, taskId: taskId, projectId: null,
         text: fill(key, params), kind: kind, key: key, params: params || null,
-        actorName: null, actorId: null, bookmarked: false, dedupe: dedupe, route: route || null,
-        createdAt: new Date().toISOString(), read: false, archived: false
+        dedupe: dedupe, route: route || null
       });
       added++;
     }
@@ -3481,12 +3523,16 @@
     if (!u) return false;
     if (!kind) return true;
     var n = u.prefs && u.prefs.notify;
-    if (!n || !(kind in n)) return true;    // ไม่เคยตั้งค่า = เปิดทุกชนิด
+    /* ไม่เคยตั้งค่า = เปิด ยกเว้นชนิดที่ตั้ง def: false ไว้ (Sprint 2B — บันทึกเวลา) */
+    if (!n || !(kind in n)) return kindDefault(kind);
     return !!n[kind];
   }
 
+  /**
+   * @param extra { story, ref } — Sprint 2B ความเห็นที่ทำให้เกิดการแจ้งเตือน (กล่องข้อความโชว์เนื้อหาและพาไปที่ความเห็นนั้น)
+   */
   function notify(taskId, text, exceptUserId, extraUserIds, kind, excludeIds,
-                  key, params, actor) {
+                  key, params, actor, extra) {
     var t = task(taskId);
     if (!t) return;
     var targets = {};
@@ -3497,14 +3543,14 @@
     Object.keys(targets).forEach(function (target) {
       if (!user(target)) return;
       if (!wantsNotify(target, kind)) return;
-      db.notifications.push({
-        id: uid('n'), userId: target, taskId: taskId, text: text,
+      /* Sprint 2B — ผ่านตัวรวมกลุ่ม (pushNotif) ทุกครั้ง ไม่ push ตรง */
+      pushNotif({
+        userId: target, taskId: taskId, text: text,
         /* เก็บคีย์ไว้ด้วยเมื่อมี กล่องข้อความจะได้แปลตอนอ่าน
          * ไม่ใช่ค้างภาษาของคนที่ทำให้เกิดการแจ้งเตือน */
         key: key || null, params: params || null,
         actorName: actor ? actor.name : null, actorId: actor ? actor.id : null,
-        kind: kind || null, bookmarked: false,
-        createdAt: new Date().toISOString(), read: false, archived: false
+        kind: kind || null, story: extra && extra.story, ref: extra && extra.ref
       });
     });
   }
@@ -3530,20 +3576,22 @@
    */
   function notifyOnly(taskId, userIds, key, kind, params, noActor, extra) {
     var actor = noActor ? null : me();
+    var seen = {};
     (userIds || []).forEach(function (target) {
-      if (!target || target === db.currentUserId) return;
+      if (!target || target === db.currentUserId || seen[target]) return;
+      seen[target] = true;                 // Sprint 2B — รายชื่อซ้ำ (ผู้สร้างที่เป็นผู้ติดตามด้วย) ได้รายการเดียว
       if (!user(target)) return;
       if (!wantsNotify(target, kind)) return;
-      db.notifications.push({
-        id: uid('n'), userId: target, taskId: taskId,
+      pushNotif({
+        userId: target, taskId: taskId,
         /* ประกาศของโปรเจกต์ไม่มีงานให้ชี้ เก็บรหัสโปรเจกต์ไว้แทน
          * กล่องข้อความจะได้พาไปที่หน้าประกาศ ไม่ใช่ขึ้นว่างานถูกลบแล้ว */
         projectId: (extra && extra.projectId) || null,
         route: (extra && extra.route) || null,
         text: fill(key, params), kind: kind || null,
         key: key, params: params || null,
-        actorName: actor ? actor.name : null, actorId: actor ? actor.id : null, bookmarked: false,
-        createdAt: new Date().toISOString(), read: false, archived: false
+        actorName: actor ? actor.name : null, actorId: actor ? actor.id : null,
+        story: extra && extra.story, ref: extra && extra.ref
       });
     });
   }
@@ -3568,9 +3616,10 @@
     if (autoCtx) st.auto = 1;          // 3a — ทำโดยอัตโนมัติ (ประวัติขึ้น ⚡)
     db.stories.push(st);
     var actor = me();
-    /* ข้อความแจ้งเตือนก็ต้องแปลตอนอ่านเหมือนกัน จึงส่งคีย์กับค่าไปด้วย */
+    /* ข้อความแจ้งเตือนก็ต้องแปลตอนอ่านเหมือนกัน จึงส่งคีย์กับค่าไปด้วย
+     * Sprint 2B — บันทึกบางชนิด (ลงเวลา ตั้งเวลาประมาณ) แยกชนิดออกมา ปิดได้โดยไม่ต้องปิดความเคลื่อนไหวทั้งหมด */
     notify(taskId, (actor ? actor.name : 'มีคน') + ' ' + fill(key, params),
-      db.currentUserId, null, 'activity', exclude, key, params, actor);
+      db.currentUserId, null, logKind(key), exclude, key, params, actor);
   }
 
   /* ---------- ข้อความมีรูปแบบ (รายละเอียดงานและความเห็น) ----------
@@ -3895,6 +3944,7 @@
         }
       }
       if (patch.completed) {
+        if (('type' in patch ? patch.type : t.type) === 'milestone') notifyMilestone(t);   // Sprint 2B
         spawnRecurrence(t);
         // ปลดล็อกงานที่รออยู่ แล้วแจ้งผู้รับผิดชอบ
         blocking(id).forEach(function (b) {
@@ -4632,7 +4682,9 @@
     if (i >= 0) t.likes.splice(i, 1);
     else {
       t.likes.push(db.currentUserId);
-      notify(taskId, (me() ? me().name : 'มีคน') + ' ถูกใจงานนี้', db.currentUserId, null, 'activity');
+      /* Sprint 2B — เก็บเป็นคีย์ เดิมเป็นประโยคไทยสำเร็จรูป คนใช้ภาษาอังกฤษเห็น "Somchai ถูกใจงานนี้" */
+      notify(taskId, (me() ? me().name : 'มีคน') + ' ถูกใจงานนี้', db.currentUserId, null, 'activity',
+        null, 'ถูกใจงานนี้', null, me());
     }
     commit();
   }
@@ -4727,8 +4779,11 @@
     var actor = me();
     /* คนที่ถูกพูดถึงกับคนที่แค่ติดตาม ต้องแยกชนิดกัน
      * เพราะคนปิด "ความเห็นใหม่" ทิ้งได้ แต่ไม่มีใครอยากพลาดตอนถูกเรียกชื่อ */
+    /* Sprint 2B — ทุกการแจ้งเตือนของความเห็นจำรหัสความเห็นไว้ (story)
+     * กล่องข้อความจะโชว์เนื้อความสองบรรทัดแรก และกดแล้วพาไปที่ความเห็นนั้นพร้อมไฮไลต์ */
+    var sx = { story: s.id };
     if (mentioned.length) {
-      notifyOnly(taskId, mentioned, 'พูดถึงคุณในความเห็น', 'mention');
+      notifyOnly(taskId, mentioned, 'พูดถึงคุณในความเห็น', 'mention', null, false, sx);
     }
     if (parent) {
       /* คำตอบในเธรดแจ้งเฉพาะคนที่อยู่ในบทสนทนานั้น ไม่กระจายไปหาผู้ติดตามทั้งงาน
@@ -4738,10 +4793,11 @@
         if (inThread.indexOf(r.actorId) < 0) inThread.push(r.actorId);
       });
       notifyOnly(taskId, inThread.filter(function (u) { return mentioned.indexOf(u) < 0; }),
-        'ตอบกลับความเห็นในงาน “{t}”', 'comment', { t: t.name });
+        'ตอบกลับความเห็นในงาน “{t}”', 'comment', { t: t.name }, false, sx);
     } else {
-      notify(taskId, (actor ? actor.name : 'มีคน') + ' แสดงความเห็น',
-        db.currentUserId, [], 'comment', mentioned, 'แสดงความเห็น', null, actor);
+      /* Sprint 2B — คีย์ใหม่มีชื่องาน เดิม "แสดงความเห็น" อย่างเดียว ภาษาอังกฤษจึงค้างเป็น "commented on" */
+      notify(taskId, (actor ? actor.name : 'มีคน') + ' ' + fill('แสดงความเห็นในงาน “{t}”', { t: t.name }),
+        db.currentUserId, [], 'comment', mentioned, 'แสดงความเห็นในงาน “{t}”', { t: t.name }, actor, sx);
     }
     logConnected(taskId, '', clean);
     if (autoCtx) s.auto = 1;            // 3a — ความเห็นที่อัตโนมัติเขียน
@@ -4766,7 +4822,7 @@
     var t = task(s.taskId);
     if (t) {
       fresh.forEach(function (u) { if (t.followers.indexOf(u) < 0) t.followers.push(u); });
-      if (fresh.length) notifyOnly(s.taskId, fresh, 'พูดถึงคุณในความเห็น', 'mention');
+      if (fresh.length) notifyOnly(s.taskId, fresh, 'พูดถึงคุณในความเห็น', 'mention', null, false, { story: s.id });
       logConnected(s.taskId, before, clean);
     }
     commit();
@@ -4868,11 +4924,18 @@
     var n = notification(id);
     if (n && !n.read) { n.read = true; commit(); }
   }
+  /** @returns จำนวนรายการที่เพิ่งทำเป็นอ่านแล้ว
+   *  Sprint 2B — ไม่ถามก่อน แต่ย้อนกลับได้ (snapshot) กดพลาดแล้วไม่เสียรายการที่ยังไม่ได้อ่าน
+   *  รายการที่เลื่อนเตือนไว้ไม่แตะ กลับมาตามเวลาแล้วต้องยังเป็นรายการใหม่ */
   function markAllRead(userId) {
-    db.notifications.forEach(function (n) {
-      if (n.userId === userId) n.read = true;
+    var list = db.notifications.filter(function (n) {
+      return n.userId === userId && !n.read && !isSnoozed(n);
     });
+    if (!list.length) return 0;
+    snapshot('อ่านทั้งหมด');
+    list.forEach(function (n) { n.read = true; });
     commit();
+    return list.length;
   }
   function archiveNotification(id) {
     var n = notification(id);
@@ -5068,11 +5131,19 @@
       by: db.currentUserId, at: new Date().toISOString()   // Sprint 1C — เวลาจริง (เดิมแค่วันที่ → "5 ชม.ที่แล้ว")
     };
     f.statusLog = f.statusLog || [];
-    f.statusLog.push({
-      id: uid('ps'), state: state, text: f.status.text,
+    var fsId = uid('ps');                                   // Sprint 2B — การแจ้งเตือนชี้กลับมาที่รายการนี้
+    f.statusLog.push(stampStatus(f.statusLog, {          // Sprint 2C — ตัวเลข ณ ตอนนี้ + ที่เปลี่ยนจากรอบก่อน
+      id: fsId, state: state, text: f.status.text,
       by: db.currentUserId, at: new Date().toISOString()
-    });
+    }, statusSnapOf(id)));
     if (f.statusLog.length > 30) f.statusLog = f.statusLog.slice(-30);
+    /* Sprint 2B — แจ้งคนที่ติดตามพอร์ตโฟลิโอ (เจ้าของติดตามเป็นค่าเริ่มต้น) ทั้งจากเมนูสถานะและแท็บความคืบหน้า
+     * เดิมแจ้งเฉพาะเจ้าของ และเฉพาะตอนเขียนจากแท็บความคืบหน้า */
+    var pw = pfWatchers(id);
+    if (pw.length) {
+      notifyOnly(null, pw, 'อัปเดตสถานะพอร์ตโฟลิโอ {p}', 'status', { p: f.name }, false,
+        { route: 'portfolio:' + id + ':progress', ref: fsId });
+    }
     commit();
   }
 
@@ -5147,15 +5218,17 @@
       at: new Date().toISOString()     // Sprint 1C — เวลาจริง เดิมเก็บแค่วันที่ พอร์ตโฟลิโอจึงขึ้น "5 ชม.ที่แล้ว" ทั้งที่เพิ่งรายงาน
     };
     p.statusLog = p.statusLog || [];
-    p.statusLog.push({
-      id: uid('ps'), state: state, text: p.status.text,
+    var psId = uid('ps');                                   // Sprint 2B
+    p.statusLog.push(stampStatus(p.statusLog, {          // Sprint 2C
+      id: psId, state: state, text: p.status.text,
       by: db.currentUserId, at: new Date().toISOString()
-    });
+    }, statusSnapOf(id)));
     if (p.statusLog.length > 30) p.statusLog = p.statusLog.slice(-30);
     var watchers = projectWatchers(id, 'status');
     if (watchers.length) {
+      /* Sprint 2B — ref = รายการในประวัติสถานะ กล่องข้อความโชว์สถานะกับบรรทัดแรกได้โดยไม่ต้องเปิดโปรเจกต์ */
       notifyOnly(null, watchers, 'อัปเดตสถานะของ {p}', 'status', { p: p.name }, false,
-        { projectId: id, route: 'p-overview' });
+        { projectId: id, route: 'p-overview', ref: psId });
     }
     closeRemindTask(p);       // 3b — รายงานแล้ว งานเตือนวันศุกร์ปิดเอง
     commit();
@@ -7543,7 +7616,9 @@
       var t = task(r.taskId);
       if (t && !t.completed) updateTask(t.id, { completed: true }, { quiet: true });
       if (t) log(t.id, grant ? 'ให้สิทธิ์เข้าโปรเจกต์แล้ว' : 'ปฏิเสธคำขอเข้าโปรเจกต์');
-      notifyOnly(null, [userId], grant ? 'คุณได้รับสิทธิ์เข้าโปรเจกต์ {p}' : 'คำขอเข้าโปรเจกต์ {p} ถูกปฏิเสธ',
+      /* Sprint 2B — ข้อความต่อท้ายชื่อคนตอบ ("สมชาย ให้สิทธิ์คุณเข้าโปรเจกต์ X แล้ว")
+       * เดิม "สมชาย คุณได้รับสิทธิ์เข้าโปรเจกต์ X" มีประธานสองตัว อ่านแล้วงงว่าใครทำอะไร */
+      notifyOnly(null, [userId], grant ? 'ให้สิทธิ์คุณเข้าโปรเจกต์ {p} แล้ว' : 'ปฏิเสธคำขอเข้าโปรเจกต์ {p} ของคุณ',
         'activity', { p: p.name }, false, grant ? { projectId: projectId, route: 'p-overview' } : null);
     });
     return true;
@@ -9661,13 +9736,13 @@
       by: db.currentUserId, at: new Date().toISOString() };
     p.status = { state: o.state, text: summary, title: entry.title, by: db.currentUserId, at: entry.at };   // Sprint 1C — เวลาเดียวกับรายการในประวัติ
     p.statusLog = p.statusLog || [];
-    p.statusLog.push(entry);
+    p.statusLog.push(stampStatus(p.statusLog, entry, statusSnapOf(pid)));   // Sprint 2C — ก่อน push จะได้เทียบกับรอบก่อนจริง
     if (p.statusLog.length > 30) p.statusLog = p.statusLog.slice(-30);
-    p.statusLayout = { blocks: all.map(function (b) { return { k: b.k, title: b.title }; }), hl: hl, period: period };
+    p.statusLayout ={ blocks: all.map(function (b) { return { k: b.k, title: b.title }; }), hl: hl, period: period };
     var watchers = projectWatchers(pid, 'status');
     if (watchers.length) {
       notifyOnly(null, watchers, 'อัปเดตสถานะของ {p}', 'status', { p: p.name }, false,
-        { projectId: pid, route: 'p-overview' });
+        { projectId: pid, route: 'p-overview', ref: entry.id });      // Sprint 2B — โชว์สถานะ+บรรทัดแรกในกล่องข้อความ
     }
     closeRemindTask(p);
     commit();
@@ -11838,12 +11913,8 @@
   /** อัปเดตสถานะพอร์ตโฟลิโอพร้อมข้อความ (แท็บความคืบหน้า) */
   function postPortfolioUpdate(pfId, state, text) {
     if (!portfolio(pfId) || !can('structure') || !PROJECT_STATES.some(function (x) { return x.id === state; })) return false;
+    /* Sprint 2B — แจ้งผู้ติดตามอยู่ใน setPortfolioStatus แล้ว (เดิมแจ้งเจ้าของซ้ำที่นี่) */
     setPortfolioStatus(pfId, state, String(text || '').slice(0, 20000));
-    var f = portfolio(pfId);
-    if (f.owner && f.owner !== db.currentUserId) {
-      notifyOnly(null, [f.owner], 'อัปเดตสถานะพอร์ตโฟลิโอ {p}', 'status', { p: f.name }, false, { route: 'portfolio:' + pfId + ':progress' });
-      persist();
-    }
     return true;
   }
 
@@ -13442,6 +13513,197 @@
   Object.keys(X4B2).forEach(function (k) { global.Store[k] = X4B2[k]; });
 
   /* ======================================================================
+   * Sprint 2C — มุมมองผู้บริหาร
+   * ผู้บริหารถาม "ตอนนี้ทำอะไรถึงไหนแล้ว?" แล้วต้องได้คำตอบโดยไม่ต้องคลิกไล่ทีละโปรเจกต์
+   * ทุกตัวเลขในนี้คิดจากสายตาของคนที่เปิดดู (โปรเจกต์/งานที่เห็นได้เท่านั้น)
+   * ====================================================================== */
+
+  /* ตัวเลข ณ ตอนรายงาน — t งานทั้งหมด d เสร็จแล้ว o เลยกำหนด (เก็บสั้น ๆ เพราะทุกรายงานพกไปด้วย) */
+  function statusSnapOf(hostId) {
+    if (/^pf_/.test(String(hostId || ''))) {
+      var ps = portfolioStats(hostId);
+      return { t: ps.total, d: ps.done, o: ps.overdue };
+    }
+    var st = projectStats(hostId);
+    return { t: st.total, d: st.done, o: st.overdue };
+  }
+  /** ตัวเลขของรายงานเก่าที่ยังไม่มี snap — ไฮไลต์ "ภาพรวมความคืบหน้า" (3b) เก็บตัวเลขชุดเดียวกันไว้ */
+  function snapOfEntry(e) {
+    if (!e) return null;
+    if (e.snap) return e.snap;
+    var c = (e.hl || []).filter(function (x) { return x && x.k === 'chart'; })[0];
+    return c ? { t: c.total, d: c.done, o: c.overdue } : null;
+  }
+  /** ติดตัวเลขและ "อะไรเปลี่ยนจากรอบก่อน" ให้รายงานใหม่ คิดตอนรายงานแล้วเก็บไว้เลย
+   *  เปิดดูย้อนหลังเมื่อไรก็ได้ตัวเลขเดิม ไม่ใช่คิดใหม่จากงานวันนี้ซึ่งเปลี่ยนไปแล้ว */
+  function stampStatus(log, entry, snap) {
+    var prev = log && log.length ? log[log.length - 1] : null;
+    var ps = snapOfEntry(prev);
+    entry.replies = entry.replies || [];
+    entry.snap = snap;
+    entry.chg = prev ? {
+      from: prev.state || null, since: prev.at || null,
+      d: ps && snap ? snap.d - ps.d : null, o: ps && snap ? snap.o - ps.o : null
+    } : null;
+    return entry;
+  }
+  /** ที่เปลี่ยนจากรอบก่อนของรายงานหนึ่ง — รายงานเก่าที่ไม่ได้เก็บไว้ บอกได้แค่สถานะที่เปลี่ยน (ดูจากรายงานก่อนหน้าในประวัติ) */
+  function statusChange(host, e) {
+    if (!host || !e) return null;
+    if (e.chg !== undefined) return e.chg;
+    var log = host.statusLog || [], i = log.indexOf(e);
+    if (i <= 0) return null;
+    return { from: log[i - 1].state || null, since: log[i - 1].at || null, d: null, o: null };
+  }
+
+  /* ---------- คำตอบใต้รายงานสถานะ ---------- */
+  var STATUS_REPLY_MAX = 100;
+  function statusHost(id) { return /^pf_/.test(String(id || '')) ? portfolio(id) : project(id); }
+  function statusEntry(hostId, entryId) {
+    var h = statusHost(hostId);
+    return h ? (h.statusLog || []).filter(function (e) { return e && e.id === entryId; })[0] || null : null;
+  }
+  /** ถาม/ตอบได้ = แสดงความเห็นในโปรเจกต์นั้นได้ (พอร์ตโฟลิโอ = แสดงความเห็นได้ในองค์กร) */
+  function canReplyStatus(hostId) {
+    return isActive() && !!statusHost(hostId) && canInProject(hostId, 'comment');
+  }
+  /** ปลายทางของการแจ้งเตือน — โปรเจกต์ไปหน้าภาพรวม พอร์ตโฟลิโอไปแท็บความคืบหน้า */
+  function statusNotifExtra(hostId) {
+    return /^pf_/.test(hostId) ? { route: 'portfolio:' + hostId + ':progress' } : { projectId: hostId, route: 'p-overview' };
+  }
+  function addStatusReply(hostId, entryId, body) {
+    var h = statusHost(hostId), e = statusEntry(hostId, entryId);
+    var text = String(body || '').replace(/\r\n/g, '\n').trim();
+    if (!h || !e || !text || !canReplyStatus(hostId)) return null;
+    e.replies = Array.isArray(e.replies) ? e.replies : [];
+    if (e.replies.length >= STATUS_REPLY_MAX) return null;
+    snapshot('ตอบรายงานสถานะ');
+    var r = { id: uid('sr'), by: db.currentUserId, at: new Date().toISOString(), body: text.slice(0, 5000) };
+    e.replies.push(r);
+    var isPf = /^pf_/.test(hostId);
+    /* แจ้งเฉพาะคนที่ยังเห็นที่นี่ได้ (โปรเจกต์ปิดที่ถูกถอดออกแล้วไม่ต้องได้) */
+    var sees = function (u) { return isPf || !!projectAccess(hostId, u); };
+    var men = parseMentions(text).filter(sees);
+    /* คนที่ต้องรู้: คนเขียนรายงาน เจ้าของ และคนที่เคยถาม/ตอบในเธรดนี้แล้ว (คนที่ถูก @ ได้ข้อความแบบเจาะจงแยกไป) */
+    var who = [e.by, h.owner].concat(e.replies.map(function (x) { return x.by; }))
+      .filter(function (u, i, a) { return u && a.indexOf(u) === i && men.indexOf(u) < 0 && sees(u); });
+    var extra = statusNotifExtra(hostId);
+    if (men.length) notifyOnly(null, men, 'พูดถึงคุณในรายงานสถานะของ {p}', 'mention', { p: h.name }, false, extra);
+    if (who.length) notifyOnly(null, who, 'ตอบรายงานสถานะของ {p}', 'status', { p: h.name }, false, extra);
+    commit();
+    return r;
+  }
+  function deleteStatusReply(hostId, entryId, replyId) {
+    var e = statusEntry(hostId, entryId);
+    var r = e && (e.replies || []).filter(function (x) { return x.id === replyId; })[0];
+    if (!r || (r.by !== db.currentUserId && !can('manage'))) return false;
+    snapshot('ลบคำตอบ');
+    e.replies = e.replies.filter(function (x) { return x !== r; });
+    commit();
+    return true;
+  }
+
+  /* ---------- การ์ดภาพรวมผู้บริหารบนหน้าแรก ---------- */
+  /* เงื่อนไขค้นหาขั้นสูงที่ตรงกับตัวเลขบนการ์ด — กดตัวเลขแล้วรายการที่เปิดต้องนับได้เท่ากันพอดี
+   * (งานหลักที่อยู่ในโปรเจกต์ ยังไม่เสร็จ ไม่นับงานย่อยและงานส่วนตัว เหมือน projectStats) */
+  function execConds(kind) {
+    return [{ f: 'due', op: kind === 'week' ? 'week' : 'overdue', v: null }, { f: 'completed', op: 'no', v: null },
+            { f: 'project', op: 'notempty', v: null }, { f: 'subtask', op: 'no', v: null }];
+  }
+  function execOverview() {
+    var td = today(), risk = [], silent = [];
+    visibleProjects().forEach(function (p) {
+      var st = projectStats(p.id);
+      var s = p.status ? p.status.state : null;
+      var at = statusAt(p);
+      var age = at ? daysBetween(String(at).slice(0, 10), td) : null;
+      var row = { p: p, state: s, overdue: st.overdue, percent: st.percent, total: st.total, at: at, age: age };
+      if (s === 'off_track' || s === 'at_risk') risk.push(row);
+      /* "เงียบ" = ไม่ได้รายงานเกิน 7 วัน (หรือไม่เคย) แต่มีงานเลยกำหนด — โปรเจกต์ที่ปิดไปแล้วไม่นับ */
+      else if (st.overdue > 0 && (age === null || age >= 7) && !(s && projectStateDone(s))) silent.push(row);
+    });
+    risk.sort(function (a, b) {
+      if (a.state !== b.state) return a.state === 'off_track' ? -1 : 1;
+      return b.overdue - a.overdue;
+    });
+    silent.sort(function (a, b) { return b.overdue - a.overdue; });
+    /* คนที่งานล้นหรือค้างเยอะ — ใช้ตัวคำนวณเดียวกับหน้าภาระงาน (นับงานค้างไว้ที่วันนี้ ตาม Sprint 1C) */
+    var people = [];
+    try {
+      workload({ kind: 'all' }, wlDefaultCfg()).rows.forEach(function (r) {
+        var now = r.cells[0] || {}, next = r.cells[1] || {};
+        var score = r.late * 10 + (now.over ? 5 : 0) + (next.over ? 2 : 0);
+        if (!score) return;
+        people.push({ uid: r.uid, late: r.late, over: !!now.over, overNext: !!next.over,
+          v: now.v || 0, cap: now.cap || 0, score: score });
+      });
+    } catch (err) { people = []; }
+    people.sort(function (a, b) { return b.score - a.score; });
+    return {
+      risk: risk, silent: silent, people: people,
+      offTrack: risk.filter(function (x) { return x.state === 'off_track'; }).length,
+      atRisk: risk.filter(function (x) { return x.state === 'at_risk'; }).length,
+      overdue: searchAdv({ conds: execConds('overdue'), limit: 1e6 }).length,
+      dueWeek: searchAdv({ conds: execConds('week'), limit: 1e6 }).length,
+      projects: visibleProjects().length
+    };
+  }
+
+  /* ---------- กิจกรรมล่าสุดบนหน้าแรก ----------
+   * เดิมหนึ่งบรรทัดต่อหนึ่งความเคลื่อนไหว คนเดียวแก้งานเดียวห้าครั้งก็กินห้าบรรทัด เรื่องสำคัญหลุดจากการ์ดไปหมด
+   * ตอนนี้รวมเป็นบรรทัดเดียวต่อ "คน + งาน + วัน" และรายงานสถานะขึ้นในฟีดเดียวกัน
+   * mode 'decisions' = เฉพาะรายงานสถานะ การอนุมัติ และหมุดหมายที่เสร็จ (เรื่องที่ผู้บริหารต้องรู้) */
+  var DECISION_KEYS = ['เปลี่ยนสถานะอนุมัติเป็น “{s}”', 'ส่งงานนี้ขออนุมัติอีกครั้ง'];
+  function isDecisionStory(s, t) {
+    if (s.type !== 'log') return false;
+    if (DECISION_KEYS.indexOf(s.text) >= 0) return true;
+    return s.text === 'ทำงานนี้เสร็จแล้ว' && !!t && t.type === 'milestone';
+  }
+  function activityFeed(limit, mode) {
+    var n = limit || 6, decisions = mode === 'decisions';
+    var out = [];
+    visibleProjects().forEach(function (p) {
+      (p.statusLog || []).forEach(function (e) {
+        if (e && e.at) out.push({ kind: 'status', at: String(e.at), actorId: e.by, host: p, entry: e });
+      });
+    });
+    if (role() !== 'guest') {
+      (db.portfolios || []).forEach(function (f) {
+        (f.statusLog || []).forEach(function (e) {
+          if (e && e.at) out.push({ kind: 'pfstatus', at: String(e.at), actorId: e.by, host: f, entry: e });
+        });
+      });
+    }
+    var list = db.stories.slice().sort(function (a, b) { return a.createdAt < b.createdAt ? 1 : -1; });
+    var seeCache = {}, groups = {}, gl = [];
+    for (var i = 0; i < list.length && i < 4000 && gl.length < n * 3; i++) {
+      var s = list[i];
+      if (!(s.taskId in seeCache)) seeCache[s.taskId] = canSeeTask(s.taskId);
+      if (!seeCache[s.taskId]) continue;
+      var t = task(s.taskId);
+      if (decisions && !isDecisionStory(s, t)) continue;
+      var key = (s.actorId || '') + '|' + s.taskId + '|' + String(s.createdAt).slice(0, 10);
+      var g = groups[key];
+      if (!g) {
+        g = groups[key] = { kind: 'task', at: String(s.createdAt), actorId: s.actorId, taskId: s.taskId,
+          taskName: t ? t.name : null, milestone: !!t && t.type === 'milestone', stories: [] };
+        gl.push(g);
+      }
+      g.stories.push(s);
+    }
+    out = out.concat(gl);
+    out.sort(function (a, b) { return a.at < b.at ? 1 : a.at > b.at ? -1 : 0; });
+    return out.slice(0, n).map(function (x) { x.actor = user(x.actorId); return x; });
+  }
+
+  var X2C = {
+    statusChange: statusChange, statusEntry: statusEntry, canReplyStatus: canReplyStatus,
+    addStatusReply: addStatusReply, deleteStatusReply: deleteStatusReply, STATUS_REPLY_MAX: STATUS_REPLY_MAX,
+    execOverview: execOverview, execConds: execConds, activityFeed: activityFeed, isDecisionStory: isDecisionStory
+  };
+  Object.keys(X2C).forEach(function (k) { global.Store[k] = X2C[k]; });
+
+  /* ======================================================================
    * 4b ส่วนที่ 2 — ไฟล์แนบบน SharePoint/OneDrive และสื่อฝัง
    * ====================================================================== */
 
@@ -13607,5 +13869,338 @@
     addEmbed: addEmbed, removeEmbed: removeEmbed, renameEmbed: renameEmbed
   };
   Object.keys(X4B3).forEach(function (k) { global.Store[k] = X4B3[k]; });
+
+  /* ====================== Sprint 2B — การแจ้งเตือน ศูนย์อนุมัติ การติดตามโปรเจกต์ ======================
+   *
+   * ผลทดสอบกับผู้ใช้: กล่องข้อความ "เสียงดังแต่อ่านไม่รู้เรื่อง" และหางานรออนุมัติไม่เจอ
+   * การกระทำเดียวได้หลายรายการ (มอบหมาย + ตั้งวัน + แก้รายละเอียด = 3, ส่งฟอร์ม = 3, ขออนุมัติ = 5)
+   *
+   * รูปข้อมูลที่เพิ่ม (SCHEMA 19) ทุกช่องไม่บังคับ ไม่มี = แบบเดิม
+   *   notification.more        [{ key, params, kind, story?, ref?, x? }] ส่วนที่รวมเข้ามาในรายการเดียวกัน
+   *                             (คนเดียวกัน งานเดียวกัน ภายใน 10 นาที ยังไม่ได้อ่าน) ส่วนแรกคือ key/params/kind เดิม
+   *   notification.x           ส่วนแรกเกิดซ้ำกี่ครั้ง (แสดงความเห็นสองครั้ง = 2)
+   *   notification.story       ความเห็นที่ทำให้เกิดรายการนี้ — โชว์เนื้อหาและพาไปที่ความเห็น
+   *   notification.ref         รายการในประวัติสถานะ (ps_…) — โชว์สถานะกับบรรทัดแรก
+   *   notification.snoozeUntil ISO|null เลื่อนเตือน ซ่อนจนถึงเวลานั้น (migrate เติม null)
+   *   notification.wokeAt      เวลาที่กลับมาจากการเลื่อน ใช้เรียงขึ้นบนสุด
+   *   user.prefs.projNotify[pid].milestones  หมุดหมายสำเร็จ (ส่วนหนึ่งของ "ติดตามโปรเจกต์")
+   *   user.prefs.pfFollow[pfId]  ติดตามพอร์ตโฟลิโอ (ไม่เคยตั้ง = เจ้าของติดตาม คนอื่นไม่)
+   *
+   * ทุกอย่างในบล็อกนี้เป็น function declaration เพราะ hydrate() (ซึ่งเรียก migrate/seed) รันก่อนถึงบรรทัดนี้ */
+
+  function migrate2b(d) {
+    d.notifications = (d.notifications || []).filter(function (n) { return !!n && typeof n === 'object'; });
+    d.notifications.forEach(function (n) {
+      if (!('snoozeUntil' in n)) n.snoozeUntil = null;
+      if ('more' in n && !Array.isArray(n.more)) delete n.more;
+      /* รายการ "พูดถึงคุณในความเห็น" ของข้อมูลตัวอย่างรุ่นเก่าเก็บเป็นประโยคตามภาษาตอนสร้าง (ไทยหรืออังกฤษ)
+       * แปลงเป็นคีย์ + คนทำ จะได้แปลตามภาษาคนอ่าน (ไม่ขึ้น "Somchai mentioned you in a comment" ในหน้าภาษาไทย) */
+      var m = !n.key && /^(.+?) (พูดถึงคุณในความเห็น|mentioned you in a comment)$/.exec(String(n.text || ''));
+      var who = m && (d.users || []).filter(function (u) { return u && u.name === m[1]; })[0];
+      if (who) {
+        n.key = 'พูดถึงคุณในความเห็น'; n.params = null; n.kind = n.kind || 'mention';
+        n.actorId = who.id; n.actorName = who.name;
+        var cm = (d.stories || []).filter(function (s) {
+          return s && s.type === 'comment' && s.taskId === n.taskId && s.actorId === who.id;
+        })[0];
+        if (cm && !n.story) n.story = cm.id;
+      }
+    });
+  }
+
+  /** ค่าเริ่มต้นของชนิดการแจ้งเตือนเมื่อผู้ใช้ไม่เคยตั้ง — ชนิดที่ def: false ปิดไว้ก่อน */
+  function kindDefault(kind) {
+    for (var i = 0; i < NOTIFY_KINDS.length; i++) {
+      if (NOTIFY_KINDS[i].id === kind) return NOTIFY_KINDS[i].def !== false;
+    }
+    return true;
+  }
+
+  /** บันทึกความเคลื่อนไหวบางคีย์แจ้งเป็นชนิดของตัวเอง (ปิดแยกได้) ที่เหลือเป็น activity */
+  function logKind(key) {
+    return ({ 'บันทึกเวลา {v}': 'timelog', 'ตั้งเวลาประมาณเป็น {v}': 'timelog', 'ล้างเวลาประมาณ': 'timelog' })[key] || 'activity';
+  }
+
+  function isSnoozed(n, now) {
+    return !!(n && n.snoozeUntil && Date.parse(n.snoozeUntil) > (now || Date.now()));
+  }
+
+  /** เวลาที่ใช้เรียง — รายการที่เพิ่งกลับจากการเลื่อนเตือนนับเป็นของใหม่ */
+  function notifAt(n) {
+    return n.wokeAt && n.wokeAt > n.createdAt ? n.wokeAt : n.createdAt;
+  }
+
+  /** ทุกส่วนของรายการ (ส่วนแรก = ช่องเดิมของรายการ ตามด้วย more) */
+  function notifParts(n) {
+    var head = { key: n.key || null, params: n.params || null, kind: n.kind || null };
+    if (!n.key) head.text = n.text;            // ข้อมูลเก่าที่เก็บเป็นประโยค
+    if (n.story) head.story = n.story;
+    if (n.ref) head.ref = n.ref;
+    if (n.x > 1) head.x = n.x;
+    return [head].concat(Array.isArray(n.more) ? n.more : []);
+  }
+
+  function notifKinds(n) {
+    return notifParts(n).map(function (p) { return p.kind; });
+  }
+
+  /**
+   * ทางเดียวที่การแจ้งเตือนเข้า db.notifications (notify / notifyOnly / เตือนกำหนดส่ง)
+   *
+   * ไม่แจ้งคนที่เป็นคนทำเอง และรวมเข้ากับรายการเดิมเมื่อ "คนเดียวกันทำกับงานเดียวกันภายใน 10 นาที"
+   * และผู้รับยังไม่ได้อ่าน — สมชายมอบหมาย ตั้งวัน แก้รายละเอียด ได้บรรทัดเดียว
+   * "สมชาย มอบหมายงาน … ให้คุณ · ตั้งกำหนดส่ง 4 ธ.ค. · แก้ไขรายละเอียด"
+   * อ่านไปแล้ว/เก็บไปแล้ว = เริ่มรายการใหม่ ไม่ปลุกของที่เคลียร์แล้วให้กลับมาพร้อมของเก่า
+   */
+  function pushNotif(rec) {
+    if (!rec || !rec.userId) return null;
+    if (rec.actorId && rec.actorId === rec.userId) return null;
+    var now = new Date().toISOString();
+    var part = { key: rec.key || null, params: rec.params || null, kind: rec.kind || null };
+    if (rec.story) part.story = rec.story;
+    if (rec.ref) part.ref = rec.ref;
+    var g = (rec.taskId && rec.actorId && part.key && !rec.dedupe && rec.kind !== 'access')
+      ? notifGroupTarget(rec, now) : null;
+    if (g) { mergeNotif(g, part, now); return g; }
+    var n = {
+      id: uid('n'), userId: rec.userId, taskId: rec.taskId || null, projectId: rec.projectId || null,
+      route: rec.route || null, text: rec.text != null ? rec.text : fill(part.key || '', part.params),
+      kind: part.kind, key: part.key, params: part.params,
+      actorName: rec.actorName || null, actorId: rec.actorId || null, bookmarked: false,
+      createdAt: now, read: false, archived: false, snoozeUntil: null
+    };
+    if (rec.dedupe) n.dedupe = rec.dedupe;
+    if (part.story) n.story = part.story;
+    if (part.ref) n.ref = part.ref;
+    db.notifications.push(n);
+    return n;
+  }
+
+  /** รายการเดิมที่ควรรวมด้วย — ไล่จากท้าย (ใหม่สุด) ไม่เกิน 400 รายการ */
+  function notifGroupTarget(rec, nowIso) {
+    var cutoff = Date.parse(nowIso) - 10 * 60000;
+    var list = db.notifications;
+    for (var i = list.length - 1, k = 0; i >= 0 && k < 400; i--, k++) {
+      var n = list[i];
+      if (!n || n.userId !== rec.userId || n.taskId !== rec.taskId || n.actorId !== rec.actorId) continue;
+      if (n.read || n.archived || n.dedupe || n.snoozeUntil || !n.key || n.kind === 'access') continue;
+      if ((n.more || []).length >= 11) continue;          // ยาวเกินอ่านในบรรทัดเดียว เริ่มรายการใหม่
+      if (Date.parse(n.createdAt) < cutoff) continue;
+      return n;
+    }
+    return null;
+  }
+
+  function mergeNotif(n, part, nowIso) {
+    var same = JSON.stringify(part.params || null);
+    var parts = [], prev = null;
+    notifParts(n).forEach(function (p) {
+      /* ข้อความเดียวกันค่าเดียวกัน (แสดงความเห็นอีกครั้ง แก้รายละเอียดอีกรอบ) = นับเพิ่ม เก็บอันล่าสุด
+       * ความเห็นอันล่าสุดจะเป็นอันที่โชว์และพาไป */
+      if (p.key === part.key && JSON.stringify(p.params || null) === same) prev = p;
+      else parts.push(p);
+    });
+    if (prev) part.x = (prev.x || 1) + 1;
+    parts.push(part);
+    /* ได้รับมอบหมายแล้ว ไม่ต้องบอกอีกว่า "สร้างงานนี้" (เรื่องเดียวกัน คนรับงานสนใจแค่ว่ามีงานเข้า) */
+    if (parts.some(function (p) { return p.kind === 'assigned'; })) {
+      parts = parts.filter(function (p) { return p.key !== 'สร้างงานนี้'; });
+    }
+    /* ส่วนที่สำคัญที่สุดขึ้นหน้า (พูดถึง > มอบหมาย/ขออนุมัติ > ผลอนุมัติ > ความเห็น > ความเคลื่อนไหว)
+     * เท่ากันคงลำดับเวลา — ตัวกรอง "มอบหมายให้ฉัน" "@พูดถึงฉัน" ดูทุกส่วนอยู่แล้ว (notifKinds) */
+    parts = parts.map(function (p, i) { return { p: p, i: i }; }).sort(function (a, b) {
+      return ((INBOX_RANK[b.p.kind] || 0) - (INBOX_RANK[a.p.kind] || 0)) || (a.i - b.i);
+    }).map(function (x) { return x.p; });
+    var head = parts[0];
+    n.key = head.key; n.params = head.params || null; n.kind = head.kind || null;
+    n.text = fill(head.key || '', head.params);
+    if (head.story) n.story = head.story; else delete n.story;
+    if (head.ref) n.ref = head.ref; else delete n.ref;
+    if (head.x > 1) n.x = head.x; else delete n.x;
+    var rest = parts.slice(1).map(function (p) {
+      var o = { key: p.key, params: p.params || null, kind: p.kind || null };
+      if (p.story) o.story = p.story;
+      if (p.ref) o.ref = p.ref;
+      if (p.x > 1) o.x = p.x;
+      return o;
+    });
+    if (rest.length) n.more = rest; else delete n.more;
+    n.createdAt = nowIso;                      // ขึ้นบนสุดอีกครั้ง
+    n.read = false;
+  }
+
+  /** หมุดหมายสำเร็จ — แจ้งคนที่ติดตามโปรเจกต์ (เปิด "หมุดหมายสำเร็จ") ไม่ commit */
+  function notifyMilestone(t) {
+    (index().memByTask[t.id] || []).forEach(function (m) {
+      var p = project(m.projectId);
+      if (!p) return;
+      var w = projectWatchers(p.id, 'milestones');
+      if (w.length) notifyOnly(t.id, w, 'ทำหมุดหมาย “{t}” ของ {p} สำเร็จ', 'milestone', { t: t.name, p: p.name });
+    });
+  }
+
+  /* ---------- อ่าน/เก็บทีละกลุ่ม (แถวที่รวมหลายรายการของงานเดียวกัน) ---------- */
+
+  function setNotifsRead(ids, read) {
+    var list = (ids || []).map(notification).filter(function (n) { return n && n.read !== !!read; });
+    if (!list.length) return 0;
+    list.forEach(function (n) { n.read = !!read; });
+    commit();
+    return list.length;
+  }
+
+  function archiveNotifs(ids) {
+    var list = (ids || []).map(notification).filter(function (n) { return n && !n.archived; });
+    if (!list.length) return 0;
+    snapshot('เก็บการแจ้งเตือน');
+    list.forEach(function (n) { n.archived = true; n.read = true; });
+    commit();
+    return list.length;
+  }
+
+  /* ---------- เลื่อนเตือน ----------
+   * ไม่มีเซิร์ฟเวอร์ตั้งเวลา — main.js เรียก wakeSnoozed() ตอนเปิดแอปและทุกนาทีที่เปิดค้างไว้
+   * ระหว่างนั้นรายการถูกซ่อนด้วยเวลาอยู่แล้ว (isSnoozed) ถึงเวลาแล้วยังไม่ถูกปลุกก็โผล่ตามปกติ */
+
+  /** เวลาที่เลือกได้ — 1 ชม. / พรุ่งนี้ 9:00 / สัปดาห์หน้า (จันทร์ 9:00) */
+  function snoozeChoices(from) {
+    var now = from ? new Date(from) : new Date();
+    var hour = new Date(now.getTime() + 3600000);
+    var tm = new Date(now); tm.setDate(tm.getDate() + 1); tm.setHours(9, 0, 0, 0);
+    var wk = new Date(now); wk.setDate(wk.getDate() + (((8 - wk.getDay()) % 7) || 7)); wk.setHours(9, 0, 0, 0);
+    return [
+      { id: 'hour', label: 'อีก 1 ชั่วโมง', at: hour.toISOString() },
+      { id: 'tomorrow', label: 'พรุ่งนี้ 9:00', at: tm.toISOString() },
+      { id: 'week', label: 'สัปดาห์หน้า (จันทร์ 9:00)', at: wk.toISOString() }
+    ];
+  }
+
+  function snoozeNotifs(ids, untilIso) {
+    var at = Date.parse(untilIso);
+    var list = (ids || []).map(notification).filter(Boolean);
+    if (!list.length || !(at > Date.now())) return 0;
+    snapshot('เลื่อนเตือน');
+    list.forEach(function (n) { n.snoozeUntil = new Date(at).toISOString(); });
+    commit();
+    return list.length;
+  }
+
+  function unsnoozeNotifs(ids) {
+    var list = (ids || []).map(notification).filter(function (n) { return n && n.snoozeUntil; });
+    if (!list.length) return 0;
+    snapshot('เลิกเลื่อนเตือน');
+    var now = new Date().toISOString();
+    list.forEach(function (n) { n.snoozeUntil = null; n.wokeAt = now; });
+    commit();
+    return list.length;
+  }
+
+  /** รายการของฉันที่ถึงเวลาแล้ว กลับมาเป็นยังไม่อ่านและขึ้นบนสุด @returns จำนวน */
+  function wakeSnoozed() {
+    var me0 = db && db.currentUserId;
+    if (!me0) return 0;
+    var now = Date.now(), iso = new Date(now).toISOString(), n = 0;
+    db.notifications.forEach(function (x) {
+      if (x.userId !== me0 || !x.snoozeUntil || Date.parse(x.snoozeUntil) > now) return;
+      x.snoozeUntil = null; x.read = false; x.wokeAt = iso; n++;
+    });
+    if (n) commit();
+    return n;
+  }
+
+  function snoozedCount(userId) {
+    var who = userId || db.currentUserId;
+    return db.notifications.filter(function (n) {
+      return n.userId === who && !n.archived && isSnoozed(n) && notifVisible(n);
+    }).length;
+  }
+
+  /* ---------- ศูนย์อนุมัติ "รออนุมัติจากฉัน" ----------
+   * งานขออนุมัติที่ฉันเป็นผู้อนุมัติ (ผู้รับผิดชอบ) ยังรออนุมัติ — ขอแก้ไขแล้วไม่นับ เพราะรอคนขอส่งกลับมา
+   * ครบกำหนดก่อนขึ้นก่อน ไม่มีกำหนดตามลำดับที่ขอเข้ามา */
+  function approvalsWaiting(userId) {
+    var who = userId || db.currentUserId;
+    return db.tasks.filter(function (t) {
+      return t.type === 'approval' && !t.completed && t.assigneeId === who &&
+        (t.approval || 'pending') === 'pending' && canSeeTask(t.id);
+    }).sort(function (a, b) {
+      var x = a.dueOn || '9999-99-99', y = b.dueOn || '9999-99-99';
+      if (x !== y) return x < y ? -1 : 1;
+      var p = String(a.assignedAt || a.createdAt || ''), q = String(b.assignedAt || b.createdAt || '');
+      return p < q ? -1 : p > q ? 1 : 0;
+    });
+  }
+
+  /** คนขออนุมัติ = คนที่มอบงานให้ผู้อนุมัติ (ไม่รู้ = คนสร้างงาน) */
+  function approvalRequester(t) {
+    return user(t.assignedBy) || user(t.createdBy) || null;
+  }
+
+  /* ---------- ติดตามโปรเจกต์ / พอร์ตโฟลิโอ ----------
+   * ติดตามโปรเจกต์ = เปิดสามหัวข้อในการแจ้งเตือนของโปรเจกต์พร้อมกัน (อัปเดตสถานะ งานใหม่ หมุดหมายสำเร็จ)
+   * ใช้ค่าชุดเดิม (prefs.projNotify) ไม่มีที่เก็บใหม่ ปรับละเอียดทีละหัวข้อได้ที่ ⋯ → การแจ้งเตือนของโปรเจกต์นี้ */
+  function projFollowing(projectId, userId) {
+    var x = projNotifyOf(projectId, userId);
+    return !!(x.status && x.newTasks && x.milestones);
+  }
+
+  function setProjFollow(projectId, on) {
+    var u = me();
+    if (!u || !project(projectId) || !projectAccess(projectId)) return false;
+    u.prefs = u.prefs || {};
+    u.prefs.projNotify = u.prefs.projNotify || {};
+    var cur = u.prefs.projNotify[projectId] || {};
+    cur.status = !!on; cur.newTasks = !!on; cur.milestones = !!on;
+    u.prefs.projNotify[projectId] = cur;
+    commit();
+    return true;
+  }
+
+  function projFollowers(projectId) {
+    return db.users.filter(function (u) {
+      return u.active !== false && !!projectAccess(projectId, u.id) && projFollowing(projectId, u.id);
+    });
+  }
+
+  function pfFollowing(pfId, userId) {
+    var u = user(userId || db.currentUserId), f = portfolio(pfId);
+    if (!u || !f) return false;
+    var m = u.prefs && u.prefs.pfFollow;
+    if (m && Object.prototype.hasOwnProperty.call(m, pfId)) return !!m[pfId];
+    return f.owner === u.id;          // เดิมแจ้งเจ้าของอยู่แล้ว คงพฤติกรรมนั้นเป็นค่าเริ่มต้น
+  }
+
+  function setPfFollow(pfId, on) {
+    var u = me();
+    if (!u || !portfolio(pfId) || !isActive()) return false;
+    u.prefs = u.prefs || {};
+    u.prefs.pfFollow = u.prefs.pfFollow || {};
+    u.prefs.pfFollow[pfId] = !!on;
+    commit();
+    return true;
+  }
+
+  function pfFollowers(pfId) {
+    return db.users.filter(function (u) {
+      return u.active !== false && u.role !== 'guest' && pfFollowing(pfId, u.id);
+    });
+  }
+
+  /** คนที่ต้องได้ยินเรื่องสถานะของพอร์ตโฟลิโอ (ไม่รวมคนที่ทำเอง) */
+  function pfWatchers(pfId) {
+    return pfFollowers(pfId).map(function (u) { return u.id; })
+      .filter(function (id) { return id !== db.currentUserId; });
+  }
+
+  var X2B = {
+    notifParts: notifParts, notifKinds: notifKinds, isSnoozed: isSnoozed, notifAt: notifAt,
+    setNotifsRead: setNotifsRead, archiveNotifs: archiveNotifs,
+    snoozeChoices: snoozeChoices, snoozeNotifs: snoozeNotifs, unsnoozeNotifs: unsnoozeNotifs,
+    wakeSnoozed: wakeSnoozed, snoozedCount: snoozedCount, wantsNotify: wantsNotify,
+    approvalsWaiting: approvalsWaiting, approvalRequester: approvalRequester,
+    projFollowing: projFollowing, setProjFollow: setProjFollow, projFollowers: projFollowers,
+    pfFollowing: pfFollowing, setPfFollow: setPfFollow, pfFollowers: pfFollowers
+  };
+  Object.keys(X2B).forEach(function (k) { global.Store[k] = X2B[k]; });
 
 })(window);
