@@ -2864,6 +2864,15 @@
     'ความเห็นและประวัติเก่าของผู้ใช้ตัวอย่างยังอ่านได้ (แสดงเป็น “ผู้ใช้ตัวอย่าง (ลบแล้ว)”) และย้อนกลับได้ทั้งชุด': 'Old comments and history by sample users stay readable (shown as “Sample user (removed)”), and the whole clean-up can be undone.',
     'ล้างข้อมูลตัวอย่าง: ผู้ใช้ {u} คน, โปรเจกต์ {p} โปรเจกต์, งาน {t} งาน': 'Cleared sample data: {u} users, {p} projects, {t} tasks',
     'ได้ล้างข้อมูลตัวอย่าง': 'cleared sample data',
+    // View save
+    'เปลี่ยนแล้วแสดงผลทันที': 'Changes apply instantly',
+    'ใช้แบบนี้เป็นค่าเริ่มต้นของทุกคนในโปรเจกต์': 'Use this as the default for everyone in the project',
+    'บันทึกเป็นแท็บใหม่…': 'Save as new tab…',
+    'บันทึกการตั้งค่าของ {v} แล้ว': 'Saved {v} settings',
+    'เป็นค่าเริ่มต้นของโปรเจกต์': 'set as project default',
+    'ตั้งค่าเริ่มต้นของมุมมอง': 'Set view default',
+    'ตั้งตัวกรอง เรียง จัดกลุ่มให้ถูกใจ แล้วกด “บันทึกเป็นแท็บใหม่…” ถ้าต้องการแท็บแยก แท็บจะขึ้นต่อท้ายแท็บของโปรเจกต์ให้ทุกคนใช้':
+      'Set up filters, sorting and grouping, then press “Save as new tab…” if you want a separate tab — it appears after the project tabs for everyone.',
   };
 
   /* ข้อความที่เก็บไว้ในบันทึก/การแจ้งเตือนเก่าเป็นคีย์ไทยเดิมที่เรียกเซกชันว่า "คอลัมน์"

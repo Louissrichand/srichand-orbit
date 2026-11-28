@@ -5829,3 +5829,12 @@ label.pf-pick-row { cursor: pointer; }
 @media (max-width: 700px) {
   .tr-new-input { font-size: 16px; min-height: 40px; }
 }
+/* View save */
+.opt-foot.opt-foot-v { flex-direction: column; align-items: stretch; gap: 8px; }
+.opt-foot-btns { display: flex; align-items: center; gap: 8px; }
+.opt-foot-btns .grow { flex: 1; }
+.opt-foot-note { margin: 0; }
+.opt-chk { display: flex; align-items: flex-start; gap: 6px; font-size: 12.5px; color: var(--fg); line-height: 1.5; cursor: pointer; }
+.opt-chk input { margin-top: 3px; }
+.opt-link { align-self: center; background: none; border: 0; padding: 2px 4px; font-size: 12px; color: var(--fg-soft); text-decoration: underline; cursor: pointer; }
+.opt-link:hover { color: var(--fg); }
