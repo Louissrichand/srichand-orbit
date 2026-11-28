@@ -2334,6 +2334,7 @@
     if (canStruct) {
       h += item('manage-fields', 'filter', L('จัดการฟิลด์'));
       h += item('required-fields', 'check', L('ฟิลด์ที่ต้องกรอกก่อนทำเสร็จ…'));   // Sprint 4
+      h += item('stale-days', 'bell', L('เตือนงานเงียบ…'));
       h += item('auto-open', 'bolt', L('ระบบอัตโนมัติ'));
     }
     h += item('forms-open', 'note', L('ฟอร์ม'));          // ฟอร์มเปิดให้คนนอกส่งเรื่องเข้ามาได้โดยตั้งใจ
@@ -8482,7 +8483,7 @@
     put('structure', ['sv-rename', 'sv-move', 'sv-update', 'sv-delete', 'tab-default',
       'dup-section', 'do-dup-section']);
     put('write', ['carry-over', 'slip-overdue', 'pg-move', 'set-next-meeting']);
-    put('structure', ['required-fields', 'save-required-fields']);
+    put('structure', ['required-fields', 'save-required-fields', 'stale-days']);
     put('manage', ['fix-user-name', 'set-manager']);        // Sprint 4 — เฉพาะผู้ดูแลระบบ        // Sprint 4
     put('manage', ['set-org-lang', 'set-org-privacy']);       // Sprint 3 — เฉพาะผู้ดูแลระบบ        // Sprint 3 — ย้ายงานระหว่างเซกชัน = แก้งาน ไม่ใช่แก้โครงสร้าง
     put('write:task', ['set-cover', 'clear-cover', 'cell-set-priority']);
@@ -9441,6 +9442,16 @@
             if (moved) toast(L('เลื่อน {n} งานแล้ว', { n: moved }), L('ย้อนกลับ'), 'undo');
           } };
         }));
+        break;
+      }
+      /* Sprint 4 — เตือนงานเงียบ: เลือกกี่วัน (ทำงานตอนมีคนเปิด Orbit เท่านั้น ยังไม่มีเซิร์ฟเวอร์รันให้ตลอด) */
+      case 'stale-days': {
+        closePops();
+        var sdPid = state.route.id, sdCur = (S.project(sdPid) || {}).staleDays || 0;
+        askChoice(L('เตือนงานเงียบ'), L('งานที่ไม่มีความเคลื่อนไหวเกินกำหนดจะแจ้งผู้รับผิดชอบ และเกิน 2 เท่าจะเพิ่มเจ้าของโปรเจกต์เป็นผู้ติดตาม ทำงานเฉพาะตอนมีคนเปิด Orbit อยู่ ปัจจุบัน: {d}', { d: sdCur ? L('{n} วัน', { n: sdCur }) : L('ปิดการเตือน') }),
+          [[0, L('ปิดการเตือน')], [7, L('7 วัน')], [14, L('14 วัน')], [30, L('30 วัน')]].map(function (o) {
+            return { label: o[1], run: function () { if (S.setStaleDays(sdPid, o[0])) { toast(L('ตั้งเตือนงานเงียบแล้ว')); S.runStaleCheck(); } } };
+          }));
         break;
       }
       case 'required-fields': closePops(); openModal(requiredFieldsModal(state.route.id)); break;
@@ -14180,6 +14191,10 @@
     try { S.wakeSnoozed(); } catch (err) { console.error('ปลุกรายการที่เลื่อนเตือนไม่สำเร็จ', err); }
   }
   setTimeout(runSnoozeWake, 2000);
+  /* Sprint 4 — เตือนงานเงียบ ตรวจตอนเปิดแอปและทุกชั่วโมง (เฉพาะโปรเจกต์ที่ตั้งไว้) */
+  function runStale() { try { S.runStaleCheck(); } catch (err) { console.error('ตรวจงานเงียบไม่สำเร็จ', err); } }
+  setTimeout(runStale, 6000);
+  setInterval(runStale, 60 * 60 * 1000);
   setInterval(runSnoozeWake, 60 * 1000);
 
   /* ---------- 4b — ส่วนขยาย ----------

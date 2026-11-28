@@ -2674,6 +2674,12 @@
     'ชื่อที่แสดงของ {e}': 'Display name for {e}', 'ใส่ชื่อ ไม่ใช่อีเมล': 'Enter a name, not an email address', 'แก้ชื่อแล้ว': 'Name updated', 'เช่น สมชาย ใจดี': 'e.g. Somchai Jaidee',
     'หัวหน้า': 'Manager', 'หัวหน้า: {m}': 'Manager: {m}', 'ตั้งหัวหน้า': 'Set manager', 'ตั้งหัวหน้าแล้ว': 'Manager set', 'ไม่มีหัวหน้า': 'No manager',
     'หัวหน้าของ {n}': 'Manager of {n}', 'ใช้เลือกผู้รับโอนงานให้อัตโนมัติตอนปิดบัญชี': 'Used to pre-select who takes over their tasks when the account is closed',
+    'เงียบมา {n} วันแล้ว — ขอให้ผู้รับผิดชอบอัปเดตสถานะ': 'Quiet for {n} days — asking the assignee for a status update',
+    'เงียบนานกว่า {n} วัน — เพิ่มเจ้าของโปรเจกต์เป็นผู้ติดตาม': 'Quiet for over {n} days — added the project owner as a follower',
+    'งาน “{t}” เงียบมา {n} วันแล้ว อัปเดตสถานะหน่อย': 'The task “{t}” has been quiet for {n} days — please post a status update',
+    'เตือนงานเงียบ…': 'Quiet-task reminders…', 'เตือนงานเงียบ': 'Quiet-task reminders',
+    'งานที่ไม่มีความเคลื่อนไหวเกินกำหนดจะแจ้งผู้รับผิดชอบ และเกิน 2 เท่าจะเพิ่มเจ้าของโปรเจกต์เป็นผู้ติดตาม ทำงานเฉพาะตอนมีคนเปิด Orbit อยู่ ปัจจุบัน: {d}': 'Tasks with no activity past the limit notify the assignee; past twice the limit the project owner becomes a follower. Runs only while someone has Orbit open. Currently: {d}',
+    'ปิดการเตือน': 'Off', '7 วัน': '7 days', '14 วัน': '14 days', 'ตั้งเตือนงานเงียบแล้ว': 'Quiet-task reminders set',
     /* Sprint 3 — อภิธานศัพท์ */
     'ศัพท์ที่ใช้ใน Orbit': 'Orbit glossary',
     'กลุ่มงานที่ทำเรื่องเดียวกัน มีเซกชัน สมาชิก และมุมมองของตัวเอง': 'A group of work on one topic, with its own sections, members and views',

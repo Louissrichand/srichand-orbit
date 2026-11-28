@@ -6559,6 +6559,62 @@
   /** เปลี่ยนบทบาท — ห้ามเหลือศูนย์ผู้ดูแล ไม่งั้นไม่มีใครเข้าหน้าผู้ดูแลได้อีก */
   /* Sprint 4 — แก้ชื่อที่แสดงของสมาชิก (ผู้ดูแลระบบ) ใช้กับชื่อที่เป็นอีเมลซึ่งขึ้นเต็มตามงาน/ความเห็นทุกที่ */
   /* Sprint 4 — หัวหน้าของสมาชิก (ผู้ดูแลระบบตั้ง) ใช้เลือกผู้รับโอนงานให้อัตโนมัติตอนปิดบัญชี */
+  /* Sprint 4 — เตือนงานเงียบ (ทำงานฝั่งเครื่อง เฉพาะตอนมีคนเปิด Orbit อยู่ — ยังไม่มีเซิร์ฟเวอร์รันให้ตลอดเวลา)
+   * โปรเจกต์ที่ตั้ง staleDays = N: งานที่ยังไม่เสร็จและไม่มีความเคลื่อนไหวจากคนเกิน N วัน → แจ้งผู้รับผิดชอบให้อัปเดตสถานะ
+   * เกิน 2N วัน → เพิ่มเจ้าของโปรเจกต์เป็นผู้ติดตามด้วย แต่ละขั้นทำครั้งเดียว (t.stale) งานกลับมาเคลื่อนไหวแล้วเริ่มนับใหม่
+   * บันทึกของระบบเองมี sys:1 ไม่นับเป็นความเคลื่อนไหว (ไม่งั้นเตือนแล้วงานกลายเป็น "ไม่เงียบ" ทันที) */
+  function lastActivityMs(t) {
+    var last = Date.parse(String(t.createdAt || '').length === 10 ? t.createdAt + 'T00:00:00' : t.createdAt) || 0;
+    (index().storyByTask[t.id] || []).forEach(function (st) {
+      if (st.sys) return;
+      var ms = Date.parse(st.createdAt) || 0;
+      if (ms > last) last = ms;
+    });
+    return last;
+  }
+  function setStaleDays(projectId, days) {
+    var p = project(projectId);
+    if (!p || !can('structure') || !canInProject(projectId, 'edit')) return false;
+    snapshot('ตั้งเตือนงานเงียบ');
+    p.staleDays = Math.max(0, Math.min(365, parseInt(days, 10) || 0));
+    commit();
+    return true;
+  }
+  function runStaleCheck() {
+    var now = Date.now(), changed = 0;
+    db.projects.forEach(function (p) {
+      var N = +p.staleDays || 0;
+      if (!N || p.archived) return;
+      tasksInProject(p.id).forEach(function (x) {
+        var t = x.task;
+        if (t.completed || !t.assigneeId) return;
+        var days = (now - lastActivityMs(t)) / 86400000;
+        if (days < N) {
+          if (t.stale) { t.stale = null; changed++; }          // กลับมาเคลื่อนไหวแล้ว เริ่มนับใหม่
+          return;
+        }
+        t.stale = t.stale || {};
+        function sys(key, params) {
+          db.stories.push({ id: uid('st'), taskId: t.id, actorId: null, type: 'log', text: key, params: params, createdAt: new Date().toISOString(), sys: 1 });
+        }
+        if (!t.stale.a) {
+          t.stale.a = new Date().toISOString();
+          sys('เงียบมา {n} วันแล้ว — ขอให้ผู้รับผิดชอบอัปเดตสถานะ', { n: Math.floor(days) });
+          notifyOnly(t.id, [t.assigneeId], 'งาน “{t}” เงียบมา {n} วันแล้ว อัปเดตสถานะหน่อย', 'activity', { t: t.name, n: Math.floor(days) }, true);
+          changed++;
+        }
+        if (days >= 2 * N && !t.stale.b && p.owner) {
+          t.stale.b = new Date().toISOString();
+          if (t.followers.indexOf(p.owner) < 0) t.followers.push(p.owner);
+          sys('เงียบนานกว่า {n} วัน — เพิ่มเจ้าของโปรเจกต์เป็นผู้ติดตาม', { n: 2 * N });
+          changed++;
+        }
+      });
+    });
+    if (changed) commit();
+    return changed;
+  }
+
   function setManager(userId, managerId) {
     var u = user(userId), m = managerId ? user(managerId) : null;
     if (!u || !isAdmin() || (managerId && !m) || managerId === userId) return false;
@@ -12870,7 +12926,7 @@
     accessRequestFor: accessRequestFor,
     canAnswerAccess: canAnswerAccess, answerAccess: answerAccess, accessOwner: accessOwner,
     convertToProject: convertToProject,
-    setManager: setManager, setUserName: setUserName, subRollup: subRollup, missingRequiredFields: missingRequiredFields, setRequiredFields: setRequiredFields, setNextMeeting: setNextMeeting, setOrgLang: setOrgLang, setOrgPrivacy: setOrgPrivacy, slipOverdue: slipOverdue, bulkAddToProject: bulkAddToProject, bulkMoveSection: bulkMoveSection, bulkSetField: bulkSetField,
+    setStaleDays: setStaleDays, runStaleCheck: runStaleCheck, setManager: setManager, setUserName: setUserName, subRollup: subRollup, missingRequiredFields: missingRequiredFields, setRequiredFields: setRequiredFields, setNextMeeting: setNextMeeting, setOrgLang: setOrgLang, setOrgPrivacy: setOrgPrivacy, slipOverdue: slipOverdue, bulkAddToProject: bulkAddToProject, bulkMoveSection: bulkMoveSection, bulkSetField: bulkSetField,
     bulkAddFollowers: bulkAddFollowers, bulkAddTag: bulkAddTag, bulkDependOn: bulkDependOn,
     bulkMerge: bulkMerge,
 
