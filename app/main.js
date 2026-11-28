@@ -2131,7 +2131,7 @@
     var cur = p.requiredFields || [];
     var list = (p.fields || []).filter(function (f) { return f.type !== 'id' && f.type !== 'formula'; });
     var h = '<h2>' + L('ฟิลด์ที่ต้องกรอกก่อนทำเสร็จ') + '</h2><p class="modal-sub">' +
-      R.esc(L('งานที่ฟิลด์เหล่านี้ยังว่างจะกดทำเสร็จไม่ได้ (งานอนุมัติและกฎอัตโนมัติไม่ถูกกั้น)')) + '</p>';
+      R.esc(L('งานที่ฟิลด์เหล่านี้ยังว่างจะกดทำเสร็จไม่ได้ (เฉพาะงานหลัก ไม่รวมงานย่อย งานอนุมัติและกฎอัตโนมัติไม่ถูกกั้น)')) + '</p>';
     if (!list.length) h += '<div class="ovw-empty">' + L('โปรเจกต์นี้ยังไม่มีฟิลด์') + '</div>';
     list.forEach(function (f) {
       h += '<label class="chk"><input type="checkbox" class="rf-cb" data-id="' + R.esc(f.id) + '"' + (cur.indexOf(f.id) >= 0 ? ' checked' : '') + '> ' + R.esc(f.name) + '</label>';

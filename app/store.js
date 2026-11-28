@@ -4050,7 +4050,7 @@
 
   function missingRequiredFields(taskId) {
     var t = task(taskId);
-    if (!t) return [];
+    if (!t || t.parentId) return []; /* เฉพาะงานหลัก ไม่รวมงานย่อย */
     var out = [];
     (index().memByTask[rootOf(t).id] || []).forEach(function (m) {
       var p = project(m.projectId);
@@ -7572,14 +7572,14 @@
 
   var CSV_TARGETS = [
     { id: 'ignore',        label: 'ไม่นำเข้า' },
-    { id: 'name',          label: 'ชื่องาน',               names: ['Name', 'Task Name', 'Task', 'ชื่องาน', 'ชื่อ'] },
-    { id: 'notes',         label: 'รายละเอียด',            names: ['Notes', 'Description', 'รายละเอียด'] },
-    { id: 'section',       label: 'เซกชัน (เซกชัน)',       names: ['Section/Column', 'Section', 'Column', 'เซกชัน', 'เซกชัน'] },
-    { id: 'assignee',      label: 'ผู้รับผิดชอบ',           names: ['Assignee', 'ผู้รับผิดชอบ'] },
-    { id: 'assigneeEmail', label: 'อีเมลผู้รับผิดชอบ',       names: ['Assignee Email'] },
+    { id: 'name',          label: 'ชื่องาน',               names: ['Name', 'Task Name', 'Task', 'ชื่องาน', 'ชื่อ', 'งาน', 'หัวข้อ', 'ชื่อเรื่อง'] },
+    { id: 'notes',         label: 'รายละเอียด',            names: ['Notes', 'Description', 'รายละเอียด', 'หมายเหตุ', 'คำอธิบาย'] },
+    { id: 'section',       label: 'เซกชัน (เซกชัน)',       names: ['Section/Column', 'Section', 'Column', 'เซกชัน', 'คอลัมน์', 'หมวด', 'สถานะ'] },
+    { id: 'assignee',      label: 'ผู้รับผิดชอบ',           names: ['Assignee', 'ผู้รับผิดชอบ', 'ผู้รับงาน'] },
+    { id: 'assigneeEmail', label: 'อีเมลผู้รับผิดชอบ',       names: ['Assignee Email', 'อีเมลผู้รับผิดชอบ'] },
     { id: 'collaborators', label: 'ผู้ร่วมงาน (ผู้ติดตาม)', names: ['Collaborators', 'Followers', 'ผู้ติดตาม', 'ผู้ร่วมงาน'] },
-    { id: 'start',         label: 'วันเริ่ม',               names: ['Start Date', 'วันเริ่ม'] },
-    { id: 'due',           label: 'กำหนดส่ง',              names: ['Due Date', 'กำหนดส่ง'] },
+    { id: 'start',         label: 'วันเริ่ม',               names: ['Start Date', 'วันเริ่ม', 'เริ่ม', 'วันที่เริ่ม'] },
+    { id: 'due',           label: 'กำหนดส่ง',              names: ['Due Date', 'กำหนดส่ง', 'วันครบกำหนด', 'วันที่ส่ง', 'ครบกำหนด'] },
     { id: 'priority',      label: 'ความสำคัญ',             names: ['Priority', 'ความสำคัญ'] },
     { id: 'type',          label: 'ชนิดงาน',               names: ['Type', 'ชนิดงาน'] },
     { id: 'tags',          label: 'แท็ก',                  names: ['Tags', 'แท็ก'] },
@@ -7599,7 +7599,12 @@
     var used = {};
     var guess = head.map(function (h) {
       var hl = String(h || '').trim().toLowerCase();
-      if (!hl || hl === 'task id') return 'ignore';
+      if (!hl || hl === 'task id' || hl === 'รหัสงาน') return 'ignore';
+      /* ฟิลด์ที่ชื่อตรงเป๊ะ (ภาษาไทย) ชนะคำพ้องของคอลัมน์มาตรฐาน เช่น ฟิลด์ "สถานะ" */
+      var fx = /[฀-๿]/.test(hl) ? ((p && p.fields) || []).filter(function (x) {
+        return x.type !== 'id' && x.name.trim().toLowerCase() === hl;
+      })[0] : null;
+      if (fx) return 'field:' + fx.id;
       for (var k = 0; k < CSV_TARGETS.length; k++) {
         var c = CSV_TARGETS[k];
         if (c.names && !used[c.id] && c.names.some(function (n) { return n.toLowerCase() === hl; })) {
@@ -14800,7 +14805,7 @@
   /* ---------- Sprint 4c - เพิ่มสมาชิกหลายคนพร้อมกัน (อีเมลทีละบรรทัด / CSV) ----------
    * rows [{email, name, team}] -> { added:[], dup:[], bad:[] } ใช้ addUser/emailProblem ชุดเดิม ย้อนกลับได้ทีเดียว */
   function bulkAddUsers(rows, role) {
-    var out = { added: [], dup: [], bad: [] };
+    var out = { added: [], dup: [], bad: [], teamsCreated: [] };
     if (!isAdmin()) { denied('members'); return out; }
     var seen = {};
     batch('เพิ่มสมาชิกหลายคน', null, function () {
@@ -14818,6 +14823,10 @@
         var tn = String(r.team || '').trim().toLowerCase();
         if (tn) {
           var tm = (db.teams || []).filter(function (x) { return String(x.name || '').trim().toLowerCase() === tn; })[0];
+          if (!tm) {
+            tm = createTeam({ name: String(r.team).trim() });
+            if (tm) out.teamsCreated.push(tm.name);
+          }
           if (tm) addTeamMember(tm.id, u.id, 'member');
         }
       });

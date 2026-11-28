@@ -2667,7 +2667,7 @@
     'อนุมัติปล่อยสินค้า (Gate 4)': 'Approve release (Gate 4)',
     'วันเปิดตัวสินค้า': 'Product launch day',
     'ฟิลด์ที่ต้องกรอกก่อนทำเสร็จ…': 'Fields required before completing…', 'ฟิลด์ที่ต้องกรอกก่อนทำเสร็จ': 'Fields required before completing',
-    'งานที่ฟิลด์เหล่านี้ยังว่างจะกดทำเสร็จไม่ได้ (งานอนุมัติและกฎอัตโนมัติไม่ถูกกั้น)': 'Tasks with any of these fields empty can’t be completed (approval tasks and automations are not blocked)',
+    'งานที่ฟิลด์เหล่านี้ยังว่างจะกดทำเสร็จไม่ได้ (เฉพาะงานหลัก ไม่รวมงานย่อย งานอนุมัติและกฎอัตโนมัติไม่ถูกกั้น)': 'Tasks with any of these fields empty can’t be completed (top-level tasks only, not subtasks; approval tasks and automations are not blocked)',
     'กรอกให้ครบก่อนทำเสร็จ: {f}': 'Fill these in before completing: {f}', 'โปรเจกต์นี้ยังไม่มีฟิลด์': 'This project has no fields yet',
     'งานย่อยครบแล้ว — ปิดงานหลัก “{t}” ได้': 'All subtasks are done — you can close “{t}”',
     'มีสมาชิก {n} คนที่ชื่อที่แสดงเป็นอีเมล': '[n|1 member has|{n} members have] an email address as the display name', 'แก้ชื่อ': 'Fix name',
@@ -2753,6 +2753,9 @@
     'ยังไม่มีอีเมลให้เพิ่ม': 'No emails to add', 'สรุปการเพิ่มสมาชิก': 'Members added',
     'เพิ่มแล้ว {n} คน': 'Added [n|{n} person|{n} people]', 'ข้าม (มีอยู่แล้วหรือซ้ำ) {n} รายการ': 'Skipped (already exist or duplicate): {n}',
     'อีเมลไม่ถูกต้อง {n} รายการ': 'Invalid emails: {n}',
+    // Pre-pilot B
+    'สร้างทีมใหม่ {n} ทีม': 'Created [n|{n} new team|{n} new teams]',
+    //@@B
   };
 
   /* ข้อความที่เก็บไว้ในบันทึก/การแจ้งเตือนเก่าเป็นคีย์ไทยเดิมที่เรียกเซกชันว่า "คอลัมน์"
