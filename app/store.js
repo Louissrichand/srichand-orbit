@@ -253,6 +253,15 @@
 
   /* ---------- seed ---------- */
 
+  /** QA-D — ฐานข้อมูลองค์กรเปล่า (ไม่มีคน/โปรเจกต์/งานตัวอย่าง) ใช้ตั้งต้นไฟล์กลางตอนยังไม่เคยมี */
+  function emptyOrgDb() {
+    return migrate({
+      version: SCHEMA, currentUserId: null, settings: { theme: 'auto', lang: null },
+      users: [], projects: [], tasks: [], memberships: [], stories: [], fieldValues: [],
+      notifications: [], taskTemplates: []
+    });
+  }
+
   function seed() {
     var t = today();
 
@@ -328,6 +337,9 @@
     };
 
     var projects = [pLaunch, pContent, pOps];
+    /* QA-D — ทุกอย่างที่ seed() สร้างเป็นข้อมูลตัวอย่าง ไม่ใช่คนหรืองานจริงขององค์กร */
+    users.forEach(function (u) { u.sample = true; });
+    projects.forEach(function (p) { p.sample = true; });
 
     // [name, project, section, assignee, dueOffset, priority, notes, tags, type, startOffset]
     var raw = [
@@ -730,6 +742,15 @@
       var firstUser = d.users.filter(function (u) { return u.id === d.currentUserId; })[0] || d.users[0];
       if (firstUser) firstUser.role = 'admin';
     }
+    /* QA-D — ไฟล์เก่าที่มาจาก seed() ยังไม่มีธง sample: จับจากรหัสตัวอย่าง และต้องไม่เคยล็อกอินจริง
+     * (คนที่ล็อกอินแล้วไม่ถูกธงเด็ดขาด) ไม่เพิ่ม SCHEMA ธงเป็นช่องไม่บังคับ */
+    var SEED_USERS = ['u_me', 'u_nan', 'u_ploy', 'u_tor'], SEED_PROJECTS = ['p_launch', 'p_content', 'p_ops'];
+    d.users.forEach(function (u) {
+      if (u && SEED_USERS.indexOf(u.id) >= 0 && !u.lastSeenAt && !u.authBy) u.sample = true;
+    });
+    d.projects.forEach(function (p) {
+      if (p && SEED_PROJECTS.indexOf(p.id) >= 0) p.sample = true;
+    });
     d.version = SCHEMA;
     return d;
   }
@@ -1109,7 +1130,8 @@
   function indexSig() {
     return db.tasks.length + '/' + db.memberships.length + '/' + db.projects.length +
            '/' + db.users.length + '/' + db.stories.length +
-           '/' + (db.fieldValues || []).length + '/' + (db.projectMembers || []).length;
+           '/' + (db.fieldValues || []).length + '/' + (db.projectMembers || []).length +
+           '/' + (db.removedUsers || []).length;
   }
 
   function index() {
@@ -1121,6 +1143,11 @@
       pmByProject: {}, access: {}, types: {}, statuses: {}, teamMem: {}
     };
     db.users.forEach(function (u) { i.user[u.id] = u; });
+    /* QA-D — ผู้ใช้ตัวอย่างที่ล้างออกแล้ว: ความเห็น/ประวัติเก่ายังอ่านออกว่าใครทำ */
+    (db.removedUsers || []).forEach(function (r) {
+      if (!i.user[r.id]) i.user[r.id] = { id: r.id, name: L('ผู้ใช้ตัวอย่าง (ลบแล้ว)'), email: '', color: '#9ca0a8',
+        role: null, active: false, removed: true };
+    });
     /* 4a — สมาชิกทีม { teamId: { userId: 'admin'|'member' } } ใช้คำนวณสิทธิ์ที่ได้ผ่านทีม */
     (db.teams || []).forEach(function (tm) {
       var mm = i.teamMem[tm.id] = {};
@@ -2368,8 +2395,8 @@
 
   /** คนที่ควรได้ยินเรื่องนี้ของโปรเจกต์ — ต้องเห็นโปรเจกต์ได้และเปิดหัวข้อนี้ไว้ */
   function projectWatchers(projectId, key) {
-    return db.users.filter(function (u) {
-      return u.id !== db.currentUserId && u.active !== false &&
+    return orgPeople().filter(function (u) {
+      return u.id !== db.currentUserId &&
         !!projectAccess(projectId, u.id) && projNotifyOf(projectId, u.id)[key];
     }).map(function (u) { return u.id; });
   }
@@ -2767,7 +2794,7 @@
     var p = project(projectId);
     if (!def) return [];
     if (def.kind === 'person' || fid === 'followers') {
-      return [[ME, 'ฉัน', null]].concat(db.users.filter(function (u) { return u.active !== false; })
+      return [[ME, 'ฉัน', null]].concat(orgPeople()
         .map(function (u) { return [u.id, u.name, u.color]; }));
     }
     if (fid === 'project') {
@@ -3035,8 +3062,8 @@
     var mem = projectMembers(projectId).map(function (m) { return m.userId; });
     var p = project(projectId);
     if (p && p.owner && mem.indexOf(p.owner) < 0) mem.push(p.owner);
-    return db.users.filter(function (u) {
-      return u.active !== false && (!mem.length || mem.indexOf(u.id) >= 0);
+    return orgPeople().filter(function (u) {
+      return (!mem.length || mem.indexOf(u.id) >= 0);
     });
   }
 
@@ -3622,7 +3649,7 @@
   /** หา @ชื่อ ในข้อความ แล้วคืน id ของคนที่ถูกพูดถึง */
   function parseMentions(text) {
     var found = [];
-    db.users.forEach(function (u) {
+    orgPeople().forEach(function (u) {
       if (text.indexOf('@' + u.name) >= 0) found.push(u.id);
     });
     return found;
@@ -3806,8 +3833,8 @@
     var am = rest.match(/\s@(\S+)/);
     if (am) {
       var q = am[1].toLowerCase();
-      var hits = (db.users || []).filter(function (u) {
-        return u && u.name && !u.disabled && u.active !== false && u.name.toLowerCase().indexOf(q) === 0 &&
+      var hits = orgPeople().filter(function (u) {
+        return u && u.name && u.name.toLowerCase().indexOf(q) === 0 &&
           (!projectId || !!projectAccess(projectId, u.id));
       });
       if (hits.length === 1) { assignee = hits[0].id; rest = rest.replace(am[0], ' '); }
@@ -6875,6 +6902,126 @@
   /** คนที่เคยล็อกอินจริง แยกจากผู้ใช้ตัวอย่าง */
   function signedInUsers() {
     return db.users.filter(function (u) { return !!u.lastSeenAt; });
+  }
+
+  /* ---------- QA-D · ผู้ใช้จริงเท่านั้น ----------
+   * โหมดทีม (ล็อกอินแล้ว): ตัวเลือกคนทุกที่ต้องมีแต่สมาชิกจริงขององค์กร ไม่มีคน/งานตัวอย่างหรืออีเมลทดสอบ
+   * โหมดบนเครื่อง ("ลองบนเครื่องนี้"): เห็นคนตัวอย่างตามเดิม เดโมยังใช้ได้ */
+  function isTeamMode() {
+    return !!(global.OrbitSync && global.OrbitSync.state && global.OrbitSync.state.mode === 'team');
+  }
+  var TEST_MAIL_RE = /@example\.(com|org)\s*$/i;
+  /** สมาชิกจริง: ใช้งานอยู่ ไม่ถูกปิด ไม่ใช่ตัวอย่าง อีเมลไม่ใช่โดเมนทดสอบ
+   *  และล็อกอินด้วย Microsoft แล้ว หรือผู้ดูแลเพิ่มไว้พร้อมอีเมล */
+  function isRealMember(u) {
+    if (!u || u.active === false || u.disabled || u.sample || u.removed) return false;
+    var em = String(u.email || '').trim();
+    if (TEST_MAIL_RE.test(em)) return false;
+    return u.authBy === 'microsoft' || !!u.lastSeenAt || !!em;
+  }
+  /** รายชื่อที่ใช้ในตัวเลือกคนทุกจุด (ผู้รับผิดชอบ ผู้อนุมัติ ผู้ติดตาม @ ฯลฯ) */
+  function orgPeople() {
+    if (isTeamMode()) return db.users.filter(isRealMember);
+    return db.users.filter(function (u) { return u.active !== false && !u.disabled; });
+  }
+  /** id นี้เลือกเป็นคนได้ไหม (ใช้กับตัวเลือกที่ไม่ได้ไล่ทั้งลิสต์) */
+  function isPickable(id) { return orgPeople().some(function (u) { return u.id === id; }); }
+
+  /** ข้อมูลตัวอย่างที่ยังค้างอยู่ และแยกว่าอันไหนล้างได้/ข้าม (มีงานจริงอยู่) */
+  function realUserIds() {
+    var m = {};
+    db.users.forEach(function (u) { if (!u.sample) m[u.id] = true; });
+    return m;
+  }
+  function sampleSummary() {
+    var real = realUserIds();
+    var users = db.users.filter(function (u) { return u.sample; });
+    var removable = [], skipped = [];
+    db.projects.filter(function (p) { return p.sample; }).forEach(function (p) {
+      var tids = {};
+      db.memberships.forEach(function (m) { if (m.projectId === p.id) tids[m.taskId] = true; });
+      var hasReal = db.tasks.some(function (t) {
+        if (!tids[t.id] && !(t.parentId && tids[t.parentId])) return false;
+        return real[t.createdBy] || real[t.assigneeId] || real[t.assignedBy];
+      }) || db.stories.some(function (s) { return tids[s.taskId] && real[s.actorId]; });
+      (hasReal ? skipped : removable).push(p);
+    });
+    return { users: users, removable: removable, skipped: skipped,
+             any: !!(users.length || removable.length || skipped.length) };
+  }
+
+  /** ล้างข้อมูลตัวอย่างจากตอนเริ่มระบบ (ผู้ดูแลเท่านั้น · ย้อนกลับครั้งเดียว · มีบันทึกผู้ดูแล) */
+  function clearSampleData() {
+    if (!isAdmin()) { denied('manage'); return null; }
+    var sum = sampleSummary();
+    if (!sum.users.length && !sum.removable.length) return null;
+    var userIds = {}, projIds = {};
+    sum.users.forEach(function (u) { if (u.id !== db.currentUserId) userIds[u.id] = u; });
+    sum.removable.forEach(function (p) { projIds[p.id] = p; });
+    var nTasks = 0;
+    batch('ล้างข้อมูลตัวอย่าง', null, function () {
+      /* งาน: ที่อยู่เฉพาะโปรเจกต์ตัวอย่างลบทิ้งพร้อมงานย่อย ที่อยู่โปรเจกต์อื่นด้วยแค่หลุดออก */
+      var gone = {};
+      db.tasks.forEach(function (t) {
+        var ms = db.memberships.filter(function (m) { return m.taskId === t.id; });
+        if (ms.length && ms.every(function (m) { return projIds[m.projectId]; })) gone[t.id] = true;
+      });
+      var more = true;
+      while (more) {
+        more = false;
+        db.tasks.forEach(function (t) {
+          if (!gone[t.id] && t.parentId && gone[t.parentId]) { gone[t.id] = true; more = true; }
+        });
+      }
+      nTasks = Object.keys(gone).length;
+      db.tasks = db.tasks.filter(function (t) { return !gone[t.id]; });
+      db.memberships = db.memberships.filter(function (m) { return !gone[m.taskId] && !projIds[m.projectId]; });
+      db.stories = db.stories.filter(function (s) { return !gone[s.taskId]; });
+      db.fieldValues = (db.fieldValues || []).filter(function (v) { return !gone[v.taskId]; });
+      db.notifications = (db.notifications || []).filter(function (n) { return !gone[n.taskId]; });
+      db.tasks.forEach(function (t) {
+        t.dependsOn = (t.dependsOn || []).filter(function (d) { return !gone[d.id]; });
+      });
+      db.projects = db.projects.filter(function (p) { return !projIds[p.id]; });
+      db.projectMembers = (db.projectMembers || []).filter(function (m) { return !projIds[m.projectId]; });
+      (db.portfolios || []).forEach(function (f) {
+        f.projectIds = (f.projectIds || []).filter(function (id) { return !projIds[id]; });
+      });
+      /* คน: ถอดออกจากทุกที่ที่อ้างถึง */
+      var cur = db.currentUserId;
+      function not(id) { return !userIds[id]; }
+      db.tasks.forEach(function (t) {
+        if (userIds[t.assigneeId]) { t.assigneeId = null; t.assignedAt = null; t.assignedBy = null; }
+        if (userIds[t.assignedBy]) t.assignedBy = null;
+        t.followers = (t.followers || []).filter(not);
+        t.likes = (t.likes || []).filter(not);
+        if (t.approvers) {
+          t.approvers = t.approvers.filter(not);
+          if (t.approvers.length < 2) t.approvers = null;
+        }
+        if (t.approvalVotes) Object.keys(t.approvalVotes).forEach(function (k) { if (userIds[k]) delete t.approvalVotes[k]; });
+      });
+      db.projectMembers = db.projectMembers.filter(function (m) { return not(m.userId); });
+      db.projects.forEach(function (p) { if (userIds[p.owner]) p.owner = cur; });
+      (db.portfolios || []).forEach(function (f) {
+        if (userIds[f.owner]) f.owner = cur;
+        if (f.members) f.members = f.members.filter(function (m) { return not(m.u || m.userId || m); });
+      });
+      (db.teams || []).forEach(function (t) {
+        t.members = (t.members || []).filter(function (m) { return not(m.u); });
+      });
+      db.notifications = db.notifications.filter(function (n) { return not(n.userId); });
+      if (db.personal) Object.keys(userIds).forEach(function (id) { delete db.personal[id]; });
+      db.removedUsers = db.removedUsers || [];
+      Object.keys(userIds).forEach(function (id) {
+        db.removedUsers.push({ id: id });
+        db.users = db.users.filter(function (u) { return u.id !== id; });
+      });
+      audit('sample.clear', null, 'ล้างข้อมูลตัวอย่าง: ผู้ใช้ {u} คน, โปรเจกต์ {p} โปรเจกต์, งาน {t} งาน',
+        { u: Object.keys(userIds).length, p: Object.keys(projIds).length, t: nTasks });
+    });
+    return { users: Object.keys(userIds).length, projects: Object.keys(projIds).length, tasks: nTasks,
+             skipped: sum.skipped.length };
   }
 
   /** กิจกรรมล่าสุด ใช้ทั้งหน้าแรกและหน้าผู้ดูแล
@@ -11326,7 +11473,7 @@
    * และถ้าบรรทัดมี @ชื่อ ที่ตรงกับคนในระบบ มอบงานนั้นให้คนนั้นเลย (เอา @ชื่อ ออกจากชื่องาน) */
   var PG_BULLET = /^(?:[-*•·▪◦‣–—+]\s+|\d{1,3}[.)]\s+|\[[ xX✓]?\]\s*|[☐☑✅]\s*)+/;
   function pageTaskLines(raw) {
-    var people = db.users.filter(function (u) { return u.active !== false && u.name; })
+    var people = orgPeople().filter(function (u) { return u.name; })
       .sort(function (a, b) { return b.name.length - a.name.length; });     // ชื่อยาวก่อน "@มานี" ไม่โดน "@มา" แย่ง
     return String(raw || '').split(/\r?\n/).map(function (line) {
       var src = line.trim();
@@ -12348,10 +12495,10 @@
     var f = portfolio(pfId);
     if (fid === 'status') return PROJECT_STATES.map(function (x) { return [x.id, x.label, x.color]; });
     if (fid === 'kind') return [['project', 'โปรเจกต์', null], ['portfolio', 'พอร์ตโฟลิโอ', null]];
-    if (fid === 'owner') return [[ME, 'ฉัน', null]].concat(db.users.filter(function (u) { return u.active !== false; })
+    if (fid === 'owner') return [[ME, 'ฉัน', null]].concat(orgPeople()
       .map(function (u) { return [u.id, u.name, u.color]; }));
     var fd = f && fid.indexOf('pff:') === 0 ? pfField(f, fid.slice(4)) : null;
-    if (fd && fd.type === 'person') return [[ME, 'ฉัน', null]].concat(db.users.map(function (u) { return [u.id, u.name, u.color]; }));
+    if (fd && fd.type === 'person') return [[ME, 'ฉัน', null]].concat(orgPeople().map(function (u) { return [u.id, u.name, u.color]; }));
     if (fd && fd.type === 'select') return fd.options.map(function (o) { return [o.name, o.name, o.color]; });
     return [];
   }
@@ -13083,6 +13230,8 @@
     setActive: setActive, isActive: isActive,
     audit: audit, auditLog: auditLog, auditGroups: auditGroups, auditCsv: auditCsv,
     signedInUsers: signedInUsers, recentActivity: recentActivity,
+    emptyOrgDb: emptyOrgDb, isTeamMode: isTeamMode, isRealMember: isRealMember, orgPeople: orgPeople, isPickable: isPickable,
+    sampleSummary: sampleSummary, clearSampleData: clearSampleData,
     setSetting: setSetting,
 
     /* 2c — ค้นหา ฟิลด์ แท็ก นำเข้า/ส่งออก และงานดูแลโปรเจกต์ */
@@ -13462,7 +13611,7 @@
   /** คนที่แสดงเป็นแถว — ผู้รับผิดชอบงานในขอบเขต + สมาชิก (โปรเจกต์ที่มีรายชื่อ / ทีม) */
   function wlPeople(scope, tasks) {
     var seen = {}, out = [];
-    var add = function (u) { if (u && !seen[u] && user(u) && user(u).active !== false) { seen[u] = true; out.push(u); } };
+    var add = function (u) { if (u && !seen[u] && user(u) && user(u).active !== false && (!isTeamMode() || isRealMember(user(u)))) { seen[u] = true; out.push(u); } };
     if (scope.kind === 'project') projectMembers(scope.id).forEach(function (m) { add(m.userId); });
     var tid = scope.kind === 'all' ? scope.team : null;
     if (tid && team(tid)) team(tid).members.forEach(function (m) { add(m.u); });
@@ -14738,8 +14887,8 @@
   }
 
   function projFollowers(projectId) {
-    return db.users.filter(function (u) {
-      return u.active !== false && !!projectAccess(projectId, u.id) && projFollowing(projectId, u.id);
+    return orgPeople().filter(function (u) {
+      return !!projectAccess(projectId, u.id) && projFollowing(projectId, u.id);
     });
   }
 
@@ -14762,8 +14911,8 @@
   }
 
   function pfFollowers(pfId) {
-    return db.users.filter(function (u) {
-      return u.active !== false && u.role !== 'guest' && pfFollowing(pfId, u.id);
+    return orgPeople().filter(function (u) {
+      return u.role !== 'guest' && pfFollowing(pfId, u.id);
     });
   }
 

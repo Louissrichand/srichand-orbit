@@ -5674,3 +5674,8 @@ label.pf-pick-row { cursor: pointer; }
 .ask-body { white-space: pre-line; }
 .card-fv { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; }
 .card-fv .card-fn { color: var(--text-3, #7a8599); font-size: 11px; white-space: nowrap; }
+
+/* QA-D */
+.smp-card { align-items: center; }
+.smp-card .btn { margin-left: auto; flex: none; white-space: nowrap; }
+.smp-pill { background: var(--accent-soft, #eef0ff); color: var(--accent, #5b50e6); }

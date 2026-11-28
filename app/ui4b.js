@@ -300,7 +300,7 @@
         '<button class="btn btn-primary" data-act="rp-scope-save" data-id="' + esc(r.id) + '">' + L('บันทึก') + '</button></div>';
     }
     function rpShareHtml(r) {
-      var users = S.db.users.filter(function (u) { return u.active !== false && u.id !== r.owner; });
+      var users = S.orgPeople().filter(function (u) { return u.active !== false && u.id !== r.owner; });
       return '<h2>' + L('แชร์รายงาน') + '</h2><p class="prj-note">' +
         L('คนที่ได้รับแชร์เห็นกราฟที่คิดจากงานที่ตัวเองมีสิทธิ์เห็นเท่านั้น และแก้รายงานไม่ได้') + '</p>' +
         '<label class="rp-org"><input type="checkbox" id="rpOrg"' + (r.share.org ? ' checked' : '') + '> ' + L('ทุกคนในองค์กรเห็นรายงานนี้ (ยกเว้นแขก)') + '</label>' +

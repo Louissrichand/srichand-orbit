@@ -1449,7 +1449,7 @@
       if (popIsOpenFor(cell)) { closePops(); return; }
       var ah = '<button data-act="cell-set-assignee" data-id="' + R.esc(tid) +
         '" data-user="">' + R.avatar(null) + ' ' + L('ยังไม่มอบหมาย') + '</button>';
-      S.db.users.forEach(function (u) {
+      S.orgPeople().forEach(function (u) {
         ah += '<button data-act="cell-set-assignee" data-id="' + R.esc(tid) +
           '" data-user="' + R.esc(u.id) + '">' + R.avatar(u) + ' ' + R.esc(u.name) + '</button>';
       });
@@ -1501,7 +1501,7 @@
       if (popIsOpenFor(cell)) { closePops(); return; }
       var ph2 = '<button data-act="cell-set-option" data-id="' + R.esc(tid) + '" data-field="' +
         R.esc(fid) + '" data-v="">' + L('ไม่ระบุ') + '</button>';
-      S.db.users.forEach(function (u) {
+      S.orgPeople().forEach(function (u) {
         ph2 += '<button data-act="cell-set-option" data-id="' + R.esc(tid) + '" data-field="' +
           R.esc(fid) + '" data-v="' + R.esc(u.id) + '">' + R.avatar(u) + ' ' +
           R.esc(u.name) + '</button>';
@@ -2150,7 +2150,7 @@
   /* Sprint 3 — ช่องค้นหาในรายชื่อคน (ผู้รับผิดชอบ ผู้ติดตาม) เมื่อมีคนเกิน 6 คน หาชื่อไทย/อังกฤษได้โดยไม่ต้องไล่เลื่อน
    * กรองด้วยการซ่อนปุ่ม ไม่สร้างรายการใหม่ จึงไม่กระทบการทำงานของปุ่มเดิม ปุ่ม "ยังไม่มอบหมาย" (data-user="") อยู่เสมอ */
   function peopleFilterHtml() {
-    return S.db.users.length > 6
+    return S.orgPeople().length > 6
       ? '<input class="pop-filter" type="search" autocomplete="off" placeholder="' + R.esc(L('ค้นหาชื่อ')) + '" aria-label="' + R.esc(L('ค้นหาชื่อ')) + '">'
       : '';
   }
@@ -2301,7 +2301,7 @@
       } else if (canManage) {
         h += '<div class="field" style="margin-top:12px"><label>' + L('เพิ่มสมาชิกใหม่') + '</label>' +
           '<select id="paUser">';
-        S.db.users.filter(function (u) {
+        S.orgPeople().filter(function (u) {
           return u.active !== false &&
                  !members.some(function (m) { return m.userId === u.id; });
         }).forEach(function (u) {
@@ -2700,7 +2700,7 @@
         '<input id="psName" data-pid="' + R.esc(projectId) + '" value="' + R.esc(pv.name) + '"></div>';
       h += '<div class="field"><label>' + L('เจ้าของโปรเจกต์') + '</label><select id="psOwner">' +
         '<option value="">' + L('ยังไม่ระบุ') + '</option>';
-      S.db.users.forEach(function (u) {
+      S.orgPeople().forEach(function (u) {
         h += '<option value="' + R.esc(u.id) + '"' + (pv.owner === u.id ? ' selected' : '') +
           '>' + R.esc(u.name) + '</option>';
       });
@@ -3385,7 +3385,7 @@
       '<p class="prj-note">' + (t.assigneeId
         ? L('ทุกคนที่เลือกจะได้งาน “{t}” เป็นของตัวเองคนละชิ้น งานเดิมยังอยู่กับผู้รับผิดชอบคนเดิม', { t: t.name })
         : L('คนแรกที่เลือกได้งานนี้ไป คนที่เหลือได้สำเนาคนละชิ้น')) + '</p><div class="dup-grid people">';
-    S.db.users.forEach(function (u) {
+    S.orgPeople().forEach(function (u) {
       if (u.active === false || u.id === t.assigneeId) return;
       h += '<label class="chk"><input type="checkbox" class="ac-user" value="' + R.esc(u.id) + '"> ' +
         R.avatar(u, 'sm') + ' ' + R.esc(u.name) + '</label>';
@@ -4013,7 +4013,7 @@
     h += '</div>';
     var have = {};
     people.forEach(function (pp) { have[pp[0]] = true; });
-    var rest = S.db.users.filter(function (u) { return u.active !== false && !have[u.id]; });
+    var rest = S.orgPeople().filter(function (u) { return u.active !== false && !have[u.id]; });
     if (rest.length) {
       h += '<div class="flt-line" style="margin-top:12px"><select class="opt-select" id="ptsUser">' +
         rest.map(function (u) { return '<option value="' + esc(u.id) + '">' + esc(u.name) + '</option>'; }).join('') + '</select>' +
@@ -4107,7 +4107,7 @@
       (t.type !== 'milestone' ? '<label class="opt-lbl">' + L('วันเริ่ม') + '</label>' + relInputs('t.start', t.start) : '') +
       '<label class="opt-lbl">' + L('แท็ก (คั่นด้วยจุลภาค)') + '</label><input class="opt-select" data-act="tte" data-k="tags" value="' + esc(t.tags.join(', ')) + '">' +
       '<label class="opt-lbl">' + L('ผู้ติดตาม') + '</label><div class="flt-chips">' +
-      S.db.users.filter(function (u) { return u.active !== false; }).map(function (u) {
+      S.orgPeople().map(function (u) {
         return '<button class="flt-chip' + (t.followers.indexOf(u.id) >= 0 ? ' on' : '') + '" data-act="tte-fol" data-v="' + esc(u.id) + '">' + esc(u.name) + '</button>';
       }).join('') + '</div>';
     var fs = ((p && p.fields) || []).filter(function (f) { return ['select', 'text', 'number', 'person'].indexOf(f.type) >= 0; });
@@ -4509,7 +4509,7 @@
 
   function auSel(act, options, cur, d) { return optSelect(act, options, cur == null ? '' : String(cur), d); }
   function auUsers(withNone) {
-    return S.db.users.filter(function (u) { return u.active !== false; })
+    return S.orgPeople()
       .map(function (u) { return [u.id, u.name + (S.isAway(u.id) ? ' · ' + L('ไม่อยู่') : '')]; });
   }
   function auSecOpts(pid, anyLabel) {
@@ -4611,7 +4611,7 @@
     h += '</div>';
     if (mode === 'rr') {
       var cur = s.list || [];
-      h += '<div class="flt-chips">' + S.db.users.filter(function (u) { return u.active !== false; }).map(function (u) {
+      h += '<div class="flt-chips">' + S.orgPeople().map(function (u) {
         var on = cur.indexOf(u.id) >= 0;
         return '<button class="flt-chip' + (on ? ' on' : '') + '" data-act="ae-ap-chip"' + d + ' data-k="' + pre + 'list" data-v="' + esc(u.id) + '">' +
           esc(u.name) + (S.isAway(u.id) ? ' <em class="au-away">' + L('ไม่อยู่') + '</em>' : '') + '</button>';
@@ -4693,7 +4693,7 @@
         var us = a.users || [], vs = a.vars || [];
         return '<div class="flt-chips">' + AU_VARS_USER.map(function (x) {
           return '<button class="flt-chip' + (vs.indexOf(x[0]) >= 0 ? ' on' : '') + '" data-act="ae-ap-chip"' + k('vars') + ' data-v="' + x[0] + '">' + esc(L(x[1])) + '</button>';
-        }).join('') + S.db.users.filter(function (u) { return u.active !== false; }).map(function (u) {
+        }).join('') + S.orgPeople().map(function (u) {
           return '<button class="flt-chip' + (us.indexOf(u.id) >= 0 ? ' on' : '') + '" data-act="ae-ap-chip"' + k('users') + ' data-v="' + esc(u.id) + '">' + esc(u.name) + '</button>';
         }).join('') + '</div>';
       }
@@ -5599,7 +5599,7 @@
     Object.keys(p.roles || {}).forEach(add);
     /* โปรเจกต์เปิดทั้งองค์กรไม่มีรายชื่อสมาชิก — ให้เลือกจากคนที่ถืองานในโปรเจกต์ แล้วค่อยทุกคน */
     S.tasksInProject(projectId).forEach(function (x) { add(x.task.assigneeId); });
-    if (ids.length < 3) S.db.users.forEach(function (u) { add(u.id); });
+    if (ids.length < 3) S.orgPeople().forEach(function (u) { add(u.id); });
     var h = '<h2>' + L('บทบาทในโปรเจกต์') + '</h2><p class="prj-note">' +
       L('พิมพ์บทบาทของแต่ละคน เช่น ผู้อนุมัติ ผู้ประสานงาน ฝ่ายออกแบบ แสดงที่หน้าภาพรวม ไม่เกี่ยวกับสิทธิ์') + '</p>';
     h += '<div class="roles-grid">';
@@ -5685,7 +5685,7 @@
       }).join('') + '</div>';
     }
     if (f.type === 'person') {
-      return '<select id="bfVal" class="inp"><option value="">—</option>' + S.db.users.filter(function (u) {
+      return '<select id="bfVal" class="inp"><option value="">—</option>' + S.orgPeople().filter(function (u) {
         return u.active !== false;
       }).map(function (u) { return '<option value="' + R.esc(u.id) + '">' + R.esc(u.name) + '</option>'; }).join('') + '</select>';
     }
@@ -5714,7 +5714,7 @@
 
   function bulkFollowersModal() {
     var h = '<h2>' + L('เพิ่มผู้ติดตามให้ {n} งาน', { n: selCount() }) + '</h2><div class="dup-grid people">';
-    S.db.users.forEach(function (u) {
+    S.orgPeople().forEach(function (u) {
       if (u.active === false) return;
       h += '<label class="chk"><input type="checkbox" class="bf-user" value="' + R.esc(u.id) + '"> ' +
         R.avatar(u, 'sm') + ' ' + R.esc(u.name) + '</label>';
@@ -6166,7 +6166,7 @@
     /* Sprint 1B — บุคคลภายนอก (เอเจนซี ฟรีแลนซ์) ไม่ใช่คนรับช่วงงานในองค์กร
      * เดิมอยู่ในรายชื่อปะปนกับพนักงาน เลือกผิดคนเดียวงานภายในทั้งหมดไปถึงคนนอกพร้อมความเห็นทุกอัน
      * จึงซ่อนไว้เป็นค่าเริ่มต้น ติ๊ก "แสดงบุคคลภายนอก" ก่อนถึงจะเลือกได้ และมีคำเตือนกำกับ */
-    var others = S.db.users.filter(function (x) {
+    var others = S.orgPeople().filter(function (x) {
       return x.id !== userId && x.active !== false && x.role !== 'viewer';
     });
     var staff = others.filter(function (x) { return x.role !== 'guest'; });
@@ -7610,7 +7610,7 @@
   function teamAddMemberHtml(tid) {
     var t = S.team(tid);
     var h = '<h2>' + L('เพิ่มสมาชิกเข้า {t}', { t: t.name }) + '</h2><div class="pf-pick">';
-    var rest = S.db.users.filter(function (u) { return u.active !== false && !t.members.some(function (m) { return m.u === u.id; }); });
+    var rest = S.orgPeople().filter(function (u) { return u.active !== false && !t.members.some(function (m) { return m.u === u.id; }); });
     if (!rest.length) h += '<p class="prj-note">' + L('ทุกคนอยู่ในทีมนี้แล้ว') + '</p>';
     rest.forEach(function (u) {
       h += '<button class="pf-pick-row" data-act="team-add-pick" data-id="' + esc(tid) + '" data-u="' + esc(u.id) + '">' + R.avatar(u, 'sm') +
@@ -7951,7 +7951,7 @@
         var setV = function (v) { if (S.setPfValue(cf.id, it.id, cfd.id, v)) { renderAll(); toast(L('บันทึกแล้ว'), L('ย้อนกลับ'), 'undo'); } };
         if (cfd.type === 'select' || cfd.type === 'person') {
           var ch = (cfd.type === 'select' ? cfd.options.map(function (o) { return { label: o.name, v: o.name }; })
-            : S.db.users.filter(function (u) { return u.active !== false; }).map(function (u) { return { label: u.name, v: u.id }; }))
+            : S.orgPeople().map(function (u) { return { label: u.name, v: u.id }; }))
             .map(function (o) { return { label: o.label, primary: o.v === curV, run: function () { setV(o.v); } }; });
           ch.push({ label: L('ล้างค่า'), run: function () { setV(null); } });
           askChoice(cfd.name + ' · ' + it.o.name, '', ch);
@@ -8060,7 +8060,7 @@
   function goGoal(id) { state.route = { type: 'goal', id: id }; state.goalUi = { gtab: 'comments' }; clearSel(); renderAll(); }
 
   function userOpts(cur, blank) {
-    return (blank ? '<option value="">' + esc(blank) + '</option>' : '') + S.db.users.filter(function (u) { return u.active !== false; }).map(function (u) {
+    return (blank ? '<option value="">' + esc(blank) + '</option>' : '') + S.orgPeople().map(function (u) {
       return '<option value="' + esc(u.id) + '"' + (u.id === cur ? ' selected' : '') + '>' + esc(u.name) + '</option>';
     }).join('');
   }
@@ -8090,7 +8090,7 @@
     h += '<div class="field"><label>' + L('เป้าหมายแม่') + '</label><select id="gParent" class="inp"><option value="">' + L('ไม่มี') + '</option>' +
       S.visibleGoals().filter(function (x) { return x.id !== id && !bad[x.id]; }).map(function (x) {
         return '<option value="' + esc(x.id) + '"' + (cur.parent === x.id ? ' selected' : '') + '>' + esc(x.name) + '</option>'; }).join('') + '</select></div></div>';
-    h += '<label class="opt-lbl">' + L('สมาชิก') + '</label><div class="g-mem">' + S.db.users.filter(function (u) { return u.active !== false; }).map(function (u) {
+    h += '<label class="opt-lbl">' + L('สมาชิก') + '</label><div class="g-mem">' + S.orgPeople().map(function (u) {
       return '<label><input type="checkbox" class="gMem" value="' + esc(u.id) + '"' + (cur.members.indexOf(u.id) >= 0 ? ' checked' : '') + '> ' + esc(u.name) + '</label>'; }).join('') + '</div>';
     h += '<div class="field"><label>' + L('คำอธิบาย') + '</label><textarea id="gDesc" class="inp" rows="3">' + esc(cur.desc) + '</textarea></div>';
     h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button><button class="btn btn-primary" data-act="goal-save"' +
@@ -10008,7 +10008,7 @@
         if (popIsOpenFor(el)) { closePops(); break; }
         var ph = peopleFilterHtml() + '<button data-act="set-assignee" data-id="' + R.esc(state.openTaskId) +
           '" data-user="">' + R.avatar(null) + ' ' + L('ยังไม่มอบหมาย') + '</button>';
-        S.db.users.forEach(function (u) {
+        S.orgPeople().forEach(function (u) {
           ph += '<button data-act="set-assignee" data-id="' + R.esc(state.openTaskId) +
             '" data-user="' + R.esc(u.id) + '">' + R.avatar(u) + ' ' + R.esc(u.name) + '</button>';
         });
@@ -10059,7 +10059,7 @@
       case 'pick-follower': {
         if (popIsOpenFor(el)) { closePops(); break; }
         var fh = peopleFilterHtml();
-        S.db.users.forEach(function (u) {
+        S.orgPeople().forEach(function (u) {
           fh += '<button data-act="do-follow" data-id="' + R.esc(id) + '" data-user="' +
             R.esc(u.id) + '">' + R.avatar(u) + ' ' + R.esc(u.name) + '</button>';
         });
@@ -10143,7 +10143,7 @@
         if (popIsOpenFor(el)) { closePops(); break; }
         var ah = '<button data-act="set-sub-assignee" data-id="' + R.esc(id) +
           '" data-user="">' + R.avatar(null) + ' ' + L('ยังไม่มอบหมาย') + '</button>';
-        S.db.users.forEach(function (u) {
+        S.orgPeople().forEach(function (u) {
           ah += '<button data-act="set-sub-assignee" data-id="' + R.esc(id) +
             '" data-user="' + R.esc(u.id) + '">' + R.avatar(u, 'sm') + ' ' +
             R.esc(u.name) + '</button>';
@@ -12162,6 +12162,30 @@
         toast(L('เพิ่ม “{name}” เข้ารายชื่อแล้ว', { name: un }));
         break;
       }
+      /* QA-D — ล้างข้อมูลตัวอย่างจากตอนเริ่มระบบ (ผู้ดูแลเท่านั้น) */
+      case 'clear-sample': {
+        if (!S.isAdmin()) { toast(L('ต้องเป็นผู้ดูแลระบบ')); break; }
+        var cs = S.sampleSummary();
+        if (!cs.users.length && !cs.removable.length) { toast(L('ไม่มีข้อมูลตัวอย่างให้ล้าง')); break; }
+        var csTasks = 0;
+        cs.removable.forEach(function (p) { csTasks += S.tasksInProject(p.id).length; });
+        var csBody = [];
+        var csUsers = cs.users.filter(function (u) { return u.id !== S.db.currentUserId; });
+        if (csUsers.length) csBody.push(L('ผู้ใช้ตัวอย่างที่จะลบ ({n} คน)', { n: csUsers.length }) + ': ' +
+          csUsers.map(function (u) { return u.name; }).join(', '));
+        if (cs.removable.length) csBody.push(L('โปรเจกต์ตัวอย่างที่จะลบ ({n} โปรเจกต์ พร้อมงานราว {t} งาน)', { n: cs.removable.length, t: csTasks }) + ': ' +
+          cs.removable.map(function (p) { return p.name; }).join(', '));
+        if (cs.skipped.length) csBody.push(L('มีงานจริงอยู่ ข้าม') + ': ' +
+          cs.skipped.map(function (p) { return p.name; }).join(', ') + ' — ' + L('จะถอดเฉพาะผู้ใช้ตัวอย่างออกจากโปรเจกต์นี้'));
+        csBody.push(L('ความเห็นและประวัติเก่าของผู้ใช้ตัวอย่างยังอ่านได้ (แสดงเป็น “ผู้ใช้ตัวอย่าง (ลบแล้ว)”) และย้อนกลับได้ทั้งชุด'));
+        askConfirm(L('ล้างข้อมูลตัวอย่าง'), csBody.join('\n\n'), function () {
+          var res = S.clearSampleData();
+          if (!res) { toast(L('ไม่มีข้อมูลตัวอย่างให้ล้าง')); return; }
+          renderAll();
+          toast(L('ล้างข้อมูลตัวอย่างแล้ว'), L('ย้อนกลับ'), 'undo');
+        }, { ok: L('ล้างข้อมูลตัวอย่าง') });
+        break;
+      }
       case 'remove-user': {
         var ru = S.user(id);
         if (!ru) break;
@@ -12294,7 +12318,7 @@
       case 'set-manager': {        // Sprint 4 — ผู้ดูแลระบบตั้งหัวหน้าของสมาชิก
         var smU = S.user(id), smId = id;
         if (!smU) break;
-        var smChoices = S.db.users.filter(function (x) { return x.id !== smId && x.active !== false && x.role !== 'viewer' && x.role !== 'guest'; }).slice(0, 14).map(function (x) {
+        var smChoices = S.orgPeople().filter(function (x) { return x.id !== smId && x.active !== false && x.role !== 'viewer' && x.role !== 'guest'; }).slice(0, 14).map(function (x) {
           return { label: x.name, run: function () { if (S.setManager(smId, x.id)) toast(L('ตั้งหัวหน้าแล้ว')); } };
         });
         smChoices.push({ label: L('ไม่มีหัวหน้า'), run: function () { if (S.setManager(smId, null)) toast(L('ตั้งหัวหน้าแล้ว')); } });

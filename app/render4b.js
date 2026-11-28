@@ -458,7 +458,7 @@
 
   /* ====================== ผู้ดูแลระบบ ====================== */
   function adminExt() {
-    var users = S.db.users.filter(function (u) { return u.active !== false; });
+    var users = S.orgPeople();
     var h = '<section class="admin-sec" id="adminCapacity"><h3>' + L('ความจุงานและช่วงไม่อยู่') + '</h3>' +
       '<p class="prj-note">' + L('ความจุต่อวันทำงาน ใช้ในหน้าภาระงาน แต่ละคนแก้ของตัวเองได้ ผู้ดูแลแก้ให้ทุกคนได้') + '</p>' +
       '<div class="cap-table"><div class="cap-row head"><span class="grow">' + L('คน') + '</span><span>' + L('ชม./วัน') + '</span><span>' + L('งาน/วัน') + '</span><span>' +

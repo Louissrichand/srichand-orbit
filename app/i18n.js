@@ -2790,6 +2790,23 @@
     'วันที่เริ่มทำงานจริง ใช้เทียบกับแผน': 'The day work actually started, to compare with the plan',
     'วันที่ทำงานเสร็จจริง ใช้เทียบกับแผน': 'The day work actually finished, to compare with the plan',
     //@@B
+    // QA-D
+    'พบข้อมูลตัวอย่างจากตอนเริ่มระบบ: ผู้ใช้ {u} คน, โปรเจกต์ {p} โปรเจกต์': 'Sample data from system setup found: {u} [u|user|users], {p} [p|project|projects]',
+    'คนและงานสมมติเหล่านี้ไม่ใช่ข้อมูลจริงขององค์กร ล้างออกแล้วย้อนกลับได้': 'These made-up people and tasks are not real organisation data. Clearing them can be undone.',
+    'ล้างข้อมูลตัวอย่าง…': 'Clear sample data…',
+    'ล้างข้อมูลตัวอย่าง': 'Clear sample data',
+    'ล้างข้อมูลตัวอย่างแล้ว': 'Sample data cleared',
+    'ไม่มีข้อมูลตัวอย่างให้ล้าง': 'No sample data to clear',
+    'ต้องเป็นผู้ดูแลระบบ': 'Admins only',
+    'ตัวอย่าง': 'Sample',
+    'ผู้ใช้ตัวอย่าง (ลบแล้ว)': 'Sample user (removed)',
+    'ผู้ใช้ตัวอย่างที่จะลบ ({n} คน)': 'Sample users to remove ({n})',
+    'โปรเจกต์ตัวอย่างที่จะลบ ({n} โปรเจกต์ พร้อมงานราว {t} งาน)': 'Sample projects to remove ({n}, with about {t} tasks)',
+    'มีงานจริงอยู่ ข้าม': 'Has real work, skipped',
+    'จะถอดเฉพาะผู้ใช้ตัวอย่างออกจากโปรเจกต์นี้': 'only sample users are taken out of this project',
+    'ความเห็นและประวัติเก่าของผู้ใช้ตัวอย่างยังอ่านได้ (แสดงเป็น “ผู้ใช้ตัวอย่าง (ลบแล้ว)”) และย้อนกลับได้ทั้งชุด': 'Old comments and history by sample users stay readable (shown as “Sample user (removed)”), and the whole clean-up can be undone.',
+    'ล้างข้อมูลตัวอย่าง: ผู้ใช้ {u} คน, โปรเจกต์ {p} โปรเจกต์, งาน {t} งาน': 'Cleared sample data: {u} users, {p} projects, {t} tasks',
+    'ได้ล้างข้อมูลตัวอย่าง': 'cleared sample data',
   };
 
   /* ข้อความที่เก็บไว้ในบันทึก/การแจ้งเตือนเก่าเป็นคีย์ไทยเดิมที่เรียกเซกชันว่า "คอลัมน์"

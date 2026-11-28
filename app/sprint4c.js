@@ -102,7 +102,7 @@
     function approverModal(t) {
       var cur = S.approverIds(t);
       var h = '<h2>' + esc(L('ผู้อนุมัติ')) + '</h2><p class="prj-note">' + esc(L('เลือกได้หลายคน ผู้อนุมัติแต่ละคนตัดสินแยกกัน และเห็นประวัติในแผงงาน')) + '</p><div class="apv4c-picks">';
-      S.db.users.filter(function (u) { return u.active !== false && u.role !== 'guest'; }).forEach(function (u) {
+      S.orgPeople().filter(function (u) { return u.active !== false && u.role !== 'guest'; }).forEach(function (u) {
         h += '<label class="apv4c-pick"><input type="checkbox" value="' + esc(u.id) + '"' + (cur.indexOf(u.id) >= 0 ? ' checked' : '') + '> ' +
           R.avatar(u, 'sm') + '<span>' + esc(u.name) + '</span></label>';
       });
