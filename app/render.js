@@ -4896,16 +4896,16 @@
     var showRecur = more || !!t.recur;
 
     h += '<div class="fld"><label>' + L('วันเริ่ม') + '</label><div class="val fld-inline">' +
-      '<input class="inp" type="date" data-act="edit-start" value="' + esc(t.startOn || '') +
-      '" style="flex:1">' +
+      '<button type="button" class="inp date-btn' + (t.startOn ? '' : ' empty') + '" data-act="dp-open" data-f="start" data-id="' + esc(t.id) + '" style="flex:1">' +
+      (t.startOn ? esc(fmtDate(t.startOn)) : L('ไม่มีกำหนด')) + '</button>' +
       (showTime
         ? '<input class="inp" type="time" data-act="edit-starttime" value="' + esc(t.startTime || '') +
           '" style="flex:0 0 110px" title="' + L('เวลาเริ่ม (ไม่บังคับ)') + '">'
         : '') + '</div></div>';
 
     h += '<div class="fld"><label>' + L('กำหนดส่ง') + '</label><div class="val fld-inline">' +
-      '<input class="inp" type="date" data-act="edit-due" value="' + esc(t.dueOn || '') +
-      '" style="flex:1">' +
+      '<button type="button" class="inp date-btn' + (t.dueOn ? '' : ' empty') + '" data-act="dp-open" data-f="due" data-id="' + esc(t.id) + '" style="flex:1">' +
+      (t.dueOn ? esc(fmtDate(t.dueOn)) : L('ไม่มีกำหนด')) + '</button>' +
       (showTime
         ? '<input class="inp" type="time" data-act="edit-duetime" value="' + esc(t.dueTime || '') +
           '" style="flex:0 0 110px" title="' + L('เวลา (ไม่บังคับ') + ')">'

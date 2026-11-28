@@ -10494,6 +10494,9 @@
         if (popIsOpenFor(el)) { closePops(); break; }
         var sd = S.task(id);
         if (!sd) break;
+        e.stopPropagation();
+        openTaskDatePicker(el, id, 'due');      // ใช้ปฏิทินตัวเดียวกับตารางรายการ
+        break;
         openPop(el,
           '<div class="subdate">' +
           '<label>' + L('วันเริ่ม') + '</label>' +

@@ -6000,3 +6000,6 @@ input[type="text"], input[type="search"], input[type="date"], input[type="number
 .g-dep { z-index: 1; }
 .g-barlabel { z-index: 3; background: var(--bg); padding: 0 4px; margin-left: -4px; border-radius: 3px; }
 .pop { border-radius: 8px; }
+.fld .date-btn { text-align: left; cursor: pointer; background: transparent; border-color: transparent; height: 32px; padding: 0 8px; }
+.fld .date-btn:hover { background: var(--bg-sunk); border-color: var(--line); }
+.fld .date-btn.empty { color: var(--fg-faint); }
