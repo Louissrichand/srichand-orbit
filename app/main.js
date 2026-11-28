@@ -4208,7 +4208,7 @@
     return ((p && p.fields) || []).filter(function (f) { return f.id === fid; })[0] || null;
   }
   var AU_FREQ = [['daily', 'ทุกวัน'], ['weekly', 'ทุกสัปดาห์'], ['monthly', 'ทุกเดือน']];
-  var AU_VARS_USER = [['creator', 'คนสร้างงาน'], ['triggerer', 'คนที่ทำให้อัตโนมัติทำงาน'], ['assignee', 'ผู้รับผิดชอบเดิม']];
+  var AU_VARS_USER = [['creator', 'คนสร้างงาน'], ['triggerer', 'คนที่ทำให้อัตโนมัติทำงาน'], ['assignee', 'ผู้รับผิดชอบเดิม'], ['owner', 'เจ้าของโปรเจกต์']];
   var AU_VAR_LABEL = { task: 'ชื่องาน', link: 'ลิงก์งาน', assignee: 'ผู้รับผิดชอบ', creator: 'คนสร้าง',
     triggerer: 'คนที่ทำให้ทำงาน', due: 'กำหนดส่ง', start: 'วันเริ่ม', created: 'วันที่สร้าง',
     project: 'โปรเจกต์', section: 'เซกชัน' };
@@ -4216,6 +4216,8 @@
   /** ทริกเกอร์เป็นประโยคเดียว */
   function trigText(pid, tr) {
     var dd = trigDefOf(tr.type);
+    var x2 = global.Auto2 && global.Auto2.trigText(pid, tr);   // QA-B
+    if (x2) return x2;
     switch (tr.type) {
       case 'moved': return tr.sec ? L('ย้ายเข้า “{s}”', { s: auSecName(pid, tr.sec) }) : L('ย้ายเซกชัน');
       case 'completed': return tr.v === false ? L('งานถูกเปิดใหม่') : L('งานทำเสร็จ');
@@ -4279,6 +4281,8 @@
 
   /** การกระทำเป็นวลีสั้น */
   function actText(pid, a) {
+    var x2 = global.Auto2 && global.Auto2.actText(pid, a);   // QA-B
+    if (x2) return x2;
     switch (a.type) {
       case 'section': return L('ย้ายไป “{s}”', { s: auSecName(pid, a.sec) });
       case 'complete': return a.v === false ? L('เปิดงานใหม่') : L('ทำเครื่องหมายเสร็จ');
@@ -4378,8 +4382,11 @@
       '<button class="' + (st.tab === 'list' ? 'on' : '') + '" data-act="auto-tab" data-v="list">' +
         L('รายการ') + ' <span>' + all.length + '</span></button>' +
       '<button class="' + (st.tab === 'runs' ? 'on' : '') + '" data-act="auto-tab" data-v="runs">' +
-        L('ประวัติการรัน') + ' <span>' + S.autoRuns(pid).length + '</span></button></div>';
-    if (st.tab === 'runs') {
+        L('ประวัติการรัน') + ' <span>' + S.autoRuns(pid).length + '</span></button>' +
+      '<button class="' + (st.tab === 'gallery' ? 'on' : '') + '" data-act="auto-tab" data-v="gallery">' + L('เทมเพลต') + '</button></div>';
+    if (st.tab === 'gallery') {
+      h += global.Auto2.galleryHtml(pid, canEdit);
+    } else if (st.tab === 'runs') {
       h += autoRunsHtml(pid);
     } else {
       var list = st.sec ? all.filter(function (a) { return a.trigger.type === 'moved' && a.trigger.sec === st.sec; }) : all;
@@ -4444,6 +4451,7 @@
         '<div class="sub">' + esc(R.fmtExact(r.at)) +
         (by ? ' · ' + esc(by.name) : '') + ' · ' + L('{n} การกระทำ', { n: r.n || 0 }) +
         (r.p === -1 ? ' · ' + L('เส้นทาง “อื่น ๆ”') : r.p > 0 ? ' · ' + L('เส้นทาง {n}', { n: r.p + 1 }) : '') + '</div>' +
+        (global.Auto2 ? global.Auto2.runExtra(pid, r) : '') +
         (r.e ? '<div class="au-err">' + esc(L(r.e, r.ep || undefined)) + '</div>' : '') +
         '</div></div>';
     });
@@ -4478,7 +4486,7 @@
 
   function autoNewAct(pid, type) {
     var mk = AUTO_ACT_DEFAULT[type];
-    var a = mk ? mk(pid) : {};
+    var a = mk ? mk(pid) : (global.Auto2 && global.Auto2.newAct(pid, type)) || {};
     a.type = type;
     return a;
   }
@@ -4529,6 +4537,15 @@
   function auDateFields(pid) {
     var p = S.project(pid);
     return ((p && p.fields) || []).filter(function (f) { return f.type === 'date'; });
+  }
+
+  /* QA-B — ส่วนขยายตัวสร้างกฎ (app/autos2.js) ใช้ตัวช่วยชุดเดียวกับตัวแก้ไขเดิม */
+  if (global.Auto2) {
+    global.Auto2.init({
+      L: L, esc: esc, auSel: auSel, auUsers: auUsers, auSecOpts: auSecOpts, auSecName: auSecName, auUserName: auUserName,
+      auUserSpec: auUserSpec, auDateSpec: auDateSpec, auVarChips: auVarChips,
+      trigText: trigText, actText: actText, trigDefOf: trigDefOf, actDefOf: actDefOf
+    });
   }
 
   /** ช่องของทริกเกอร์ (data-act="ae-tp" data-k) */
@@ -4727,7 +4744,7 @@
         return h4;
       }
     }
-    return '';
+    return global.Auto2 ? global.Auto2.actParams(pid, a, d) : '';
   }
 
   function autoActsHtml(pid, acts, pi) {
@@ -4754,10 +4771,11 @@
     var h = '<h2 class="au-h">' + I('bolt', 17) + ' ' + (e.isNew ? L('สร้างอัตโนมัติ') : L('แก้อัตโนมัติ')) + '</h2>';
     h += '<div class="field"><label>' + L('ชื่อ (ไม่บังคับ)') + '</label><input class="opt-select" data-act="ae-name" maxlength="120" value="' +
       esc(a.name || '') + '" placeholder="' + esc(autoTitle(pid, { trigger: a.trigger, paths: a.paths })) + '"></div>';
+    if (global.Auto2) h += global.Auto2.previewHtml(pid, a);   // QA-B — สรุปเป็นประโยค
 
     h += '<div class="au-block"><div class="au-bh">' + L('เมื่อ') + '</div><div class="flt-line">' +
       auSel('ae-trig', S.AUTO_TRIGGERS.map(function (x) { return [x.id, L(x.label)]; }), a.trigger.type, '') + '</div>' +
-      '<div class="au-params">' + autoTrigParams(pid, a.trigger) + '</div>' +
+      '<div class="au-params">' + autoTrigParams(pid, a.trigger) + (global.Auto2 ? global.Auto2.trigParams(pid, a.trigger) : '') + '</div>' +
       (td.time ? '<p class="opt-note au-hint">' + I('alert', 12) + ' ' + L(AU_TIME_NOTE) + '</p>' : '') +
       (a.trigger.type === 'manual' ? '<p class="opt-note au-hint">' + L('กดรันได้จากเมนู ⋯ ของงาน หรือเลือกได้ถึง 50 งานแล้วกด “เพิ่มเติม → รันอัตโนมัติ”') + '</p>' : '') +
       '</div>';
@@ -4801,6 +4819,7 @@
       L('ปิดไว้ = ทำงานเฉพาะเมื่อคนทำ ถ้าเปิด การกระทำของอัตโนมัติอื่นก็ปลุกได้ ลึกได้ไม่เกิน {n} ชั้น และตัวเดิมรันกับงานเดิมได้ครั้งเดียวต่อหนึ่งการกด', { n: S.AUTO_MAX_DEPTH }));
     h += '<p class="opt-note">' + L('ทำได้สูงสุด {a} การกระทำต่อเส้นทาง {p} เส้นทาง เส้นทางแรกที่ตรงเงื่อนไขครบได้ทำ การกระทำใช้ไม่ได้ (เช่น เซกชันถูกลบ) จะลงประวัติการรันเป็นผิดพลาด',
       { a: S.AUTO_MAX_ACTS, p: S.AUTO_MAX_PATHS }) + '</p>';
+    if (global.Auto2 && a.trigger.type !== 'scheduled') h += global.Auto2.dryBlock(pid, e);   // QA-B — ทดลองกับงานนี้
     h += '<div class="modal-acts"><button class="btn" data-act="auto-back">' + L('ยกเลิก') + '</button>' +
       '<button class="btn btn-primary" data-act="ae-save">' + L('บันทึก') + '</button></div>';
     return h;
@@ -8475,7 +8494,7 @@
       'manage-fields', 'add-field', 'delete-field', 'create-field', 'rename-field',
       'drop-field', 'add-field-picker', 'pick-ftype', 'add-option', 'remove-option',
       'opt-color', 'set-opt-color',
-      'auto-new', 'auto-edit', 'auto-toggle', 'auto-dup', 'auto-del', 'ae-save',
+      'auto-new', 'auto-tpl', 'auto-edit', 'auto-toggle', 'auto-dup', 'auto-del', 'ae-save',
       'pick-status', 'clear-status', 'toggle-view',
       'new-portfolio', 'pf-rename', 'pf-desc', 'pf-look', 'save-pf-look', 'pf-delete',
       'pf-add', 'pf-pick', 'pf-pick-multi', 'pf-remove', 'pf-pick-status', 'pf-clear-status',
@@ -8688,7 +8707,7 @@
   /* Pre-pilot B — คำสั่งแก้โครงสร้างโปรเจกต์ ทำได้เฉพาะเจ้าของ/ผู้ดูแลโปรเจกต์/ผู้ดูแลระบบ (สมาชิกทั่วไปยังเพิ่ม/เปลี่ยนชื่อเซกชันได้) */
   var PSTRUCT = {};
   ['toggle-archive', 'manage-fields', 'add-field', 'delete-field', 'create-field', 'rename-field', 'drop-field',
-    'add-field-picker', 'pick-ftype', 'auto-new', 'auto-edit', 'auto-toggle', 'auto-dup', 'auto-del', 'ae-save',
+    'add-field-picker', 'pick-ftype', 'auto-new', 'auto-tpl', 'auto-edit', 'auto-toggle', 'auto-dup', 'auto-del', 'ae-save',
     'save-project-details', 'set-depmode', 'set-depscope', 'set-workdays', 'import-csv', 'field-format', 'do-field-format',
     'required-fields', 'save-required-fields', 'stale-days', 'project-settings', 'auto-open', 'types-open'
   ].forEach(function (a) { PSTRUCT[a] = true; });
@@ -11555,7 +11574,12 @@
         break;
       }
       case 'auto-sec-clear': state.auto.sec = null; refreshAuto(); break;
-      case 'auto-tab': state.auto.tab = el.dataset.v === 'runs' ? 'runs' : 'list'; refreshAuto(); break;
+      case 'auto-tab': state.auto.tab = el.dataset.v === 'runs' ? 'runs' : el.dataset.v === 'gallery' ? 'gallery' : 'list'; refreshAuto(); break;
+      case 'auto-tpl': {   // QA-B — เริ่มกฎใหม่จากเทมเพลต (ยังไม่บันทึก ตรวจและแก้ก่อนได้)
+        var tplA = global.Auto2.build(state.auto.pid, el.dataset.v);
+        if (tplA) autoEditStart(state.auto.pid, tplA, true);
+        break;
+      }
       case 'auto-new': {
         var anPid = state.auto.pid;
         autoEditStart(anPid, { name: '', on: true, chain: false,
@@ -12706,6 +12730,12 @@
     if (/^(ae-|aec-)/.test(act) && state.auto && state.auto.edit) {
       var ea = state.auto.edit.a, epid = state.auto.edit.pid;
       if (act === 'ae-name') { ea.name = el.value; return; }        // ไม่ต้องวาดใหม่
+      if (act === 'ae-dry') {                                       // QA-B — ทดลองกับงานที่เลือก
+        global.Auto2.runDry(epid, state.auto.edit, el.value);
+        refreshAuto();
+        return;
+      }
+      if (state.auto.edit.dry) state.auto.edit.dry.stale = true;
       if (act === 'ae-trig') {
         ea.trigger = autoNewTrig(epid, el.value, ea.trigger.sec);
       } else if (act === 'ae-tp') {

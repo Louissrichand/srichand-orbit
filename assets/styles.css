@@ -5674,3 +5674,23 @@ label.pf-pick-row { cursor: pointer; }
 .ask-body { white-space: pre-line; }
 .card-fv { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; }
 .card-fv .card-fn { color: var(--text-3, #7a8599); font-size: 11px; white-space: nowrap; }
+
+/* QA-B — อัตโนมัติ: สรุปประโยค ทดลองรัน เทมเพลต ประวัติ */
+.au2-sent { background: var(--bg-soft, rgba(127,127,127,.08)); border-radius: 8px; padding: 8px 10px; margin: 8px 0; font-size: 13px; }
+.au2-sh { font-size: 12px; font-weight: 600; opacity: .7; margin-bottom: 4px; }
+.au2-line { padding: 2px 0; overflow-wrap: anywhere; }
+.au2-line em { font-style: normal; opacity: .65; margin-right: 4px; }
+.au2-dry { border-top: 1px solid var(--line-soft); margin-top: 12px; padding-top: 10px; }
+.au2-res { margin-top: 8px; font-size: 13px; }
+.au2-res.stale { opacity: .55; }
+.au2-list { margin: 6px 0 0; padding-left: 18px; }
+.au2-list li { padding: 2px 0; overflow-wrap: anywhere; }
+.au2-from { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.au2-from span { font-size: 12px; opacity: .7; white-space: nowrap; }
+.au2-gal { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.au2-card { border: 1px solid var(--line-soft); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+.au2-card .sub { flex: 1; font-size: 12px; opacity: .75; }
+.au2-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+.au2-tr, .au2-ac { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line-soft); }
+.au2-tr { opacity: .7; }
+.au2-ac.bad { border-color: #d94a4a; color: #d94a4a; }
