@@ -388,6 +388,7 @@ Capacity planning แบบจองคน (allocation/placeholder) และ Bu
 (แจ้งเตือนทางอีเมล/Teams, ฟอร์มสาธารณะ, API/webhook) รอหลังมีระบบหลังบ้านจริง
 
 ## ขั้นต่อไป
+**แผนเฟส 5 (Azure Static Web Apps + Functions + Azure SQL)** อยู่ใน `db/schema.sql` (ตรงกับ SCHEMA 19), `docs/API.md` (รวมวิธีย้ายข้อมูลจาก JSON) และ **[docs/PHASE5-CHECKLIST.md](docs/PHASE5-CHECKLIST.md)** — รายการด้านล่างเป็นแผนเดิมแบบ Supabase เก็บไว้เทียบเท่านั้น
 
 โหมดทีมพร้อมใช้แล้ว (ข้อ 4 กับ 5 ของแผนเดิมเสร็จไปแล้ว) ที่เหลือคือของที่จะทำเมื่อทีมโตเกินไฟล์เดียว
 

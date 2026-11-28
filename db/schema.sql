@@ -758,6 +758,39 @@ CREATE TABLE dbo.project_teams (
 );
 GO
 
+/* ---------------------------------------------------------------
+   งานขออนุมัติหลายผู้อนุมัติ (Sprint 4c) — ต้องอยู่ก่อน fn_VisibleTasks เพราะฟังก์ชันอ้างถึง
+   t.approvers [userId] (≥ 2 คนจึงเก็บ ไม่งั้น = assignee_id เดี่ยวแบบเดิม) · t.approvalMode 'all'|'any'
+   t.approvalVotes {userId: approved|changes|rejected} ของรอบปัจจุบัน ล้างเมื่อกลับไปรอ (pending) ·
+   t.approvalTrail [{u,d,at,note}] เก็บ 100 รายการล่าสุด (เก็บถาวรในตาราง ตัดทิ้งตอนอ่านก็ได้)
+   --------------------------------------------------------------- */
+ALTER TABLE dbo.tasks ADD
+    approval_mode VARCHAR(3) NOT NULL CONSTRAINT df_tasks_apmode DEFAULT 'all'
+                  CONSTRAINT ck_tasks_apmode CHECK (approval_mode IN ('all','any')),
+    slips         INT        NOT NULL CONSTRAINT df_tasks_slips DEFAULT 0;   -- จำนวนครั้งที่เลื่อนกำหนดส่งรวดเดียว (slipOverdue)
+GO
+CREATE TABLE dbo.task_approvers (
+    task_id   UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.tasks(id) ON DELETE CASCADE,
+    user_id   UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.users(id),
+    position  INT              NOT NULL DEFAULT 0,     -- คนแรก = ผู้รับผิดชอบหลัก (= tasks.assignee_id)
+    vote      VARCHAR(8)       NULL,                   -- approved | changes | rejected | NULL = ยังไม่โหวตรอบนี้ (approvalVotes)
+    voted_at  DATETIME2(0)     NULL,
+    CONSTRAINT pk_task_approvers PRIMARY KEY (task_id, user_id),
+    CONSTRAINT ck_ap_vote CHECK (vote IS NULL OR vote IN ('approved','changes','rejected'))
+);
+CREATE INDEX ix_ap_user ON dbo.task_approvers(user_id) INCLUDE (task_id, vote);
+CREATE TABLE dbo.task_approval_trail (
+    id        BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    task_id   UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.tasks(id) ON DELETE CASCADE,
+    user_id   UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    decision  VARCHAR(8)       NOT NULL,
+    note      NVARCHAR(500)    NULL,
+    at        DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT ck_aptrail_dec CHECK (decision IN ('approved','changes','rejected','pending'))
+);
+CREATE INDEX ix_aptrail_task ON dbo.task_approval_trail(task_id, at DESC);
+GO
+
 /* =============================================================
    ด่านสิทธิ์ — ทุกคำสั่งอ่านต้องผ่านฟังก์ชันนี้
    =============================================================
@@ -775,21 +808,40 @@ GO
 
    ตรงกับ projectAccess() ใน app/store.js ทีละข้อ แก้ที่ไหนต้องแก้อีกที่ด้วย
    ============================================================= */
-CREATE FUNCTION dbo.fn_VisibleProjects (@user_id UNIQUEIDENTIFIER)
+CREATE OR ALTER FUNCTION dbo.fn_VisibleProjects (@user_id UNIQUEIDENTIFIER)
 RETURNS TABLE
 AS
 RETURN
 (
+    /* Phase 5 sync — เพิ่มสิทธิ์ผ่านทีม (project_teams) และบังคับโปรเจกต์ private ที่ชั้นนี้
+       ระดับที่ได้ = ค่าสูงสุดระหว่าง project_members กับทีมที่ผู้ใช้อยู่ (admin > edit > comment > view)
+       โปรเจกต์ visibility = 'private' เห็นได้เฉพาะ ผู้ดูแลระบบ · สมาชิกโดยตรง · สมาชิกของทีมที่ผูกไว้
+       (เจ้าของ owner_id ต้องมีแถวใน project_members เสมอ ตอนสร้างโปรเจกต์ API ต้องใส่ให้) */
+    WITH me AS (
+        SELECT org_role FROM dbo.users WHERE id = @user_id AND is_active = 1
+    ),
+    grants AS (
+        SELECT pm.project_id,
+               CASE pm.access WHEN 'admin' THEN 4 WHEN 'edit' THEN 3 WHEN 'comment' THEN 2 ELSE 1 END AS rk
+        FROM dbo.project_members pm WHERE pm.user_id = @user_id
+        UNION ALL
+        SELECT pt.project_id,
+               CASE pt.access WHEN 'admin' THEN 4 WHEN 'edit' THEN 3 WHEN 'comment' THEN 2 ELSE 1 END
+        FROM dbo.project_teams pt
+        INNER JOIN dbo.team_members tm ON tm.team_id = pt.team_id AND tm.user_id = @user_id
+    ),
+    best AS (SELECT project_id, MAX(rk) AS rk FROM grants GROUP BY project_id)
     SELECT
         p.id AS project_id,
         CASE
-            WHEN u.org_role = 'admin'      THEN 'admin'
-            WHEN u.org_role = 'viewer'     THEN 'view'
-            WHEN pm.access IS NOT NULL     THEN pm.access
+            WHEN u.org_role = 'admin'  THEN 'admin'
+            WHEN u.org_role = 'viewer' THEN 'view'
+            WHEN b.rk IS NOT NULL      THEN CASE b.rk WHEN 4 THEN 'admin' WHEN 3 THEN 'edit' WHEN 2 THEN 'comment' ELSE 'view' END
             ELSE 'edit'
         END AS access,
 
-        /* แก้โครงสร้างได้ไหม — เซกชัน ฟิลด์กำหนดเอง ชื่อโปรเจกต์ มุมมองที่บันทึกไว้
+        /* แก้โครงสร้างได้ไหม — เซกชัน ฟิลด์กำหนดเอง ชื่อโปรเจกต์ มุมมองที่บันทึกไว้ ค่าเริ่มต้นมุมมอง
+           ฟิลด์บังคับ ตั้งค่างานเงียบ อัตโนมัติ
 
            ต้องแยกเป็นบิตต่างหาก เพราะ "แก้งานได้ แต่แก้โครงสร้างไม่ได้" ไม่มีขั้นของ
            ตัวเองบนบันได admin > edit > comment > view — บุคคลภายนอกตกอยู่ระหว่าง
@@ -801,13 +853,12 @@ RETURN
            ตรงกับ ROLE_CAPS ใน app/store.js ที่ guest กับ viewer ไม่มี cap 'structure' */
         CASE WHEN u.org_role IN ('admin','member') THEN 1 ELSE 0 END AS can_structure
     FROM dbo.projects p
-    CROSS JOIN (SELECT org_role FROM dbo.users WHERE id = @user_id AND is_active = 1) u
-    LEFT JOIN dbo.project_members pm
-           ON pm.project_id = p.id AND pm.user_id = @user_id
+    CROSS JOIN me u
+    LEFT JOIN best b ON b.project_id = p.id
     WHERE p.deleted_at IS NULL
       AND (
             u.org_role = 'admin'
-         OR pm.user_id IS NOT NULL
+         OR b.project_id IS NOT NULL
          OR (p.visibility = 'org' AND u.org_role <> 'guest')
       )
 );
@@ -829,7 +880,7 @@ GO
    การกรองรายชื่อโปรเจกต์ของงานทำที่ชั้น API */
 /* งานส่วนตัว (2a) = งานต้นทางไม่อยู่ใน task_projects เลย เห็นเฉพาะคู่กรณีตามส่วนล่างของฟังก์ชันนี้
    งานย่อยต้องใช้สิทธิ์ของงานต้นทาง (ยังไม่ได้เขียนลงฟังก์ชันนี้ — ทำตอนย้ายไป API) */
-CREATE FUNCTION dbo.fn_VisibleTasks (@user_id UNIQUEIDENTIFIER)
+CREATE OR ALTER FUNCTION dbo.fn_VisibleTasks (@user_id UNIQUEIDENTIFIER)
 RETURNS TABLE
 AS
 RETURN
@@ -848,6 +899,14 @@ RETURN
          OR t.created_by  = @user_id
          OR EXISTS (SELECT 1 FROM dbo.task_followers f
                      WHERE f.task_id = t.id AND f.user_id = @user_id)
+         /* Phase 5 sync — ผู้อนุมัติหลายคน (task_approvers) เป็นคู่กรณีของงานด้วย
+            เห็นงานขออนุมัติได้แม้ไม่ได้อยู่ในโปรเจกต์ปิด */
+         OR EXISTS (SELECT 1 FROM dbo.task_approvers ap
+                     WHERE ap.task_id = t.id AND ap.user_id = @user_id)
+         /* งานย่อยใช้สิทธิ์ของงานต้นทาง (งานย่อยไม่มีแถวใน task_projects) */
+         OR EXISTS (SELECT 1 FROM dbo.task_projects tp2
+                     INNER JOIN dbo.fn_VisibleProjects(@user_id) vp2 ON vp2.project_id = tp2.project_id
+                     WHERE tp2.task_id = t.parent_id)
       )
 );
 GO
@@ -1287,4 +1346,256 @@ CREATE TABLE dbo.status_update_replies (
     CONSTRAINT ck_sur_parent CHECK ((project_update_id IS NULL AND portfolio_update_id IS NOT NULL)
                                  OR (project_update_id IS NOT NULL AND portfolio_update_id IS NULL))
 );
+GO
+
+/* =============================================================
+   Phase 5 sync — ให้ตรงกับ app/store.js SCHEMA 19 (Sprint 1–4 และงานต่อเนื่อง)
+   ส่วนนี้เขียนให้รันซ้ำได้ (IF COL_LENGTH / OBJECT_ID) เพื่อใช้กับฐานที่สร้างจากเวอร์ชันก่อนหน้า
+   ที่แก้ในไฟล์ส่วนบนแล้ว: fn_VisibleProjects (ทีม + private), fn_VisibleTasks (ผู้อนุมัติ + งานย่อย),
+   tasks.approval_mode/slips, task_approvers, task_approval_trail
+   ============================================================= */
+
+/* ---------- ผู้ใช้: หัวหน้า ธงข้อมูลตัวอย่าง และป้ายหลุมศพ ---------- */
+IF COL_LENGTH('dbo.users','manager_id') IS NULL
+    ALTER TABLE dbo.users ADD manager_id UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id);   -- หัวหน้า (user.managerId) ใช้เลือกผู้รับโอนงาน
+IF COL_LENGTH('dbo.users','is_sample') IS NULL
+    ALTER TABLE dbo.users ADD is_sample BIT NOT NULL CONSTRAINT df_users_sample DEFAULT 0;  -- user.sample = ข้อมูลตัวอย่างจาก seed()
+GO
+IF COL_LENGTH('dbo.projects','is_sample') IS NULL
+    ALTER TABLE dbo.projects ADD is_sample BIT NOT NULL CONSTRAINT df_proj_sample DEFAULT 0; -- project.sample
+GO
+/* ผู้ใช้ตัวอย่างที่ล้างออกแล้ว (db.removedUsers) — ความเห็น/ประวัติเก่ายังอ้าง id นี้ จึงแสดงเป็น "ผู้ใช้ตัวอย่าง (ลบแล้ว)"
+   ฐานจริงไม่ควรมีข้อมูลตัวอย่างหลังย้าย (ดูหัวข้อย้ายข้อมูลใน docs/API.md) ตารางนี้เก็บไว้ให้นำเข้าได้ครบ */
+IF OBJECT_ID(N'dbo.removed_users','U') IS NULL
+CREATE TABLE dbo.removed_users (
+    id         UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
+    removed_at DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME()
+);
+GO
+
+/* ---------- ค่าตั้งระดับองค์กร (db.settings) ----------
+   key ที่ใช้อยู่: orgLang (th|en) · orgPrivacy (org|private = ค่าเริ่มต้น "ใครเห็น" ของโปรเจกต์ใหม่) ·
+   fyStart (1–12) · mission · missionBy · missionAt · timeCats · tsReviewers
+   (time_categories / timesheet_reviewers เป็นตารางเฉพาะแล้ว ใช้ตารางนั้นเป็นหลัก) · แก้ได้เฉพาะผู้ดูแลระบบ */
+IF OBJECT_ID(N'dbo.org_settings','U') IS NULL
+CREATE TABLE dbo.org_settings (
+    [key]       VARCHAR(40)    NOT NULL PRIMARY KEY,
+    value_json  NVARCHAR(MAX)  NULL,
+    updated_by  UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    updated_at  DATETIME2(0)   NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT ck_org_settings_json CHECK (value_json IS NULL OR ISJSON(value_json) = 1)
+);
+GO
+/* วันหยุดราชการไทย — ตอนนี้ฝั่งแอปเป็นรายการคงที่ในโค้ด (แถบเทาใน Gantt/ปฏิทิน และการเลื่อนวันตาม work_days)
+   ตารางนี้เผื่อให้ผู้ดูแลระบบเพิ่ม/ปิดวันหยุดพิเศษโดยไม่ต้องแก้โค้ด (ยังไม่มีหน้าจอ ไม่บังคับใช้) */
+IF OBJECT_ID(N'dbo.org_holidays','U') IS NULL
+CREATE TABLE dbo.org_holidays (
+    on_date   DATE          NOT NULL PRIMARY KEY,
+    name      NVARCHAR(120) NOT NULL,
+    is_off    BIT           NOT NULL DEFAULT 1
+);
+GO
+
+/* ---------- โปรเจกต์: งานเงียบ นัดประชุมถัดไป ฟิลด์บังคับ ค่าเริ่มต้นมุมมอง ---------- */
+IF COL_LENGTH('dbo.projects','stale_days') IS NULL
+    ALTER TABLE dbo.projects ADD
+        stale_days     INT NULL CONSTRAINT ck_proj_stale CHECK (stale_days IS NULL OR stale_days BETWEEN 0 AND 365), -- 0/NULL = ปิด
+        stale_move_to  UNIQUEIDENTIFIER NULL REFERENCES dbo.sections(id),   -- เงียบเกิน 30 วัน ย้ายไปเซกชันนี้
+        next_meeting   DATE NULL;                                           -- project.nextMeeting สร้างหน้าบันทึกประชุมล่วงหน้า
+GO
+/* ฟิลด์ที่ต้องกรอกก่อนปิดงาน (project.requiredFields) — เฉพาะงานระดับบนสุด งานย่อยไม่บังคับ
+   API ตรวจตอน PATCH completed = 1 → 422 พร้อมรายชื่อฟิลด์ที่ขาด (missingRequiredFields) */
+IF OBJECT_ID(N'dbo.project_required_fields','U') IS NULL
+CREATE TABLE dbo.project_required_fields (
+    project_id UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.projects(id) ON DELETE CASCADE,
+    field_id   UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.custom_fields(id),
+    CONSTRAINT pk_project_required_fields PRIMARY KEY (project_id, field_id)
+);
+GO
+/* ค่าเริ่มต้นของมุมมองต่อชนิด (project.viewDefaults[kind] = viewDiff) ผู้มีสิทธิ์โครงสร้างตั้ง · คนที่ยังไม่เคยปรับเห็นแบบนี้ */
+IF OBJECT_ID(N'dbo.project_view_defaults','U') IS NULL
+CREATE TABLE dbo.project_view_defaults (
+    project_id  UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.projects(id) ON DELETE CASCADE,
+    kind        VARCHAR(12)      NOT NULL,
+    config_json NVARCHAR(MAX)    NOT NULL,
+    updated_by  UNIQUEIDENTIFIER NULL REFERENCES dbo.users(id),
+    updated_at  DATETIME2(0)     NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT pk_project_view_defaults PRIMARY KEY (project_id, kind),
+    CONSTRAINT ck_pvd_kind CHECK (kind IN ('list','board','timeline','gantt','calendar'))
+);
+GO
+/* ฟิลด์: ธง "สำคัญ" (แสดงบนการ์ด) และคำอธิบายฟิลด์ (คำใบ้) */
+IF COL_LENGTH('dbo.custom_fields','is_important') IS NULL
+    ALTER TABLE dbo.custom_fields ADD
+        is_important BIT NOT NULL CONSTRAINT df_cf_important DEFAULT 0,
+        description  NVARCHAR(500) NULL;
+GO
+/* หน้าบันทึกประชุม — หน้าเอกสารที่สร้างจากวันนัดประชุม (meetingPageRaw) ผูกกับวันที่ */
+IF COL_LENGTH('dbo.pages','meeting_on') IS NULL
+    ALTER TABLE dbo.pages ADD meeting_on DATE NULL;
+GO
+
+/* ---------- งาน: เตือนฉัน (เฉพาะตัวเอง) สถานะงานเงียบ ---------- */
+IF OBJECT_ID(N'dbo.task_reminders','U') IS NULL
+CREATE TABLE dbo.task_reminders (
+    id        UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    task_id   UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.tasks(id) ON DELETE CASCADE,
+    user_id   UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.users(id),       -- ทุกคนเห็นเฉพาะของตัวเอง
+    remind_at DATETIME2(0)     NOT NULL,
+    done_at   DATETIME2(0)     NULL
+);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_rem_due')
+    CREATE INDEX ix_rem_due ON dbo.task_reminders(remind_at) INCLUDE (task_id, user_id) WHERE done_at IS NULL;  -- timer function สแกน
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ux_rem_open')
+    CREATE UNIQUE INDEX ux_rem_open ON dbo.task_reminders(task_id, user_id) WHERE done_at IS NULL;               -- หนึ่งงานหนึ่งเตือนที่ค้างอยู่
+GO
+/* t.stale = { a, b, c } เวลาที่ทำแต่ละขั้นครั้งแรก เพื่อไม่เตือนซ้ำ
+   a = เตือนผู้รับผิดชอบ (N วัน) · b = เพิ่มเจ้าของโปรเจกต์เป็นผู้ติดตาม (2N วัน) · c = ย้ายเซกชัน (30 วัน)
+   ล้างแถวเมื่องานกลับมาเคลื่อนไหว */
+IF OBJECT_ID(N'dbo.task_stale','U') IS NULL
+CREATE TABLE dbo.task_stale (
+    task_id UNIQUEIDENTIFIER NOT NULL PRIMARY KEY REFERENCES dbo.tasks(id) ON DELETE CASCADE,
+    a_at DATETIME2(0) NULL, b_at DATETIME2(0) NULL, c_at DATETIME2(0) NULL
+);
+GO
+/* ประวัติที่ระบบเขียนเอง (stories.sys = 1) ไม่นับเป็นความเคลื่อนไหวของงานเงียบ */
+IF COL_LENGTH('dbo.stories','is_system') IS NULL
+    ALTER TABLE dbo.stories ADD is_system BIT NOT NULL CONSTRAINT df_stories_sys DEFAULT 0;
+GO
+
+/* ---------- การแจ้งเตือน: ติดตามโปรเจกต์/พอร์ตโฟลิโอรายคน ----------
+   user.prefs.projNotify[pid] = { status, messages, newTasks, milestones } · prefs.pfFollow[pfId] */
+IF OBJECT_ID(N'dbo.user_project_notify','U') IS NULL
+CREATE TABLE dbo.user_project_notify (
+    user_id     UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.users(id) ON DELETE CASCADE,
+    project_id  UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.projects(id) ON DELETE CASCADE,
+    status      BIT NOT NULL DEFAULT 0, messages BIT NOT NULL DEFAULT 0,
+    new_tasks   BIT NOT NULL DEFAULT 0, milestones BIT NOT NULL DEFAULT 0,
+    CONSTRAINT pk_user_project_notify PRIMARY KEY (user_id, project_id)
+);
+GO
+IF OBJECT_ID(N'dbo.user_portfolio_follow','U') IS NULL
+CREATE TABLE dbo.user_portfolio_follow (
+    user_id      UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.users(id) ON DELETE CASCADE,
+    portfolio_id UNIQUEIDENTIFIER NOT NULL REFERENCES dbo.portfolios(id) ON DELETE CASCADE,
+    follows      BIT NOT NULL,   -- ไม่มีแถว = ค่าเริ่มต้น (เจ้าของติดตาม คนอื่นไม่)
+    CONSTRAINT pk_user_portfolio_follow PRIMARY KEY (user_id, portfolio_id)
+);
+GO
+/* ส่งแจ้งเตือนออกนอกระบบ (อีเมล / Teams) — ต้องขอสิทธิ์จาก IT (Mail.Send / ChatMessage.Send หรือ webhook ของช่อง)
+   notification_deliveries เป็นคิว: timer function อ่านแถว status='queued' ส่ง แล้วบันทึกผล · ยังไม่เปิดใช้จนกว่า IT อนุมัติ */
+IF OBJECT_ID(N'dbo.notification_deliveries','U') IS NULL
+CREATE TABLE dbo.notification_deliveries (
+    id              BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    notification_id BIGINT NOT NULL REFERENCES dbo.notifications(id) ON DELETE CASCADE,
+    channel         VARCHAR(8)  NOT NULL,
+    status          VARCHAR(8)  NOT NULL DEFAULT 'queued',
+    attempts        INT         NOT NULL DEFAULT 0,
+    last_error      NVARCHAR(400) NULL,
+    sent_at         DATETIME2(0) NULL,
+    CONSTRAINT ck_nd_channel CHECK (channel IN ('email','teams')),
+    CONSTRAINT ck_nd_status  CHECK (status IN ('queued','sent','failed','skipped'))
+);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_nd_queue')
+    CREATE INDEX ix_nd_queue ON dbo.notification_deliveries(status, id) WHERE status = 'queued';
+/* เลื่อนเตือนที่ถึงเวลา (snooze_until <= now) กลับมาเป็นยังไม่อ่าน — ค้นเร็วด้วยดัชนีนี้ */
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_notif_snooze')
+    CREATE INDEX ix_notif_snooze ON dbo.notifications(snooze_until) INCLUDE (user_id) WHERE snooze_until IS NOT NULL;
+GO
+
+/* ---------- อัตโนมัติ: ชนิดทริกเกอร์ / การกระทำ / ประวัติ ----------
+   ชนิดที่รองรับ (ตรงกับ AUTO_TRIGGERS / AUTO_ACTIONS ใน app/store.js)
+   ทริกเกอร์: added moved completed assignee due start field comment tagadd tagdel subsdone movedout attachment
+              follower unblocked approval approaching overdue manual scheduled
+   การกระทำ: section complete assign due start field comment followers tag untag priority create addproj mtmove
+             notify subtasks followup approvers
+   ขีดจำกัด (AUTO_*) บังคับที่ API: 50 อัตโนมัติ/โปรเจกต์ · 5 เส้นทาง · 10 เงื่อนไข/เส้นทาง · 20 การกระทำ/เส้นทาง ·
+             ลึกสุด 3 ชั้นเมื่อเปิด allow_chain · กดรันเอง ≤ 50 งานต่อครั้ง · ตามเวลา ≤ 50 งานต่อรอบ ·
+             ประวัติการรัน 200 ล่าสุดต่อโปรเจกต์ · automation_fired เก็บ 60 วัน */
+IF COL_LENGTH('dbo.automations','trigger_type') IS NULL
+    ALTER TABLE dbo.automations ADD
+        trigger_type AS CAST(JSON_VALUE(trigger_json, '$.type') AS VARCHAR(20)) PERSISTED;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'ck_automation_json')
+    ALTER TABLE dbo.automations ADD
+        CONSTRAINT ck_automation_json CHECK (ISJSON(trigger_json) = 1 AND ISJSON(paths_json) = 1
+                                             AND (else_json IS NULL OR ISJSON(else_json) = 1)),
+        CONSTRAINT ck_automation_trigger CHECK (trigger_type IN
+            ('added','moved','completed','assignee','due','start','field','comment','tagadd','tagdel','subsdone','movedout',
+             'attachment','follower','unblocked','approval','approaching','overdue','manual','scheduled'));
+GO
+/* ประวัติการรัน: trace_json = รายการการกระทำที่ทำ (ac; ต่อท้าย ! = ไม่สำเร็จ) · is_dry = รันทดสอบ ไม่แก้ข้อมูลจริง */
+IF COL_LENGTH('dbo.automation_runs','trace_json') IS NULL
+    ALTER TABLE dbo.automation_runs ADD
+        trace_json NVARCHAR(MAX) NULL,
+        is_dry     BIT NOT NULL CONSTRAINT df_autoruns_dry DEFAULT 0;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_autoruns_task')
+    CREATE INDEX ix_autoruns_task ON dbo.automation_runs(task_id, ran_at DESC) WHERE task_id IS NOT NULL;
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_automations_timed')
+    CREATE INDEX ix_automations_timed ON dbo.automations(trigger_type) INCLUDE (project_id) WHERE is_on = 1;   -- ตัวสแกนตามเวลา
+GO
+
+/* ---------- ดัชนีสำหรับคำค้นที่ใช้บ่อย ---------- */
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_tasks_approval')   -- งานที่รออนุมัติของฉัน
+    CREATE INDEX ix_tasks_approval ON dbo.tasks(approval, assignee_id) WHERE approval = 'pending' AND deleted_at IS NULL;
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_tasks_completed_by')   -- งานที่ฉันทำเสร็จ (รายงาน)
+    CREATE INDEX ix_tasks_completed_by ON dbo.tasks(completed_by, completed_at DESC) WHERE completed_by IS NOT NULL;
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_users_manager')   -- ลูกทีมของหัวหน้า
+    CREATE INDEX ix_users_manager ON dbo.users(manager_id) WHERE manager_id IS NOT NULL;
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_tm_user')   -- fn_VisibleProjects ผ่านทีม
+    CREATE INDEX ix_tm_user ON dbo.team_members(user_id) INCLUDE (team_id, role);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_pt_team')
+    CREATE INDEX ix_pt_team ON dbo.project_teams(team_id) INCLUDE (project_id, access);
+GO
+
+/* ---------- ล้างข้อมูลตัวอย่าง (ผู้ดูแลระบบ) ----------
+   sampleSummary / clearSampleData ในแอป: ลบผู้ใช้ is_sample และโปรเจกต์ is_sample ที่ไม่มีข้อมูลจริงปนอยู่
+   (ไม่มีงาน/ความเห็นที่คนจริงสร้าง มอบ หรือเขียน) โปรเจกต์ที่มีข้อมูลจริงปนจะถูกข้ามและแจ้งผู้ใช้
+   @dry_run = 1 (ค่าเริ่มต้น) คืนเฉพาะสรุปจำนวน ไม่แก้อะไร */
+CREATE OR ALTER PROCEDURE dbo.sp_ClearSampleData @actor_id UNIQUEIDENTIFIER, @dry_run BIT = 1
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF NOT EXISTS (SELECT 1 FROM dbo.users WHERE id = @actor_id AND org_role = 'admin' AND is_active = 1)
+        THROW 50403, 'admin only', 1;
+
+    DECLARE @real TABLE (id UNIQUEIDENTIFIER PRIMARY KEY);
+    INSERT @real SELECT id FROM dbo.users WHERE is_sample = 0;
+
+    DECLARE @del TABLE (id UNIQUEIDENTIFIER PRIMARY KEY);
+    INSERT @del
+    SELECT p.id FROM dbo.projects p
+    WHERE p.is_sample = 1 AND p.deleted_at IS NULL
+      AND NOT EXISTS (SELECT 1 FROM dbo.task_projects tp
+                      INNER JOIN dbo.tasks t ON t.id = tp.task_id OR t.parent_id = tp.task_id
+                      WHERE tp.project_id = p.id
+                        AND (t.created_by IN (SELECT id FROM @real) OR t.assignee_id IN (SELECT id FROM @real)
+                             OR t.assigned_by IN (SELECT id FROM @real)))
+      AND NOT EXISTS (SELECT 1 FROM dbo.task_projects tp
+                      INNER JOIN dbo.stories s ON s.task_id = tp.task_id
+                      WHERE tp.project_id = p.id AND s.actor_id IN (SELECT id FROM @real));
+
+    SELECT (SELECT COUNT(*) FROM dbo.users WHERE is_sample = 1) AS sample_users,
+           (SELECT COUNT(*) FROM @del) AS removable_projects,
+           (SELECT COUNT(*) FROM dbo.projects WHERE is_sample = 1 AND deleted_at IS NULL) - (SELECT COUNT(*) FROM @del) AS skipped_projects;
+    IF @dry_run = 1 RETURN;
+
+    BEGIN TRAN;
+        -- ลบแบบซ่อน (ถังขยะ 30 วัน) เพื่อกู้คืนได้ถ้าผิดพลาด
+        UPDATE dbo.projects SET deleted_at = SYSUTCDATETIME(), deleted_by = @actor_id WHERE id IN (SELECT id FROM @del);
+        UPDATE t SET deleted_at = SYSUTCDATETIME(), deleted_by = @actor_id
+          FROM dbo.tasks t WHERE t.deleted_at IS NULL
+           AND EXISTS (SELECT 1 FROM dbo.task_projects tp WHERE tp.task_id = t.id AND tp.project_id IN (SELECT id FROM @del));
+        INSERT dbo.removed_users(id) SELECT id FROM dbo.users WHERE is_sample = 1
+            AND id NOT IN (SELECT id FROM dbo.removed_users);
+        UPDATE dbo.users SET is_active = 0 WHERE is_sample = 1;
+        DELETE FROM dbo.project_members WHERE user_id IN (SELECT id FROM dbo.users WHERE is_sample = 1);
+        DELETE FROM dbo.notifications   WHERE user_id IN (SELECT id FROM dbo.users WHERE is_sample = 1);
+        INSERT dbo.audit_log(actor_id, action, target_type, detail_json)
+        VALUES (@actor_id, 'sample.clear', 'org', N'{"note":"ล้างข้อมูลตัวอย่าง"}');
+    COMMIT;
+END;
 GO

@@ -29,7 +29,7 @@ Bugs:
 4. Task delete still uses native `confirm()` (`main.js` ~3138) → `askConfirm`.
 5. Tab+X writes legacy `db.settings.theme` (`main.js` ~4570) → `setPref('theme')` + `applyTheme`. (Note: in Asana Tab+X is "full screen task"; keep theme toggle but ALSO make the drawer's expand button reachable — choose: Tab+X = expand task when a task is open, otherwise theme.)
 6. "Copy link" builds `#/task/<id>` that `readHash` ignores (`main.js` ~3121) → support the route on hashchange.
-7. README/`db/schema.sql` drift: document portfolios, messages, reactions, rules, templates, baseline, away, photos; README "not built" list is wrong.
+7. ~~README/`db/schema.sql` drift~~ — resolved 2026-11-28: `db/schema.sql` and `docs/API.md` synced to SCHEMA 19 (see Phase 5 sync section); README "not built" list is current. Plan: `docs/PHASE5-CHECKLIST.md`.
 
 Features:
 - **Threaded replies** on comments: one level deep, collapsed by default with "n replies · time" row + participant avatars, oldest-first, reply box; notify only thread participants + @mentioned.
