@@ -67,9 +67,8 @@
 ด่าน "แก้โครงสร้างได้ไหม" บังคับด้วย `can_structure` ที่ `fn_VisibleProjects` คืนมา
 ไม่ใช่การไล่เช็ก `org_role` ซ้ำในแต่ละปลายทาง เพราะแบบหลังลืมที่เดียวก็รั่วทั้งระบบ
 
-> **ยังไม่ได้เขียนไว้ที่นี่** — ปลายทางของเซกชัน ฟิลด์กำหนดเอง มุมมองที่บันทึกไว้
-> และเทมเพลต ยังไม่มีในเอกสารนี้ (อัตโนมัติอยู่ในตารางด้านล่างแล้ว) ตอนเพิ่มเข้ามาทุกอันต้องใช้ `E + ST`
-> เพราะทั้งหมดนับเป็นการแก้โครงสร้าง
+> **หมายเหตุ** — ปลายทางของเซกชัน ฟิลด์กำหนดเอง มุมมองที่บันทึกไว้ และเทมเพลต เป็น CRUD ปกติ ทุกอันต้องใช้ `E + ST` เพราะนับเป็นการแก้โครงสร้าง
+> ปลายทางของ Sprint 1–4 อยู่ในหัวข้อ "ปลายทางเพิ่มเติมตาม SCHEMA 19" ด้านล่าง
 
 ---
 
@@ -301,6 +300,158 @@
 
 ---
 
+## ปลายทางเพิ่มเติมตาม SCHEMA 19 (Sprint 1–4)
+
+สิทธิ์ใช้สัญลักษณ์ชุดเดียวกับด้านบน เพิ่ม `ตัวเอง` = ทำได้เฉพาะแถวของตัวเอง
+**หลักการแบ่งสิทธิ์:** โครงสร้าง (เซกชัน ฟิลด์ มุมมอง ค่าเริ่มต้นมุมมอง ฟิลด์บังคับ งานเงียบ อัตโนมัติ) = เจ้าของ / `PA` / `OA`
+ที่ผ่าน `E + ST` · งาน ความเห็น การย้ายเซกชันของงาน = สมาชิกที่มี `E` (ความเห็น = `C`) · โครงสร้างองค์กร = `OA`
+
+### อนุมัติหลายคน
+
+| Method | Path | สิทธิ์ | หมายเหตุ |
+|---|---|---|---|
+| PUT | `/api/tasks/{id}/approvers` | E | `{user_ids[], mode: all\|any}` → `task_approvers` + `tasks.approval_mode` · 1 คน = แบบเดี่ยว (`assignee_id`) · ตั้งใหม่ = ล้างโหวต กลับเป็น `pending` · ผู้อนุมัติต้องผ่านด่านคนนอกโปรเจกต์ปิด (`outsidersOf`) |
+| POST | `/api/tasks/{id}/approval/vote` | ต้องอยู่ใน `task_approvers` (หรือ `assignee_id` แบบเดี่ยว) | `{decision: approved\|changes\|rejected, note?}` · **เห็นงานได้ไม่พอ** ต้องเป็นผู้อนุมัติของรอบนี้ · ลง `task_approval_trail` · `mode=all` ต้อง approved ครบทุกคนจึงเปลี่ยน `tasks.approval` · `changes/rejected` คนเดียวมีผลทันที · คำนวณและแจ้งผู้ขอฝั่งเซิร์ฟเวอร์ ธุรกรรมเดียว · ทริกเกอร์อัตโนมัติ `approval` |
+| GET | `/api/tasks/{id}/approval` | R | โหวตปัจจุบัน + ประวัติ (100 ล่าสุด) |
+
+### เตือนฉัน (รายบุคคล)
+
+| Method | Path | สิทธิ์ | หมายเหตุ |
+|---|---|---|---|
+| GET · POST | `/api/tasks/{id}/reminders` | R + ตัวเอง | คืนเฉพาะของตัวเอง · หนึ่งงานหนึ่งเตือนที่ค้างอยู่ (`ux_rem_open`) |
+| DELETE | `/api/tasks/{id}/reminders/{rid}` | ตัวเอง | ถึงเวลา → timer `reminders-due` แจ้งเตือนและตั้ง `done_at` |
+
+### โปรเจกต์: งานเงียบ ฟิลด์บังคับ ค่าเริ่มต้นมุมมอง นัดประชุม
+
+| Method | Path | สิทธิ์ | หมายเหตุ |
+|---|---|---|---|
+| PUT | `/api/projects/{id}/stale` | E + ST | `{days: 0–365, move_to: sectionId\|null}` |
+| PUT | `/api/projects/{id}/required-fields` | E + ST | `{field_ids[]}` เฉพาะฟิลด์ของโปรเจกต์ · มีผลกับงานระดับบนสุดเท่านั้น · `PATCH /api/tasks/{id}` ที่ตั้ง `completed` ตอบ `422 {missing:[fieldId]}` ถ้ายังไม่กรอก |
+| GET · PUT · DELETE | `/api/projects/{id}/view-defaults/{kind}` | R / E + ST | `kind` = list board timeline gantt calendar · `config_json` ชุดเดียวกับ `saved_views` |
+| PUT | `/api/projects/{id}/next-meeting` | E | `{date\|null}` · `POST /api/projects/{id}/meeting-pages` สร้างหน้าบันทึกประชุมของวันนั้น (`pages.meeting_on`) |
+| POST | `/api/projects/{id}/carry-over` | E | `{from_section_ids[], to_section_id}` ย้ายงานที่ยังไม่เสร็จพร้อมแท็ก “ยกมาจาก {วันที่}” |
+| POST | `/api/projects/{id}/slip` | E | `{new_date}` เลื่อนงานที่เลยกำหนดทั้งหมด เพิ่ม `tasks.slips` ทีละ 1 |
+| POST · DELETE | `/api/projects/{id}/baseline` | E + ST | บันทึก/ล้างแผนเดิมของ Gantt (`project_baselines`, `project_baseline_tasks`) |
+| GET · POST | `/api/projects/{id}/status-updates` · `…/{uid}/replies` | R / C | รายงานสถานะ + ถาม/ตอบหนึ่งระดับ (`status_update_replies`) · ตัวเลข snapshot คิดตอนโพสต์ · แจ้งคนเขียน เจ้าของ คนที่เคยตอบ และคนที่ถูก `@` |
+| PUT | `/api/projects/{id}/fields/{fid}` | E + ST | รวมธง `is_important` และ `description` · `POST /api/projects/{id}/fields/merge` (`{from, into, preview?}`) รวมฟิลด์ — ส่ง `preview=true` ก่อนเสมอ |
+
+### อัตโนมัติ (เพิ่มจากตารางด้านบน)
+
+| Method | Path | สิทธิ์ | หมายเหตุ |
+|---|---|---|---|
+| POST | `/api/projects/{id}/automations/{aid}/dry-run` | R + เห็นงาน | `{task_id}` ประเมินเงื่อนไขและบอกว่าจะทำอะไร **ไม่แก้ข้อมูล** · บันทึกลง `automation_runs` แบบ `is_dry = 1` |
+| POST | `/api/projects/{id}/automations/validate` | E + ST | ตรวจ JSON ตามขีดจำกัด `AUTO_*` (50 อัตโนมัติ · 5 เส้นทาง · 10 เงื่อนไข · 20 การกระทำ · ลึก 3 ชั้น) ก่อนบันทึก |
+| GET | `/api/projects/{id}/automation-runs?task_id=` | R | ประวัติ 200 ล่าสุด รวม `trace_json` (ac) |
+
+ชนิดทริกเกอร์ที่รับ: `added moved completed assignee due start field comment tagadd tagdel subsdone movedout attachment follower unblocked approval approaching overdue manual scheduled` ·
+การกระทำ: `section complete assign due start field comment followers tag untag priority create addproj mtmove notify subtasks followup approvers`
+(บังคับด้วย `ck_automation_trigger` และตรวจการกระทำที่ API) ·
+การกระทำที่ **มอบงาน/เพิ่มคน** ให้คนนอกโปรเจกต์ปิดต้องผ่านกติกา `outsidersOf` เดิม — ไม่มีคนให้ถาม = ข้ามการกระทำนั้นและลงเหตุผลในประวัติ
+
+### สมาชิก ทีม และผู้ใช้
+
+| Method | Path | สิทธิ์ | หมายเหตุ |
+|---|---|---|---|
+| POST | `/api/projects/{id}/members/bulk` | PA หรือ OA (ล็อกอยู่ = OA) | `{users:[{id,access}], teams:[{id,access}]}` เพิ่มรายคนและ/หรือทั้งทีมในครั้งเดียว · ทีมผูกผ่าน `project_teams` (ไม่คัดลอกสมาชิกลงตาราง) · ลง audit ครั้งเดียว · โปรเจกต์ที่ล็อก สมาชิกทั่วไปทำไม่ได้ |
+| GET · POST · PATCH · DELETE | `/api/teams[/{id}]` · `/api/teams/{id}/members` | ทุกคน (อ่าน ตาม `privacy`) / ผู้ดูแลทีม / OA | ทีม `private` ไม่โผล่ให้คนนอกทีม (404) |
+| PUT | `/api/users/{id}/manager` | OA | `users.manager_id` |
+| GET | `/api/users/{id}/open-work` | OA | งานที่ค้างและบทบาทโปรเจกต์ของคนนั้น (ใช้ก่อนโอนงาน/ปิดบัญชี) |
+| POST | `/api/users/{id}/handover` | OA | `{to, tasks: bool, projects: bool, with_projects_access: bool}` โอนงาน/ความเป็นเจ้าของ/ผู้ดูแล ในธุรกรรมเดียว · ลง audit `user.handover` |
+| POST | `/api/users/bulk` | OA | นำเข้ารายชื่อ (CSV) ล่วงหน้าก่อนล็อกอิน · ตรวจรูปแบบอีเมล (`emailProblem`) · ซ้ำ = ข้าม ไม่ทับ |
+| GET · PUT | `/api/admin/settings` | OA | `org_settings`: `orgLang`, `orgPrivacy`, `fyStart`, `mission` … · `orgPrivacy` เป็นแค่ค่าเริ่มต้นของโปรเจกต์ใหม่ ไม่แตะโปรเจกต์ที่มีอยู่ |
+| GET · POST | `/api/admin/sample-data` | OA | `GET` = สรุปที่จะลบ/ข้าม · `POST {confirm:true}` เรียก `sp_ClearSampleData` (ลบแบบซ่อน กู้ได้ 30 วัน) · ข้ามโปรเจกต์ที่มีข้อมูลคนจริงปน |
+
+### การแจ้งเตือน
+
+| Method | Path | สิทธิ์ | หมายเหตุ |
+|---|---|---|---|
+| GET | `/api/me/notifications?tab=&snoozed=` | ตัวเอง | รวมกลุ่ม (`parts_json`) · ซ่อนรายการที่เลื่อนเตือนอยู่ยกเว้น `snoozed=1` |
+| POST | `/api/me/notifications/snooze` · `/unsnooze` | ตัวเอง | `{ids[], until}` |
+| PUT | `/api/me/follow/projects/{id}` · `/portfolios/{id}` | R | `user_project_notify` / `user_portfolio_follow` |
+
+**การส่งออกนอกระบบ (อีเมล / Teams)** — **ต้องขอสิทธิ์จาก IT** (Graph `Mail.Send` แบบ application หรือ webhook ของช่อง Teams
+พร้อม admin consent) ก่อนเปิดใช้ ระหว่างนี้แจ้งเตือนอยู่ในแอปอย่างเดียว · ออกแบบเป็นคิว `notification_deliveries`
+ผู้ใช้ปิดรายชนิดได้ จำกัดความถี่ต่อคน และห้ามใส่เนื้อหาโปรเจกต์ private ในข้อความที่ส่งออก (ส่งเป็นลิงก์) ·
+ปลายทางตั้งค่า: `PUT /api/admin/delivery` (OA) เปิด/ปิดช่องทาง · ไม่ตั้งค่า = ไม่ส่ง
+
+### งานเบื้องหลัง (Azure Functions timer) แทนตัวนับเวลาฝั่งเบราว์เซอร์
+
+ตอนนี้ทั้งหมดทำงานเมื่อมีคนเปิดแอปเท่านั้น (`setInterval` ใน `app/main.js`) ฝั่งเซิร์ฟเวอร์ต้องรันเองทุกคืน/ทุกรอบ
+ทุกตัวต้อง **idempotent** (ใช้ `automation_fired` / คอลัมน์ `*_at` กันซ้ำ) และรันด้วยตัวตนระบบ ไม่ใช่ผู้ใช้
+
+| Timer | ความถี่ | ทำอะไร | แทนของเดิม |
+|---|---|---|---|
+| `automations-scheduled` | ทุก 5 นาที | ทริกเกอร์ `approaching overdue scheduled` (≤ 50 งาน/รอบ) กันซ้ำด้วย `automation_fired` | `runAutoTick` |
+| `reminders-due` | ทุก 1 นาที | `task_reminders` ที่ถึงเวลา → แจ้งเตือน ตั้ง `done_at` | `runReminders` |
+| `snooze-wake` | ทุก 1 นาที | `notifications.snooze_until <= now` → ยังไม่อ่าน ตั้ง `woke_at` | `runSnoozeWake` |
+| `stale-check` | ทุกชั่วโมง | โปรเจกต์ที่ `stale_days > 0` ตามขั้น a/b/c (`task_stale`) | `runStale` |
+| `status-remind` | วันศุกร์เช้า | โปรเจกต์ `status_remind = 1` สร้างงานเตือนอัปเดตสถานะ (`remind_key` กันซ้ำรายสัปดาห์) | `runRemind` |
+| `due-notify` | ทุกชั่วโมง | เตือนครบกำหนด/เลยกำหนด (`dedupe_key`) | เตือนกำหนดส่ง |
+| `recurring-tasks` | ทุก 15 นาที | สร้างงานซ้ำตาม `recur_json` ที่ยังไม่สร้าง | งานซ้ำ |
+| `delivery-send` | ทุก 1 นาที | อ่านคิว `notification_deliveries` — **ปิดอยู่จนกว่า IT อนุมัติ** | — |
+| `cleanup-nightly` | ทุกคืน | ลบถังขยะเกิน 30 วัน · `automation_fired` เก่ากว่า 60 วัน · `automation_runs` เกิน 200/โปรเจกต์ · ตัดเลขหมุนเวียน audit ตามนโยบาย | ล้างในแอป |
+
+ถ้า timer สองเครื่องรันชนกัน ต้องมีล็อก (`sp_getapplock`) ต่อ timer หนึ่งตัวต่อครั้ง
+
+### สิทธิ์สรุปต่อกลุ่มปลายทาง
+
+| กลุ่ม | ทำได้ | ตัวตรวจ |
+|---|---|---|
+| โครงสร้างโปรเจกต์ (เซกชัน ฟิลด์ มุมมอง ค่าเริ่มต้น ฟิลด์บังคับ งานเงียบ อัตโนมัติ baseline) | เจ้าของ · `PA` · `OA` (และ `edit` ที่ `can_structure = 1`) | `E + ST` |
+| งาน ความเห็น ย้ายเซกชัน ผู้ติดตาม เตือนฉัน | `E` (ความเห็น `C`) | `fn_VisibleTasks` + ระดับในโปรเจกต์ |
+| อนุมัติ | เฉพาะผู้อนุมัติของรอบนั้น | `task_approvers` |
+| สมาชิก / ทีมของโปรเจกต์ / ล็อก | `PA` · `OA` (ล็อก = `OA`) | ด่านสมาชิก |
+| ผู้ใช้ หัวหน้า โอนงาน ตั้งค่าองค์กร ล้างข้อมูลตัวอย่าง ส่งออก | `OA` | `org_role = 'admin'` |
+
+### ย้ายข้อมูลจาก SharePoint JSON (SCHEMA 19) ขึ้น Azure SQL
+
+ไฟล์ต้นทางคือออบเจกต์ `db` เดียวใน `app/store.js` · ตัวนำเข้าเป็นสคริปต์ครั้งเดียว (Node หรือ Function ที่รันด้วยมือโดยผู้ดูแลระบบ)
+ที่ **เรียก `migrate()` เดิมก่อนเสมอ** เพื่อให้ไฟล์เก่ากว่า 19 ได้ค่าเริ่มต้นครบ แล้วจึงแปลงเป็นแถว — ไม่เขียนตัวแปลงแยกอีกชุด
+
+**หลักการ**
+
+1. **คงรหัสเดิม** — รหัสในแอปเป็นสตริง (`p_…`, `t_…`, `au_…`) แต่ตารางใช้ `UNIQUEIDENTIFIER`
+   สร้างตาราง `id_map(old_id VARCHAR(60) PRIMARY KEY, kind, new_id UNIQUEIDENTIFIER)` ชั่วคราว
+   ใช้ UUID แบบกำหนดแน่นอน (UUID v5 จาก `old_id`) เพื่อให้รันซ้ำแล้วได้รหัสเดิม ·
+   ลิงก์ที่คนบันทึกไว้ (`#/task/<id>`) ต้องแปลงผ่าน `id_map` ตอนเปิด (ให้ API มี `GET /api/resolve/{oldId}` ช่วงเปลี่ยนผ่าน)
+   · ผู้ใช้ใช้ Entra `oid` เป็น `users.id` โดยจับคู่จากอีเมล (ใครไม่มี `oid` = สร้างล่วงหน้าแล้วอัปเดตตอนล็อกอินครั้งแรก)
+2. **ไม่นำเข้าข้อมูลตัวอย่าง** — ข้าม `user.sample` / `project.sample` / `removedUsers` ตั้งแต่ต้น (ถ้ามีข้อมูลจริงปนในโปรเจกต์ตัวอย่าง ให้ผู้ดูแลระบบเคลียร์ในแอปเก่าก่อน)
+3. **นำเข้าในธุรกรรมเดียวต่อขั้น** และหยุดทันทีถ้าตรวจไม่ผ่าน
+
+**ลำดับนำเข้า** (ตามคีย์นอก)
+
+1. `users` (+ `manager_id` ทีหลัง) → `org_settings` → `time_categories` / `timesheet_reviewers`
+2. `teams` → `team_members` → `team_pins`
+3. `projects` (+ `stale_days`, `next_meeting`, `status_layout_json`, `views_json`) → `project_members` → `project_teams`
+4. `sections` (แล้วค่อยตั้ง `projects.stale_move_to`) → `custom_fields` + `custom_field_options` → `project_required_fields`
+5. `tags` · `task_types` · `task_templates` · `forms` · `project_templates`
+6. `tasks` (งานระดับบนสุดก่อน แล้วงานย่อยตาม `parent_id`) → `task_projects` (section/position) → `task_followers` `task_tags`
+   `task_dependencies` `task_field_values` `task_approvers` (จาก `t.approvers/approvalVotes`) `task_approval_trail` `task_reminders` `task_stale`
+   · `completed_by` / `slips` เก่าที่ไม่มีค่า = `NULL` / `0` (ไม่เดา)
+7. `stories` (ความเห็น/ประวัติ; เธรด `parent_story_id` ทีหลัง) → `story_reactions` → `attachments` (ไฟล์ยังอยู่ที่ SharePoint/OneDrive: เก็บลิงก์ ไม่คัดลอกไฟล์)
+8. `saved_views` `project_view_defaults` `user_project_views` `project_baselines` `project_baseline_tasks`
+9. `project_status_updates` + `status_update_replies` → `portfolios` (+ ลูก) → `goals` (+ ลูก) → `reports` `dashboard_widgets`
+10. `pages` `page_versions` `project_messages` `message_replies` · `time_entries` `timesheets`
+11. `automations` (`trigger_json/paths_json/else_json`) → `automation_runs` → `automation_fired`
+12. `notifications` (รวม `parts_json`, `snooze_until`) → `user_project_notify` `user_portfolio_follow` → `user_personal` `my_task_*`
+13. `audit_log` เก่า (ถ้าต้องการ) — ใส่ตามเวลาเดิม ไม่ทับของใหม่
+
+**ข้อควรระวังเรื่องรูปแบบ**: วันที่แบบ `YYYY-MM-DD` → `DATE` · เวลา ISO → `DATETIME2(0)` UTC · ข้อความที่เป็น JSON ในแอป (`config_json` ฯลฯ) ตรวจ `ISJSON` ก่อนใส่ ·
+รูปโปรไฟล์ data URI → อัปโหลดไป Blob แล้วเก็บ URL ใน `users.photo_url` · ค่ากึ่งโครงสร้าง (`user.prefs`) → `users`/`user_settings.prefs_json`
+
+**ขั้น dry-run และตรวจสอบก่อนใช้จริง**
+
+1. รันตัวนำเข้าแบบ `--dry-run` กับ **สำเนา** ไฟล์ JSON ลงฐาน staging ที่ว่าง (ไม่แตะไฟล์จริงบน SharePoint ซึ่งอ่านอย่างเดียว) — ต้องจบโดยไม่มี error และรายงานจำนวนแถวต่อตาราง
+2. **เทียบจำนวน**: ผู้ใช้ โปรเจกต์ งาน (รวมงานย่อย) ความเห็น ไฟล์แนบ อัตโนมัติ แจ้งเตือน ต่อโปรเจกต์ — ต้องเท่ากับ JSON (ลบข้อมูลตัวอย่างที่จงใจข้าม)
+3. **เทียบเนื้อหาแบบสุ่ม**: งานอย่างน้อย 50 งาน/โปรเจกต์ (ชื่อ ผู้รับผิดชอบ กำหนดส่ง เซกชัน ฟิลด์ ผู้อนุมัติ) และรายงานสถานะ 1 ฉบับต่อโปรเจกต์
+4. **เทียบสิทธิ์**: สำหรับผู้ใช้ตัวแทนอย่างน้อย 1 คนต่อบทบาท (admin member guest viewer) คำนวณรายชื่อโปรเจกต์/งานที่เห็นได้จากแอปเก่า (`projectAccess`, `canSeeTask`)
+   เทียบกับ `fn_VisibleProjects` / `fn_VisibleTasks` — **ต้องตรงกันทุกแถว โดยเฉพาะโปรเจกต์ private** ก่อนเปิดให้ทีมลับ
+5. ตรวจคีย์นอก กำพร้า (งานที่ไม่มีโปรเจกต์ก็ได้ถ้าเป็นงานส่วนตัว) และรหัสซ้ำ
+6. วันตัดข้อมูลจริง: ตั้งแอปเก่าเป็นอ่านอย่างเดียว → นำเข้า (ครั้งเดียว) → ตรวจซ้ำข้อ 2–4 → เปิดแอปใหม่ · เก็บ JSON เดิมเป็นข้อมูลสำรองอย่างน้อย 90 วัน
+   (ย้อนกลับ = เปิดแอปเก่ากลับ แต่การแก้ไขหลังตัดข้อมูลจะไม่ย้อนกลับมา จึงควรตัดข้อมูลช่วงนอกเวลางาน)
+
+---
+
 ## จุดรั่วที่ต้องเขียนเทสต์คลุมทุกข้อ
 
 | # | สถานการณ์ | ผลที่ถูกต้อง |
@@ -322,6 +473,14 @@
 | 8 | guest เรียก `/api/admin/directory` | `403` |
 | 9 | สองคนแก้งานเดียวกันพร้อมกัน | คนที่สองได้ `409` ไม่ใช่เขียนทับ |
 | 10 | ขอไฟล์แนบที่ยังสแกนไม่เสร็จ | ปฏิเสธ |
+| 11 | ผู้ใช้ที่ไม่ได้เป็นสมาชิก/ทีมของโปรเจกต์ `private` เรียก `GET /api/projects/{id}` | `404` · ไม่ขึ้นในค้นหา กิจกรรม พอร์ตโฟลิโอ รายงาน แดชบอร์ด |
+| 12 | สมาชิกของทีมที่ผูกกับโปรเจกต์ `private` ระดับ `view` พยายามแก้งาน | `403` · ถอดออกจากทีมแล้วต้องเห็นไม่ได้ทันที |
+| 13 | โหวตอนุมัติโดยคนที่ไม่ใช่ผู้อนุมัติของรอบนั้น (แม้เห็นงานได้) | `403` |
+| 14 | ปิดงานที่โปรเจกต์ตั้งฟิลด์บังคับไว้ แต่ยังไม่กรอก | `422` พร้อมรายชื่อฟิลด์ที่ขาด (งานย่อยไม่โดน) |
+| 15 | อัตโนมัติมอบงานให้คนนอกโปรเจกต์ปิด | ข้ามการกระทำนั้น ลงเหตุผลในประวัติ ไม่รั่วงานให้คนนอก |
+| 16 | `dry-run` อัตโนมัติ | ไม่มีการเปลี่ยนแปลงใด ๆ ในงาน ความเห็น แจ้งเตือน |
+| 17 | เรียกเตือนฉัน/เลื่อนเตือนของคนอื่น | `404` |
+| 18 | ล้างข้อมูลตัวอย่างโปรเจกต์ที่มีข้อมูลคนจริงปน | ข้ามโปรเจกต์นั้น ไม่ลบ |
 
 ---
 
