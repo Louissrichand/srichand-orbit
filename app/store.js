@@ -4965,15 +4965,34 @@
   function setDependencyType(taskId, blockerId, type) {
     var t = task(taskId);
     if (!t) return;
-    t.dependsOn.forEach(function (d) { if (d.id === blockerId) d.type = type; });
+    var dp = t.dependsOn.filter(function (d) { return d.id === blockerId; })[0];
+    if (!dp || dp.type === type) return;
+    snapshot('เปลี่ยนชนิดลำดับก่อนหลัง');
+    dp.type = type;
+    log(taskId, 'เปลี่ยนชนิดการรอ “{t}” เป็น {y}', { t: task(blockerId) ? task(blockerId).name : '', y: type });
     commit();
+  }
+
+  /* ขัดกันไหม: งานที่รอเริ่ม/จบก่อนที่ตัวบล็อกยอมให้ (เทียบวันที่ ไม่เลื่อนอะไร) */
+  function depConflict(taskId, blockerId, type) {
+    var t = task(taskId), b = task(blockerId);
+    if (!t || !b || b.completed) return false;
+    var bs = b.startOn || b.dueOn, be = b.dueOn || b.startOn;
+    var ts = t.startOn || t.dueOn, te = t.dueOn || t.startOn;
+    type = type || 'FS';
+    if (type === 'FS') return !!(be && ts && ts < be);
+    if (type === 'SS') return !!(bs && ts && ts < bs);
+    if (type === 'FF') return !!(be && te && te < be);
+    return !!(bs && te && te < bs);
   }
 
   function removeDependency(taskId, blockerId) {
     var t = task(taskId);
     if (!t) return;
     snapshot('ลบลำดับก่อนหลัง');
+    var rb = task(blockerId);
     t.dependsOn = t.dependsOn.filter(function (d) { return d.id !== blockerId; });
+    log(taskId, 'เลิกรอ “{t}”', { t: rb ? rb.name : '' });
     commit();
   }
 
@@ -13366,7 +13385,7 @@
     NUMBER_FORMATS: NUMBER_FORMATS, CURRENCIES: CURRENCIES,
     formatNumber: formatNumber, setFieldFormat: setFieldFormat,
     addTaskToProject: addTaskToProject, removeTaskFromProject: removeTaskFromProject,
-    addDependency: addDependency, removeDependency: removeDependency,
+    addDependency: addDependency, removeDependency: removeDependency, depConflict: depConflict,
     setDependencyType: setDependencyType,
     toggleFollower: toggleFollower, toggleLike: toggleLike,
     addAttachment: addAttachment, removeAttachment: removeAttachment,

@@ -2873,6 +2873,18 @@
     // Date+Grid
     'เพิ่มวันที่': 'Add date', 'ล้าง': 'Clear', 'เดือนก่อน': 'Previous month', 'เดือนถัดไป': 'Next month',
     'พิมพ์วันที่เป็น วัน/เดือน/ปี เช่น 4/12/2569': 'Type the date as day/month/year, e.g. 4/12/2026',
+    // Deps
+    'วันที่ขัดกับงานที่ต้องรอ': 'Dates conflict with the blocking task',
+    'เสร็จแล้วจึงเริ่ม': 'Finish to start',
+    'เริ่มพร้อมกัน': 'Start to start',
+    'เสร็จพร้อมกัน': 'Finish to finish',
+    'เริ่มแล้วจึงเสร็จ': 'Start to finish',
+    'ลบความเชื่อมโยง': 'Remove dependency',
+    'เปลี่ยนชนิดเป็น': 'Type changed to',
+    'เปลี่ยนชนิดลำดับก่อนหลัง': 'Change dependency type',
+    'เปลี่ยนชนิดการรอ “{t}” เป็น {y}': 'changed the dependency on “{t}” to {y}',
+    'เลิกรอ “{t}”': 'stopped waiting on “{t}”',
+    'งานที่รองานนี้': 'Blocking',
     // Auto QA
     'ทำงานครั้งแรกที่มีคนเปิด Orbit ในวันนั้น (ยังตั้งเวลาเป็นชั่วโมงไม่ได้)': 'Runs the first time anyone opens Orbit that day (time of day cannot be set yet)',
     'ต้องแก้: {m}': 'Needs fixing: {m}', 'เซกชันถูกลบ': 'section was deleted', 'ฟิลด์ถูกลบ': 'field was deleted', 'คนที่เลือกไม่อยู่แล้ว': 'the chosen person is no longer available',
