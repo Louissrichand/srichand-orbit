@@ -2693,6 +2693,8 @@
       (!canW ? '' : t.parentId
         ? item('promote-task', 'arrowUp', L('ย้ายออกเป็นงานหลัก'))
         : item('make-subtask', 'subtask', L('แปลงเป็นงานย่อยของ…'))) +
+      /* Sprint 2A — ย้ายคอลัมน์ในโปรเจกต์/เซกชันในงานของฉันได้โดยไม่ต้องลาก (จอสัมผัส) — mobile.js */
+      (global.OrbitMobile && global.OrbitMobile.canMoveSec(taskId) ? item('m2a-move-sec', 'grid', L('ย้ายไปเซกชัน…')) : '') +
       (t.recur && canW ? item('stop-recur', 'repeat', L('หยุดทำซ้ำ')) : '') +
       (canW ? item('save-template', 'star', L('บันทึกเป็นเทมเพลต')) : '') +
       (!t.parentId && canW ? item('to-project', 'grid', L('แปลงเป็นโปรเจกต์…')) : '') +

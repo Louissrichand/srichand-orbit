@@ -9,6 +9,22 @@
   'use strict';
 
   var EN = {
+    /* Sprint 2A */
+    'ตัวเลือกของงาน': 'Task options', 'ค้นหางาน': 'Search tasks', 'ปิดช่องค้นหา': 'Close search',
+    'เมนูงานของฉัน': 'My Tasks menu', 'เมนูกล่องข้อความ': 'Inbox menu', 'เมนูหลัก': 'Main menu',
+    'เลิกเลือก': 'Done', 'เลือกหลายงาน': 'Select tasks', 'สัปดาห์หน้า': 'Next week',
+    'ย้ายไปเซกชัน': 'Move to section', 'ย้ายไปเซกชัน…': 'Move to section…', 'ย้ายคอลัมน์ในโปรเจกต์…': 'Move within the project…',
+    'ย้ายไป {s} แล้ว': 'Moved to {s}', 'ย้าย {n} งานไปเซกชัน': 'Move [n|1 task|{n} tasks] to section',
+    'ไม่มีงานที่ย้ายได้': 'None of these tasks can be moved',
+    'เพิ่มในโปรเจกต์ {p}': 'Adds to {p}',
+    'เพิ่มในงานของฉัน — เป็นงานส่วนตัว เห็นเฉพาะคุณจนกว่าจะเพิ่มเข้าโปรเจกต์':
+      'Adds to My Tasks — private, only you can see it until it’s added to a project',
+    'แตะงานเพื่อเลือก แล้วใช้แถบด้านล่างแก้พร้อมกัน': 'Tap tasks to select them, then use the bar below to change them together',
+    'ดูบนคอมพิวเตอร์จะสะดวกกว่า': 'Easier to use on a computer', 'ดูแบบรายการ': 'Show as list',
+    'ส่งออกไปปฏิทิน (.ics)': 'Export to calendar (.ics)',
+    'ได้ไฟล์ .ics ของงานที่มีวัน เปิดด้วย Outlook หรือ Google Calendar': 'Downloads an .ics file of your dated tasks for Outlook or Google Calendar',
+    'ติดตั้ง Orbit ไว้บนหน้าจอโฮม': 'Add Orbit to your Home Screen', 'แตะ': 'Tap',
+    'แชร์ → เพิ่มไปยังหน้าจอโฮม': 'Share → Add to Home Screen', 'เข้าใจแล้ว': 'Got it',
     /* Sprint 1A */
     'ส่งแล้ว': 'Sent', 'โพสต์': 'Post', 'เปิดงานใหม่แล้ว': 'Task reopened',
     'คลิกช่องความเห็นก่อน แล้วกด Ctrl+Enter เพื่อส่ง · ทำเครื่องหมายว่าเสร็จใช้ Tab+Y':
