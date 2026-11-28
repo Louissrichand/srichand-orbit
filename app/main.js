@@ -1113,7 +1113,7 @@
         I('arrowLeft', 14) + '</button>' +
         '<button class="g-today-btn" data-act="g-today">' + L('วันนี้') + '</button>' +
         '<button data-act="g-pan" data-d="1" title="' + L('เลื่อนไปทางขวา') + '">' +
-        I('arrowRight', 14) + '</button></div>',
+        I('arrowRight', 14) + '</button></div>' + (R.s4bGanttBtns ? R.s4bGanttBtns(state.route.id) : ''),
       right: '<div class="g-zoomctl">' +
         '<span class="lbl" data-act="g-zoom-menu" role="button" tabindex="0">' +
         R.esc(zoomLabel(v.gZoom)) + '</span>' +

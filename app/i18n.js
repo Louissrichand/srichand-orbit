@@ -2697,6 +2697,18 @@
     'จัดการสมาชิกและสิทธิ์ในโปรเจกต์นั้น (ลบโปรเจกต์ได้เฉพาะผู้ดูแลระบบ)': 'Manages members and access in that project (only an admin can delete a project)',
     'ดูแลทั้งองค์กร: สมาชิก สิทธิ์ การลบโปรเจกต์ และบันทึกการทำงาน': 'Looks after the whole organization: members, access, deleting projects and the audit log',
     'ใครเห็นโปรเจกต์นี้': 'Who can see this project',
+    // Sprint 4b
+    '{n} วันทำการ': '{n} working days', 'วันเริ่มโปรเจกต์ {d}': 'Project starts {d}', 'เริ่มโปรเจกต์': 'Project start',
+    'บันทึกแผนเดิม': 'Save baseline', 'บันทึกวันที่ของทุกงานไว้เป็นแผนเดิม แล้วเทียบกับวันที่ปัจจุบัน': 'Save every task\'s dates as the baseline and compare with the current dates',
+    'ยังไม่มีงานที่มีวันที่ให้พิมพ์': 'No dated tasks to print', 'แผนงาน (Gantt)': 'Schedule (Gantt)', 'วันทำการ': 'Working days',
+    'แถบเทา = เสาร์อาทิตย์/วันหยุดนักขัตฤกษ์ · เส้นเทาใต้แท่ง = แผนเดิม': 'Grey bands = weekends / public holidays · thin grey line under a bar = baseline',
+    'วันขึ้นปีใหม่': 'New Year\'s Day', 'วันหยุดพิเศษ': 'Special holiday', 'วันมาฆบูชา': 'Makha Bucha', 'วันจักรี': 'Chakri Day',
+    'วันสงกรานต์': 'Songkran', 'วันแรงงาน': 'Labour Day', 'วันฉัตรมงคล': 'Coronation Day', 'ชดเชยวันวิสาขบูชา': 'Visakha Bucha (substitute)',
+    'วันเฉลิมฯ สมเด็จพระราชินี': 'Queen\'s Birthday', 'วันเฉลิมฯ ร.10': 'King\'s Birthday', 'วันอาสาฬหบูชา': 'Asarnha Bucha',
+    'วันเข้าพรรษา': 'Khao Phansa', 'วันแม่แห่งชาติ': 'Mother\'s Day', 'วันคล้ายวันสวรรคต ร.9': 'King Bhumibol Memorial Day',
+    'วันปิยมหาราช': 'Chulalongkorn Day', 'ชดเชยวันพ่อแห่งชาติ': 'Father\'s Day (substitute)', 'วันรัฐธรรมนูญ': 'Constitution Day',
+    'วันสิ้นปี': 'New Year\'s Eve', 'ชดเชยวันมาฆบูชา': 'Makha Bucha (substitute)', 'ชดเชยวันแรงงาน': 'Labour Day (substitute)',
+    'วันวิสาขบูชา': 'Visakha Bucha', 'ชดเชยวันปิยมหาราช': 'Chulalongkorn Day (substitute)',
   };
 
   /* ข้อความที่เก็บไว้ในบันทึก/การแจ้งเตือนเก่าเป็นคีย์ไทยเดิมที่เรียกเซกชันว่า "คอลัมน์"
