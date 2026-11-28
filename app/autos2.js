@@ -267,7 +267,7 @@
         var fs = (p.fields || []).filter(function (f) { return f.type === 'select'; });
         var f = fs.filter(function (x) { return /อย|fda|สถานะ/i.test(x.name); })[0] || fs[0];
         var op = f ? ((f.options || []).filter(function (o) { return /อนุมัติ/.test(o.name); })[0] || (f.options || [])[0]) : null;
-        return { name: 'อย. อนุมัติแล้ว → ไปต่อ', trigger: { type: 'field', field: f ? f.id : '', val: op ? op.name : '' }, paths: [{ conds: [], acts: [
+        return { name: (f && op) ? (f.name + ' = ' + op.name + ' → ไปต่อ') : 'ค่าฟิลด์เปลี่ยน → ไปต่อ', trigger: { type: 'field', field: f ? f.id : '', val: op ? op.name : '' }, paths: [{ conds: [], acts: [
           { type: 'section', sec: secBy(p, /ถัดไป|ผลิต|เปิดตัว|เสร็จ|done/i, 'last') },
           { type: 'comment', text: 'อัปเดต: {task} ผ่านสถานะแล้ว โดย {triggerer}' },
           { type: 'notify', users: [], vars: ['assignee', 'owner'], text: '{task} ผ่านการอนุมัติแล้ว' }] }], els: null };

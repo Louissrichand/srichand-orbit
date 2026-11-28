@@ -8974,7 +8974,7 @@
       if (conds.every(function (c) { return matchCond(t, c, m); })) { acts = paths[i].acts || []; pathIdx = i; break; }
     }
     if (!acts && a.els) { acts = a.els; pathIdx = -1; }
-    if (!acts) return false;                       // ไม่ตรงเงื่อนไข ไม่ถือเป็นการรัน
+    if (!acts || !acts.length) return false;     // ไม่ตรงเงื่อนไข หรือเส้นทางนั้นไม่มีการกระทำ ไม่ถือเป็นการรัน (Auto QA)
     var prev = autoCtx;
     autoCtx = { depth: ev.depth, a: a, p: p, t: t, m: m, ev: ev };
     var done = 0, err = null, trace = [];
@@ -9054,6 +9054,28 @@
   }
 
   /** ประวัติการรัน — สั้นที่สุดเท่าที่อ่านรู้เรื่อง เก็บ 200 ครั้งล่าสุดต่อโปรเจกต์ (งานของฉัน 50) */
+  /* Auto QA — กฎที่อ้างถึงเซกชัน/ฟิลด์/คนที่ไม่มีแล้ว: คืนข้อความสั้น ๆ ไว้ขึ้นป้ายเตือนในรายการ (ไม่มีปัญหาคืน null) */
+  function autoIssue(pid, a) {
+    var p = project(pid);
+    if (!p || !a) return null;
+    var tr = a.trigger || {};
+    var hasF = function (id) { return (p.fields || []).some(function (f) { return f.id === id; }); };
+    var okU = function (id) { if (!id || id === '@none' || id === ME) return true; var u = user(id); return !!u && u.active !== false; };
+    if ((tr.type === 'moved' || tr.type === 'movedout') && tr.sec && !section(pid, tr.sec)) return 'เซกชันถูกลบ';
+    if (tr.type === 'field' && tr.field && !hasF(tr.field)) return 'ฟิลด์ถูกลบ';
+    var bad = null;
+    (a.paths || []).map(function (x) { return x.acts || []; }).concat([a.els || []]).forEach(function (acts) {
+      acts.forEach(function (x) {
+        if (bad) return;
+        if (x.type === 'section' && x.sec && !section(pid, x.sec)) bad = 'เซกชันถูกลบ';
+        else if (x.type === 'field' && x.field && !hasF(x.field)) bad = 'ฟิลด์ถูกลบ';
+        else if (x.type === 'assign' && (x.mode || 'user') === 'user' && x.user && !okU(x.user)) bad = 'คนที่เลือกไม่อยู่แล้ว';
+        else if (x.type === 'assign' && x.mode === 'rr' && (x.list || []).length && !(x.list || []).some(function (u) { return okU(u); })) bad = 'คนที่เลือกไม่อยู่แล้ว';
+      });
+    });
+    return bad;
+  }
+
   function autoLog(p, a, t, ev, s, n, err, path, trace) {
     var list = p ? (p.autoRuns = p.autoRuns || []) : personalOf().autoRuns;
     list.push({
@@ -9272,12 +9294,12 @@
     return true;
   }
 
-  function duplicateAutomation(pid, id) {
+  function duplicateAutomation(pid, id, title) {
     var a = automation(pid, id), list = autoList(pid);
     if (!a || !canEditAutos(pid) || list.length >= AUTO_MAX) return null;
     snapshot('ทำสำเนาอัตโนมัติ');
     var c = remapAuto(a, {});
-    c.name = (a.name ? a.name + ' ' : '') + '(สำเนา)';
+    c.name = ((a.name || title) ? (a.name || title).slice(0, 100) + ' ' : '') + '(สำเนา)';
     c.on = false;                       // สำเนาเริ่มแบบปิด ไม่ให้ทำงานซ้อนกับตัวเดิมทันที
     c.by = db.currentUserId;
     c.at = new Date().toISOString();
@@ -13462,7 +13484,7 @@
     saveAutomation: saveAutomation, setAutomationOn: setAutomationOn,
     duplicateAutomation: duplicateAutomation, deleteAutomation: deleteAutomation,
     manualAutomationsFor: manualAutomationsFor, runAutomation: runAutomation,
-    autoRuns: autoRuns, autoForSection: autoForSection, autoTick: autoTick, autoDryRun: autoDryRun,
+    autoRuns: autoRuns, autoForSection: autoForSection, autoTick: autoTick, autoDryRun: autoDryRun, autoIssue: autoIssue,
     autoFire: autoFire, autoRegister: autoRegister, shiftDate: shiftDate, quietBatch: quietBatch,
 
     /* 3b — ชนิดงาน ฟอร์ม เทมเพลต รายงานสถานะ */
