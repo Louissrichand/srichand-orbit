@@ -5701,6 +5701,7 @@
     'project.duplicate': 'ได้คัดลอกโปรเจกต์',
     'project.delete': 'ได้ลบโปรเจกต์',
     'project.visibility': 'ได้เปลี่ยนความเป็นส่วนตัวของ',
+    'page.move': 'ได้ย้ายหน้าเข้าโปรเจกต์',
     'project.lock': 'ได้ล็อกรายชื่อสมาชิกของ',
     'project.unlock': 'ได้ปลดล็อกรายชื่อสมาชิกของ',
     'project.member': 'ได้ตั้งสิทธิ์ในโปรเจกต์',
@@ -6243,6 +6244,7 @@
       h += '<button class="btn btn-sm btn-ghost" data-act="pg-comment" data-id="' + esc(id) + '" title="' +
         esc(L('เลือกข้อความในหน้าแล้วกดเพื่อแสดงความเห็น')) + '">' + I('send', 13) + '<span class="hide-sm"> ' + L('ความเห็น') + '</span></button>';
     }
+    if (!l.project && !x.notepad && S.canEditPage(id)) h += '<button class="btn btn-sm btn-ghost" data-act="pg-move" data-id="' + esc(id) + '">' + L('ย้ายเข้าโปรเจกต์…') + '</button>';   // Sprint 3
     if (l.project ? S.canCreateTask(l.project.id) : S.can('write')) h += '<button class="btn btn-sm btn-ghost" data-act="pg-task" data-id="' + esc(id) + '" title="' +
       esc(L('เลือกข้อความในหน้าแล้วกดเพื่อสร้างงาน')) + '">' + I('checkCircle', 13) + '<span class="hide-sm"> ' + L('สร้างงาน') + '</span></button>';
     h += '<button class="btn btn-sm btn-ghost" data-act="pg-versions" data-id="' + esc(id) + '" title="' + esc(L('ประวัติเวอร์ชัน')) + '">' +
@@ -6289,7 +6291,7 @@
 
   /** รายการหน้า + หน้าที่เลือก (scope = รหัสโปรเจกต์ หรือ '' = หน้าเดี่ยว) */
   function pagesView(scope, pageId, ui) {
-    var list = scope ? S.projectPages(scope) : S.myPages();
+    var list = scope ? S.projectPages(scope) : S.myPages().concat(S.visibleProjectPages());   // Sprint 3 — รายการหน้ารวมมีหน้าของโปรเจกต์ด้วย (ติดป้ายโปรเจกต์)
     var canNew = scope ? (S.can('write') && S.canInProject(scope, 'edit')) : S.isActive();
     if (!pageId && list.length) pageId = list[0].id;
     var h = '<div class="pgv"><nav class="pgv-list"><div class="pgv-head"><b>' + (scope ? L('หน้าของโปรเจกต์') : L('หน้าเอกสาร')) + '</b>' +
@@ -6298,9 +6300,10 @@
     if (!list.length) h += '<div class="ovw-empty">' + (scope ? L('ยังไม่มีหน้า เก็บบรีฟ สรุปประชุม หรือคู่มือของโปรเจกต์ไว้ที่นี่')
       : L('ยังไม่มีหน้า สร้างหน้าส่วนตัวหรือหน้าที่แชร์ให้ทั้งองค์กรได้')) + '</div>';
     list.forEach(function (x) {
+      var xl = scope ? null : S.pageLoc(x.id), xp = xl && xl.project ? xl.project : null;
       h += '<button class="pgv-item' + (x.id === pageId ? ' on' : '') + '" data-act="pg-open" data-id="' + esc(x.id) + '"' +
-        (scope ? ' data-project="' + esc(scope) + '"' : '') + '><span class="em">' + esc(x.icon || '📄') + '</span><span class="grow">' +
-        esc(x.title || L('ไม่มีชื่อ')) + '</span>' + (x.private ? I('lock', 11) : '') +
+        (scope ? ' data-project="' + esc(scope) + '"' : (xp ? ' data-project="' + esc(xp.id) + '"' : '')) + '><span class="em">' + esc(x.icon || '📄') + '</span><span class="grow">' +
+        esc(x.title || L('ไม่มีชื่อ')) + '</span>' + (xp ? '<span class="pgv-proj">' + esc(xp.name) + '</span>' : '') + (x.private ? I('lock', 11) : '') +
         (x.comments.filter(function (c) { return !c.resolved; }).length ? '<span class="count">' +
           x.comments.filter(function (c) { return !c.resolved; }).length + '</span>' : '') + '</button>';
     });

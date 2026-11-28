@@ -2620,6 +2620,12 @@
     'เปลี่ยน {f} จาก {a} เป็น {b}': 'changed {f} from {a} to {b}', 'ล้างค่า {f} (เดิม {a})': 'cleared {f} (was {a})',
     'โปรเจกต์ใหม่เริ่มต้นที่': 'New projects start as', 'ปิด (เฉพาะคนที่เชิญ)': 'Private (invited only)', 'ตั้งค่าเริ่มต้นแล้ว': 'Default set',
     'ได้ตั้งความเป็นส่วนตัวเริ่มต้นของโปรเจกต์ใหม่เป็น': 'set the default privacy of new projects to',
+    'ย้ายเข้าโปรเจกต์…': 'Move to a project…', 'ย้ายหน้าเข้าโปรเจกต์ไหน': 'Move this page to which project?',
+    'หน้านี้เป็นหน้าส่วนตัว ย้ายแล้วสมาชิกโปรเจกต์จะเห็นหน้านี้': 'This is a private page; project members will be able to see it once moved',
+    'สมาชิกโปรเจกต์จะเห็นหน้านี้': 'Project members will be able to see this page',
+    'ไม่มีโปรเจกต์ที่คุณเพิ่มหน้าได้': 'No project you can add pages to', 'ย้ายหน้าเข้า “{p}” แล้ว': 'Moved the page to “{p}”',
+    'ย้ายหน้าไม่ได้ (สิทธิ์หรือครบจำนวนแล้ว)': 'Couldn’t move the page (permissions or page limit)',
+    'ได้ย้ายหน้าเข้าโปรเจกต์': 'moved a page into a project',
     /* Sprint 3 — อภิธานศัพท์ */
     'ศัพท์ที่ใช้ใน Orbit': 'Orbit glossary',
     'กลุ่มงานที่ทำเรื่องเดียวกัน มีเซกชัน สมาชิก และมุมมองของตัวเอง': 'A group of work on one topic, with its own sections, members and views',

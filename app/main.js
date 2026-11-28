@@ -7094,6 +7094,22 @@
         }, { ok: L('สร้าง'), note: npid ? '' : L('หน้าใหม่ทุกคนในองค์กรเห็นได้ เปลี่ยนเป็นส่วนตัวได้จากปุ่มรูปกุญแจ') });
         return true;
       }
+      /* Sprint 3 — ย้ายหน้าเดี่ยวเข้าโปรเจกต์ (ถามก่อน เพราะสมาชิกโปรเจกต์จะเห็นหน้านี้) */
+      case 'pg-move': {
+        var mvl = S.pageLoc(id);
+        if (!mvl || mvl.project) return true;
+        var mvProjects = S.activeProjects().filter(function (q) { return S.canInProject(q.id, 'edit'); }).slice(0, 12);
+        if (!mvProjects.length) { toast(L('ไม่มีโปรเจกต์ที่คุณเพิ่มหน้าได้')); return true; }
+        askChoice(L('ย้ายหน้าเข้าโปรเจกต์ไหน'),
+          mvl.page.private ? L('หน้านี้เป็นหน้าส่วนตัว ย้ายแล้วสมาชิกโปรเจกต์จะเห็นหน้านี้') : L('สมาชิกโปรเจกต์จะเห็นหน้านี้'),
+          mvProjects.map(function (q) {
+            return { label: q.name, run: function () {
+              if (S.movePageToProject(id, q.id)) { pageRoute(q.id, id); toast(L('ย้ายหน้าเข้า “{p}” แล้ว', { p: q.name }), L('ย้อนกลับ'), 'undo'); }
+              else toast(L('ย้ายหน้าไม่ได้ (สิทธิ์หรือครบจำนวนแล้ว)'));
+            } };
+          }));
+        return true;
+      }
       case 'pg-open': pageRoute(el.dataset.project || '', id); return true;
       case 'pg-del':
         askConfirm(L('ลบหน้านี้?'), L('ความเห็นและประวัติเวอร์ชันของหน้านี้หายไปด้วย ย้อนกลับได้ทันทีหลังลบ'), function () {
@@ -8436,7 +8452,7 @@
      * ส่วนตัวกรอง เรียง จัดกลุ่ม คอลัมน์ การ์ด และปฏิทินเป็นมุมมองของแต่ละคน จำลง db.personal */
     put('structure', ['sv-rename', 'sv-move', 'sv-update', 'sv-delete', 'tab-default',
       'dup-section', 'do-dup-section']);
-    put('write', ['carry-over', 'slip-overdue']);
+    put('write', ['carry-over', 'slip-overdue', 'pg-move']);
     put('manage', ['set-org-lang', 'set-org-privacy']);       // Sprint 3 — เฉพาะผู้ดูแลระบบ        // Sprint 3 — ย้ายงานระหว่างเซกชัน = แก้งาน ไม่ใช่แก้โครงสร้าง
     put('write:task', ['set-cover', 'clear-cover', 'cell-set-priority']);
     put('create', ['tl-new']);

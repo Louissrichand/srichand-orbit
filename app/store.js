@@ -10770,6 +10770,29 @@
   function myPages() {
     return (db.pages || []).filter(function (x) { return !x.notepad && (!x.private || x.owner === db.currentUserId); });
   }
+  /* Sprint 3 — หน้าของโปรเจกต์ที่คนนี้เห็นทั้งหมด (ไว้แสดงในรายการหน้ารวม พร้อมป้ายโปรเจกต์) */
+  function visibleProjectPages() {
+    var out = [];
+    visibleProjects().forEach(function (p) { (p.pages || []).forEach(function (pg) { out.push(pg); }); });
+    return out;
+  }
+  /** ย้ายหน้าเดี่ยวเข้าโปรเจกต์ (หน้าที่เคยเป็นส่วนตัวกลายเป็นของโปรเจกต์ ต้องผ่านด่านสิทธิ์แก้ทั้งหน้าและโปรเจกต์) */
+  function movePageToProject(id, projectId) {
+    var l = pageLoc(id), p = project(projectId);
+    if (!l || l.project || l.page.notepad || !p) return false;
+    if (!canEditPage(id) || !can('write') || !canInProject(projectId, 'edit')) return false;
+    if ((p.pages || []).length >= PAGE_MAX) return false;
+    snapshot('ย้ายหน้าเข้าโปรเจกต์');
+    db.pages = db.pages.filter(function (x) { return x !== l.page; });
+    delete l.page.owner;
+    l.page.private = false;
+    p.pages = p.pages || [];
+    p.pages.push(l.page);
+    audit('page.move', l.page.title || '—', p.name);
+    commit();
+    return true;
+  }
+
   function notepadPage(userId) {
     userId = userId || db.currentUserId;
     return (db.pages || []).filter(function (x) { return x.notepad && x.owner === userId; })[0] || null;
@@ -12790,7 +12813,7 @@
   var X3C2 = {
     PAGE_MAX: PAGE_MAX, PAGE_VERSIONS: PAGE_VERSIONS, PAGE_IMG_BYTES: PAGE_IMG_BYTES,
     pageLoc: pageLoc, canSeePage: canSeePage, canEditPage: canEditPage, canCommentPage: canCommentPage,
-    projectPages: projectPages, myPages: myPages, notepadPage: notepadPage, ensureNotepadPage: ensureNotepadPage,
+    projectPages: projectPages, myPages: myPages, visibleProjectPages: visibleProjectPages, movePageToProject: movePageToProject, notepadPage: notepadPage, ensureNotepadPage: ensureNotepadPage,
     createPage: createPage, savePage: savePage, restorePageVersion: restorePageVersion, deletePage: deletePage,
     setPagePrivate: setPagePrivate, addPageImage: addPageImage, pageImgMap: pageImgMap,
     addPageComment: addPageComment, replyPageComment: replyPageComment, resolvePageComment: resolvePageComment,
