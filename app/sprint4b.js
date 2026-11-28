@@ -9,7 +9,7 @@
   var S = global.Store, R = global.Render, L = global.I18N.t, I = global.Icons.icon;
   var esc = R.esc;
 
-  /* ====================== วันหยุดนักขัตฤกษ์ไทย 2026–2027 (รวมวันชดเชย) ====================== */
+  /* ====================== วันหยุดราชการไทย 2026–2027 (รวมวันชดเชย) ====================== */
   var HOLIDAYS = {
     '2026-01-01': 'วันขึ้นปีใหม่', '2026-01-02': 'วันหยุดพิเศษ', '2026-03-03': 'วันมาฆบูชา', '2026-04-06': 'วันจักรี',
     '2026-04-13': 'วันสงกรานต์', '2026-04-14': 'วันสงกรานต์', '2026-04-15': 'วันสงกรานต์', '2026-05-01': 'วันแรงงาน',
@@ -127,7 +127,7 @@
     h += '<div class="pg-over"><div class="pg-overarea">' + bg +
       (p.startOn ? '<u class="pg-pstart" style="left:' + pct(p.startOn) + '"></u>' : '') +
       (td >= min && td <= max ? '<u class="pg-today" style="left:' + pct(td) + '"></u>' : '') + '</div></div></div>';
-    h += '<p class="ps-meta">' + esc(L('แถบเทา = เสาร์อาทิตย์/วันหยุดนักขัตฤกษ์ · เส้นเทาใต้แท่ง = แผนเดิม')) + '</p></div>';
+    h += '<p class="ps-meta">' + esc(L('แถบเทา = เสาร์อาทิตย์/วันหยุดราชการ · เส้นเทาใต้แท่ง = แผนเดิม')) + '</p></div>';
     return h;
   }
   function printLandscape(html, title) {
@@ -209,13 +209,13 @@
     });
     document.addEventListener('dragend', function () { secDrag = null; clearMarks(); });
 
-    /* เซกชันปลายทางของงานที่เงียบเกิน 30 วัน (ใช้ร่วมกับกล่อง "เตือนงานเงียบ") */
+    /* เซกชันปลายทางของงานที่เงียบเกิน 30 วัน (ใช้ร่วมกับกล่อง "เตือนงานไม่มีความเคลื่อนไหว") */
     R.s4bStaleMove = function (pid) {
       var p = S.project(pid);
       if (!p) return;
       var cur = p.staleMoveTo ? (S.section(pid, p.staleMoveTo) || {}).name : null;
       api.askChoice(L('ย้ายงานที่เงียบเกิน 30 วันไปเซกชัน'),
-        L('ต้องเปิดเตือนงานเงียบไว้ด้วย งานจะถูกย้ายครั้งเดียวและมีบันทึกในประวัติงาน ปัจจุบัน: {s}', { s: cur || L('ไม่ย้าย') }),
+        L('ต้องเปิดเตือนงานไม่มีความเคลื่อนไหวไว้ด้วย งานจะถูกย้ายครั้งเดียวและมีบันทึกในประวัติงาน ปัจจุบัน: {s}', { s: cur || L('ไม่ย้าย') }),
         [{ label: L('ไม่ย้าย'), run: function () { if (S.setStaleMoveTo(pid, null)) api.toast(L('บันทึกแล้ว')); } }].concat(
           p.sections.map(function (s) {
             return { label: s.name, run: function () { if (S.setStaleMoveTo(pid, s.id)) { api.toast(L('บันทึกแล้ว')); S.runStaleCheck(); } } };

@@ -107,7 +107,7 @@
   }
 
   /** หัวตารางเวลา แบ่งช่วงตามหน่วยที่ขอ */
-  function bandCells(from, days, w, unit) {
+  function bandCells(from, days, w, unit, withYear) {
     var h = '', i = 0;
     while (i < days) {
       var ds = S.addDays(from, i);
@@ -122,7 +122,7 @@
         label = d.getDate() + ' ' + R.MON()[d.getMonth()];
       } else if (unit === 'month') {
         len = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate() - d.getDate() + 1;
-        label = R.MON()[d.getMonth()];
+        label = R.MON()[d.getMonth()] + (withYear ? ' ' + R.YR(d.getFullYear()) : '');
       } else if (unit === 'quarter') {
         var q = Math.floor(d.getMonth() / 3);
         var qEnd = new Date(d.getFullYear(), q * 3 + 3, 0);
@@ -310,7 +310,7 @@
     /* ---------------- ฝั่งขวา ---------------- */
     h += '<div class="g-right" style="width:' + chartW + 'px">';
     h += '<div class="g-rhead">' +
-      '<div class="g-band g-band-top">' + bandCells(from, days, W, Z.top) + '</div>' +
+      '<div class="g-band g-band-top">' + bandCells(from, days, W, Z.top, true) + '</div>' +
       '<div class="g-band g-band-bot">' + bandCells(from, days, W, Z.bottom) + '</div>' +
       '</div>';
 
@@ -360,7 +360,7 @@
       var dim = q && !hit(t) ? ' g-dim' : '';
       var wdur = R.s4bWorkDays ? R.s4bWorkDays(s[0], s[1]) : null;   // 4b
 
-      /* เส้นฐานวาดไว้ใต้แท่งจริง เห็นทั้งสองเส้นพร้อมกันจึงรู้ว่าเลื่อนไปกี่วัน */
+      /* แผนเดิมวาดไว้ใต้แท่งจริง เห็นทั้งสองเส้นพร้อมกันจึงรู้ว่าเลื่อนไปกี่วัน */
       if (showBase) {
         var bl = p.baseline.tasks[t.id];
         if (bl && (bl.startOn || bl.dueOn)) {

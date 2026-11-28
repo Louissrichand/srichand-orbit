@@ -663,7 +663,7 @@
     }
 
     if (page === 'deps') {
-      h += optHead(L('การจัดตารางและเส้นฐาน'), true);
+      h += optHead(L('การจัดตารางและแผนเดิม'), true);
       h += '<div class="opt-body">';
       /* โหมดการเลื่อนวันเป็นของโปรเจกต์ ไม่ใช่ของมุมมองส่วนตัว
        * ถ้าให้แต่ละคนตั้งเอง วันที่จะขยับไม่เหมือนกันแล้วแต่ว่าใครลาก */
@@ -677,17 +677,17 @@
       h += '<div class="opt-sep"></div>';
       h += '<div class="opt-base">' + I('calendar', 15) +
         '<span class="grow">' + (p.baseline
-          ? esc(L('ตั้งเส้นฐานไว้เมื่อ {when}', { when: R.fmtWhen(p.baseline.at) }))
-          : L('ยังไม่ได้ตั้งเส้นฐาน')) + '</span></div>';
-      h += optToggle('g-basetoggle', L('แสดงเส้นฐาน'), v.gShowBaseline,
+          ? esc(L('บันทึกแผนเดิมไว้เมื่อ {when}', { when: R.fmtWhen(p.baseline.at) }))
+          : L('ยังไม่ได้บันทึกแผนเดิม')) + '</span></div>';
+      h += optToggle('g-basetoggle', L('แสดงแผนเดิม'), v.gShowBaseline,
         p.baseline ? L('เส้นจาง ๆ ใต้แท่งคือแผนเดิม เทียบแล้วรู้ทันทีว่าหลุดไปกี่วัน')
-                   : L('ต้องตั้งเส้นฐานก่อนจึงจะแสดงได้'));
+                   : L('ต้องบันทึกแผนเดิมก่อนจึงจะแสดงได้'));
       h += '<div class="opt-acts">' +
         '<button class="btn btn-sm" data-act="g-set-baseline">' +
-        (p.baseline ? L('ตั้งเส้นฐานใหม่จากวันปัจจุบัน') : L('ตั้งเส้นฐานจากวันปัจจุบัน')) + '</button>' +
+        (p.baseline ? L('ตั้งแผนเดิมใหม่จากวันปัจจุบัน') : L('ตั้งแผนเดิมจากวันปัจจุบัน')) + '</button>' +
         (p.baseline ? '<button class="btn btn-sm btn-ghost" data-act="g-clear-baseline">' +
-          L('ลบเส้นฐาน') + '</button>' : '') + '</div>';
-      h += '<p class="opt-note">' + L('เส้นฐานคือภาพถ่ายวันที่ของทุกงาน ณ ตอนที่กด ใช้ตอบคำถามว่า “แผนเดิมบอกว่าเสร็จวันไหน” ตั้งใหม่ได้ทุกเมื่อ แต่ของเดิมจะถูกทับ') + '</p>';
+          L('ลบแผนเดิม') + '</button>' : '') + '</div>';
+      h += '<p class="opt-note">' + L('แผนเดิมคือภาพถ่ายวันที่ของทุกงาน ณ ตอนที่กด ใช้ตอบคำถามว่า “แผนเดิมบอกว่าเสร็จวันไหน” ตั้งใหม่ได้ทุกเมื่อ แต่ของเดิมจะถูกทับ') + '</p>';
       h += '</div>';
       return h + optFoot();
     }
@@ -852,12 +852,12 @@
       '<input class="opt-name" id="gvName" value="' + esc(curSv ? curSv.name + ' ' + L('(สำเนา)') : '') +
       '" placeholder="' + esc(L('เช่น งานของฉันสัปดาห์นี้')) + '"></div></div>';
 
-    /* กลุ่มนี้เป็นของผัง Gantt ล้วน เส้นฐาน ระดับการซูม และคอลัมน์ในตารางซ้าย
+    /* กลุ่มนี้เป็นของผัง Gantt ล้วน แผนเดิม ระดับการซูม และคอลัมน์ในตารางซ้าย
      * มุมมองอื่นไม่มีของพวกนี้ ถ้าโชว์ไว้จะกลายเป็นปุ่มที่กดแล้วไม่มีอะไรเปลี่ยน */
     h += '<div class="opt-sep"></div>';
     if (isG) {
       h += optRow('g-opt-page', 'pencil', L('รูปแบบการแสดงผล'), '', true, ' data-page="layout"');
-      h += optRow('g-opt-page', 'repeat', L('การจัดตารางและเส้นฐาน'),
+      h += optRow('g-opt-page', 'repeat', L('การจัดตารางและแผนเดิม'),
         L(((S.DEP_SHIFT.filter(function (m) {
           return m.id === ((p.depShift && p.depShift.mode) || 'consume');
         })[0]) || {}).label || ''), true, ' data-page="deps"');
@@ -2338,7 +2338,7 @@
     if (canAdm) {
       h += item('manage-fields', 'filter', L('จัดการฟิลด์'));
       h += item('required-fields', 'check', L('ฟิลด์ที่ต้องกรอกก่อนทำเสร็จ…'));   // Sprint 4
-      h += item('stale-days', 'bell', L('เตือนงานเงียบ…'));
+      h += item('stale-days', 'bell', L('เตือนงานไม่มีความเคลื่อนไหว…'));
       h += item('auto-open', 'bolt', L('ระบบอัตโนมัติ'));
     }
     h += item('forms-open', 'note', L('ฟอร์ม'));          // ฟอร์มเปิดให้คนนอกส่งเรื่องเข้ามาได้โดยตั้งใจ
@@ -2731,11 +2731,13 @@
       });
       h += '</select></div>';
       if (p.workDays !== 'all') {
-        var off = S.tasksInProject(projectId).filter(function (x) {
+        var offList = S.tasksInProject(projectId).filter(function (x) {
           return x.task.dueOn && !S.isWorkday(x.task.dueOn, p.workDays);
-        }).length;
+        });
+        var off = offList.length;
+        var offNames = offList.slice(0, 4).map(function (x) { return '“' + R.esc(x.task.name) + '”'; }).join(', ') + (off > 4 ? ' …' : '');
         h += '<div class="prj-warn">' + I('alert', 15) + '<span>' +
-          (off ? L('ตอนนี้มี {n} งานที่ครบกำหนดตรงวันหยุด ระบบไม่ย้ายให้เอง เพราะวันที่คนตั้งไว้เองต้องเคารพไว้ก่อน', { n: off })
+          (off ? L('ตอนนี้มี {n} งานที่ครบกำหนดตรงวันหยุด: {t} ระบบไม่ย้ายให้เอง เพราะวันที่คนตั้งไว้เองต้องเคารพไว้ก่อน', { n: off, t: offNames })
                : L('ไม่มีงานไหนครบกำหนดตรงวันหยุด')) + '</span></div>';
       }
       h += '<div class="modal-acts"><button class="btn btn-primary" data-act="close-modal">' + L('ปิด') + '</button></div>';
@@ -9125,7 +9127,7 @@
       case 'g-basetoggle': {
         var vb = viewFor(state.route.id);
         var pb2 = S.project(state.route.id);
-        if (!pb2.baseline && !vb.gShowBaseline) { toast(L('ยังไม่ได้ตั้งเส้นฐาน')); break; }
+        if (!pb2.baseline && !vb.gShowBaseline) { toast(L('ยังไม่ได้บันทึกแผนเดิม')); break; }
         vb.gShowBaseline = !vb.gShowBaseline;
         renderViewBody();
         refreshOpts();
@@ -9139,23 +9141,23 @@
           viewFor(blPid).gShowBaseline = true;
           renderViewBody();
           refreshOpts();
-          toast(L('ตั้งเส้นฐานแล้ว'), L('ย้อนกลับ'), 'undo');
+          toast(L('บันทึกแผนเดิมแล้ว'), L('ย้อนกลับ'), 'undo');
         };
         if (pbs.baseline) {
-          askConfirm(L('ตั้งเส้นฐานใหม่?'), L('แผนเดิมที่บันทึกไว้จะถูกทับ'), doBaseline,
+          askConfirm(L('บันทึกแผนเดิมใหม่?'), L('แผนเดิมที่บันทึกไว้จะถูกทับ'), doBaseline,
             { ok: L('ตั้งใหม่') });
         } else doBaseline();
         break;
       }
       case 'g-clear-baseline':
         var cbPid = state.route.id;
-        askConfirm(L('ลบเส้นฐานที่บันทึกไว้?'), '', function () {
+        askConfirm(L('ลบแผนเดิมที่บันทึกไว้?'), '', function () {
           S.clearBaseline(cbPid);
           viewFor(cbPid).gShowBaseline = false;
           renderViewBody();
           refreshOpts();
-          toast(L('ลบเส้นฐานแล้ว'), L('ย้อนกลับ'), 'undo');
-        }, { ok: L('ลบเส้นฐานนี้') });
+          toast(L('ลบแผนเดิมแล้ว'), L('ย้อนกลับ'), 'undo');
+        }, { ok: L('ลบแผนเดิมนี้') });
         break;
 
       /* คำค้นเก็บอยู่ในมุมมอง ไม่ใช่ใน state ชั่วคราว
@@ -9475,14 +9477,14 @@
         }));
         break;
       }
-      /* Sprint 4 — เตือนงานเงียบ: เลือกกี่วัน (ทำงานตอนมีคนเปิด Orbit เท่านั้น ยังไม่มีเซิร์ฟเวอร์รันให้ตลอด) */
+      /* Sprint 4 — เตือนงานไม่มีความเคลื่อนไหว: เลือกกี่วัน (ทำงานตอนมีคนเปิด Orbit เท่านั้น ยังไม่มีเซิร์ฟเวอร์รันให้ตลอด) */
       case 'stale-days': {
         closePops();
         var sdPid = state.route.id, sdCur = (S.project(sdPid) || {}).staleDays || 0;
-        askChoice(L('เตือนงานเงียบ'), L('งานที่ไม่มีความเคลื่อนไหวเกินกำหนดจะแจ้งผู้รับผิดชอบ และเกิน 2 เท่าจะเพิ่มเจ้าของโปรเจกต์เป็นผู้ติดตาม ทำงานเฉพาะตอนมีคนเปิด Orbit อยู่ ปัจจุบัน: {d}', { d: sdCur ? L('{n} วัน', { n: sdCur }) : L('ปิดการเตือน') }),
+        askChoice(L('เตือนงานไม่มีความเคลื่อนไหว'), L('แจ้งผู้รับผิดชอบเมื่องานไม่มีความเคลื่อนไหวเกินจำนวนวันที่ตั้ง (ตรวจตอนมีคนเปิด Orbit) ปัจจุบัน: {d}', { d: sdCur ? L('{n} วัน', { n: sdCur }) : L('ปิดการเตือน') }),
           [[0, L('ปิดการเตือน')], [7, L('7 วัน')], [14, L('14 วัน')], [30, L('30 วัน')]].map(function (o) {
-            return { label: o[1], run: function () { if (S.setStaleDays(sdPid, o[0])) { toast(L('ตั้งเตือนงานเงียบแล้ว')); S.runStaleCheck(); } } };
-          }).concat(R.s4bStaleMove ? [{ label: L('ย้ายงานเงียบ 30 วันไปเซกชัน…'), run: function () { R.s4bStaleMove(sdPid); } }] : []));
+            return { label: o[1], run: function () { if (S.setStaleDays(sdPid, o[0])) { toast(L('ตั้งเตือนงานไม่มีความเคลื่อนไหวแล้ว')); S.runStaleCheck(); } } };
+          }).concat(R.s4bStaleMove ? [{ label: L('ย้ายงานไม่มีความเคลื่อนไหว 30 วันไปเซกชัน…'), run: function () { R.s4bStaleMove(sdPid); } }] : []));
         break;
       }
       case 'required-fields': closePops(); openModal(requiredFieldsModal(state.route.id)); break;
@@ -14246,8 +14248,8 @@
     try { S.wakeSnoozed(); } catch (err) { console.error('ปลุกรายการที่เลื่อนเตือนไม่สำเร็จ', err); }
   }
   setTimeout(runSnoozeWake, 2000);
-  /* Sprint 4 — เตือนงานเงียบ ตรวจตอนเปิดแอปและทุกชั่วโมง (เฉพาะโปรเจกต์ที่ตั้งไว้) */
-  function runStale() { try { S.runStaleCheck(); } catch (err) { console.error('ตรวจงานเงียบไม่สำเร็จ', err); } }
+  /* Sprint 4 — เตือนงานไม่มีความเคลื่อนไหว ตรวจตอนเปิดแอปและทุกชั่วโมง (เฉพาะโปรเจกต์ที่ตั้งไว้) */
+  function runStale() { try { S.runStaleCheck(); } catch (err) { console.error('ตรวจงานไม่มีความเคลื่อนไหวไม่สำเร็จ', err); } }
   setTimeout(runStale, 6000);
   /* Sprint 4c - เตือนฉันต่องาน */
   function runRemind() { try { S.runReminders(); } catch (err) { console.error('เตือนงานไม่สำเร็จ', err); } }

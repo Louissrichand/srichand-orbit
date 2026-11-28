@@ -110,7 +110,7 @@
     { id: 'at_risk',   label: 'เสี่ยง',       color: '#f5a623' },
     { id: 'off_track', label: 'หลุดแผน',     color: '#e8384f' },
     { id: 'on_hold',   label: 'พักไว้ก่อน',   color: '#4186e0' },
-    { id: 'complete',  label: 'เสร็จสมบูรณ์', color: '#37c5ab', done: true },
+    { id: 'complete',  label: 'เสร็จแล้ว', color: '#37c5ab', done: true },
     { id: 'dropped',   label: 'ยกเลิกแล้ว',   color: '#9ca0a8', done: true }
   ];
 
@@ -504,7 +504,7 @@
     d.projects.forEach(function (p) {
       if (!p.visibility) p.visibility = 'org';   // ของเดิมทุกโปรเจกต์เปิดให้ทุกคน
       if (!('locked' in p)) p.locked = false;
-      if (!('baseline' in p)) p.baseline = null; // เส้นฐานของ Gantt ยังไม่เคยตั้ง
+      if (!('baseline' in p)) p.baseline = null; // แผนเดิมของ Gantt ยังไม่เคยตั้ง
       if (!('owner' in p)) p.owner = null;
       if (!('dueOn' in p)) p.dueOn = null;
       if (!p.depShift) p.depShift = { mode: 'consume', scope: 'downstream' };
@@ -1228,7 +1228,7 @@
     return Math.abs(daysBetween(t.startOn, t.dueOn)) + 1;
   }
 
-  /* ---------- เส้นฐาน (baseline) ----------
+  /* ---------- แผนเดิม (baseline) ----------
    *
    * เก็บวันที่ของทุกงานไว้ ณ วันที่กดตั้ง ไว้เทียบว่าตอนนี้หลุดจากแผนเดิมไปเท่าไร
    * เก็บที่ตัวโปรเจกต์ ไม่ใช่ที่มุมมอง เพราะเป็นข้อเท็จจริงร่วมของทีม
@@ -1237,7 +1237,7 @@
   function setBaseline(projectId) {
     var p = project(projectId);
     if (!p) return false;
-    snapshot('ตั้งเส้นฐาน');
+    snapshot('บันทึกแผนเดิม');
     var map = {};
     tasksInProject(projectId).forEach(function (x) {
       var t = x.task;
@@ -1253,14 +1253,14 @@
   function clearBaseline(projectId) {
     var p = project(projectId);
     if (!p || !p.baseline) return false;
-    snapshot('ลบเส้นฐาน');
+    snapshot('ลบแผนเดิม');
     p.baseline = null;
     audit('project.baselineClear', p.name);
     commit();
     return true;
   }
 
-  /** วันตามเส้นฐานของงานหนึ่ง คืน null ถ้างานนี้ยังไม่อยู่ในเส้นฐาน */
+  /** วันตามแผนเดิมของงานหนึ่ง คืน null ถ้างานนี้ยังไม่อยู่ในแผนเดิม */
   function baselineOf(projectId, taskId) {
     var p = project(projectId);
     if (!p || !p.baseline) return null;
@@ -1291,7 +1291,7 @@
   ];
 
   var DEP_SHIFT = [
-    { id: 'consume',  label: 'กินระยะห่าง',
+    { id: 'consume',  label: 'ขยับเฉพาะเมื่อวันชนกัน',
       desc: 'ขยับงานที่รออยู่เฉพาะตอนที่วันชนกันจริง ระยะห่างที่เว้นไว้ทำหน้าที่เป็นกันชน' },
     { id: 'maintain', label: 'รักษาระยะห่าง',
       desc: 'ขยับงานที่พึ่งพากันด้วยระยะเท่ากับที่งานต้นทางขยับ ระยะห่างเดิมคงอยู่เท่าเดิม' },
@@ -2412,7 +2412,7 @@
     { id: 'list',      label: 'รายการ',   icon: 'menu',       desc: 'ตารางงาน จัดกลุ่มและลากสลับลำดับได้' },
     { id: 'board',     label: 'บอร์ด',    icon: 'grid',       desc: 'คัมบัง ลากงานข้ามคอลัมน์' },
     { id: 'timeline',  label: 'ไทม์ไลน์', icon: 'bars',       desc: 'วางแผนงานตามช่วงเวลา' },
-    { id: 'gantt',     label: 'Gantt',    icon: 'subtask',    desc: 'ลำดับก่อนหลังและเส้นฐาน' },
+    { id: 'gantt',     label: 'Gantt',    icon: 'subtask',    desc: 'ลำดับก่อนหลังและแผนเดิม' },
     { id: 'calendar',  label: 'ปฏิทิน',   icon: 'calendar',   desc: 'ดูตามกำหนดส่งรายเดือน' },
     { id: 'dashboard', label: 'สรุปผล',   icon: 'chart',      desc: 'ตัวเลขรวมและความคืบหน้า' },
     { id: 'messages',  label: 'ประกาศ',    icon: 'send',       desc: 'เรื่องของทั้งโปรเจกต์ที่ไม่ได้ผูกกับงานชิ้นไหน' },
@@ -6649,7 +6649,7 @@
   /** เปลี่ยนบทบาท — ห้ามเหลือศูนย์ผู้ดูแล ไม่งั้นไม่มีใครเข้าหน้าผู้ดูแลได้อีก */
   /* Sprint 4 — แก้ชื่อที่แสดงของสมาชิก (ผู้ดูแลระบบ) ใช้กับชื่อที่เป็นอีเมลซึ่งขึ้นเต็มตามงาน/ความเห็นทุกที่ */
   /* Sprint 4 — หัวหน้าของสมาชิก (ผู้ดูแลระบบตั้ง) ใช้เลือกผู้รับโอนงานให้อัตโนมัติตอนปิดบัญชี */
-  /* Sprint 4 — เตือนงานเงียบ (ทำงานฝั่งเครื่อง เฉพาะตอนมีคนเปิด Orbit อยู่ — ยังไม่มีเซิร์ฟเวอร์รันให้ตลอดเวลา)
+  /* Sprint 4 — เตือนงานไม่มีความเคลื่อนไหว (ทำงานฝั่งเครื่อง เฉพาะตอนมีคนเปิด Orbit อยู่ — ยังไม่มีเซิร์ฟเวอร์รันให้ตลอดเวลา)
    * โปรเจกต์ที่ตั้ง staleDays = N: งานที่ยังไม่เสร็จและไม่มีความเคลื่อนไหวจากคนเกิน N วัน → แจ้งผู้รับผิดชอบให้อัปเดตสถานะ
    * เกิน 2N วัน → เพิ่มเจ้าของโปรเจกต์เป็นผู้ติดตามด้วย แต่ละขั้นทำครั้งเดียว (t.stale) งานกลับมาเคลื่อนไหวแล้วเริ่มนับใหม่
    * บันทึกของระบบเองมี sys:1 ไม่นับเป็นความเคลื่อนไหว (ไม่งั้นเตือนแล้วงานกลายเป็น "ไม่เงียบ" ทันที) */
@@ -6662,12 +6662,12 @@
     });
     return last;
   }
-  /** Sprint 4b — เซกชันที่งานเงียบเกิน 30 วันจะถูกย้ายไป (null = ไม่ย้าย) */
+  /** Sprint 4b — เซกชันที่งานไม่มีความเคลื่อนไหวเกิน 30 วันจะถูกย้ายไป (null = ไม่ย้าย) */
   function setStaleMoveTo(projectId, sectionId) {
     var p = project(projectId);
     if (!p || !canStructureProject(projectId)) return false;
     if (sectionId && !section(projectId, sectionId)) return false;
-    snapshot('ตั้งเตือนงานเงียบ');
+    snapshot('ตั้งเตือนงานไม่มีความเคลื่อนไหว');
     p.staleMoveTo = sectionId || null;
     commit();
     return true;
@@ -6675,7 +6675,7 @@
   function setStaleDays(projectId, days) {
     var p = project(projectId);
     if (!p || !canStructureProject(projectId)) return false;
-    snapshot('ตั้งเตือนงานเงียบ');
+    snapshot('ตั้งเตือนงานไม่มีความเคลื่อนไหว');
     p.staleDays = Math.max(0, Math.min(365, parseInt(days, 10) || 0));
     commit();
     return true;
