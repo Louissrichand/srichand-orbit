@@ -4990,6 +4990,36 @@
     return h;
   }
 
+  /* Sprint 3 — ทัวร์แนะนำครั้งแรก: 4 หน้า ข้ามได้ทุกเมื่อ แสดงครั้งเดียวต่อคน (บันทึก tourDone ตั้งแต่ตอนแสดง
+   * ไม่ใช่ตอนกดจบ — ปิดหน้าต่างทิ้งก็ไม่เด้งซ้ำ) เปิดดูอีกได้จากอภิธานศัพท์ */
+  var TOUR = [
+    ['ยินดีต้อนรับสู่ Orbit', 'Orbit รวมงานของทีมไว้ที่เดียว: โปรเจกต์ → เซกชัน → งาน เริ่มจากเปิดโปรเจกต์ในเมนูซ้าย'],
+    ['เพิ่มงานให้เร็ว', 'ในช่องเพิ่มงานพิมพ์เช่น “ส่งใบเสนอราคา @สมชาย พรุ่งนี้” ระบบจะใส่ผู้รับผิดชอบและกำหนดส่งให้เอง'],
+    ['กล่องแจ้งเตือน', 'เรื่องที่เกี่ยวกับคุณอยู่ที่นี่ทั้งหมด เช่น ถูกมอบหมายงาน ถูกพูดถึง มีคนขออนุมัติ'],
+    ['หาของและทางลัด', 'กด / เพื่อค้นหางาน หน้า และข้อความ กด ? เพื่อดูคีย์ลัด ถ้าคำไหนไม่เข้าใจ เปิด “ศัพท์ที่ใช้ใน Orbit” จากเมนูซ้าย']
+  ];
+  function tourModal() {
+    var i = Math.max(0, Math.min(TOUR.length - 1, state.tourStep || 0));
+    var last = i === TOUR.length - 1;
+    var h = '<h2>' + R.esc(L(TOUR[i][0])) + '</h2><p class="tour-body">' + R.esc(L(TOUR[i][1])) + '</p>' +
+      '<p class="tour-step">' + L('ขั้นที่ {a} จาก {b}', { a: i + 1, b: TOUR.length }) + '</p><div class="modal-acts">';
+    h += '<button class="btn btn-ghost" data-act="close-modal">' + L('ข้ามทัวร์') + '</button>';
+    if (i > 0) h += '<button class="btn" data-act="tour-prev">' + L('← ก่อนหน้า') + '</button>';
+    h += last ? '<button class="btn btn-primary" data-act="close-modal">' + L('เริ่มใช้งาน') + '</button>'
+              : '<button class="btn btn-primary" data-act="tour-next">' + L('ถัดไป →') + '</button>';
+    return h + '</div>';
+  }
+  function maybeTour() {
+    setTimeout(function () {
+      try {
+        if (!S.isActive() || S.pref('tourDone') || ($gate && !$gate.hidden)) return;
+        S.setPref('tourDone', true);
+        state.tourStep = 0;
+        openModal(tourModal());
+      } catch (e) { /* ทัวร์ไม่ใช่ของจำเป็น พลาดก็ข้าม */ }
+    }, 2500);
+  }
+
   /* Sprint 3 — อภิธานศัพท์: คำที่ Orbit ใช้ อธิบายสั้น ๆ ให้คนใหม่ (และคนที่ย้ายมาจาก Asana) เปิดอ่านได้จากเมนูซ้าย */
   function glossaryModal() {
     var rows = [
@@ -5012,7 +5042,7 @@
     rows.forEach(function (r) {
       h += '<div class="sc"><kbd>' + R.esc(global.I18N.getLang() === 'en' ? r[1] : r[0]) + '</kbd><span class="d">' + R.esc(L(r[2])) + '</span></div>';
     });
-    h += '</div><div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
+    h += '</div><div class="modal-acts"><button class="btn" data-act="show-tour">' + L('ดูทัวร์แนะนำอีกครั้ง') + '</button><button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
     return h;
   }
 
@@ -12090,6 +12120,9 @@
       /* --- settings --- */
       case 'show-shortcuts': openModal(shortcutsModal(), true); break;
       case 'show-glossary': openModal(glossaryModal(), true); break;      // Sprint 3 — ไม่แก้ข้อมูล จึงไม่อยู่ใน NEEDS
+      case 'show-tour': state.tourStep = 0; openModal(tourModal()); break;
+      case 'tour-next': state.tourStep = (state.tourStep || 0) + 1; openModal(tourModal()); break;
+      case 'tour-prev': state.tourStep = Math.max(0, (state.tourStep || 0) - 1); openModal(tourModal()); break;
       case 'open-settings':
         closePops();
         state.setTab = el.dataset.tab || state.setTab || 'general';
@@ -13750,6 +13783,7 @@
     $gate.hidden = true;
     $gate.innerHTML = '';
     document.body.classList.remove('gated');
+    maybeTour();                         // Sprint 3 — ทัวร์ครั้งแรก (ครั้งเดียวต่อคน)
   }
 
   /** ตัดสินว่าจะเข้าโหมดทีมหรือเครื่องเดียว แล้ววาดหน้าจอให้ตรงกัน */

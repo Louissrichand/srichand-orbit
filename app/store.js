@@ -1461,6 +1461,28 @@
    * ให้คะแนนแทนการกรองล้วน ๆ ชื่อที่ตรงเป๊ะต้องมาก่อนงานที่บังเอิญมีคำนั้นในรายละเอียด
    * และงานที่ทำเสร็จแล้วถูกลดคะแนนให้ไปอยู่ท้าย เพราะคนค้นหามักหาสิ่งที่ยังทำอยู่
    */
+  /* Sprint 3 — ค้นในหน้าเอกสารและข้อความโปรเจกต์ (นอกจากงาน)
+   * เห็นเฉพาะของโปรเจกต์ที่คนค้นเข้าถึงได้ (visibleProjects) กับหน้าเดี่ยวที่ตัวเองเห็น (myPages)
+   * ค้นแบบข้อความตรง ๆ ไม่รองรับตัวดำเนินการเหมือนค้นงาน */
+  function searchDocs(q) {
+    var needle = String(q || '').trim().toLowerCase();
+    if (!needle) return [];
+    function hit(s) { return plainText(s, true).toLowerCase().indexOf(needle) >= 0; }
+    var out = [];
+    visibleProjects().forEach(function (p) {
+      (p.pages || []).forEach(function (pg) {
+        if (hit(pg.title) || hit(pg.body)) out.push({ kind: 'page', id: pg.id, title: pg.title || '', project: p });
+      });
+      (p.messages || []).forEach(function (m) {
+        if (hit(m.title) || hit(m.body)) out.push({ kind: 'message', id: m.id, title: m.title || String(m.body || '').split('\n')[0].slice(0, 60), project: p });
+      });
+    });
+    myPages().forEach(function (pg) {
+      if (hit(pg.title) || hit(pg.body)) out.push({ kind: 'page', id: pg.id, title: pg.title || '', project: null });
+    });
+    return out.slice(0, 30);
+  }
+
   function search(q) {
     /* 2c — ตัวค้นหาตัวเดียวกับค้นหาขั้นสูง (searchAdv) รองรับ "วลี" a | b -คำ คำ* ( ) และรหัสงาน */
     return searchAdv({ q: q, limit: 60 });
@@ -12469,7 +12491,7 @@
     setBaseline: setBaseline, clearBaseline: clearBaseline, baselineOf: baselineOf,
     sortItems: sortItems, projectStats: projectStats,
 
-    quickAdd: quickAdd, createTask: createTask, createTasks: createTasks, updateTask: updateTask, deleteTask: deleteTask,
+    quickAdd: quickAdd, searchDocs: searchDocs, createTask: createTask, createTasks: createTasks, updateTask: updateTask, deleteTask: deleteTask,
     deleteTasks: deleteTasks, duplicateTask: duplicateTask, moveTask: moveTask,
     DUP_KEYS: DUP_KEYS, assignCopies: assignCopies, mergeDuplicate: mergeDuplicate,
     createFollowUp: createFollowUp, setParent: setParent, promoteSubtask: promoteSubtask,

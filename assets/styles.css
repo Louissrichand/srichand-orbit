@@ -5577,3 +5577,14 @@ body.print-preview .print-sheet { display: block; width: 210mm; min-height: 297m
 .gate-lang button { padding: 4px 12px; border-radius: 999px; font-size: 12.5px; color: var(--fg-soft); }
 .gate-lang button.on { background: var(--fg); color: var(--bg); font-weight: 600; }
 .gate-card .gate-lang { display: flex; width: max-content; }
+
+/* Sprint 3 — ผลค้นหาหน้า/ข้อความ */
+.sdocs { padding-top: 0; }
+.sdoc { display: flex; align-items: center; gap: 10px; padding: 9px 8px; border-bottom: 1px solid var(--line); color: var(--fg); text-decoration: none; }
+.sdoc:hover { background: var(--bg-sunk); }
+.sdoc .nm { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sdoc .sub { flex: none; font-size: 12.5px; color: var(--fg-faint); }
+
+/* Sprint 3 — ทัวร์แนะนำ */
+.tour-body { font-size: 15px; line-height: 1.6; margin: 8px 0 14px; }
+.tour-step { font-size: 12.5px; color: var(--fg-faint); margin: 0 0 4px; }

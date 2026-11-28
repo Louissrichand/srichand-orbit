@@ -4451,6 +4451,19 @@
    * ผลลัพธ์เป็นรายการหรือปฏิทิน
    * opts = { conds, mode: list|calendar, anchor, panel, calMode }
    */
+  /* Sprint 3 — ผลค้นหาที่ไม่ใช่งาน: หน้าเอกสารและข้อความโปรเจกต์ (ลิงก์ตรงไปที่หน้า/แท็บข้อความ) */
+  function searchDocsBlock(docs) {
+    if (!docs.length) return '';
+    var h = '<div class="list-wrap sdocs"><div class="bucket-head">' + L('หน้าและข้อความ') + ' <span class="n">' + docs.length + '</span></div>';
+    docs.forEach(function (d) {
+      var href = d.kind === 'page' ? '#/page/' + d.id : '#/project/' + d.project.id + '/messages';
+      h += '<a class="sdoc" href="' + esc(href) + '">' + I(d.kind === 'page' ? 'note' : 'send', 15) +
+        '<span class="nm">' + esc(d.title || L('ไม่มีชื่อ')) + '</span><span class="sub">' +
+        (d.kind === 'page' ? L('หน้าเอกสาร') : L('ข้อความโปรเจกต์')) + (d.project ? ' · ' + esc(d.project.name) : '') + '</span></a>';
+    });
+    return h + '</div>';
+  }
+
   function searchView(q, sel, opts) {
     opts = opts || {};
     var conds = opts.conds || [];
@@ -4460,6 +4473,7 @@
         L('พิมพ์คำค้น หรือเพิ่มเงื่อนไขเพื่อค้นหางานทุกโปรเจกต์ที่คุณเห็น') + searchHelp() + '</div></div>';
     }
     var res = S.searchAdv({ q: q, conds: conds });
+    var docs = (opts.mode !== 'calendar' && !conds.length) ? S.searchDocs(q) : [];
     if (opts.mode === 'calendar') {
       var dated = res.filter(function (t) { return t.dueOn || t.startOn; });
       var un = res.filter(function (t) { return !t.dueOn && !t.startOn; });
@@ -4469,6 +4483,7 @@
         sideTitle: L('ไม่มีวัน'), addable: false
       }) + '</div>';
     }
+    if (!res.length && docs.length) return h + searchDocsBlock(docs) + '</div>';
     if (!res.length) {
       return h + '<div class="empty"><div class="big">🔍</div>' +
         (q ? L('ไม่พบงานที่ตรงกับ “') + esc(q) + '”' : L('ไม่พบงานที่ตรงเงื่อนไข')) + '</div></div>';
@@ -4479,7 +4494,7 @@
     res.forEach(function (t) {
       h += taskRow(t, { showProject: true, selectable: true, selected: !!sel[t.id] });
     });
-    h += '</div></div>';
+    h += '</div>' + searchDocsBlock(docs) + '</div>';
     return h;
   }
 
