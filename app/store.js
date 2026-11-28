@@ -698,6 +698,13 @@
       p.accessRequests.forEach(function (r) { if (!('note' in r)) r.note = null; });
     });
     prunePersonal(d);
+    /* Sprint 1C ตั้งกำหนดส่งรอบแรกให้ตอนตั้งทำซ้ำ (firstRecurDate) แต่งานทำซ้ำจากข้อมูลเก่าที่ไม่มีกำหนดส่ง
+     * ยังไม่โผล่ในปฏิทินจนกว่าจะมีคนไปแก้ — ให้วันครบกำหนดรอบแรกตอนโหลด เฉพาะงานที่ยังไม่เสร็จ (ทำครั้งเดียว มีวันแล้วไม่แตะอีก) */
+    d.tasks.forEach(function (t) {
+      if (t && t.recur && t.recur.freq && !t.dueOn && !t.completed) {
+        try { t.dueOn = firstRecurDate(t.recur, t.startOn); } catch (e) { /* รูปแบบทำซ้ำเพี้ยน ปล่อยไว้เหมือนเดิม */ }
+      }
+    });
     if (!d.users.some(function (u) { return u.role === 'admin'; })) {
       var firstUser = d.users.filter(function (u) { return u.id === d.currentUserId; })[0] || d.users[0];
       if (firstUser) firstUser.role = 'admin';
@@ -3824,6 +3831,18 @@
     return copy;
   }
 
+  function undoKeyOf(patch) {
+    if ('approval' in patch) return 'เปลี่ยนผลอนุมัติของ “{t}”';     // ก่อน completed — ผลอนุมัติพาสถานะเสร็จมาด้วย
+    if ('completed' in patch) return patch.completed ? 'ทำ “{t}” เสร็จ' : 'เปิด “{t}” ใหม่';
+    if ('assigneeId' in patch) return 'เปลี่ยนผู้รับผิดชอบของ “{t}”';
+    if ('name' in patch) return 'เปลี่ยนชื่องาน “{t}”';
+    if ('dueOn' in patch || 'startOn' in patch || 'dueTime' in patch || 'startTime' in patch) return 'เปลี่ยนวันของ “{t}”';
+    if ('priority' in patch) return 'เปลี่ยนความสำคัญของ “{t}”';
+    if ('tags' in patch) return 'เปลี่ยนแท็กของ “{t}”';
+    if ('notes' in patch) return 'แก้รายละเอียดของ “{t}”';
+    return 'แก้ไขงาน “{t}”';
+  }
+
   function updateTask(id, patch, opts) {
     var t = task(id);
     if (!t) return null;
@@ -3853,7 +3872,9 @@
       }
       if (!Object.keys(patch).length) return t;      // ไม่เหลืออะไรให้แก้ ไม่ต้องมีจุดย้อนกลับเปล่า ๆ
     }
-    if (!opts || !opts.quiet) snapshot('แก้ไขงาน');
+    /* ป้ายจุดย้อนกลับบอกว่าแก้อะไรของงานไหน — ข้อความหลังกดย้อนกลับเดิมขึ้นแค่ "ย้อนกลับแล้ว: แก้ไขงาน"
+     * ไม่รู้ว่าอะไรถูกคืนค่า (เลือกจากช่องที่แก้ ช่องที่คนสังเกตก่อน) */
+    if (!opts || !opts.quiet) snapshot(undoKeyOf(patch), { t: String(t.name || '').slice(0, 60) });
 
     /* 3b — เปลี่ยนเป็นชนิดในตัวแล้ว ชนิดกำหนดเองหลุดออก (ยกเว้นตอน setTypeRaw ตั้งชนิดพื้นฐานให้เอง) */
     if ('type' in patch && t.ctype && !(opts && opts.keepCtype)) { patch.ctype = null; patch.cstatus = null; }
@@ -4122,13 +4143,19 @@
     return roots.length;
   }
 
+  /* ลบ = แก้งาน ต้องผ่าน can('write', id) ที่ชั้นข้อมูลด้วย (เดิมไม่ตรวจเลย ด่านหน้าจอดูแค่บทบาทองค์กร
+   * คนที่แสดงความเห็นได้ในโปรเจกต์ปิดจึงลบงานจากเมนูงานหรือปุ่ม Delete ได้) */
   function deleteTask(id) {
+    if (!task(id)) return false;
+    if (!can('write', id)) { denied('write'); return false; }
     snapshot('ลบงาน');
     trashTasks([id]);
     commit();
+    return true;
   }
 
   function deleteTasks(ids) {
+    if (!(ids || []).every(function (id) { return !task(id) || can('write', id); })) { denied('write'); return false; }
     snapshot('ลบ {n} งาน', { n: ids.length });
     trashTasks(ids);
     commit();
@@ -5253,6 +5280,9 @@
       copy.parentId = parentNew || null;
       copy.completed = false;
       copy.completedAt = null;
+      /* งานขออนุมัติ ผลอนุมัติเป็นตัวเปิด/ปิดงาน (Sprint 1B) — สำเนาเริ่มใหม่ยังไม่เสร็จ ต้องกลับไปรออนุมัติด้วย
+       * เดิมคงผลเดิมไว้ สำเนาจึงโชว์ ✕ "ไม่อนุมัติ" / ✓ "อนุมัติแล้ว" บนงานที่ยังไม่เสร็จ */
+      if (copy.type === 'approval') copy.approval = 'pending';
       copy.likes = [];
       copy.dependsOn = [];
       copy.startOn = mv(copy.startOn);
@@ -5837,7 +5867,9 @@
 
   function setProjectVisibility(projectId, visibility) {
     var p = project(projectId);
-    if (!p) return false;
+    /* ด่านเดียวกับปุ่มในหน้าต่างสมาชิก (ผู้ดูแลระบบ/ผู้ดูแลโปรเจกต์) — เปิดโปรเจกต์ปิดให้ทั้งองค์กร
+     * ก็คือการให้ทุกคนเห็น จึงต้องผ่านด่านเดียวกับการเพิ่มสมาชิก */
+    if (!p || !canAddMembers(projectId)) return false;
     snapshot('เปลี่ยนความเป็นส่วนตัว');
     p.visibility = visibility === 'private' ? 'private' : 'org';
     /* ปิดโปรเจกต์แล้วต้องมีสมาชิกอย่างน้อยหนึ่งคน ไม่งั้นจะไม่มีใครเข้าได้อีก */
@@ -5862,6 +5894,9 @@
 
   function setProjectMember(projectId, userId, access, quiet) {
     if (!ACCESS_RANK[access]) return false;
+    /* quiet = ทางภายในที่ตรวจสิทธิ์ของตัวเองมาแล้ว (ตอบคำขอ ถามก่อนมอบงาน โอนงาน สร้างโปรเจกต์)
+     * ทางจากหน้าต่างสมาชิกต้องผ่านด่าน canAddMembers ที่ชั้นข้อมูลด้วย ไม่พึ่งปุ่มบนจออย่างเดียว */
+    if (!quiet && !canAddMembers(projectId)) return false;
     db.projectMembers = db.projectMembers || [];
     var m = db.projectMembers.filter(function (x) {
       return x.projectId === projectId && x.userId === userId;
@@ -5886,7 +5921,7 @@
     var p = project(projectId);
     var list = projectMembers(projectId);
     var target = list.filter(function (m) { return m.userId === userId; })[0];
-    if (!target) return false;
+    if (!target || !canAddMembers(projectId)) return false;
     if (target.access === 'admin' && p && p.visibility === 'private') {
       var others = list.filter(function (m) {
         return m.userId !== userId && m.access === 'admin';
@@ -5897,6 +5932,10 @@
     db.projectMembers = db.projectMembers.filter(function (m) {
       return !(m.projectId === projectId && m.userId === userId);
     });
+    /* ถอดแล้วเข้าโปรเจกต์ไม่ได้อีก (โปรเจกต์ปิด/บุคคลภายนอก) — บทบาทในโปรเจกต์ของเขาไม่มีความหมายแล้ว
+     * เดิมภาพรวมยังโชว์ "Piti – ทีมขาย" เหมือนยังอยู่ ลบในจุดย้อนกลับเดียวกัน (ย้อนกลับแล้วบทบาทกลับมา) */
+    dropIndex();
+    if (p && p.roles && p.roles[userId] && !projectAccess(projectId, userId)) delete p.roles[userId];
     var u = user(userId);
     audit('project.member-remove', (p ? p.name : projectId), u ? u.name : userId);
     commit();
@@ -6077,15 +6116,105 @@
     return out;
   }
 
-  /** เพิ่มคนเป็นสมาชิกโปรเจกต์จากหน้าต่างถามก่อนมอบงานได้ไหม — ตามกติกาเดิม จัดการสมาชิก = ผู้ดูแลระบบ */
+  /* งานที่ยังไม่เกิด (สร้างจากภาระงาน หน้าเอกสาร เทมเพลต) หรือค่าที่จะมอบงานในอนาคต (ฟอร์ม อัตโนมัติ)
+   * revealOutsiders ดูจากงานที่มีอยู่แล้ว ใช้ไม่ได้ ตัวนี้ดูจากโปรเจกต์ปลายทางตรง ๆ แทน
+   * ใครที่ยังไม่มีสิทธิ์เห็นโปรเจกต์นั้น = จะได้เห็นงานเพราะถูกมอบ/ถูกตามงาน (คู่กรณีเห็นงานได้เสมอ)
+   * โปรเจกต์เปิดทั้งองค์กรจึงมักไม่มีใครติด ยกเว้นบุคคลภายนอกที่ยังไม่ถูกเชิญ */
+  function outsidersOf(projectId, userIds) {
+    var out = { users: [], projects: [] }, seen = {};
+    var p = projectId ? project(projectId) : null;
+    if (!p) return out;
+    out.projects.push(p);
+    [].concat(userIds || []).forEach(function (u) {
+      if (!u || seen[u] || u === db.currentUserId) return;
+      var x = user(u);
+      if (!x || x.active === false) return;
+      if (projectAccess(p.id, u)) return;
+      seen[u] = true;
+      out.users.push(x);
+    });
+    return out;
+  }
+
+  /* เอางานที่มีอยู่แล้วเข้าโปรเจกต์ (ปิด) อีกโปรเจกต์ (เพิ่มเข้าโปรเจกต์ ทำให้เป็นสาธารณะ แก้หลายงาน อัตโนมัติ)
+   * คู่กรณีของงาน (ผู้รับผิดชอบ คนสร้าง ผู้ติดตาม รวมงานย่อยทุกชั้น) เห็นงานได้เสมอ งานเข้าโปรเจกต์ปิดแล้ว
+   * เขาจะเห็นทุกอย่างที่สมาชิกโปรเจกต์นั้นคุยกันในงานต่อจากนี้ทั้งที่ไม่ได้เป็นสมาชิก จึงต้องถามก่อน
+   * ไม่นับคนที่เห็นงานนี้ผ่านโปรเจกต์อื่นที่ตัวเองเข้าได้อยู่แล้ว (เช่นงานอยู่โปรเจกต์เปิดด้วย = ทั้งองค์กรเห็นอยู่แล้ว)
+   * @returns { users, projects: [โปรเจกต์ปลายทาง] } รูปเดียวกับ revealOutsiders/outsidersOf */
+  function joinOutsiders(taskIds, projectId) {
+    var out = { users: [], projects: [] }, seen = {};
+    var p = projectId ? project(projectId) : null;
+    if (!p) return out;
+    out.projects.push(p);
+    [].concat(taskIds || []).forEach(function (id) {
+      var t = task(id);
+      if (!t) return;
+      var root = rootOf(t);
+      var other = (index().memByTask[root.id] || []).filter(function (m) { return m.projectId !== p.id; });
+      Object.keys(treeIds(id)).forEach(function (tid) {
+        var x = task(tid);
+        if (!x) return;
+        [x.assigneeId, x.createdBy].concat(x.followers || []).forEach(function (u) {
+          if (!u || seen[u] || u === db.currentUserId) return;
+          var usr = user(u);
+          if (!usr || usr.active === false) return;
+          if (projectAccess(p.id, u)) return;
+          if (other.some(function (m) { return !!projectAccess(m.projectId, u); })) return;
+          seen[u] = true;
+          out.users.push(usr);
+        });
+      });
+    });
+    return out;
+  }
+
+  /** ก่อนโอนงาน (ผู้ดูแลระบบ) — โปรเจกต์ที่งานที่จะโอนอยู่ แต่คนรับเข้าไม่ได้ เขาจะเห็นงานเพราะกลายเป็นผู้รับผิดชอบ
+   *  งานที่เขาเห็นผ่านโปรเจกต์อื่นอยู่แล้วไม่นับ · withProj = โอนบทบาทผู้ดูแลไปด้วย โปรเจกต์ที่ handoverProjects
+   *  จะเพิ่มเขาเป็นผู้ดูแลอยู่แล้ว (เคยเป็นผู้ดูแล หรือเป็นโปรเจกต์ปิด) ไม่ต้องนับ
+   *  @returns [{ project, taskIds }] */
+  function handoverOutsiders(fromId, toId, withProj) {
+    if (!user(fromId) || !user(toId)) return [];
+    var covered = {};
+    if (withProj) projectRolesOf(fromId).forEach(function (p) {
+      var wasAdmin = projectMembers(p.id).some(function (m) { return m.userId === fromId && m.access === 'admin'; });
+      if (wasAdmin || p.visibility === 'private') covered[p.id] = true;
+    });
+    var byP = {}, out = [];
+    openTasksOf(fromId).forEach(function (t) {
+      var ms = index().memByTask[rootOf(t).id] || [];
+      if (!ms.length) return;                       // งานส่วนตัว — คนรับเป็นคู่กรณีก็ตั้งใจให้เห็นอยู่แล้ว
+      if (isTaskParticipant(t.id, toId)) return;      // เห็นงานนี้อยู่แล้ว
+      if (ms.some(function (m) { return covered[m.projectId] || !!projectAccess(m.projectId, toId); })) return;
+      ms.forEach(function (m) {
+        var p = project(m.projectId);
+        if (!p) return;
+        if (!byP[p.id]) { byP[p.id] = { project: p, taskIds: [] }; out.push(byP[p.id]); }
+        if (byP[p.id].taskIds.indexOf(t.id) < 0) byP[p.id].taskIds.push(t.id);
+      });
+    });
+    return out;
+  }
+
+  /** เพิ่มคนเป็นสมาชิกโปรเจกต์ได้ไหม (หน้าต่างสมาชิก และตัวเลือก "เพิ่มเป็นสมาชิก" ในหน้าต่างถามก่อนมอบงาน)
+   *
+   * เดิมให้เฉพาะผู้ดูแลระบบ ทั้งที่คำอธิบายสิทธิ์ "ผู้ดูแลโปรเจกต์" บอกว่าจัดการสมาชิกได้ หน้าต่างก็โชว์ปุ่มให้
+   * แต่กดแล้วโดนปฏิเสธ ตอนนี้ผู้ดูแลระบบ หรือคนที่มีสิทธิ์ผู้ดูแลในโปรเจกต์นั้น (ตามคำอธิบาย)
+   * โปรเจกต์ที่ล็อกรายชื่อไว้ = ผู้ดูแลระบบเท่านั้น (ตามคำอธิบายของปุ่มล็อก)
+   * สมาชิกทั่วไปเพิ่มคน (รวมตัวเอง) หรือยกสิทธิ์ตัวเองไม่ได้ เพราะไม่ผ่านด่าน admin ของโปรเจกต์ */
   function canAddMembers(projectId) {
-    return !!project(projectId) && can('manage');
+    var p = project(projectId);
+    if (!p || !isActive()) return false;
+    if (can('manage')) return true;
+    if (p.locked) return false;
+    return can('write') && canInProject(projectId, 'admin');
   }
 
   /** ทำตามที่เลือกในหน้าต่างถาม — ไม่ snapshot/commit ให้ผู้เรียกครอบด้วย batch กับการกระทำจริง
-   *  access = 'comment' | 'edit' เพิ่มเป็นสมาชิกโปรเจกต์แรกของงาน · null = ให้เห็นเฉพาะงานนี้ (ลงประวัติไว้) */
-  function revealTo(taskIds, userIds, access) {
-    var r = revealOutsiders(taskIds, userIds);
+   *  access = 'comment' | 'edit' เพิ่มเป็นสมาชิกโปรเจกต์แรกของงาน · null = ให้เห็นเฉพาะงานนี้ (ลงประวัติไว้)
+   *  projectId — งานเพิ่งสร้าง (หรือยังไม่มีงาน) คนที่ถูกมอบเป็นคู่กรณีไปแล้ว revealOutsiders จะไม่เจอเขา
+   *  จึงนับคนนอกจากสมาชิกของโปรเจกต์นี้แทน และลงประวัติเฉพาะงานที่คนนั้นเกี่ยวข้องจริง */
+  function revealTo(taskIds, userIds, access, projectId) {
+    var r = projectId ? outsidersOf(projectId, userIds) : revealOutsiders(taskIds, userIds);
     if (!r.users.length) return true;
     if (access) {
       var p = r.projects[0];
@@ -6097,9 +6226,13 @@
       return true;
     }
     /* เลือกให้เห็นเฉพาะงาน — ทิ้งร่องรอยไว้ในประวัติของงาน คนที่มาดูทีหลังจะรู้ว่าใครเปิดให้คนนอกเห็น */
-    [].concat(taskIds || []).forEach(function (tid) {
-      if (!task(tid)) return;
-      r.users.forEach(function (u) {
+    var ids = [].concat(taskIds || []).filter(function (tid) { return !!task(tid); });
+    r.users.forEach(function (u) {
+      var where = !projectId ? ids : ids.filter(function (tid) {
+        return isTaskParticipant(tid, u.id) || subtasks(tid).some(function (s) { return isTaskParticipant(s.id, u.id); });
+      });
+      if (projectId && !where.length) where = ids.slice(0, 1);
+      where.forEach(function (tid) {
         log(tid, 'ให้ {who} เห็นงานนี้ (ไม่ได้เป็นสมาชิกโปรเจกต์)', { who: u.name });
       });
     });
@@ -7191,8 +7324,32 @@
       /* 3b — งานหลักที่นำเข้า = งานเข้าโปรเจกต์ (อัตโนมัติ "added" รันตอน commit หลังใส่ค่าฟิลด์และงานหลักครบ) */
       made.forEach(function (x) { if (!x.t.parentId) notifyNewTask(x.t, projectId); });
       audit('project.import', p.name, 'นำเข้า {n} งาน', { n: res.tasks });
+      res.ids = made.map(function (x) { return x.t.id; });       // ให้หน้าจอลงประวัติ "ให้ … เห็นงานนี้" ได้
     });
     return res;
+  }
+
+  /** คนที่ไฟล์ CSV จะมอบงานให้หรือใส่เป็นผู้ติดตาม (คอลัมน์ผู้รับผิดชอบ อีเมล ผู้ร่วมงาน)
+   *  จับคู่ชื่อ/อีเมลแบบเดียวกับตอนนำเข้า — ใช้ถามก่อนนำเข้าโปรเจกต์ปิด ว่าใครจะได้เห็นงานทั้งที่ไม่ได้เป็นสมาชิก */
+  function csvPeople(text, map) {
+    var rows = parseCsv(text || ''), col = {}, out = [];
+    (map || []).forEach(function (tgt, k) { if (tgt && tgt !== 'ignore' && !(tgt in col)) col[tgt] = k; });
+    var byName = {}, byMail = {};
+    db.users.forEach(function (u) {
+      byName[u.name.trim().toLowerCase()] = u.id;
+      if (u.email) byMail[u.email.trim().toLowerCase()] = u.id;
+    });
+    function who(v) {
+      var k = String(v || '').trim().toLowerCase();
+      return k ? (byMail[k] || byName[k] || null) : null;
+    }
+    rows.slice(1).forEach(function (r) {
+      var cell = function (k) { return k >= 0 && r[k] != null ? String(r[k]).trim() : ''; };
+      var a = who(cell(col.assigneeEmail)) || who(cell(col.assignee));
+      if (a) out.push(a);
+      csvList(cell(col.collaborators)).forEach(function (x) { var u = who(x); if (u) out.push(u); });
+    });
+    return out;
   }
 
   /* ---------- ส่งออกโปรเจกต์เป็น JSON และปฏิทิน .ics ---------- */
@@ -7696,6 +7853,15 @@
 
   function needTask(ctx) { if (!ctx.t || !task(ctx.t.id)) throw autoErr('ไม่มีงานให้ทำ'); return ctx.t; }
 
+  /* คนจาก "ตัวแปร" (คนสร้างงาน คนที่ทำให้ทำงาน ผู้รับผิดชอบเดิม ฟิลด์คน) รู้ตัวตอนรันเท่านั้น คนตั้งกฎไม่เคยถูกถาม
+   * (ต่างจากคนที่ระบุชื่อ ซึ่งถามไปแล้วตอนบันทึกกฎ) ถ้าเขาจะได้เห็นงานในโปรเจกต์ (ปิด) ที่ไม่ได้เป็นสมาชิก
+   * ห้ามเปิดให้เห็นเงียบ ๆ — โยนข้อผิดพลาดที่แปลได้ autoRun จะข้ามการกระทำนี้ ลงเหตุผลในประวัติการรัน
+   * แล้วทำการกระทำที่เหลือในกฎต่อตามปกติ */
+  function autoGuard(taskIds, who, key) {
+    var r = revealOutsiders(taskIds, [who]);
+    if (r.users.length) throw autoErr(key, { who: r.users[0].name, p: r.projects[0] ? r.projects[0].name : '' });
+  }
+
   var AUTO_ACTIONS = [
     { id: 'section', label: 'ย้ายไปคอลัมน์', task: true, run: function (a, ctx) {
       var t = needTask(ctx), p = ctx.p;
@@ -7710,6 +7876,7 @@
     } },
     { id: 'assign', label: 'มอบหมายให้', task: true, run: function (a, ctx) {
       var t = needTask(ctx), who = autoUser(a, ctx);
+      if (who && (a.mode || 'user') === 'var') autoGuard([t.id], who, 'ข้ามการมอบงาน: {who} ไม่ได้เป็นสมาชิกของ “{p}” จึงไม่เปิดให้เห็นงานนี้');
       if ((t.assigneeId || null) !== who) updateTask(t.id, { assigneeId: who }, { quiet: true });
     } },
     { id: 'due', label: 'ตั้งกำหนดส่ง', task: true, run: function (a, ctx) {
@@ -7751,16 +7918,22 @@
       addComment(t.id, txt.slice(0, 5000));
     } },
     { id: 'followers', label: 'เพิ่มผู้ติดตาม', task: true, run: function (a, ctx) {
-      var t = needTask(ctx), people = (a.users || []).slice();
+      var t = needTask(ctx), people = (a.users || []).slice(), skipped = null;
       (a.vars || []).forEach(function (v) {
         var id = v === 'creator' ? t.createdBy : v === 'triggerer' ? ctx.ev.by : v === 'assignee' ? t.assigneeId : null;
-        if (id) people.push(id);
+        if (!id) return;
+        /* คนจากตัวแปรที่ไม่ได้เป็นสมาชิกโปรเจกต์ (ปิด) — ไม่เพิ่ม คนอื่นยังเพิ่มตามปกติ แล้วบอกในประวัติการรัน */
+        var r = revealOutsiders([t.id], [id]);
+        if (r.users.length) { skipped = skipped || r; return; }
+        people.push(id);
       });
       people.forEach(function (u) {
         if (!user(u) || t.followers.indexOf(u) >= 0) return;
         t.followers.push(u);
         autoFire('follower', t.id, { user: u });
       });
+      if (skipped) throw autoErr('ไม่ได้เพิ่ม {who} เป็นผู้ติดตาม: ไม่ได้เป็นสมาชิกของ “{p}”',
+        { who: skipped.users[0].name, p: skipped.projects[0] ? skipped.projects[0].name : '' });
     } },
     { id: 'tag', label: 'เพิ่มแท็ก', task: true, run: function (a, ctx) {
       var t = needTask(ctx), tg = String(a.tag || '').trim().slice(0, 40);
@@ -7782,6 +7955,12 @@
                     type: kind === 'approval' ? 'approval' : 'task' };
       if (a.assign && a.assign.mode && a.assign.mode !== 'none') attrs.assigneeId = autoUser(a.assign, ctx);
       if (a.due && a.due.on) attrs.dueOn = autoDate(a.due, ctx);
+      /* ผู้รับผิดชอบจากตัวแปรที่ไม่ได้เป็นสมาชิกโปรเจกต์ (ปิด) — สร้างงานต่อแต่ไม่มอบให้เขา แล้วบอกในประวัติการรัน */
+      var hidden = null;
+      if (attrs.assigneeId && a.assign.mode === 'var') {
+        var hr = kind === 'task' ? outsidersOf(p && p.id, [attrs.assigneeId]) : (t ? revealOutsiders([t.id], [attrs.assigneeId]) : null);
+        if (hr && hr.users.length) { hidden = hr; attrs.assigneeId = null; }
+      }
       var c;
       if (kind === 'task') {
         if (!p) throw autoErr('ไม่มีโปรเจกต์ให้สร้างงาน');
@@ -7793,6 +7972,8 @@
         c = createTaskRaw(attrs, null, null);
       }
       if (attrs.assigneeId && c.followers.indexOf(attrs.assigneeId) < 0) c.followers.push(attrs.assigneeId);
+      if (hidden) throw autoErr('สร้างงานแล้วแต่ไม่ได้มอบให้ {who}: ไม่ได้เป็นสมาชิกของ “{p}”',
+        { who: hidden.users[0].name, p: hidden.projects[0] ? hidden.projects[0].name : '' });
     } },
     { id: 'addproj', label: 'เพิ่มเข้าโปรเจกต์อื่น', task: true, run: function (a, ctx) {
       var t = needTask(ctx), q = project(a.pid);
@@ -7803,6 +7984,11 @@
         if (a.sec && section(q.id, a.sec) && have.sectionId !== a.sec) setSectionRaw(have, a.sec, nextPosition(q.id, a.sec));
         return;
       }
+      /* คู่กรณีของงานที่ไม่ได้เป็นสมาชิกโปรเจกต์ปลายทาง (ปิด) จะเห็นทุกอย่างที่คุยกันในงานนั้นต่อ — ไม่มีคนกดให้ถาม
+       * จึงไม่เพิ่ม แล้วบอกเหตุผลในประวัติการรัน (คนตั้งกฎเพิ่มเขาเป็นสมาชิกก่อน แล้วกฎจะทำงานรอบถัดไป) */
+      var jr = joinOutsiders([t.id], q.id);
+      if (jr.users.length) throw autoErr('ไม่ได้เพิ่มเข้า “{p}”: {who} (ผู้รับผิดชอบ/ผู้ติดตามของงาน) ไม่ได้เป็นสมาชิกของโปรเจกต์นี้',
+        { p: q.name, who: jr.users.map(function (u) { return u.name; }).join(', ') });
       addTaskToProject(t.id, q.id, section(q.id, a.sec) ? a.sec : null);
     } },
     /* เฉพาะงานของฉัน — ย้ายเซกชันส่วนตัวของเจ้าของ ไม่แตะจุดสีฟ้า */
@@ -12153,6 +12339,8 @@
     canCreateTask: canCreateTask, canArrangeIn: canArrangeIn, onDeny: onDeny,
     approvalDecided: approvalDecided, canResubmit: canResubmit, resubmitApproval: resubmitApproval,
     revealOutsiders: revealOutsiders, revealTo: revealTo, canAddMembers: canAddMembers,
+    outsidersOf: outsidersOf,                                   // งานที่ยังไม่เกิด — ดูจากโปรเจกต์ปลายทาง
+    joinOutsiders: joinOutsiders, handoverOutsiders: handoverOutsiders,   // เอางานเดิมเข้าโปรเจกต์ปิด / โอนงาน
     mentionedIn: function (text) { return parseMentions(String(text || '')); },
     TRASH_DAYS: TRASH_DAYS, trashItems: trashItems, trashExpires: trashExpires,
     restoreTrash: restoreTrash, purgeTrash: purgeTrash,
@@ -12257,7 +12445,7 @@
     promoteFieldToLib: promoteFieldToLib, deleteLibField: deleteLibField,
     tagTasks: tagTasks, renameTag: renameTag, deleteTag: deleteTag,
     CSV_TARGETS: CSV_TARGETS, CSV_NEW_TYPES: CSV_NEW_TYPES, csvPreview: csvPreview,
-    importTasksCsvMapped: importTasksCsvMapped,
+    importTasksCsvMapped: importTasksCsvMapped, csvPeople: csvPeople,
     projectJson: projectJson, myTasksIcs: myTasksIcs, projectIcs: projectIcs,
     projectRoles: projectRoles, setProjectRole: setProjectRole,
     requestAccess: requestAccess, pendingRequest: pendingRequest, accessRequestOf: accessRequestOf,

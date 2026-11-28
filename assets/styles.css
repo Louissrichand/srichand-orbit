@@ -4872,3 +4872,37 @@ body.gated .toast { z-index: 320; }
 @media (max-width: 620px) {
   .nrow-access .inp { min-width: 0; flex: 1 1 120px; }
 }
+
+/* ---------- Sprint 1 (ส่วนที่ค้าง) — แผงงานของคนที่แก้ไม่ได้ และคำเตือนคนนอกโปรเจกต์ปิด ---------- */
+/* ปุ่มที่ยังโชว์แต่กดไม่ได้ (ช่องติ๊กเสร็จ อีโมจิ ตัวเลือก) ไม่ทำท่าเหมือนกดได้ */
+.check[disabled] { cursor: default; opacity: .55; }
+.check[disabled]:hover { border-color: var(--line-strong); color: transparent; }
+.check.on[disabled]:hover { border-color: var(--ok); color: #fff; }
+.rx-chip[disabled], .fld-multi[disabled], .recur-day[disabled], .dep-sel[disabled], .btn[disabled] { cursor: default; }
+.rx-chip[disabled]:hover { border-color: var(--line); }
+.fld-multi[disabled]:hover { border-color: transparent; }
+/* ชื่อคอลัมน์และวัน/ผู้รับผิดชอบของงานย่อยแบบอ่านอย่างเดียว (span แทนปุ่ม) */
+.chip-sec.ro, .sub-date.ro, .sub-who.ro { cursor: default; }
+.chip-sec.ro:hover, .sub-date.ro:hover, .sub-who.ro:hover { background: none; }
+/* ผู้รับผิดชอบเริ่มต้นของฟอร์มไม่ได้เป็นสมาชิกโปรเจกต์ปิด */
+.opt-note.fe-warn { display: flex; align-items: flex-start; gap: 6px; margin: 6px 0 4px; padding: 7px 10px;
+  border-radius: var(--radius); background: var(--warn-bg); color: var(--warn-fg); }
+.opt-note.fe-warn svg { flex: none; margin-top: 2px; }
+/* ตัวเลือกในหน้าต่างถามยาวกว่าปุ่มทั่วไป (เช่น "บันทึกต่อ (ให้เห็นเฉพาะงานที่ได้รับ)") จอแคบให้ขึ้นบรรทัดใหม่ได้ ไม่ล้นขอบ */
+.ask-choices .btn { white-space: normal; height: auto; min-height: 34px; text-align: center; line-height: 1.35; }
+
+/* ---------- Sprint 1 (ผลตรวจรอบ main) ---------- */
+/* ข้อความ "ทำเครื่องหมายว่าเสร็จ" ข้างวงกลมในแผงงาน กดได้เหมือนวงกลม */
+.dw-done-lbl { background: none; border: 0; padding: 0; font: inherit; font-size: 13px; color: var(--fg-soft); cursor: pointer; }
+.dw-done-lbl:hover { color: var(--fg); }
+.dw-done-lbl.ro { cursor: default; }
+.dw-done-lbl.ro:hover { color: var(--fg-soft); }
+/* แถบแก้หลายงานของคนที่แก้บางงานไม่ได้ */
+.bulkbar .bulk-ro { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; opacity: .85; }
+/* ข้อความแจ้งยกขึ้นเหนือแถบแก้หลายงาน (ไม่ทับปุ่มในแถบ) */
+.toast.above-bulk { bottom: calc(22px + var(--bulk-h, 44px) + 10px); }
+/* ช่องวันที่ในหน้าต่างที่ปีถูกปฏิเสธ — ยังไม่บันทึกจนกว่าจะแก้ */
+input.inp-bad, .field input.inp-bad { border-color: var(--danger) !important; box-shadow: 0 0 0 2px var(--danger-bg); }
+/* บทบาทในโปรเจกต์ของคนที่ไม่ได้เป็นสมาชิกแล้ว */
+.ovw-role.gone b, .ovw-role.gone em { color: var(--fg-faint); }
+.ovw-role.gone .avatar { opacity: .5; }
