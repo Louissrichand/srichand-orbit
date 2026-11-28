@@ -5352,7 +5352,7 @@
           (s.editedAt ? '<span class="cmt-edited" title="' + esc(fmtExact(s.editedAt)) + '">' +
             L('(แก้ไขแล้ว)') + '</span>' : '') +
           (s.pinned ? '<span class="cmt-pin">' + I('flag', 11) + L('ปักหมุด') + '</span>' : '') +
-          (s.auto ? '<span class="auto-tag" title="' + esc(L('เขียนโดยอัตโนมัติ')) + '">' + I('bolt', 11) + L('โดยอัตโนมัติ') + '</span>' : '') +
+          (s.auto ? '<span class="auto-tag" title="' + esc(L('เขียนโดยอัตโนมัติ')) + '">' + I('bolt', 11) + L('โดยอัตโนมัติ') + (s.rule ? ': ' + esc(s.rule) : '') + '</span>' : '') +
           '<span class="grow"></span>' +
           '<button class="cmt-more" data-act="comment-menu" data-story="' + esc(s.id) +
           '" title="' + L('ตัวเลือกความเห็น') + '">' + I('more', 14) + '</button></div>';
@@ -5413,7 +5413,7 @@
       } else {
         h += '<div class="story log">' + avatar(actor, 'sm') +
           '<div class="txt">' + esc(actor ? actor.name : L('ระบบ')) + ' ' + esc(storyText(s)) +
-          (s.auto ? ' <span class="auto-tag" title="' + esc(L('ทำโดยอัตโนมัติ')) + '">' + I('bolt', 11) + L('โดยอัตโนมัติ') + '</span>' : '') +
+          (s.auto ? ' <span class="auto-tag" title="' + esc(L('ทำโดยอัตโนมัติ')) + '">' + I('bolt', 11) + L('โดยอัตโนมัติ') + (s.rule ? ': ' + esc(s.rule) : '') + '</span>' : '') +
           whenTag(s.createdAt) + '</div></div>';
       }
     });

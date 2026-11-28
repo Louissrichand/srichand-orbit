@@ -3298,6 +3298,22 @@
     return true;
   }
 
+  /* Sprint 3 — บันทึกค่าเก่า→ใหม่ของฟิลด์กำหนดเอง
+   * ลงเฉพาะตอน "แก้ค่าที่มีอยู่" (ตั้งค่าครั้งแรกตอนสร้างงานไม่ลง ไม่งั้นงานใหม่ทุกชิ้นมีบรรทัดรกเต็ม)
+   * และไม่แจ้งเตือนใคร (logQuiet) ต่างจากฟิลด์ที่เปิด "แจ้งเมื่อค่าเปลี่ยน" ซึ่งยังแจ้งเหมือนเดิม */
+  function fvShown(def, val) {
+    return val == null ? '' : [].concat(val).map(function (x) {
+      var who = def && def.type === 'person' ? user(x) : null;
+      return who ? who.name : x;
+    }).join(', ');
+  }
+  function logQuiet(taskId, key, params) {
+    var st = { id: uid('st'), taskId: taskId, actorId: db.currentUserId, type: 'log', text: key, params: params || null,
+               createdAt: new Date().toISOString() };
+    if (autoCtx) { st.auto = 1; if (autoCtx.a && autoCtx.a.name) st.rule = String(autoCtx.a.name).slice(0, 60); }
+    db.stories.push(st);
+  }
+
   /** ใส่ค่าฟิลด์โดยไม่ snapshot/commit — ทางเดียวที่ค่าฟิลด์เปลี่ยน (ช่องในรายการ แผงงาน แก้หลายงาน
    *  ลากลงกลุ่ม อัตโนมัติ) ลงประวัติเมื่อฟิลด์เปิด "แจ้งเมื่อค่าเปลี่ยน" หรือ opts.log แล้วปลุกอัตโนมัติ
    *  @returns true ถ้าค่าเปลี่ยนจริง */
@@ -3319,7 +3335,11 @@
         var who = def.type === 'person' ? user(x) : null;
         return who ? who.name : x;
       }).join(', ');
-      log(taskId, empty ? 'ล้างค่า {f}' : 'ตั้ง {f} เป็น {v}', { f: def.name, v: shown });
+      if (fv && !empty) log(taskId, 'เปลี่ยน {f} จาก {a} เป็น {b}', { f: def.name, a: fvShown(def, fv.value), b: shown });
+      else log(taskId, empty ? 'ล้างค่า {f}' : 'ตั้ง {f} เป็น {v}', { f: def.name, v: shown });
+    } else if (def && fv && !(opts && opts.noLog)) {
+      if (empty) logQuiet(taskId, 'ล้างค่า {f} (เดิม {a})', { f: def.name, a: fvShown(def, fv.value) });
+      else logQuiet(taskId, 'เปลี่ยน {f} จาก {a} เป็น {b}', { f: def.name, a: fvShown(def, fv.value), b: fvShown(def, value) });
     }
     if (fv) {
       if (empty) db.fieldValues = db.fieldValues.filter(function (v) { return v !== fv; });
@@ -3637,7 +3657,7 @@
       type: 'log', text: key, params: params || null,
       createdAt: new Date().toISOString()
     };
-    if (autoCtx) st.auto = 1;          // 3a — ทำโดยอัตโนมัติ (ประวัติขึ้น ⚡)
+    if (autoCtx) { st.auto = 1; if (autoCtx.a && autoCtx.a.name) st.rule = String(autoCtx.a.name).slice(0, 60); }         // 3a — ทำโดยอัตโนมัติ (ประวัติขึ้น ⚡)
     db.stories.push(st);
     var actor = me();
     /* ข้อความแจ้งเตือนก็ต้องแปลตอนอ่านเหมือนกัน จึงส่งคีย์กับค่าไปด้วย
@@ -4902,7 +4922,7 @@
         db.currentUserId, [], 'comment', mentioned, 'แสดงความเห็นในงาน “{t}”', { t: t.name }, actor, sx);
     }
     logConnected(taskId, '', clean);
-    if (autoCtx) s.auto = 1;            // 3a — ความเห็นที่อัตโนมัติเขียน
+    if (autoCtx) { s.auto = 1; if (autoCtx.a && autoCtx.a.name) s.rule = String(autoCtx.a.name).slice(0, 60); }           // 3a — ความเห็นที่อัตโนมัติเขียน
     autoFire('comment', taskId, { story: s.id });
     commit();
     return s;

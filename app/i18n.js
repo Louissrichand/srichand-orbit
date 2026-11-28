@@ -2617,6 +2617,7 @@
     'ย้ายจากเซกชัน {a} ไป {c} (โปรเจกต์ {p})': 'moved it from {a} to {c} (project {p})',
     'ภาษาเริ่มต้นขององค์กร': 'Organization default language', 'ตั้งภาษาเริ่มต้นขององค์กรแล้ว': 'Organization default language set',
     'ได้ตั้งภาษาเริ่มต้นขององค์กรเป็น': 'set the organization default language to',
+    'เปลี่ยน {f} จาก {a} เป็น {b}': 'changed {f} from {a} to {b}', 'ล้างค่า {f} (เดิม {a})': 'cleared {f} (was {a})',
     /* Sprint 3 — อภิธานศัพท์ */
     'ศัพท์ที่ใช้ใน Orbit': 'Orbit glossary',
     'กลุ่มงานที่ทำเรื่องเดียวกัน มีเซกชัน สมาชิก และมุมมองของตัวเอง': 'A group of work on one topic, with its own sections, members and views',

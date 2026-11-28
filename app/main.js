@@ -5857,6 +5857,16 @@
     h += '</nav><div class="prj-pane">';
 
     if (tab === 'general') {
+      /* Sprint 3 — ภาษาอยู่แท็บ "ทั่วไป" (เดิมซ่อนอยู่ในแท็บแสดงผล) */
+      h += '<div class="prj-2col">';
+      h += '<div><label class="opt-lbl">' + L('ภาษา') + '</label>' +
+        segmented('set-lang', [['th', 'ไทย'], ['en', 'English']], global.I18N.getLang()) + '</div>';
+      if (S.isAdmin()) {      // Sprint 3 — ผู้ดูแลระบบตั้งภาษาเริ่มต้นของทั้งองค์กรได้ (คนที่เลือกเองแล้วไม่โดนเปลี่ยน)
+        h += '<div><label class="opt-lbl">' + L('ภาษาเริ่มต้นขององค์กร') + '</label>' +
+          segmented('set-org-lang', [['th', 'ไทย'], ['en', 'English']], (S.db.settings && S.db.settings.orgLang) || 'th') + '</div>';
+      }
+      h += '</div>';
+      h += '<div class="opt-sep"></div>';
       h += '<label class="opt-lbl">' + L('หน้าที่เปิดเมื่อเข้าแอป') + '</label>' +
         segmented('set-landing', [['home', L('หน้าแรก')], ['mytasks', L('งานของฉัน')],
                                   ['inbox', L('กล่องแจ้งเตือน')]], S.pref('landing'));
@@ -5993,12 +6003,6 @@
       h += '<div><label class="opt-lbl">' + L('ธีม') + '</label>' +
         segmented('set-theme', [['auto', L('ตามระบบ')], ['light', L('สว่าง')],
                                 ['dark', L('มืด')]], S.pref('theme')) + '</div>';
-      h += '<div><label class="opt-lbl">' + L('ภาษา') + '</label>' +
-        segmented('set-lang', [['th', 'ไทย'], ['en', 'English']], global.I18N.getLang()) + '</div>';
-      if (S.isAdmin()) {      // Sprint 3 — ผู้ดูแลระบบตั้งภาษาเริ่มต้นของทั้งองค์กรได้ (คนที่เลือกเองแล้วไม่โดนเปลี่ยน)
-        h += '<div><label class="opt-lbl">' + L('ภาษาเริ่มต้นขององค์กร') + '</label>' +
-          segmented('set-org-lang', [['th', 'ไทย'], ['en', 'English']], (S.db.settings && S.db.settings.orgLang) || 'th') + '</div>';
-      }
       h += '</div>';
       h += '<label class="opt-lbl">' + L('วันแรกของสัปดาห์') + '</label>' +
         segmented('set-firstday', [['auto', L('อัตโนมัติ')], ['sun', L('อาทิตย์')],
