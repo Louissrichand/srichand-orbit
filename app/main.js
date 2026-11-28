@@ -14599,6 +14599,11 @@ document.addEventListener('click', function (e) { global.__depClick = { x: e.cli
 
   /** ตัดสินว่าจะเข้าโหมดทีมหรือเครื่องเดียว แล้ววาดหน้าจอให้ตรงกัน */
   function bootAccount() {
+    /* ?demo=1 (เฉพาะ localhost) — เข้าโหมดเครื่องเดียวทันทีและข้ามทัวร์ ไว้ถ่ายภาพหน้าจอ/ทดสอบ */
+    if (/^(localhost|127\.0\.0\.1)$/.test(global.location.hostname) && /[?&]demo=1\b/.test(global.location.search)) {
+      try { setLocalOnly(true); S.setPref('tourDone', true); hideGate(); renderAll(); } catch (e) { /* ข้าม */ }
+      return;
+    }
     if (!R.teamReady()) return;      // ยังไม่ได้ตั้งค่า หรือโหลดไลบรารีไม่ได้ = ใช้แบบเดิม
 
     if (!localOnly()) { gate.checking = true; showGate(); }
