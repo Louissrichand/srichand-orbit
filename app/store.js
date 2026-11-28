@@ -4064,7 +4064,7 @@
   }
   function setRequiredFields(projectId, ids) {
     var p = project(projectId);
-    if (!p || !can('structure') || !canInProject(projectId, 'edit')) return false;
+    if (!p || !canStructureProject(projectId)) return false;
     var valid = (ids || []).filter(function (fid) { var d = (p.fields || []).filter(function (f) { return f.id === fid; })[0]; return d && d.type !== 'id' && d.type !== 'formula'; });
     snapshot('ตั้งฟิลด์ที่ต้องกรอกก่อนทำเสร็จ');
     p.requiredFields = valid;
@@ -5453,7 +5453,7 @@
 
   function archiveProject(id, archived) {
     var p = project(id);
-    if (!p) return;
+    if (!p || !canStructureProject(id)) return;
     p.archived = !!archived;
     commit();
   }
@@ -5823,7 +5823,7 @@
 
   function addField(projectId, field) {
     var p = project(projectId);
-    if (!p) return null;
+    if (!p || !canStructureProject(projectId)) return null;
     snapshot('เพิ่มฟิลด์');
     var nf = normalizeFieldDef({
       id: uid('f'), name: String(field.name || 'ฟิลด์ใหม่').slice(0, 80),
@@ -5849,7 +5849,7 @@
    *  ค่าของงานที่ยังอยู่ในโปรเจกต์อื่นที่ใช้ฟิลด์เดียวกันไม่ถูกลบ */
   function deleteField(projectId, fieldId) {
     var p = project(projectId);
-    if (!p) return;
+    if (!p || !canStructureProject(projectId)) return;
     var at = -1;
     p.fields.forEach(function (f, i) { if (f.id === fieldId) at = i; });
     if (at < 0) return;
@@ -6564,6 +6564,14 @@
     return out;
   }
 
+  /** Pre-pilot B — แก้โครงสร้างโปรเจกต์ (ตั้งค่า ฟิลด์ ฟิลด์ที่ต้องกรอก อัตโนมัติ นำเข้า เก็บเข้าคลัง)
+   *  = เจ้าของโปรเจกต์ ผู้ดูแลโปรเจกต์ หรือผู้ดูแลระบบ · สมาชิกทั่วไปยังเพิ่ม/แก้งาน คอมเมนต์ และเพิ่ม/เปลี่ยนชื่อเซกชันได้ */
+  function canStructureProject(projectId) {
+    var p = project(projectId);
+    if (!p || !isActive() || !can('structure')) return false;
+    return can('manage') || p.owner === db.currentUserId || canInProject(projectId, 'admin');
+  }
+
   /** เพิ่มคนเป็นสมาชิกโปรเจกต์ได้ไหม (หน้าต่างสมาชิก และตัวเลือก "เพิ่มเป็นสมาชิก" ในหน้าต่างถามก่อนมอบงาน)
    *
    * เดิมให้เฉพาะผู้ดูแลระบบ ทั้งที่คำอธิบายสิทธิ์ "ผู้ดูแลโปรเจกต์" บอกว่าจัดการสมาชิกได้ หน้าต่างก็โชว์ปุ่มให้
@@ -6642,7 +6650,7 @@
   /** Sprint 4b — เซกชันที่งานเงียบเกิน 30 วันจะถูกย้ายไป (null = ไม่ย้าย) */
   function setStaleMoveTo(projectId, sectionId) {
     var p = project(projectId);
-    if (!p || !can('structure') || !canInProject(projectId, 'edit')) return false;
+    if (!p || !canStructureProject(projectId)) return false;
     if (sectionId && !section(projectId, sectionId)) return false;
     snapshot('ตั้งเตือนงานเงียบ');
     p.staleMoveTo = sectionId || null;
@@ -6651,7 +6659,7 @@
   }
   function setStaleDays(projectId, days) {
     var p = project(projectId);
-    if (!p || !can('structure') || !canInProject(projectId, 'edit')) return false;
+    if (!p || !canStructureProject(projectId)) return false;
     snapshot('ตั้งเตือนงานเงียบ');
     p.staleDays = Math.max(0, Math.min(365, parseInt(days, 10) || 0));
     commit();
@@ -7649,6 +7657,7 @@
     var p = project(projectId);
     if (!p) throw new Error('ไม่พบโปรเจกต์');
     /* Sprint 1B — นำเข้า = สร้างงานหลายงานในโปรเจกต์ ต้องผ่านด่านเดียวกับการเพิ่มงาน */
+    if (!canStructureProject(projectId)) throw new Error('การนำเข้าไฟล์ทำได้เฉพาะเจ้าของหรือผู้ดูแลโปรเจกต์');
     if (!canCreateTask(projectId)) throw new Error('คุณไม่มีสิทธิ์เพิ่มงานในโปรเจกต์นี้');
     var rows = parseCsv(text);
     if (rows.length < 2) throw new Error('ไฟล์ว่างหรือไม่มีบรรทัดข้อมูล');
@@ -8806,7 +8815,7 @@
   /** แก้อัตโนมัติของโปรเจกต์ได้ไหม — คนที่แก้โครงสร้างโปรเจกต์นั้นได้ (งานของฉัน = ตัวเอง) */
   function canEditAutos(pid) {
     if (pid === '@me') return isActive();
-    return !!project(pid) && can('structure') && canInProject(pid, 'edit');
+    return canStructureProject(pid);
   }
 
   /** สร้างหรือแก้ (มี id อยู่แล้ว = แทนของเดิม) คืนตัวที่บันทึก หรือ null */
@@ -13100,7 +13109,7 @@
   var X4A = {
     TEAM_PRIVACY: TEAM_PRIVACY, TEAM_RES_MAX: TEAM_RES_MAX, TEAM_PIN_MAX: TEAM_PIN_MAX,
     teams: teams, team: team, teamRole: teamRole, isTeamMember: isTeamMember, canSeeTeam: canSeeTeam,
-    canManageTeam: canManageTeam, visibleTeams: visibleTeams, myTeams: myTeams, teamsOfUser: teamsOfUser,
+    canStructureProject: canStructureProject, canManageTeam: canManageTeam, visibleTeams: visibleTeams, myTeams: myTeams, teamsOfUser: teamsOfUser,
     createTeam: createTeam, updateTeam: updateTeam, deleteTeam: deleteTeam, addTeamMember: addTeamMember,
     setTeamRole: setTeamRole, removeTeamMember: removeTeamMember, joinTeam: joinTeam,
     answerTeamRequest: answerTeamRequest, toggleTeamPin: toggleTeamPin, addTeamResource: addTeamResource,

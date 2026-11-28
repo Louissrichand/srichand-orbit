@@ -669,9 +669,9 @@
        * ถ้าให้แต่ละคนตั้งเอง วันที่จะขยับไม่เหมือนกันแล้วแต่ว่าใครลาก */
       var ds = p.depShift || { mode: 'consume', scope: 'downstream' };
       var dsLabel = (S.DEP_SHIFT.filter(function (m) { return m.id === ds.mode; })[0] || {}).label;
-      h += optRow('project-settings', 'repeat', L('การเลื่อนวันของงานที่พึ่งพากัน'),
+      if (S.canStructureProject(id)) h += optRow('project-settings', 'repeat', L('การเลื่อนวันของงานที่พึ่งพากัน'),
         L(dsLabel || ''), true, ' data-id="' + esc(id) + '" data-tab="deps"');
-      h += optRow('project-settings', 'calendar', L('วันทำงานของโปรเจกต์'),
+      if (S.canStructureProject(id)) h += optRow('project-settings', 'calendar', L('วันทำงานของโปรเจกต์'),
         L((S.WORK_DAYS.filter(function (w) { return w.id === p.workDays; })[0] || {}).label || ''),
         true, ' data-id="' + esc(id) + '" data-tab="scheduling"');
       h += '<div class="opt-sep"></div>';
@@ -904,7 +904,7 @@
     }
     /* 3a — อัตโนมัติของโปรเจกต์ (เปิดเป็นหน้าต่าง รายการ + ประวัติการรัน) */
     var nAuto = S.automations(id).filter(function (a) { return a.on; }).length;
-    h += '<div class="opt-sep"></div>' + optRow('auto-open', 'bolt', L('ระบบอัตโนมัติ'),
+    if (S.canStructureProject(id)) h += '<div class="opt-sep"></div>' + optRow('auto-open', 'bolt', L('ระบบอัตโนมัติ'),
       nAuto ? L('เปิดอยู่ {n}', { n: nAuto }) : L('ไม่มี'), true, ' data-id="' + esc(id) + '"');
 
     h += '<div class="opt-sep"></div><label class="opt-lbl">' +
@@ -2311,7 +2311,8 @@
      * กดแล้วค่อยโดนปฏิเสธ คนที่แก้ไม่ได้เห็นแค่ของที่ใช้ได้จริง: ดูสิทธิ์ แจ้งเตือน ลิงก์ ส่งออก ฟอร์ม */
     var canStruct = S.can('structure') && S.canInProject(projectId, 'edit');
     var canCreate = S.canCreateTask(projectId);
-    if (canStruct) h += item('project-settings', 'settings', L('ตั้งค่าโปรเจกต์'));
+    var canAdm = S.canStructureProject(projectId);   /* Pre-pilot B — เจ้าของ/ผู้ดูแลโปรเจกต์/ผู้ดูแลระบบ */
+    if (canAdm) h += item('project-settings', 'settings', L('ตั้งค่าโปรเจกต์'));
     h += item('project-access', 'shield', L('ใครเข้าถึงโปรเจกต์นี้ได้')) ;
     if (canStruct) {
       h += item('project-look', 'pencil', L('ตั้งสีและไอคอน'));
@@ -2334,20 +2335,20 @@
       h += item('set-next-meeting', 'calendar', L('ตั้งวันประชุมถัดไป…'));
     }
     h += '<div class="pop-sep"></div>';
-    if (canStruct) {
+    if (canAdm) {
       h += item('manage-fields', 'filter', L('จัดการฟิลด์'));
       h += item('required-fields', 'check', L('ฟิลด์ที่ต้องกรอกก่อนทำเสร็จ…'));   // Sprint 4
       h += item('stale-days', 'bell', L('เตือนงานเงียบ…'));
       h += item('auto-open', 'bolt', L('ระบบอัตโนมัติ'));
     }
     h += item('forms-open', 'note', L('ฟอร์ม'));          // ฟอร์มเปิดให้คนนอกส่งเรื่องเข้ามาได้โดยตั้งใจ
+    if (canAdm) h += item('types-open', 'diamond', L('ชนิดงานและสถานะ'));
     if (canStruct) {
-      h += item('types-open', 'diamond', L('ชนิดงานและสถานะ'));
       h += item('manage-templates', 'star', L('เทมเพลตงาน'));
       h += item('reset-cols', 'arrowLeft', L('คืนความกว้างคอลัมน์เดิม'));
     }
     h += '<div class="pop-sep"></div>';
-    if (canStruct && canCreate) h += item('import-csv', 'archive', L('นำเข้างานจาก CSV / Excel'));
+    if (canAdm && canCreate) h += item('import-csv', 'archive', L('นำเข้างานจาก CSV / Excel'));
     h += item('export-csv', 'send', L('ส่งออกเป็น CSV'));
     h += item('export-xlsx', 'send', L('ส่งออกเป็น Excel (.xlsx)'));          // Sprint 4c
     h += item('time-csv', 'send', L('ส่งออกเวลาที่บันทึก (CSV)'));          // 3c
@@ -2355,8 +2356,8 @@
     h += item('export-ics', 'calendar', L('ดาวน์โหลดปฏิทิน .ics'));
     h += item('print-list', 'note', L('พิมพ์รายการงาน'));
     if (canCreate) h += item('project-trash', 'trash', L('ถังขยะของโปรเจกต์นี้'));
-    if (canStruct || S.can('manage')) h += '<div class="pop-sep"></div>';
-    if (canStruct) {
+    if (canAdm || S.can('manage')) h += '<div class="pop-sep"></div>';
+    if (canAdm) {
       h += item('toggle-archive', p.archived ? 'arrowLeft' : 'archive',
         p.archived ? L('เอากลับจากคลัง') : L('เก็บโปรเจกต์เข้าคลัง'));
     }
@@ -8639,9 +8640,21 @@
     denyToast();
   });
 
+  /* Pre-pilot B — คำสั่งแก้โครงสร้างโปรเจกต์ ทำได้เฉพาะเจ้าของ/ผู้ดูแลโปรเจกต์/ผู้ดูแลระบบ (สมาชิกทั่วไปยังเพิ่ม/เปลี่ยนชื่อเซกชันได้) */
+  var PSTRUCT = {};
+  ['toggle-archive', 'manage-fields', 'add-field', 'delete-field', 'create-field', 'rename-field', 'drop-field',
+    'add-field-picker', 'pick-ftype', 'auto-new', 'auto-edit', 'auto-toggle', 'auto-dup', 'auto-del', 'ae-save',
+    'save-project-details', 'set-depmode', 'set-depscope', 'set-workdays', 'import-csv', 'field-format', 'do-field-format',
+    'required-fields', 'save-required-fields', 'stale-days', 'project-settings', 'auto-open', 'types-open'
+  ].forEach(function (a) { PSTRUCT[a] = true; });
+
   /** ผ่านสิทธิ์ไหม ถ้าไม่ผ่านจะเตือนให้ผู้ใช้รู้ว่าทำไม ไม่เงียบหาย */
   function allowed(act, el) {
     var need = NEEDS[act];
+    if (PSTRUCT[act]) {
+      var psPid = state.route.type === "project" ? state.route.id : el.dataset.id;
+      if (psPid && psPid !== '@me' && S.project(psPid) && !S.canStructureProject(psPid)) { denyToast(); return false; }
+    }
     if (!need) return true;
     var ok;
     if (need === "write:task") ok = S.can("write", actTaskId(el));
