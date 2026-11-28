@@ -3670,11 +3670,11 @@
         '<div class="grow"><b>' + esc(f.name) + '</b><div class="sub">' +
         esc(L('{q} คำถาม · {n} คำตอบ', { q: nq, n: f.n || 0 })) + (f.last ? ' · ' + esc(L('ล่าสุด')) + ' ' + esc(R.fmtWhen(f.last)) : '') +
         '</div></div><span class="au-row-acts">' +
-        '<button class="btn btn-sm btn-ghost" data-act="fm-go"' + fd + ' title="' + esc(L('เปิดหน้าส่งฟอร์ม')) + '">' + I('arrowRight', 13) + '</button>' +
-        '<button class="btn btn-sm btn-ghost" data-act="fm-link"' + fd + ' title="' + esc(L('คัดลอกลิงก์ฟอร์ม')) + '">' + I('link', 13) + '</button>' +
-        (canEdit ? '<button class="btn btn-sm btn-ghost" data-act="fm-edit"' + fd + ' title="' + esc(L('แก้ไข')) + '">' + I('pencil', 13) + '</button>' +
-          '<button class="btn btn-sm btn-ghost" data-act="fm-dup"' + fd + ' title="' + esc(L('ทำสำเนา')) + '">' + I('copy', 13) + '</button>' +
-          '<button class="btn btn-sm btn-ghost btn-danger" data-act="fm-del"' + fd + ' title="' + esc(L('ลบ')) + '">' + I('trash', 13) + '</button>' : '') +
+        '<button class="btn btn-sm btn-ghost" data-act="fm-go"' + fd + ' title="' + esc(L('เปิดหน้าส่งฟอร์ม')) + '" aria-label="' + esc(L('เปิดหน้าส่งฟอร์ม')) + '">' + I('arrowRight', 13) + '</button>' +
+        '<button class="btn btn-sm btn-ghost" data-act="fm-link"' + fd + ' title="' + esc(L('คัดลอกลิงก์ฟอร์ม')) + '" aria-label="' + esc(L('คัดลอกลิงก์ฟอร์ม')) + '">' + I('link', 13) + '</button>' +
+        (canEdit ? '<button class="btn btn-sm btn-ghost" data-act="fm-edit"' + fd + ' title="' + esc(L('แก้ไข')) + '" aria-label="' + esc(L('แก้ไข')) + '">' + I('pencil', 13) + '</button>' +
+          '<button class="btn btn-sm btn-ghost" data-act="fm-dup"' + fd + ' title="' + esc(L('ทำสำเนา')) + '" aria-label="' + esc(L('ทำสำเนา')) + '">' + I('copy', 13) + '</button>' +
+          '<button class="btn btn-sm btn-ghost btn-danger" data-act="fm-del"' + fd + ' title="' + esc(L('ลบ')) + '" aria-label="' + esc(L('ลบ')) + '">' + I('trash', 13) + '</button>' : '') +
         '</span></div>';
     });
     h += '</div>';
@@ -3710,9 +3710,9 @@
       h += '<div class="au-block fe-q' + (it.cond ? ' fe-branch' : '') + '"' + (it.cond ? ' style="--depth:' + S.formDepth(f, it) + '"' : '') + '>' +
         '<div class="flt-line"><span class="au-n">' + (i + 1) + '</span>' +
         auSel('fe-q', S.FORM_KINDS.map(function (k) { return [k.id, L(k.label)]; }), it.kind, d + ' data-k="kind"') +
-        (i > 0 ? '<button class="flt-del" data-act="fe-q-up"' + d + ' title="' + esc(L('ย้ายขึ้น')) + '">' + I('arrowUp', 13) + '</button>' : '') +
-        (i < f.items.length - 1 ? '<button class="flt-del" data-act="fe-q-down"' + d + ' title="' + esc(L('ย้ายลง')) + '">' + I('arrowDown', 13) + '</button>' : '') +
-        '<button class="flt-del" data-act="fe-q-del"' + d + ' title="' + esc(L('ลบคำถามนี้')) + '">' + I('close', 13) + '</button></div>' +
+        (i > 0 ? '<button class="flt-del" data-act="fe-q-up"' + d + ' title="' + esc(L('ย้ายขึ้น')) + '" aria-label="' + esc(L('ย้ายขึ้น')) + '">' + I('arrowUp', 13) + '</button>' : '') +
+        (i < f.items.length - 1 ? '<button class="flt-del" data-act="fe-q-down"' + d + ' title="' + esc(L('ย้ายลง')) + '" aria-label="' + esc(L('ย้ายลง')) + '">' + I('arrowDown', 13) + '</button>' : '') +
+        '<button class="flt-del" data-act="fe-q-del"' + d + ' title="' + esc(L('ลบคำถามนี้')) + '" aria-label="' + esc(L('ลบคำถามนี้')) + '">' + I('close', 13) + '</button></div>' +
         '<div class="au-params">' +
         '<input class="opt-select" data-act="fe-q"' + d + ' data-k="label" maxlength="300" value="' + esc(it.label) + '" placeholder="' +
           esc(it.kind === 'heading' ? L('หัวข้อ') : L('คำถาม')) + '">' +
@@ -6073,7 +6073,7 @@
         '<em style="font-style:normal;font-size:12.5px;color:var(--fg-faint)">' +
         L('ผู้ดูแลระบบเท่านั้นที่เปลี่ยนได้') + '</em></div>';
 
-      h += '<div class="prj-warn">' + I('alert', 15) + '<span>' +
+      if (team) h += '<div class="prj-warn">' + I('alert', 15) + '<span>' +
         L('เข้าระบบด้วยบัญชี Microsoft ของบริษัท เปลี่ยนรหัสผ่านหรือตั้งการยืนยันสองชั้นได้ที่บัญชี Microsoft ของคุณ') +   // Sprint 1A
         '</span></div>';
 

@@ -7660,7 +7660,7 @@
   function csvDate(v) {
     var s = String(v || '').trim();
     var m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-    if (m) return m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
+    if (m) return (+m[1] > 2400 ? +m[1] - 543 : m[1]) + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
     m = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/);
     if (m) {
       var y = +m[3];
