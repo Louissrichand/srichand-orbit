@@ -5645,7 +5645,7 @@
     /* QA-A — มือถือ: ปุ่มที่ซ่อนจากแถบหลัก (.bulk-desk) ย้ายมารวมในเมนูนี้ */
     h += '<div class="qa-mob-only">' + item('bulk-due', 'calendar', L('ตั้งกำหนดส่ง')) + item('bulk-reopen', 'repeat', L('เปิดใหม่')) +
       '<select data-act="bulk-assignee" aria-label="' + R.esc(L('มอบหมายให้…')) + '"><option value="">' + L('มอบหมายให้…') + '</option>' +
-      S.db.users.map(function (u) { return '<option value="' + R.esc(u.id) + '">' + R.esc(u.name) + '</option>'; }).join('') + '</select>' +
+      S.orgPeople().map(function (u) { return '<option value="' + R.esc(u.id) + '">' + R.esc(u.name) + '</option>'; }).join('') + '</select>' +
       '<select data-act="bulk-priority" aria-label="' + R.esc(L('ความสำคัญ…')) + '"><option value="">' + L('ความสำคัญ…') + '</option>' +
       S.PRIORITIES.map(function (p) { return '<option value="' + p.id + '">' + R.esc(L(p.label)) + '</option>'; }).join('') + '</select>' +
       '<div class="pop-sep"></div></div>';
