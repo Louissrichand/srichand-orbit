@@ -105,6 +105,12 @@
     });
     b += '<button class="xo-more" data-act="go" data-route="workload">' + esc(L('ดูภาระงานทั้งหมด')) + ' ' + I('arrowRight', 11) + '</button></section>';
     b += '</div>';
+    /* Pre-pilot B — ยังไม่มีพอร์ตโฟลิโอ: ชี้ทางไปสร้าง (ผู้บริหารมักมองหาตรงนี้) */
+    if (!S.portfolios().length) {
+      b += '<div class="xo-foot xo-pf-empty">' + I('grid', 12) + ' ' + esc(L('ยังไม่มีพอร์ตโฟลิโอ รวมหลายโปรเจกต์ไว้ดูภาพรวมเดียวได้')) + ' ' +
+        (S.can('structure') ? '<button class="as-link" data-act="new-portfolio">' + esc(L('สร้างพอร์ตโฟลิโอ')) + '</button>'
+          : '<button class="as-link" data-act="go" data-route="portfolios">' + esc(L('พอร์ตโฟลิโอ')) + '</button>') + '</div>';
+    }
     b += '<div class="xo-foot">' + I('lock', 11) + ' ' + esc(L('นับเฉพาะ {n} โปรเจกต์ที่คุณมีสิทธิ์เห็น', { n: x.projects })) + '</div>';
     b += '</div>';
     return {

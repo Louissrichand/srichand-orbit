@@ -660,8 +660,8 @@
     'ได้ถอดสมาชิกออกจากโปรเจกต์': 'removed a member from',
     'ได้เปิดมุมมองในโปรเจกต์': 'enabled a view in',
     'ได้ปิดมุมมองในโปรเจกต์': 'disabled a view in',
-    'ได้ตั้งเส้นฐานของ': 'set the baseline of',
-    'ได้ลบเส้นฐานของ': 'cleared the baseline of',
+    'ได้บันทึกแผนเดิมของ': 'set the baseline of',
+    'ได้ลบแผนเดิมของ': 'cleared the baseline of',
     'ได้นำเข้างานเข้าโปรเจกต์': 'imported tasks into',
     'ได้บันทึกชนิดงานในโปรเจกต์': 'saved a task type in', 'ได้บันทึกฟอร์มในโปรเจกต์': 'saved a form in',
     'ได้บันทึกเทมเพลตโปรเจกต์': 'saved project template', 'ได้ลบเทมเพลตโปรเจกต์': 'deleted project template', 'เทมเพลต': 'Templates',
@@ -776,28 +776,28 @@
     'ความคืบหน้า': 'Progress',
     'สีช่วยให้กวาดตาแล้วเห็นภาพรวมทันที เช่น เลือก “ความคืบหน้า” แล้วแท่งแดงคืองานที่เลยกำหนด':
       'Color makes the whole plan readable at a glance — pick “Progress” and every red bar is a task past its due date.',
-    'การจัดตารางและเส้นฐาน': 'Dependency settings',
+    'การจัดตารางและแผนเดิม': 'Dependency settings',
     'เลื่อนงานที่รออยู่ให้อัตโนมัติ': 'Auto-schedule dependent tasks',
     'เมื่อเลื่อนงานหนึ่ง งานที่รอต่อจากมันจะถูกดันตามให้ลำดับยังถูกต้อง ไม่ดึงงานที่เว้นระยะไว้กลับมาชิด และไม่แตะงานที่ทำเสร็จแล้ว':
       'When you move a task, everything waiting on it shifts along so the sequence still holds. Gaps you left on purpose are kept, and completed tasks are never moved.',
     'เปิดการเลื่อนงานที่รออยู่ให้อัตโนมัติแล้ว': 'Auto-scheduling on',
     'ปิดการเลื่อนอัตโนมัติแล้ว': 'Auto-scheduling off',
     'เลื่อนวันแล้ว และดันงานที่รออยู่ต่ออีก {n} งาน': 'Dates moved · {n} dependent [n|task|tasks] shifted',
-    'ตั้งเส้นฐานไว้เมื่อ {when}': 'Baseline set {when}',
-    'ยังไม่ได้ตั้งเส้นฐาน': 'No baseline yet',
-    'แสดงเส้นฐาน': 'Show baseline',
+    'บันทึกแผนเดิมไว้เมื่อ {when}': 'Baseline set {when}',
+    'ยังไม่ได้บันทึกแผนเดิม': 'No baseline yet',
+    'แสดงแผนเดิม': 'Show baseline',
     'เส้นจาง ๆ ใต้แท่งคือแผนเดิม เทียบแล้วรู้ทันทีว่าหลุดไปกี่วัน':
       'The faint line under each bar is the original plan — the gap is how far it has slipped.',
-    'ต้องตั้งเส้นฐานก่อนจึงจะแสดงได้': 'Set a baseline first',
-    'ตั้งเส้นฐานจากวันปัจจุบัน': 'Set baseline from today’s dates',
-    'ตั้งเส้นฐานใหม่จากวันปัจจุบัน': 'Reset baseline to today’s dates',
-    'ลบเส้นฐาน': 'Clear baseline',
-    'เส้นฐานคือภาพถ่ายวันที่ของทุกงาน ณ ตอนที่กด ใช้ตอบคำถามว่า “แผนเดิมบอกว่าเสร็จวันไหน” ตั้งใหม่ได้ทุกเมื่อ แต่ของเดิมจะถูกทับ':
+    'ต้องบันทึกแผนเดิมก่อนจึงจะแสดงได้': 'Set a baseline first',
+    'ตั้งแผนเดิมจากวันปัจจุบัน': 'Set baseline from today’s dates',
+    'ตั้งแผนเดิมใหม่จากวันปัจจุบัน': 'Reset baseline to today’s dates',
+    'ลบแผนเดิม': 'Clear baseline',
+    'แผนเดิมคือภาพถ่ายวันที่ของทุกงาน ณ ตอนที่กด ใช้ตอบคำถามว่า “แผนเดิมบอกว่าเสร็จวันไหน” ตั้งใหม่ได้ทุกเมื่อ แต่ของเดิมจะถูกทับ':
       'A baseline is a snapshot of every task’s dates at the moment you press it — it answers “what did the original plan say?”. You can reset it any time, but the previous one is overwritten.',
-    'ตั้งเส้นฐานใหม่? แผนเดิมที่บันทึกไว้จะถูกทับ':
+    'บันทึกแผนเดิมใหม่? แผนเดิมที่บันทึกไว้จะถูกทับ':
       'Reset the baseline? The plan saved earlier will be overwritten.',
-    'ลบเส้นฐานที่บันทึกไว้?': 'Delete the saved baseline?',
-    'ตั้งเส้นฐานแล้ว': 'Baseline set', 'ลบเส้นฐานแล้ว': 'Baseline cleared',
+    'ลบแผนเดิมที่บันทึกไว้?': 'Delete the saved baseline?',
+    'บันทึกแผนเดิมแล้ว': 'Baseline set', 'ลบแผนเดิมแล้ว': 'Baseline cleared',
     'แผนเดิม': 'Original plan',
     'ช้ากว่าแผน {n} วัน': '{n} [n|day|days] behind plan',
     'เร็วกว่าแผน {n} วัน': '{n} [n|day|days] ahead of plan',
@@ -833,7 +833,7 @@
     'การเลื่อนวันของงานที่พึ่งพากัน': 'Dependency date shifting',
     'เลือกว่าเมื่อเลื่อนงานหนึ่ง งานที่ผูกลำดับไว้กับมันควรขยับตามอย่างไร':
       'Choose how tasks linked by a dependency shift when you move one of them.',
-    'กินระยะห่าง': 'Consume buffer',
+    'ขยับเฉพาะเมื่อวันชนกัน': 'Shift only when dates collide',
     'ขยับงานที่รออยู่เฉพาะตอนที่วันชนกันจริง ระยะห่างที่เว้นไว้ทำหน้าที่เป็นกันชน':
       'Dependent tasks move only when the dates actually collide — the gap you left acts as a buffer.',
     'รักษาระยะห่าง': 'Maintain buffer',
@@ -851,8 +851,8 @@
       'Set the project’s working days so automatic date shifts do not land on a non-working day.',
     'วันทำงาน': 'Work days', 'ทุกวัน (ไม่มีวันหยุด)': 'Every day',
     'จันทร์ – ศุกร์': 'Monday – Friday', 'จันทร์ – เสาร์': 'Monday – Saturday',
-    'ตอนนี้มี {n} งานที่ครบกำหนดตรงวันหยุด ระบบไม่ย้ายให้เอง เพราะวันที่คนตั้งไว้เองต้องเคารพไว้ก่อน':
-      '{n} tasks are currently due on a non-working day. Orbit does not move them for you — a date a person set by hand is left alone.',
+    'ตอนนี้มี {n} งานที่ครบกำหนดตรงวันหยุด: {t} ระบบไม่ย้ายให้เอง เพราะวันที่คนตั้งไว้เองต้องเคารพไว้ก่อน':
+      '{n} tasks are currently due on a non-working day: {t}. Orbit does not move them for you — a date a person set by hand is left alone.',
     'ไม่มีงานไหนครบกำหนดตรงวันหยุด': 'No task is due on a non-working day',
     'วันทำงานของโปรเจกต์': 'Project work days',
     'หรือพิมพ์อีโมจิเอง': 'Or type an emoji',
@@ -860,7 +860,7 @@
 
     /* --- สถานะโปรเจกต์ --- */
     'ตั้งสถานะ': 'Set status',
-    'พักไว้ก่อน': 'On hold', 'เสร็จสมบูรณ์': 'Complete', 'ยกเลิกแล้ว': 'Dropped',
+    'พักไว้ก่อน': 'On hold', 'เสร็จแล้ว': 'Complete', 'ยกเลิกแล้ว': 'Dropped',
     'เขียนรายงานสถานะ': 'Write a status update', 'ล้างสถานะ': 'Clear status',
     'รายงานสถานะ': 'Status update', 'รายงานก่อนหน้า': 'Previous updates',
     'ตั้งสถานะเป็น “{s}” แล้ว': 'Status set to “{s}”',
@@ -1039,7 +1039,7 @@
     'ลบไฟล์แนบ': 'Delete attachment',
     'เพิ่มลำดับก่อนหลัง': 'Add dependency',
     'ลบลำดับก่อนหลัง': 'Remove dependency',
-    'ตั้งเส้นฐาน': 'Set baseline',
+    'บันทึกแผนเดิม': 'Set baseline',
     'อัปเดตสถานะพอร์ตโฟลิโอ': 'Update portfolio status',
     'เก็บการแจ้งเตือนทั้งหมด': 'Archive all notifications',
     'กู้คืนข้อมูล': 'Restore data',
@@ -1085,14 +1085,14 @@
     'ค่าที่กรอกไว้ทั้งหมดจะหายไปด้วย': 'Every value already filled in will be lost too.',
     'ลบฟิลด์นี้?': 'Delete this field?',
     'ลบฟิลด์': 'Delete field',
-    'ตั้งเส้นฐานใหม่?': 'Set a new baseline?',
+    'บันทึกแผนเดิมใหม่?': 'Set a new baseline?',
     'แผนเดิมที่บันทึกไว้จะถูกทับ': 'The plan you saved before will be overwritten.',
     'ตั้งใหม่': 'Set new',
     'ลบลำดับก่อนหลังนี้?': 'Remove this dependency?',
     'ลบลำดับ': 'Remove',
     'ลบเซกชันนี้?': 'Delete this section?',
     'ลบเซกชันนี้': 'Delete section',
-    'ลบเส้นฐานนี้': 'Delete baseline',
+    'ลบแผนเดิมนี้': 'Delete baseline',
     'สร้างพอร์ตโฟลิโอ': 'Create portfolio',
     'งานข้างในจะย้ายไปเซกชันแรก': 'Tasks inside move to the first section.',
     'ลบพอร์ตโฟลิโอ “{name}”?': 'Delete the portfolio “{name}”?',
@@ -1297,7 +1297,7 @@
     'ตารางงาน จัดกลุ่มและลากสลับลำดับได้': 'A table of tasks you can group and reorder',
     'คัมบัง ลากงานข้ามคอลัมน์': 'Kanban — drag tasks between columns',
     'วางแผนงานตามช่วงเวลา': 'Plan work across time',
-    'ลำดับก่อนหลังและเส้นฐาน': 'Dependencies and baselines',
+    'ลำดับก่อนหลังและแผนเดิม': 'Dependencies and baselines',
     'ดูตามกำหนดส่งรายเดือน': 'See work by due date, month by month',
     'ตัวเลขรวมและความคืบหน้า': 'Totals and progress at a glance',
 
@@ -2667,7 +2667,7 @@
     'อนุมัติปล่อยสินค้า (Gate 4)': 'Approve release (Gate 4)',
     'วันเปิดตัวสินค้า': 'Product launch day',
     'ฟิลด์ที่ต้องกรอกก่อนทำเสร็จ…': 'Fields required before completing…', 'ฟิลด์ที่ต้องกรอกก่อนทำเสร็จ': 'Fields required before completing',
-    'งานที่ฟิลด์เหล่านี้ยังว่างจะกดทำเสร็จไม่ได้ (งานอนุมัติและกฎอัตโนมัติไม่ถูกกั้น)': 'Tasks with any of these fields empty can’t be completed (approval tasks and automations are not blocked)',
+    'งานที่ฟิลด์เหล่านี้ยังว่างจะกดทำเสร็จไม่ได้ (เฉพาะงานหลัก ไม่รวมงานย่อย งานอนุมัติและกฎอัตโนมัติไม่ถูกกั้น)': 'Tasks with any of these fields empty can’t be completed (top-level tasks only, not subtasks; approval tasks and automations are not blocked)',
     'กรอกให้ครบก่อนทำเสร็จ: {f}': 'Fill these in before completing: {f}', 'โปรเจกต์นี้ยังไม่มีฟิลด์': 'This project has no fields yet',
     'งานย่อยครบแล้ว — ปิดงานหลัก “{t}” ได้': 'All subtasks are done — you can close “{t}”',
     'มีสมาชิก {n} คนที่ชื่อที่แสดงเป็นอีเมล': '[n|1 member has|{n} members have] an email address as the display name', 'แก้ชื่อ': 'Fix name',
@@ -2677,9 +2677,9 @@
     'เงียบมา {n} วันแล้ว — ขอให้ผู้รับผิดชอบอัปเดตสถานะ': 'Quiet for {n} days — asking the assignee for a status update',
     'เงียบนานกว่า {n} วัน — เพิ่มเจ้าของโปรเจกต์เป็นผู้ติดตาม': 'Quiet for over {n} days — added the project owner as a follower',
     'งาน “{t}” เงียบมา {n} วันแล้ว อัปเดตสถานะหน่อย': 'The task “{t}” has been quiet for {n} days — please post a status update',
-    'เตือนงานเงียบ…': 'Quiet-task reminders…', 'เตือนงานเงียบ': 'Quiet-task reminders',
-    'งานที่ไม่มีความเคลื่อนไหวเกินกำหนดจะแจ้งผู้รับผิดชอบ และเกิน 2 เท่าจะเพิ่มเจ้าของโปรเจกต์เป็นผู้ติดตาม ทำงานเฉพาะตอนมีคนเปิด Orbit อยู่ ปัจจุบัน: {d}': 'Tasks with no activity past the limit notify the assignee; past twice the limit the project owner becomes a follower. Runs only while someone has Orbit open. Currently: {d}',
-    'ปิดการเตือน': 'Off', '7 วัน': '7 days', '14 วัน': '14 days', 'ตั้งเตือนงานเงียบแล้ว': 'Quiet-task reminders set',
+    'เตือนงานไม่มีความเคลื่อนไหว…': 'Quiet-task reminders…', 'เตือนงานไม่มีความเคลื่อนไหว': 'Quiet-task reminders',
+    'แจ้งผู้รับผิดชอบเมื่องานไม่มีความเคลื่อนไหวเกินจำนวนวันที่ตั้ง (ตรวจตอนมีคนเปิด Orbit) ปัจจุบัน: {d}': 'Notifies the assignee when a task has no activity past the set days (checked while someone has Orbit open). Current: {d}',
+    'ปิดการเตือน': 'Off', '7 วัน': '7 days', '14 วัน': '14 days', 'ตั้งเตือนงานไม่มีความเคลื่อนไหวแล้ว': 'Quiet-task reminders set',
     /* Sprint 3 — อภิธานศัพท์ */
     'ศัพท์ที่ใช้ใน Orbit': 'Orbit glossary',
     'กลุ่มงานที่ทำเรื่องเดียวกัน มีเซกชัน สมาชิก และมุมมองของตัวเอง': 'A group of work on one topic, with its own sections, members and views',
@@ -2701,7 +2701,7 @@
     '{n} วันทำการ': '{n} working days', 'วันเริ่มโปรเจกต์ {d}': 'Project starts {d}', 'เริ่มโปรเจกต์': 'Project start',
     'บันทึกแผนเดิม': 'Save baseline', 'บันทึกวันที่ของทุกงานไว้เป็นแผนเดิม แล้วเทียบกับวันที่ปัจจุบัน': 'Save every task\'s dates as the baseline and compare with the current dates',
     'ยังไม่มีงานที่มีวันที่ให้พิมพ์': 'No dated tasks to print', 'แผนงาน (Gantt)': 'Schedule (Gantt)', 'วันทำการ': 'Working days',
-    'แถบเทา = เสาร์อาทิตย์/วันหยุดนักขัตฤกษ์ · เส้นเทาใต้แท่ง = แผนเดิม': 'Grey bands = weekends / public holidays · thin grey line under a bar = baseline',
+    'แถบเทา = เสาร์อาทิตย์/วันหยุดราชการ · เส้นเทาใต้แท่ง = แผนเดิม': 'Grey bands = weekends / public holidays · thin grey line under a bar = baseline',
     'วันขึ้นปีใหม่': 'New Year\'s Day', 'วันหยุดพิเศษ': 'Special holiday', 'วันมาฆบูชา': 'Makha Bucha', 'วันจักรี': 'Chakri Day',
     'วันสงกรานต์': 'Songkran', 'วันแรงงาน': 'Labour Day', 'วันฉัตรมงคล': 'Coronation Day', 'ชดเชยวันวิสาขบูชา': 'Visakha Bucha (substitute)',
     'วันเฉลิมฯ สมเด็จพระราชินี': 'Queen\'s Birthday', 'วันเฉลิมฯ ร.10': 'King\'s Birthday', 'วันอาสาฬหบูชา': 'Asarnha Bucha',
@@ -2719,8 +2719,8 @@
     'รวมฟิลด์แล้ว ย้ายค่า {n} รายการ': 'Fields merged, {n} values moved', 'ได้รวมฟิลด์ใน': 'merged fields in',
     'รวมฟิลด์ “{a}” เข้า “{b}”': 'Merge field “{a}” into “{b}”', 'รวมฟิลด์ “{a}” เข้า “{b}” ย้ายค่า {n} รายการ': 'Merged field “{a}” into “{b}”, {n} values moved',
     'ฟิลด์สำคัญ': 'Important field',
-    'ย้ายงานเงียบ 30 วันไปเซกชัน…': 'Move tasks quiet for 30 days to a section…', 'ย้ายงานที่เงียบเกิน 30 วันไปเซกชัน': 'Move tasks quiet for over 30 days to a section',
-    'ต้องเปิดเตือนงานเงียบไว้ด้วย งานจะถูกย้ายครั้งเดียวและมีบันทึกในประวัติงาน ปัจจุบัน: {s}': 'Quiet-task reminders must be on. Each task moves once and it is logged on the task. Current: {s}',
+    'ย้ายงานไม่มีความเคลื่อนไหว 30 วันไปเซกชัน…': 'Move tasks quiet for 30 days to a section…', 'ย้ายงานที่เงียบเกิน 30 วันไปเซกชัน': 'Move tasks quiet for over 30 days to a section',
+    'ต้องเปิดเตือนงานไม่มีความเคลื่อนไหวไว้ด้วย งานจะถูกย้ายครั้งเดียวและมีบันทึกในประวัติงาน ปัจจุบัน: {s}': 'Quiet-task reminders must be on. Each task moves once and it is logged on the task. Current: {s}',
     'ไม่ย้าย': 'Don\'t move', 'เงียบนานกว่า 30 วัน — ย้ายไปเซกชัน “{s}” อัตโนมัติ': 'Quiet for over 30 days — moved to section “{s}” automatically',
     '{n} วันตามปฏิทิน': '{n} calendar days',
     'กฎที่ทำงานให้เอง เช่น ย้ายงานเมื่อเปลี่ยนสถานะ หรือมอบหมายงานใหม่ให้คนที่กำหนด': 'Rules that run on their own, e.g. move a task when its status changes or assign new tasks to someone',
@@ -2753,6 +2753,43 @@
     'ยังไม่มีอีเมลให้เพิ่ม': 'No emails to add', 'สรุปการเพิ่มสมาชิก': 'Members added',
     'เพิ่มแล้ว {n} คน': 'Added [n|{n} person|{n} people]', 'ข้าม (มีอยู่แล้วหรือซ้ำ) {n} รายการ': 'Skipped (already exist or duplicate): {n}',
     'อีเมลไม่ถูกต้อง {n} รายการ': 'Invalid emails: {n}',
+    // Pre-pilot A
+    'พิมพ์ @ชื่อ #เซกชัน หรือวันที่ (พรุ่งนี้ ศุกร์ 5 ธ.ค.) ต่อท้ายชื่องานได้': 'Add @name, #section or a date (tomorrow, Fri, 5 Dec) after the task name',
+    'พิมพ์วันที่ (พรุ่งนี้ ศุกร์ 5 ธ.ค.) ต่อท้ายชื่องานได้': 'Add a date (tomorrow, Fri, 5 Dec) after the task name',
+    'ยังไม่มีงานในเซกชันนี้': 'No tasks in this section yet',
+    'มติ': 'Decisions', 'บันทึกประชุม {d}': 'Meeting notes {d}', 'ส่งสไลด์ @ชื่อ ศุกร์': 'Send slides @name Fri',
+    'บันทึกประชุมครั้งใหม่': 'New meeting notes',
+    'ยกงานที่ยังไม่เสร็จไปประชุมครั้งหน้า…': 'Carry open tasks to the next meeting…',
+    'ยกงานที่ยังไม่เสร็จไปประชุมครั้งหน้า': 'Carry open tasks to the next meeting',
+    'เลือกเซกชันที่จะยกงานที่ยังไม่เสร็จออกมา งานจะติดแท็ก “ยกมาจาก {d}” และย้อนกลับได้ในครั้งเดียว': 'Pick the sections to take open tasks from. They get the tag “Carried over from {d}” and it can be undone in one step',
+    'ยกไปที่เซกชัน': 'Move them to section', 'จะยกงาน {n} งาน': 'Will carry [n|{n} task|{n} tasks]',
+    'ไม่มีงานที่ยังไม่เสร็จในเซกชันที่เลือก': 'No open tasks in the selected sections',
+    'ยกงาน': 'Carry over', 'ยก {n} งานแล้ว': 'Carried over [n|{n} task|{n} tasks]',
+    'ตั้งวันประชุมครั้งถัดไป…': 'Set next meeting date…', 'วันประชุมครั้งถัดไป': 'Next meeting date',
+    'ตั้งวันประชุมครั้งถัดไปเป็น {d} แล้ว': 'Next meeting set to {d}', 'เลือกวันที่ก่อน': 'Pick a date first',
+    'สร้าง “{t}” แล้ว': 'Created “{t}”',
+    // Pre-pilot B
+    'สร้างทีมใหม่ {n} ทีม': 'Created [n|{n} new team|{n} new teams]',
+    'มุมมองผู้บริหาร': 'Executive view',
+    'แสดงภาพรวมผู้บริหารไว้บนสุด ซ่อนงานส่วนตัวชั่วคราว (กดอีกครั้งเพื่อกลับ)': 'Show the executive overview first and hide personal work for now (click again to go back)',
+    '{n} พอร์ตโฟลิโอ': '{n} [n|portfolio|portfolios]',
+    'รวมหลายโปรเจกต์ไว้ดูภาพรวมและสถานะเดียวกัน เหมาะกับผู้บริหารที่ต้องติดตามหลายงานพร้อมกัน': 'Group several projects into one overview and status, ideal for leaders following many efforts at once',
+    'ยังไม่มีพอร์ตโฟลิโอ': 'No portfolios yet',
+    'ยังไม่มีพอร์ตโฟลิโอ รวมหลายโปรเจกต์ไว้ดูภาพรวมเดียวได้': 'No portfolios yet. Group several projects into one overview.',
+    'เพิ่มที่เลือก': 'Add selected',
+    'เลือกโปรเจกต์อย่างน้อยหนึ่งโปรเจกต์': 'Select at least one project',
+    'เพิ่มแล้ว {n} โปรเจกต์': 'Added [n|{n} project|{n} projects]',
+    'จะย้ายค่า {m} รายการไปที่ “{b}” และจะทิ้งค่า {d} รายการ เพราะงานนั้นมีค่าใน “{b}” อยู่แล้ว': 'Will move {m} values into “{b}” and drop {d} values because those tasks already have a value in “{b}”',
+    'เช่น': 'e.g.',
+    'รวม “{a}” เข้า “{b}”?': 'Merge “{a}” into “{b}”?',
+    'รวมฟิลด์': 'Merge fields',
+    'รหัสสินค้า (Stock Keeping Unit) ใช้อ้างอิงสินค้าตัวนี้ในคลังและยอดขาย': 'Stock Keeping Unit: the code used to refer to this product in stock and sales',
+    'ต้นทุนผลิตโดยประมาณต่อหนึ่งชิ้น ไม่รวมค่าการตลาดและค่าขนส่ง': 'Estimated production cost per unit, excluding marketing and shipping',
+    'ความคืบหน้าการจดแจ้งเครื่องสำอางกับ อย.': 'Progress of the cosmetic notification with the Thai FDA',
+    'วันเริ่มจริง': 'Actual start date', 'วันเสร็จจริง': 'Actual finish date',
+    'วันที่เริ่มทำงานจริง ใช้เทียบกับแผน': 'The day work actually started, to compare with the plan',
+    'วันที่ทำงานเสร็จจริง ใช้เทียบกับแผน': 'The day work actually finished, to compare with the plan',
+    //@@B
   };
 
   /* ข้อความที่เก็บไว้ในบันทึก/การแจ้งเตือนเก่าเป็นคีย์ไทยเดิมที่เรียกเซกชันว่า "คอลัมน์"
@@ -2761,6 +2798,15 @@
     if (k.indexOf('เซกชัน') < 0) return;
     var old = k.split('เซกชัน').join('คอลัมน์');
     if (!(old in EN)) EN[old] = EN[k];
+  });
+  /* Pre-pilot B — เปลี่ยนคำเรียก (แผนเดิม / งานไม่มีความเคลื่อนไหว / วันหยุดราชการ) บันทึกเก่าที่เก็บคีย์เดิมยังแปลได้ */
+  Object.keys(EN).forEach(function (k) {
+    [['บันทึกแผนเดิม', 'ตั้งเส้นฐาน'], ['แผนเดิม', 'เส้นฐาน'], ['งานไม่มีความเคลื่อนไหว', 'งานเงียบ'],
+      ['วันหยุดราชการ', 'วันหยุดนักขัตฤกษ์']].forEach(function (pr) {
+      if (k.indexOf(pr[0]) < 0) return;
+      var old = k.split(pr[0]).join(pr[1]);
+      if (!(old in EN)) EN[old] = EN[k];
+    });
   });
 
   var lang = 'th';

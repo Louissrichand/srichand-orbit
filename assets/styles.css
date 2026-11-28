@@ -5657,3 +5657,20 @@ span.tb-people.ro { pointer-events: none; }
 .rm4c-x:hover { opacity: 1; }
 .bi-sum { margin: 0 0 8px; padding-left: 18px; line-height: 1.7; overflow-wrap: anywhere; }
 .modal textarea.inp { width: 100%; resize: vertical; font: inherit; }
+
+/* Pre-pilot A */
+.ask-quick { margin: -4px 0 10px; }
+.ask-quick-tip { font-size: 12.5px; color: var(--fg-soft); }
+.ask-quick-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.ask-quick-chips:empty { display: none; }
+.ask-quick-chip { font-size: 12.5px; padding: 2px 9px; border-radius: 999px; background: var(--accent-bg); color: var(--accent); }
+.apv-field-list { margin-top: 6px; }
+/* Pre-pilot B */
+.pf-pick-row input.pf-cb { flex: none; margin-right: 8px; }
+label.pf-pick-row { cursor: pointer; }
+.pf-multi-bar { display: flex; justify-content: flex-end; margin: 8px 0 12px; }
+.xo-pf-empty { margin-top: 6px; }
+.xo-pf-empty .as-link { margin-left: 4px; }
+.ask-body { white-space: pre-line; }
+.card-fv { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; }
+.card-fv .card-fn { color: var(--text-3, #7a8599); font-size: 11px; white-space: nowrap; }

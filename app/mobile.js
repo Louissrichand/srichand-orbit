@@ -205,15 +205,17 @@
         var ctx = qa;
         qa = null;
         if (!v || !ctx) return;
+        var qz = api.quickParse(v, ctx.pid, { dueOn: ctx.due.dueOn || null });   // Pre-pilot A — @ชื่อ #เซกชัน วันที่ ในชื่องาน
         var made = ctx.pid
-          ? S.createTask({ name: v, dueOn: ctx.due.dueOn || null }, ctx.pid, ctx.sec)
-          : S.mtCreateTasks([v], S.MT_RECENT, ctx.due.dueOn ? { dueOn: ctx.due.dueOn } : null)[0];
+          ? S.createTask(qz.attrs, ctx.pid, qz.sectionId || ctx.sec)
+          : S.mtCreateTasks([qz.attrs.name], S.MT_RECENT, qz.attrs.dueOn ? { dueOn: qz.attrs.dueOn } : null)[0];
         if (!made) return;              // ด่านสร้างงานปฏิเสธ (ขึ้นข้อความแล้ว)
         lastNew = made.id;
         toast(L('สร้างงานแล้ว'), L('เปิดงาน'), 'm2a-open-new');
       }, { ok: L('เพิ่มงาน'), placeholder: L('ชื่องาน'), note: where,
            pasteCtx: p ? { projectId: p.id, sectionId: sec } : { mtSection: S.MT_RECENT, extra: due } });
       /* ปุ่มกำหนดส่งใต้ช่องชื่อ — ไม่บังคับ เลือกได้ทีหลังในแผงงาน */
+      api.quickHint(p ? p.id : null);
       var field = document.querySelector('#modal .field');
       if (field) field.insertAdjacentHTML('afterend', dueChipsHtml(''));
     }

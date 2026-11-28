@@ -279,7 +279,7 @@
     { id: 'more',      icon: 'more',  label: 'เพิ่มเติม' }
   ];
   var ROUTE_GROUP = {
-    goals: 'strategy', goal: 'strategy', portfolio: 'strategy', reports: 'strategy', report: 'strategy',
+    goals: 'strategy', goal: 'strategy', portfolio: 'strategy', portfolios: 'strategy', reports: 'strategy', report: 'strategy',
     pages: 'knowledge',
     teams: 'people', team: 'people', workload: 'people', timesheets: 'people', profile: 'people',
     trash: 'more', admin: 'more'
@@ -382,6 +382,7 @@
     } else if (group === 'strategy') {
       p += section('',
         go('goals', route.type === 'goals' || route.type === 'goal', 'flag', 'เป้าหมาย') +
+        go('portfolios', route.type === 'portfolios', 'grid', 'พอร์ตโฟลิโอ') +
         go('reports', route.type === 'reports' || route.type === 'report', 'chart', 'รายงาน'));
       /* พอร์ตโฟลิโอ ซ่อนหัวข้อทั้งก้อนถ้ายังไม่มีและสร้างไม่ได้ ไม่งั้นมีหัวข้อว่าง */
       var pfs = S.portfolios();
@@ -542,6 +543,8 @@
         esc(tmT.name) + '</span><span class="chip">' + esc(L(teamPrivacyLabel(tmT.privacy))) + '</span></div></div>';
     } else if (route.type === 'teams') {
       h += '<div class="tb-title">' + I('users', 20) + ' ' + L('ทีมทั้งหมด') + '</div>';
+    } else if (route.type === 'portfolios') {
+      h += '<div class="tb-title">' + I('grid', 20) + ' ' + L('พอร์ตโฟลิโอ') + '</div>';
     } else if (route.type === 'goals' || route.type === 'goal') {
       h += '<div class="tb-title">' + I('flag', 20) + ' ' + L('เป้าหมาย') + '</div>';
     } else if (route.type === 'mytasks') {
@@ -598,7 +601,7 @@
       }
       var nmP = S.project(route.id);
       if (nmP && nmP.nextMeeting && nmP.nextMeeting >= S.today()) {        // Sprint 4c - วันประชุมถัดไปบนหัวโปรเจกต์ (กดเพื่อแก้)
-        h += '<button class="btn btn-ghost nm4c" data-act="set-next-meeting" title="' + esc(L('ตั้งวันประชุมถัดไป…')) + '">' + I('calendar', 13) + '<span class="hide-sm"> ' + esc(L('ประชุมครั้งถัดไป {d}', { d: fmtDate(nmP.nextMeeting) })) + '</span></button>';
+        h += '<button class="btn btn-ghost nm4c" data-act="set-next-meeting" title="' + esc(L('ตั้งวันประชุมครั้งถัดไป…')) + '">' + I('calendar', 13) + '<span class="hide-sm"> ' + esc(L('ประชุมครั้งถัดไป {d}', { d: fmtDate(nmP.nextMeeting) })) + '</span></button>';
       }
       h += followBtn('project', route.id);            // Sprint 2B — ติดตามโปรเจกต์ (เดิมซ่อนอยู่ใน ⋯)
       h += '<button class="btn btn-ghost" data-act="project-menu" data-id="' +
@@ -637,6 +640,8 @@
       }
       h += '<button class="btn btn-ghost" data-act="team-menu" data-id="' + esc(route.id) + '" title="' +
         L('เมนูทีม') + '">' + I('more') + '</button>';
+    } else if (route.type === 'portfolios' && S.can('structure')) {
+      h += '<button class="btn btn-primary" data-act="new-portfolio">' + L('สร้างพอร์ตโฟลิโอ') + '</button>';
     } else if (route.type === 'teams' && S.can('structure')) {
       h += '<button class="btn btn-primary" data-act="team-new">' + L('+ สร้างทีม') + '</button>';
     }
@@ -1002,7 +1007,7 @@
         if (!show('field:' + f.id) && !f.important) return;   // 4b — ฟิลด์สำคัญแสดงเสมอ
         var fv = S.fieldValue(t.id, f.id);
         if (fv === null || fv === undefined || fv === '' || (Array.isArray(fv) && !fv.length)) return;
-        foot += '<span class="card-fv" title="' + esc(f.name) + '">' + fieldCell(t, f) + '</span>';
+        foot += '<span class="card-fv" title="' + esc(f.name) + '"><span class="card-fn">' + esc(f.name) + ': </span>' + fieldCell(t, f) + '</span>';
       });
     }
     if (show('assignee')) {
@@ -3018,6 +3023,27 @@
     return h + '</div></div>';
   }
 
+  /* Pre-pilot B — รายการพอร์ตโฟลิโอ (เปิดจากแถบกลยุทธ์) */
+  function portfoliosView() {
+    var all = S.portfolios();
+    var h = '<div class="pjx"><div class="pjx-head">' + I('grid', 17) + '<b>' + L('พอร์ตโฟลิโอ') + '</b><span class="n">' +
+      L('{n} พอร์ตโฟลิโอ', { n: all.length }) + '</span></div>';
+    h += '<p class="prj-note">' + L('รวมหลายโปรเจกต์ไว้ดูภาพรวมและสถานะเดียวกัน เหมาะกับผู้บริหารที่ต้องติดตามหลายงานพร้อมกัน') + '</p>';
+    if (!all.length) {
+      return h + '<div class="ovw-empty">' + L('ยังไม่มีพอร์ตโฟลิโอ') +
+        (S.can('structure') ? ' <button class="btn btn-primary btn-sm" data-act="new-portfolio">' + L('สร้างพอร์ตโฟลิโอ') + '</button>' : '') + '</div></div>';
+    }
+    h += '<div class="pjx-grid">';
+    all.forEach(function (f) {
+      var n = S.portfolioProjects(f.id).length;
+      h += '<div class="pjx-card" data-act="go" data-route="portfolio" data-id="' + esc(f.id) + '">' +
+        '<div class="pjx-top"><span class="hproj-ic" style="background:' + esc(f.color) + '22">' + esc(f.icon) + '</span>' +
+        '<span class="grow"><b>' + esc(f.name) + '</b></span></div>' +
+        '<div class="pjx-meta"><span class="pf-none">' + esc(L('{n} โปรเจกต์', { n: n })) + '</span></div></div>';
+    });
+    return h + '</div></div>';
+  }
+
   function teamView(tid, tab, ui) {
     var t = S.team(tid);
     if (!t || !S.canSeeTeam(tid)) return '<div class="empty"><div class="big">👥</div>' + L('ไม่พบทีมนี้ หรือคุณไม่มีสิทธิ์เห็น') + '</div>';
@@ -3224,6 +3250,13 @@
     var stats = S.homeStats();
     var layout = S.homeLayout();
     var edit = !!st.edit;
+    /* Pre-pilot B — สวิตช์มุมมองผู้บริหาร: เปลี่ยนแค่สิ่งที่แสดง ไม่แตะเลย์เอาต์ที่จัดไว้ ปิดแล้วกลับเหมือนเดิม */
+    var execOn = !!S.pref('homeExec') && !edit;
+    if (execOn) {
+      layout = [{ w: 'exec', full: true }].concat(layout.filter(function (x) {
+        return ['exec', 'mine', 'assigned', 'projects'].indexOf(x.w) < 0;
+      }));
+    }
 
     var h = '<div class="home">';
 
@@ -3241,6 +3274,9 @@
         esc(L('{n} งานครบกำหนดใน 7 วัน', { n: stats.dueWeek })) + '</span>';
     h += '<span class="hstat">' + I('users', 14) +
       esc(L('{n} เพื่อนร่วมงาน', { n: stats.collaborators })) + '</span>';
+    h += '<button class="hstat hstat-btn' + (execOn ? ' on' : '') + '" data-act="home-exec" aria-pressed="' + execOn +
+      '" title="' + esc(L('แสดงภาพรวมผู้บริหารไว้บนสุด ซ่อนงานส่วนตัวชั่วคราว (กดอีกครั้งเพื่อกลับ)')) + '">' +
+      I('gauge', 14) + esc(L('มุมมองผู้บริหาร')) + '</button>';
     h += '<button class="hstat hstat-btn' + (edit ? ' on' : '') + '" data-act="home-edit">' +
       I(edit ? 'check' : 'settings', 14) + esc(edit ? L('เสร็จแล้ว') : L('ปรับแต่งหน้าแรก')) + '</button>';
     h += '</div></div>';
@@ -3730,7 +3766,8 @@
         if (g.isSection && !g.items.length) {
           h += '<div class="mt-empty">' + (g.special
             ? L('งานที่มีคนมอบหมายให้คุณจะมาอยู่ที่นี่ก่อน')
-            : L('ลากงานมาวางที่นี่')) + '</div>';
+            : (window.matchMedia && window.matchMedia('(max-width: 820px), (pointer: coarse)').matches
+              ? L('ยังไม่มีงานในเซกชันนี้') : L('ลากงานมาวางที่นี่'))) + '</div>';
         }
         h += '</div>';
         if (g.isSection && canW) {
@@ -4789,8 +4826,12 @@
     if (t.type === 'approval') {
       var a = approvalState(t.approval);
       var mayApprove = S.canApprove(t.id);
-      var apU = S.user(t.assigneeId);
-      var apName = '<b>' + esc(apU ? apU.name : '?') + '</b>';
+      var apIds = S.approverIds(t);
+      var apU = S.user(apIds[0] || t.assigneeId);
+      /* Pre-pilot A — หลายผู้อนุมัติ: ข้อความ "รอ … อนุมัติ" ต้องไม่ใช่แค่ผู้รับผิดชอบ */
+      var apName = apIds.length > 1
+        ? '<b>' + esc(apIds.map(function (x) { var au = S.user(x); return au ? au.name : '?'; }).join(', ')) + '</b>'
+        : '<b>' + esc(apU ? apU.name : '?') + '</b>';
       var ACTS = [['approved', 'อนุมัติ', 'check'], ['changes', 'ขอให้แก้ไข', 'pencil'],   // ปุ่มเป็นคำกริยา (อังกฤษ "Request changes") ต่างจากชื่อสถานะ "ขอแก้ไข" = Changes requested
                   ['rejected', 'ปฏิเสธ', 'close']];
       h += '<div class="fld"><label title="' + esc(L('สถานะรออนุมัติ / อนุมัติ / ไม่อนุมัติ ของงานนี้ ผู้อนุมัติเป็นคนเปลี่ยน')) + '">' + L('การอนุมัติ') + ' <span class="fld-info">ⓘ</span></label><div class="val">' +
@@ -4826,8 +4867,17 @@
 
     h += '<div class="fld"><label>' + (t.type === 'approval' ? L('ผู้อนุมัติ') : L('ผู้รับผิดชอบ')) +
       '</label><div class="val picker">' +
-      '<button class="picker-btn" data-act="pick-assignee">' + avatar(u) +
-      '<span>' + esc(u ? u.name : L('ยังไม่มอบหมาย')) + '</span></button></div></div>';
+      (t.type === 'approval' && S.approverIds(t).length > 1 ? '' : '<button class="picker-btn" data-act="pick-assignee">' + avatar(u) +
+      '<span>' + esc(u ? u.name : L('ยังไม่มอบหมาย')) + '</span></button>') +
+      /* Pre-pilot A — หลายผู้อนุมัติ: ไล่ทุกคนพร้อมผลโหวต (ผู้รับผิดชอบด้านบนไม่ถูกแตะ) */
+      (t.type === 'approval' && S.approverIds(t).length > 1
+        ? '<div class="apv4c-list apv-field-list">' + S.approverIds(t).map(function (aid) {
+            var au = S.user(aid), av = t.approvalVotes && t.approvalVotes[aid];
+            var st = av === 'approved' ? ['อนุมัติแล้ว', '#37c5ab'] : av === 'rejected' ? ['ปฏิเสธ', '#e8384f']
+              : av === 'changes' ? ['ขอให้แก้ไข', '#fd612c'] : ['รอ', '#f5a623'];
+            return '<div class="apv4c-p">' + avatar(au, 'sm') + '<span class="grow">' + esc(au ? au.name : '?') +
+              '</span><span class="approval-pill" style="background:' + st[1] + '22;color:' + st[1] + '">' + esc(L(st[0])) + '</span></div>';
+          }).join('') + '</div>' : '') + '</div></div>';
 
     /* ---- ฟิลด์ที่ซ่อนไว้เป็นค่ามาตรฐาน ----
      *
@@ -5720,9 +5770,9 @@
     'project.viewOff': 'ได้ปิดมุมมองในโปรเจกต์',
     'project.view': 'ได้บันทึกแท็บมุมมองในโปรเจกต์',
     'section.duplicate': 'ได้ทำสำเนาเซกชันในโปรเจกต์',
-    'project.baseline': 'ได้ตั้งเส้นฐานของ',
+    'project.baseline': 'ได้บันทึกแผนเดิมของ',
     'field.merge': 'ได้รวมฟิลด์ใน',
-    'project.baselineClear': 'ได้ลบเส้นฐานของ',
+    'project.baselineClear': 'ได้ลบแผนเดิมของ',
     'project.import': 'ได้นำเข้างานเข้าโปรเจกต์',
     'project.type': 'ได้บันทึกชนิดงานในโปรเจกต์',
     'project.form': 'ได้บันทึกฟอร์มในโปรเจกต์',
@@ -6447,7 +6497,7 @@
     projectsView: projectsView,
     portfolioView: portfolioView, PF_TABS: PF_TABS, PF_COLS: PF_COLS, rollupFnLabel: rollupFnLabel,
     GOAL_TABS: GOAL_TABS, goalsView: goalsView, goalView: goalView, strategyMap: strategyMap, goalChartSpec: goalChartSpec,
-    TEAM_TABS: TEAM_TABS, teamsView: teamsView, teamView: teamView, teamPrivacyLabel: teamPrivacyLabel,
+    TEAM_TABS: TEAM_TABS, teamsView: teamsView, portfoliosView: portfoliosView, teamView: teamView, teamPrivacyLabel: teamPrivacyLabel,
     pfStatePill: pfStatePill,
     myTasksView: myTasksView, inboxView: inboxView, trashView: trashView, approvalIcon: approvalIcon,
     MT_TABS: MT_TABS, INBOX_FLAGS: INBOX_FLAGS, calBoard: calBoard, calSpan: calSpan,

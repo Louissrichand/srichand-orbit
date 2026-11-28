@@ -422,6 +422,7 @@
   function renderViewBody() {
     var r = state.route;
     var body = '';
+    if (r.type !== 'home') state.home.edit = false;   /* Pre-pilot B — ออกจากหน้าแรกแล้วปิดโหมดปรับแต่ง */
 
     /* สมุดโน้ตบนหน้าแรกบันทึกระหว่างพิมพ์ การบันทึกทำให้หน้าวาดใหม่
      * จึงเก็บข้อความกับเคอร์เซอร์ไว้ แล้วคืนให้ช่องใหม่ ไม่ให้โฟกัสหลุดกลางประโยค */
@@ -467,6 +468,8 @@
         calMode: tcx.mode, anchor: tcx.anchor });
     } else if (r.type === 'teams') {
       body = R.teamsView();
+    } else if (r.type === 'portfolios') {
+      body = R.portfoliosView();
     } else if (r.type === 'goals' || r.type === 'goal') {
       /* เป้าหมายส่วนตัวที่ไม่ได้เป็นสมาชิก — ถอยไปหน้ารวมเงียบ ๆ เหมือนไม่มีอยู่ */
       if (r.type === 'goal' && (!S.goal(r.id) || !S.canSeeGoal(r.id))) { state.route = { type: 'goals', view: 'company' }; return renderAll(); }
@@ -660,31 +663,31 @@
     }
 
     if (page === 'deps') {
-      h += optHead(L('การจัดตารางและเส้นฐาน'), true);
+      h += optHead(L('การจัดตารางและแผนเดิม'), true);
       h += '<div class="opt-body">';
       /* โหมดการเลื่อนวันเป็นของโปรเจกต์ ไม่ใช่ของมุมมองส่วนตัว
        * ถ้าให้แต่ละคนตั้งเอง วันที่จะขยับไม่เหมือนกันแล้วแต่ว่าใครลาก */
       var ds = p.depShift || { mode: 'consume', scope: 'downstream' };
       var dsLabel = (S.DEP_SHIFT.filter(function (m) { return m.id === ds.mode; })[0] || {}).label;
-      h += optRow('project-settings', 'repeat', L('การเลื่อนวันของงานที่พึ่งพากัน'),
+      if (S.canStructureProject(id)) h += optRow('project-settings', 'repeat', L('การเลื่อนวันของงานที่พึ่งพากัน'),
         L(dsLabel || ''), true, ' data-id="' + esc(id) + '" data-tab="deps"');
-      h += optRow('project-settings', 'calendar', L('วันทำงานของโปรเจกต์'),
+      if (S.canStructureProject(id)) h += optRow('project-settings', 'calendar', L('วันทำงานของโปรเจกต์'),
         L((S.WORK_DAYS.filter(function (w) { return w.id === p.workDays; })[0] || {}).label || ''),
         true, ' data-id="' + esc(id) + '" data-tab="scheduling"');
       h += '<div class="opt-sep"></div>';
       h += '<div class="opt-base">' + I('calendar', 15) +
         '<span class="grow">' + (p.baseline
-          ? esc(L('ตั้งเส้นฐานไว้เมื่อ {when}', { when: R.fmtWhen(p.baseline.at) }))
-          : L('ยังไม่ได้ตั้งเส้นฐาน')) + '</span></div>';
-      h += optToggle('g-basetoggle', L('แสดงเส้นฐาน'), v.gShowBaseline,
+          ? esc(L('บันทึกแผนเดิมไว้เมื่อ {when}', { when: R.fmtWhen(p.baseline.at) }))
+          : L('ยังไม่ได้บันทึกแผนเดิม')) + '</span></div>';
+      h += optToggle('g-basetoggle', L('แสดงแผนเดิม'), v.gShowBaseline,
         p.baseline ? L('เส้นจาง ๆ ใต้แท่งคือแผนเดิม เทียบแล้วรู้ทันทีว่าหลุดไปกี่วัน')
-                   : L('ต้องตั้งเส้นฐานก่อนจึงจะแสดงได้'));
+                   : L('ต้องบันทึกแผนเดิมก่อนจึงจะแสดงได้'));
       h += '<div class="opt-acts">' +
         '<button class="btn btn-sm" data-act="g-set-baseline">' +
-        (p.baseline ? L('ตั้งเส้นฐานใหม่จากวันปัจจุบัน') : L('ตั้งเส้นฐานจากวันปัจจุบัน')) + '</button>' +
+        (p.baseline ? L('ตั้งแผนเดิมใหม่จากวันปัจจุบัน') : L('ตั้งแผนเดิมจากวันปัจจุบัน')) + '</button>' +
         (p.baseline ? '<button class="btn btn-sm btn-ghost" data-act="g-clear-baseline">' +
-          L('ลบเส้นฐาน') + '</button>' : '') + '</div>';
-      h += '<p class="opt-note">' + L('เส้นฐานคือภาพถ่ายวันที่ของทุกงาน ณ ตอนที่กด ใช้ตอบคำถามว่า “แผนเดิมบอกว่าเสร็จวันไหน” ตั้งใหม่ได้ทุกเมื่อ แต่ของเดิมจะถูกทับ') + '</p>';
+          L('ลบแผนเดิม') + '</button>' : '') + '</div>';
+      h += '<p class="opt-note">' + L('แผนเดิมคือภาพถ่ายวันที่ของทุกงาน ณ ตอนที่กด ใช้ตอบคำถามว่า “แผนเดิมบอกว่าเสร็จวันไหน” ตั้งใหม่ได้ทุกเมื่อ แต่ของเดิมจะถูกทับ') + '</p>';
       h += '</div>';
       return h + optFoot();
     }
@@ -849,12 +852,12 @@
       '<input class="opt-name" id="gvName" value="' + esc(curSv ? curSv.name + ' ' + L('(สำเนา)') : '') +
       '" placeholder="' + esc(L('เช่น งานของฉันสัปดาห์นี้')) + '"></div></div>';
 
-    /* กลุ่มนี้เป็นของผัง Gantt ล้วน เส้นฐาน ระดับการซูม และคอลัมน์ในตารางซ้าย
+    /* กลุ่มนี้เป็นของผัง Gantt ล้วน แผนเดิม ระดับการซูม และคอลัมน์ในตารางซ้าย
      * มุมมองอื่นไม่มีของพวกนี้ ถ้าโชว์ไว้จะกลายเป็นปุ่มที่กดแล้วไม่มีอะไรเปลี่ยน */
     h += '<div class="opt-sep"></div>';
     if (isG) {
       h += optRow('g-opt-page', 'pencil', L('รูปแบบการแสดงผล'), '', true, ' data-page="layout"');
-      h += optRow('g-opt-page', 'repeat', L('การจัดตารางและเส้นฐาน'),
+      h += optRow('g-opt-page', 'repeat', L('การจัดตารางและแผนเดิม'),
         L(((S.DEP_SHIFT.filter(function (m) {
           return m.id === ((p.depShift && p.depShift.mode) || 'consume');
         })[0]) || {}).label || ''), true, ' data-page="deps"');
@@ -901,7 +904,7 @@
     }
     /* 3a — อัตโนมัติของโปรเจกต์ (เปิดเป็นหน้าต่าง รายการ + ประวัติการรัน) */
     var nAuto = S.automations(id).filter(function (a) { return a.on; }).length;
-    h += '<div class="opt-sep"></div>' + optRow('auto-open', 'bolt', L('ระบบอัตโนมัติ'),
+    if (S.canStructureProject(id)) h += '<div class="opt-sep"></div>' + optRow('auto-open', 'bolt', L('ระบบอัตโนมัติ'),
       nAuto ? L('เปิดอยู่ {n}', { n: nAuto }) : L('ไม่มี'), true, ' data-id="' + esc(id) + '"');
 
     h += '<div class="opt-sep"></div><label class="opt-lbl">' +
@@ -1911,8 +1914,16 @@
       // ถ้าใต้ปุ่มไม่พอ ให้พลิกไปอยู่เหนือปุ่มแทน
       var above = anchorRect ? anchorRect.top - 5 - r.height : 0;
       if (anchorRect && above > pad) pop.style.top = above + 'px';
-      else pop.style.maxHeight = Math.max(150, global.innerHeight - pad - r.top) + 'px';
+      else {
+        /* Pre-pilot A — เหนือก็ไม่พอ: ชิดขอบล่างจอ แล้วจำกัดความสูงไม่ให้เกินขอบบน (เดิมหลุดขึ้นไปเหนือจอบนมือถือ) */
+        var maxH = Math.max(120, global.innerHeight - 2 * pad);
+        pop.style.maxHeight = maxH + 'px';
+        r = pop.getBoundingClientRect();
+        pop.style.top = Math.max(pad, Math.min(r.top, global.innerHeight - pad - r.height)) + 'px';
+      }
     }
+    r = pop.getBoundingClientRect();
+    if (r.top < pad) pop.style.top = pad + 'px';
   }
 
   /* ---------- navigation ---------- */
@@ -1971,6 +1982,39 @@
   function quickCreate(v, projectId, sectionId) {
     var q = S.quickAdd(v, projectId);
     return S.createTask(q, projectId, q.sectionId || sectionId);
+  }
+
+  /* Pre-pilot A — พิมพ์เร็วในหน้าต่างถามชื่องาน: ตัวอย่างสดใต้ช่อง + แปลงเป็นค่าตอนบันทึก (ตัวอ่านเดียวกับช่องเพิ่มงาน)
+   * projectId null = งานส่วนตัว (อ่านแค่วันที่ ไม่แยก @ชื่อ/#เซกชัน) */
+  function quickParse(v, projectId, extra) {
+    var q = S.quickAdd(v, projectId || null, !projectId), attrs = {};
+    Object.keys(extra || {}).forEach(function (k) { attrs[k] = extra[k]; });
+    attrs.name = q.name;
+    if (q.dueOn) attrs.dueOn = q.dueOn;
+    if (projectId) { if (q.assigneeId) attrs.assigneeId = q.assigneeId; }
+    return { attrs: attrs, sectionId: projectId ? q.sectionId : null };
+  }
+  function quickHint(projectId) {
+    var inp = document.getElementById("askInput");
+    if (!inp || document.getElementById("askQuickHint")) return;
+    var box = document.createElement("div");
+    box.id = "askQuickHint";
+    box.className = "ask-quick";
+    box.innerHTML = "<div class=\"ask-quick-tip\">" + R.esc(projectId
+      ? L("พิมพ์ @ชื่อ #เซกชัน หรือวันที่ (พรุ่งนี้ ศุกร์ 5 ธ.ค.) ต่อท้ายชื่องานได้")
+      : L("พิมพ์วันที่ (พรุ่งนี้ ศุกร์ 5 ธ.ค.) ต่อท้ายชื่องานได้")) + "</div><div class=\"ask-quick-chips\"></div>";
+    inp.parentNode.insertAdjacentElement("afterend", box);
+    var chips = box.lastChild;
+    inp.addEventListener("input", function () {
+      var v = inp.value.trim(), bits = [];
+      if (v) {
+        var q = S.quickAdd(v, projectId || null, !projectId);
+        if (projectId && q.assigneeId) { var qu = S.user(q.assigneeId); if (qu) bits.push(L("มอบให้ {who}", { who: qu.name })); }
+        if (q.dueOn) bits.push(L("ส่ง {d}", { d: R.fmtDate(q.dueOn) }));
+        if (projectId && q.sectionId) { var qs = S.section(projectId, q.sectionId); if (qs) bits.push(L("ใน {s}", { s: qs.name })); }
+      }
+      chips.innerHTML = bits.map(function (b) { return "<span class=\"ask-quick-chip\">" + R.esc(b) + "</span>"; }).join("");
+    });
   }
 
   function inlineAdd(btn, sectionId) {
@@ -2131,7 +2175,7 @@
     var cur = p.requiredFields || [];
     var list = (p.fields || []).filter(function (f) { return f.type !== 'id' && f.type !== 'formula'; });
     var h = '<h2>' + L('ฟิลด์ที่ต้องกรอกก่อนทำเสร็จ') + '</h2><p class="modal-sub">' +
-      R.esc(L('งานที่ฟิลด์เหล่านี้ยังว่างจะกดทำเสร็จไม่ได้ (งานอนุมัติและกฎอัตโนมัติไม่ถูกกั้น)')) + '</p>';
+      R.esc(L('งานที่ฟิลด์เหล่านี้ยังว่างจะกดทำเสร็จไม่ได้ (เฉพาะงานหลัก ไม่รวมงานย่อย งานอนุมัติและกฎอัตโนมัติไม่ถูกกั้น)')) + '</p>';
     if (!list.length) h += '<div class="ovw-empty">' + L('โปรเจกต์นี้ยังไม่มีฟิลด์') + '</div>';
     list.forEach(function (f) {
       h += '<label class="chk"><input type="checkbox" class="rf-cb" data-id="' + R.esc(f.id) + '"' + (cur.indexOf(f.id) >= 0 ? ' checked' : '') + '> ' + R.esc(f.name) + '</label>';
@@ -2308,7 +2352,8 @@
      * กดแล้วค่อยโดนปฏิเสธ คนที่แก้ไม่ได้เห็นแค่ของที่ใช้ได้จริง: ดูสิทธิ์ แจ้งเตือน ลิงก์ ส่งออก ฟอร์ม */
     var canStruct = S.can('structure') && S.canInProject(projectId, 'edit');
     var canCreate = S.canCreateTask(projectId);
-    if (canStruct) h += item('project-settings', 'settings', L('ตั้งค่าโปรเจกต์'));
+    var canAdm = S.canStructureProject(projectId);   /* Pre-pilot B — เจ้าของ/ผู้ดูแลโปรเจกต์/ผู้ดูแลระบบ */
+    if (canAdm) h += item('project-settings', 'settings', L('ตั้งค่าโปรเจกต์'));
     h += item('project-access', 'shield', L('ใครเข้าถึงโปรเจกต์นี้ได้')) ;
     if (canStruct) {
       h += item('project-look', 'pencil', L('ตั้งสีและไอคอน'));
@@ -2328,23 +2373,25 @@
     }
     if (S.can('write') && S.canInProject(projectId, 'edit')) {      // Sprint 3
       h += item('slip-overdue', 'calendar', L('เลื่อนงานเลยกำหนดไปรอบถัดไป…'));
-      h += item('set-next-meeting', 'calendar', L('ตั้งวันประชุมถัดไป…'));
+      h += item('carry-open', 'calendar', L('ยกงานที่ยังไม่เสร็จไปประชุมครั้งหน้า…'));
+      h += item('set-next-meeting', 'calendar', L('ตั้งวันประชุมครั้งถัดไป…'));
+      if ((S.project(projectId).pages || []).length) h += item('new-meeting-page', 'text', L('บันทึกประชุมครั้งใหม่'));
     }
     h += '<div class="pop-sep"></div>';
-    if (canStruct) {
+    if (canAdm) {
       h += item('manage-fields', 'filter', L('จัดการฟิลด์'));
       h += item('required-fields', 'check', L('ฟิลด์ที่ต้องกรอกก่อนทำเสร็จ…'));   // Sprint 4
-      h += item('stale-days', 'bell', L('เตือนงานเงียบ…'));
+      h += item('stale-days', 'bell', L('เตือนงานไม่มีความเคลื่อนไหว…'));
       h += item('auto-open', 'bolt', L('ระบบอัตโนมัติ'));
     }
     h += item('forms-open', 'note', L('ฟอร์ม'));          // ฟอร์มเปิดให้คนนอกส่งเรื่องเข้ามาได้โดยตั้งใจ
+    if (canAdm) h += item('types-open', 'diamond', L('ชนิดงานและสถานะ'));
     if (canStruct) {
-      h += item('types-open', 'diamond', L('ชนิดงานและสถานะ'));
       h += item('manage-templates', 'star', L('เทมเพลตงาน'));
       h += item('reset-cols', 'arrowLeft', L('คืนความกว้างคอลัมน์เดิม'));
     }
     h += '<div class="pop-sep"></div>';
-    if (canStruct && canCreate) h += item('import-csv', 'archive', L('นำเข้างานจาก CSV / Excel'));
+    if (canAdm && canCreate) h += item('import-csv', 'archive', L('นำเข้างานจาก CSV / Excel'));
     h += item('export-csv', 'send', L('ส่งออกเป็น CSV'));
     h += item('export-xlsx', 'send', L('ส่งออกเป็น Excel (.xlsx)'));          // Sprint 4c
     h += item('time-csv', 'send', L('ส่งออกเวลาที่บันทึก (CSV)'));          // 3c
@@ -2352,8 +2399,8 @@
     h += item('export-ics', 'calendar', L('ดาวน์โหลดปฏิทิน .ics'));
     h += item('print-list', 'note', L('พิมพ์รายการงาน'));
     if (canCreate) h += item('project-trash', 'trash', L('ถังขยะของโปรเจกต์นี้'));
-    if (canStruct || S.can('manage')) h += '<div class="pop-sep"></div>';
-    if (canStruct) {
+    if (canAdm || S.can('manage')) h += '<div class="pop-sep"></div>';
+    if (canAdm) {
       h += item('toggle-archive', p.archived ? 'arrowLeft' : 'archive',
         p.archived ? L('เอากลับจากคลัง') : L('เก็บโปรเจกต์เข้าคลัง'));
     }
@@ -2449,14 +2496,14 @@
       h += '<div class="pf-pick">';
       free.forEach(function (p) {
         var s = S.projectStats(p.id);
-        h += '<button class="pf-pick-row" data-act="pf-pick" data-pf="' + R.esc(pfId) +
-          '" data-id="' + R.esc(p.id) + '">' +
+        h += '<label class="pf-pick-row">' +
+          '<input type="checkbox" class="pf-cb" value="' + R.esc(p.id) + '">' +
           '<span class="hproj-ic" style="background:' + R.esc(p.color) + '22">' + R.esc(p.icon) + '</span>' +
           '<span class="grow"><b>' + R.esc(p.name) + '</b><em>' +
-          L('{n} งาน · เสร็จ {p}%', { n: s.total, p: s.percent }) + '</em></span>' +
-          I('plus', 15) + '</button>';
+          L('{n} งาน · เสร็จ {p}%', { n: s.total, p: s.percent }) + '</em></span></label>';
       });
-      h += '</div>';
+      h += '</div><div class="pf-multi-bar"><button class="btn btn-primary btn-sm" data-act="pf-pick-multi" data-pf="' + R.esc(pfId) + '">' +
+        L('เพิ่มที่เลือก') + '</button></div>';
     }
     var inside = S.portfolioProjects(pfId);
     if (inside.length) {
@@ -2727,11 +2774,13 @@
       });
       h += '</select></div>';
       if (p.workDays !== 'all') {
-        var off = S.tasksInProject(projectId).filter(function (x) {
+        var offList = S.tasksInProject(projectId).filter(function (x) {
           return x.task.dueOn && !S.isWorkday(x.task.dueOn, p.workDays);
-        }).length;
+        });
+        var off = offList.length;
+        var offNames = offList.slice(0, 4).map(function (x) { return '“' + R.esc(x.task.name) + '”'; }).join(', ') + (off > 4 ? ' …' : '');
         h += '<div class="prj-warn">' + I('alert', 15) + '<span>' +
-          (off ? L('ตอนนี้มี {n} งานที่ครบกำหนดตรงวันหยุด ระบบไม่ย้ายให้เอง เพราะวันที่คนตั้งไว้เองต้องเคารพไว้ก่อน', { n: off })
+          (off ? L('ตอนนี้มี {n} งานที่ครบกำหนดตรงวันหยุด: {t} ระบบไม่ย้ายให้เอง เพราะวันที่คนตั้งไว้เองต้องเคารพไว้ก่อน', { n: off, t: offNames })
                : L('ไม่มีงานไหนครบกำหนดตรงวันหยุด')) + '</span></div>';
       }
       h += '<div class="modal-acts"><button class="btn btn-primary" data-act="close-modal">' + L('ปิด') + '</button></div>';
@@ -8429,7 +8478,7 @@
       'auto-new', 'auto-edit', 'auto-toggle', 'auto-dup', 'auto-del', 'ae-save',
       'pick-status', 'clear-status', 'toggle-view',
       'new-portfolio', 'pf-rename', 'pf-desc', 'pf-look', 'save-pf-look', 'pf-delete',
-      'pf-add', 'pf-pick', 'pf-remove', 'pf-pick-status', 'pf-clear-status',
+      'pf-add', 'pf-pick', 'pf-pick-multi', 'pf-remove', 'pf-pick-status', 'pf-clear-status',
       'pf-toggle-project', 'add-to-portfolio',
       'manage-templates', 'delete-template', 'save-template', 'use-template',
       'save-view', 'delete-view', 'reset-cols',
@@ -8483,7 +8532,7 @@
     put('self', [
       'mt-sec-add', 'mt-sec-rename', 'mt-sec-move', 'mt-sec-delete', 'mt-mode', 'mt-set',
       'mt-filter-clear', 'mt-sort-clear', 'calx-mode',
-      'home-edit', 'home-w-add', 'home-w-remove', 'home-w-move', 'home-w-size', 'home-w-reset', 'notepad',
+      'home-edit', 'home-exec', 'home-w-add', 'home-w-remove', 'home-w-move', 'home-w-size', 'home-w-reset', 'notepad',
       'open-notif', 'notif-bookmark', 'notif-read', 'archive-notif', 'unarchive-notif',
       'inbox-read-all', 'inbox-archive-all', 'inbox-sort-set', 'inbox-dense',
       'dnd-set', 'dnd-off', 'dnd-sched', 'dnd-from', 'dnd-to', 'proj-notify'
@@ -8492,7 +8541,7 @@
      * ส่วนตัวกรอง เรียง จัดกลุ่ม คอลัมน์ การ์ด และปฏิทินเป็นมุมมองของแต่ละคน จำลง db.personal */
     put('structure', ['sv-rename', 'sv-move', 'sv-update', 'sv-delete', 'tab-default',
       'dup-section', 'do-dup-section']);
-    put('write', ['carry-over', 'slip-overdue', 'pg-move', 'set-next-meeting']);
+    put('write', ['carry-over', 'slip-overdue', 'pg-move', 'set-next-meeting', 'new-meeting-page', 'carry-open', 'carry-open-go']);
     put('structure', ['required-fields', 'save-required-fields', 'stale-days']);
     put('manage', ['fix-user-name', 'set-manager']);        // Sprint 4 — เฉพาะผู้ดูแลระบบ        // Sprint 4
     put('manage', ['set-org-lang', 'set-org-privacy']);       // Sprint 3 — เฉพาะผู้ดูแลระบบ        // Sprint 3 — ย้ายงานระหว่างเซกชัน = แก้งาน ไม่ใช่แก้โครงสร้าง
@@ -8636,9 +8685,21 @@
     denyToast();
   });
 
+  /* Pre-pilot B — คำสั่งแก้โครงสร้างโปรเจกต์ ทำได้เฉพาะเจ้าของ/ผู้ดูแลโปรเจกต์/ผู้ดูแลระบบ (สมาชิกทั่วไปยังเพิ่ม/เปลี่ยนชื่อเซกชันได้) */
+  var PSTRUCT = {};
+  ['toggle-archive', 'manage-fields', 'add-field', 'delete-field', 'create-field', 'rename-field', 'drop-field',
+    'add-field-picker', 'pick-ftype', 'auto-new', 'auto-edit', 'auto-toggle', 'auto-dup', 'auto-del', 'ae-save',
+    'save-project-details', 'set-depmode', 'set-depscope', 'set-workdays', 'import-csv', 'field-format', 'do-field-format',
+    'required-fields', 'save-required-fields', 'stale-days', 'project-settings', 'auto-open', 'types-open'
+  ].forEach(function (a) { PSTRUCT[a] = true; });
+
   /** ผ่านสิทธิ์ไหม ถ้าไม่ผ่านจะเตือนให้ผู้ใช้รู้ว่าทำไม ไม่เงียบหาย */
   function allowed(act, el) {
     var need = NEEDS[act];
+    if (PSTRUCT[act]) {
+      var psPid = state.route.type === "project" ? state.route.id : el.dataset.id;
+      if (psPid && psPid !== '@me' && S.project(psPid) && !S.canStructureProject(psPid)) { denyToast(); return false; }
+    }
     if (!need) return true;
     var ok;
     if (need === "write:task") ok = S.can("write", actTaskId(el));
@@ -9109,7 +9170,7 @@
       case 'g-basetoggle': {
         var vb = viewFor(state.route.id);
         var pb2 = S.project(state.route.id);
-        if (!pb2.baseline && !vb.gShowBaseline) { toast(L('ยังไม่ได้ตั้งเส้นฐาน')); break; }
+        if (!pb2.baseline && !vb.gShowBaseline) { toast(L('ยังไม่ได้บันทึกแผนเดิม')); break; }
         vb.gShowBaseline = !vb.gShowBaseline;
         renderViewBody();
         refreshOpts();
@@ -9123,23 +9184,23 @@
           viewFor(blPid).gShowBaseline = true;
           renderViewBody();
           refreshOpts();
-          toast(L('ตั้งเส้นฐานแล้ว'), L('ย้อนกลับ'), 'undo');
+          toast(L('บันทึกแผนเดิมแล้ว'), L('ย้อนกลับ'), 'undo');
         };
         if (pbs.baseline) {
-          askConfirm(L('ตั้งเส้นฐานใหม่?'), L('แผนเดิมที่บันทึกไว้จะถูกทับ'), doBaseline,
+          askConfirm(L('บันทึกแผนเดิมใหม่?'), L('แผนเดิมที่บันทึกไว้จะถูกทับ'), doBaseline,
             { ok: L('ตั้งใหม่') });
         } else doBaseline();
         break;
       }
       case 'g-clear-baseline':
         var cbPid = state.route.id;
-        askConfirm(L('ลบเส้นฐานที่บันทึกไว้?'), '', function () {
+        askConfirm(L('ลบแผนเดิมที่บันทึกไว้?'), '', function () {
           S.clearBaseline(cbPid);
           viewFor(cbPid).gShowBaseline = false;
           renderViewBody();
           refreshOpts();
-          toast(L('ลบเส้นฐานแล้ว'), L('ย้อนกลับ'), 'undo');
-        }, { ok: L('ลบเส้นฐานนี้') });
+          toast(L('ลบแผนเดิมแล้ว'), L('ย้อนกลับ'), 'undo');
+        }, { ok: L('ลบแผนเดิมนี้') });
         break;
 
       /* คำค้นเก็บอยู่ในมุมมอง ไม่ใช่ใน state ชั่วคราว
@@ -9449,7 +9510,7 @@
         var spMon = S.addDays(spT, ((8 - spDow) % 7) || 7);              // วันจันทร์ถัดไป
         var spNext = S.project(spPid).nextMeeting;      // วันประชุมถัดไปที่ตั้งไว้ (ถ้ายังไม่ถึง) มาเป็นตัวเลือกแรก
         askChoice(L('เลื่อนงานเลยกำหนดไปวันไหน'), L('{n} งานที่เลยกำหนดจะถูกเลื่อน และนับว่าเลื่อนแล้วหนึ่งครั้ง', { n: spN }),
-          (spNext && spNext > spT ? [[L('วันประชุมถัดไป'), spNext]] : []).concat([
+          (spNext && spNext > spT ? [[L('วันประชุมครั้งถัดไป'), spNext]] : []).concat([
           [L('พรุ่งนี้'), S.addDays(spT, 1)], [L('วันจันทร์หน้า'), spMon], [L('อีก 7 วัน'), S.addDays(spT, 7)]
         ]).map(function (o) {
           return { label: o[0] + (R.fmtDate(o[1]) !== o[0] ? ' · ' + R.fmtDate(o[1]) : ''), run: function () {
@@ -9459,14 +9520,14 @@
         }));
         break;
       }
-      /* Sprint 4 — เตือนงานเงียบ: เลือกกี่วัน (ทำงานตอนมีคนเปิด Orbit เท่านั้น ยังไม่มีเซิร์ฟเวอร์รันให้ตลอด) */
+      /* Sprint 4 — เตือนงานไม่มีความเคลื่อนไหว: เลือกกี่วัน (ทำงานตอนมีคนเปิด Orbit เท่านั้น ยังไม่มีเซิร์ฟเวอร์รันให้ตลอด) */
       case 'stale-days': {
         closePops();
         var sdPid = state.route.id, sdCur = (S.project(sdPid) || {}).staleDays || 0;
-        askChoice(L('เตือนงานเงียบ'), L('งานที่ไม่มีความเคลื่อนไหวเกินกำหนดจะแจ้งผู้รับผิดชอบ และเกิน 2 เท่าจะเพิ่มเจ้าของโปรเจกต์เป็นผู้ติดตาม ทำงานเฉพาะตอนมีคนเปิด Orbit อยู่ ปัจจุบัน: {d}', { d: sdCur ? L('{n} วัน', { n: sdCur }) : L('ปิดการเตือน') }),
+        askChoice(L('เตือนงานไม่มีความเคลื่อนไหว'), L('แจ้งผู้รับผิดชอบเมื่องานไม่มีความเคลื่อนไหวเกินจำนวนวันที่ตั้ง (ตรวจตอนมีคนเปิด Orbit) ปัจจุบัน: {d}', { d: sdCur ? L('{n} วัน', { n: sdCur }) : L('ปิดการเตือน') }),
           [[0, L('ปิดการเตือน')], [7, L('7 วัน')], [14, L('14 วัน')], [30, L('30 วัน')]].map(function (o) {
-            return { label: o[1], run: function () { if (S.setStaleDays(sdPid, o[0])) { toast(L('ตั้งเตือนงานเงียบแล้ว')); S.runStaleCheck(); } } };
-          }).concat(R.s4bStaleMove ? [{ label: L('ย้ายงานเงียบ 30 วันไปเซกชัน…'), run: function () { R.s4bStaleMove(sdPid); } }] : []));
+            return { label: o[1], run: function () { if (S.setStaleDays(sdPid, o[0])) { toast(L('ตั้งเตือนงานไม่มีความเคลื่อนไหวแล้ว')); S.runStaleCheck(); } } };
+          }).concat(R.s4bStaleMove ? [{ label: L('ย้ายงานไม่มีความเคลื่อนไหว 30 วันไปเซกชัน…'), run: function () { R.s4bStaleMove(sdPid); } }] : []));
         break;
       }
       case 'required-fields': closePops(); openModal(requiredFieldsModal(state.route.id)); break;
@@ -9478,11 +9539,58 @@
       case 'set-next-meeting': {
         closePops();
         var nmPid = state.route.id, nmCur = S.project(nmPid) && S.project(nmPid).nextMeeting;
-        askText(L('วันประชุมถัดไป'), nmCur ? R.fmtDate(nmCur) : '', function (v) {
-          var nq = S.quickAdd('x ' + (v || ''), null);          // ใช้ตัวอ่านวันที่เดียวกับพิมพ์เร็ว (ศุกร์นี้ 5 ธ.ค. 5/12)
-          if (!nq.dueOn) { toast(L('อ่านวันที่ไม่ออก ลองพิมพ์ เช่น ศุกร์นี้ หรือ 5 ธ.ค.')); return; }
-          if (S.setNextMeeting(nmPid, nq.dueOn)) toast(L('ตั้งวันประชุมถัดไปเป็น {d} แล้ว', { d: R.fmtDate(nq.dueOn) }));
-        }, { ok: L('บันทึก'), placeholder: L('เช่น ศุกร์นี้ หรือ 5 ธ.ค.') });
+        /* Pre-pilot A — ตัวเลือกวันที่จริง (ปฏิทินของเบราว์เซอร์) แทนช่องพิมพ์ ไม่ต้องเดาว่าอ่านวันที่แบบไหนได้ */
+        askText(L('วันประชุมครั้งถัดไป'), nmCur || S.addDays(S.today(), 7), function (v) {
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(v || '')) { toast(L('เลือกวันที่ก่อน')); return; }
+          if (S.setNextMeeting(nmPid, v)) toast(L('ตั้งวันประชุมครั้งถัดไปเป็น {d} แล้ว', { d: R.fmtDate(v) }));
+        }, { ok: L('บันทึก'), type: 'date' });
+        break;
+      }
+      case 'new-meeting-page': {
+        closePops();
+        var nmpPid = state.route.id;
+        var nmp = S.createMeetingPage(nmpPid);
+        if (!nmp) { toast(L('สร้างหน้าไม่ได้ (สิทธิ์หรือครบจำนวนแล้ว)')); break; }
+        pageRoute(nmpPid, nmp.id);
+        toast(L('สร้าง “{t}” แล้ว', { t: nmp.title }), L('ย้อนกลับ'), 'undo');
+        break;
+      }
+      /* Pre-pilot A — ยกงานที่ยังไม่เสร็จ (ทุกงาน ไม่ใช่แค่เลยกำหนด) จากเซกชันที่เลือกไปเซกชันยกยอด เห็นจำนวนก่อน */
+      case 'carry-open': {
+        closePops();
+        var cpid = state.route.id, cpj = S.project(cpid);
+        if (!cpj) break;
+        var carrySec = L('ยกยอดไปครั้งหน้า');
+        var cdest = (cpj.sections.filter(function (x) { return x.name === carrySec; })[0] || cpj.sections[cpj.sections.length - 1]).id;
+        var chtml = '<h2>' + R.esc(L('ยกงานที่ยังไม่เสร็จไปประชุมครั้งหน้า')) + '</h2>' +
+          '<p class="prj-note">' + R.esc(L('เลือกเซกชันที่จะยกงานที่ยังไม่เสร็จออกมา งานจะติดแท็ก “ยกมาจาก {d}” และย้อนกลับได้ในครั้งเดียว', { d: S.today() })) + '</p>' +
+          '<div class="field" id="coSrc">' + cpj.sections.map(function (x) {
+            return '<label class="apv4c-pick"><input type="checkbox" value="' + R.esc(x.id) + '"' + (x.id === cdest ? '' : ' checked') + '> <span>' + R.esc(x.name) + '</span></label>';
+          }).join('') + '</div>' +
+          '<div class="field"><label>' + R.esc(L('ยกไปที่เซกชัน')) + '</label><select id="coDest" class="inp">' + cpj.sections.map(function (x) {
+            return '<option value="' + R.esc(x.id) + '"' + (x.id === cdest ? ' selected' : '') + '>' + R.esc(x.name) + '</option>';
+          }).join('') + '</select></div><div class="modal-note" id="coCount"></div>' +
+          '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+          '<button class="btn btn-primary" id="coGo" data-act="carry-open-go" data-id="' + R.esc(cpid) + '">' + L('ยกงาน') + '</button></div>';
+        openModal(chtml);
+        var coUpd = function () {
+          var srcs = Array.prototype.map.call(document.querySelectorAll('#coSrc input:checked'), function (x) { return x.value; });
+          var dst = document.getElementById('coDest').value;
+          var n = S.openTasksInSections(cpid, srcs.filter(function (x) { return x !== dst; })).length;
+          document.getElementById('coCount').textContent = n ? L('จะยกงาน {n} งาน', { n: n }) : L('ไม่มีงานที่ยังไม่เสร็จในเซกชันที่เลือก');
+          document.getElementById('coGo').disabled = !n;
+        };
+        document.getElementById('coSrc').addEventListener('change', coUpd);
+        document.getElementById('coDest').addEventListener('change', coUpd);
+        coUpd();
+        break;
+      }
+      case 'carry-open-go': {
+        var cgSrcs = Array.prototype.map.call(document.querySelectorAll('#coSrc input:checked'), function (x) { return x.value; });
+        var cgDest = document.getElementById('coDest').value;
+        closeModal();
+        var cgN = S.carryOpenToNext(id, cgSrcs, cgDest);
+        if (cgN) toast(L('ยก {n} งานแล้ว', { n: cgN }), L('ย้อนกลับ'), 'undo');
         break;
       }
       /* Sprint 3 — ยกงานค้าง: ย้ายงานที่ยังไม่เสร็จในเซกชันนี้ไปเซกชันอื่นรวดเดียว (เช่น ประชุมครั้งก่อน → ครั้งนี้)
@@ -9865,10 +9973,12 @@
         askText(L('ชื่องานใหม่'), '', function (v) {
           if (!v) return;
           var qsel = document.getElementById('qaSec');
-          var nt = S.createTask({ name: v }, qp.id, (qsel && qsel.value) || qaCtx.sectionId);
+          var qpz = quickParse(v, qp.id);
+          var nt = S.createTask(qpz.attrs, qp.id, qpz.sectionId || (qsel && qsel.value) || qaCtx.sectionId);
           if (nt) openTask(nt.id);          // Sprint 1B — ถูกด่านสร้างงานปฏิเสธ = null (ขึ้นข้อความแล้ว)
         }, { ok: L('เพิ่มงาน'), pasteCtx: qaCtx,
              note: L('วางข้อความหลายบรรทัดเพื่อสร้างหลายงานพร้อมกัน') });
+        quickHint(qp.id);
         /* Sprint 4b — เลือกเซกชันก่อนเพิ่ม (ค่าเริ่มต้น = เซกชันแรก) */
         var qaIn = document.getElementById('askInput');
         if (qaIn && qp.sections.length > 1) {
@@ -10877,10 +10987,12 @@
       case 'mt-add-top':
         askText(L('ชื่องานใหม่'), '', function (v) {
           if (!v) return;
-          var mmade = S.mtCreateTasks([v], S.MT_RECENT);
+          var mqz = quickParse(v, null);
+          var mmade = S.mtCreateTasks([mqz.attrs.name], S.MT_RECENT, mqz.attrs.dueOn ? { dueOn: mqz.attrs.dueOn } : null);
           if (mmade[0]) openTask(mmade[0].id);
         }, { ok: L('เพิ่มงาน'), pasteCtx: { mtSection: S.MT_RECENT },
              note: L('งานที่สร้างจากงานของฉันเป็นงานส่วนตัว เห็นเฉพาะคุณจนกว่าจะเพิ่มเข้าโปรเจกต์') });
+        quickHint(null);
         break;
 
       /* --- ปฏิทินสัปดาห์/เดือน (R.calBoard) ใช้ได้ทุกขอบเขต --- */
@@ -10916,6 +11028,11 @@
       /* --- หน้าแรก --- */
       case 'home-edit':
         state.home.edit = !state.home.edit;
+        renderViewBody();
+        break;
+      case 'home-exec':
+        state.home.edit = false;
+        S.setPref('homeExec', !S.pref('homeExec'));
         renderViewBody();
         break;
       case 'home-w-add': {
@@ -11073,6 +11190,19 @@
         break;
       }
       case 'pf-add': closePops(); openModal(portfolioAddModal(el.dataset.pf || state.route.id)); break;
+      case 'pf-pick-multi': {
+        var pmIds = [].slice.call($modal.querySelectorAll('.pf-cb:checked')).map(function (x) { return x.value; });
+        if (!pmIds.length) { toast(L('เลือกโปรเจกต์อย่างน้อยหนึ่งโปรเจกต์')); break; }
+        var pmN = S.batch('เพิ่มโปรเจกต์เข้าพอร์ตโฟลิโอ', null, function () {
+          var c = 0;
+          pmIds.forEach(function (pid) { if (S.addToPortfolio(el.dataset.pf, pid)) c++; });
+          return c;
+        });
+        openModal(portfolioAddModal(el.dataset.pf));
+        renderAll();
+        toast(L('เพิ่มแล้ว {n} โปรเจกต์', { n: pmN }), L('ย้อนกลับ'), 'undo');
+        break;
+      }
       case 'pf-pick': {
         S.addToPortfolio(el.dataset.pf, el.dataset.id);
         openModal(portfolioAddModal(el.dataset.pf));
@@ -14132,9 +14262,11 @@
         var sh = '<div class="pop-note strong">' + R.esc(L('เตือนอีกครั้ง…')) + '</div>';
         S.snoozeChoices().forEach(function (c) {
           var d = new Date(c.at);
+          /* Pre-pilot A — หนึ่งบรรทัดต่อหนึ่งตัวเลือก "อีก 1 ชั่วโมง · 15:35" (ไม่ซ้ำเวลา 9:00/09:00) */
+          var sbase = String(L(c.label)).replace(/\s*\([^)]*\d{1,2}:\d{2}\)\s*$/, '').replace(/\s*\d{1,2}:\d{2}\s*$/, '');
+          var sday = S.iso(d) === S.today() ? '' : (R.fmtDate(S.iso(d)) + ' ');
           sh += '<button data-act="notif-snooze-set" data-ids="' + R.esc(ids) + '" data-at="' + R.esc(c.at) + '">' +
-            I('clock', 14) + '<span class="grow">' + R.esc(L(c.label)) + '</span>' +
-            '<span class="pop-hint">' + R.esc(R.fmtDate(S.iso(d)) + ' ' + R.fmtTime(d)) + '</span></button>';
+            I('clock', 14) + '<span class="grow">' + R.esc(sbase + ' · ' + (c.id === 'week' ? sday : '') + R.fmtTime(d)) + '</span></button>';
         });
         sh += '<div class="pop-note">' + R.esc(L('รายการจะซ่อนไว้ แล้วกลับมาเป็นรายการใหม่ตามเวลาที่เลือก')) + '</div>';
         openPop(el, sh);
@@ -14212,8 +14344,8 @@
     try { S.wakeSnoozed(); } catch (err) { console.error('ปลุกรายการที่เลื่อนเตือนไม่สำเร็จ', err); }
   }
   setTimeout(runSnoozeWake, 2000);
-  /* Sprint 4 — เตือนงานเงียบ ตรวจตอนเปิดแอปและทุกชั่วโมง (เฉพาะโปรเจกต์ที่ตั้งไว้) */
-  function runStale() { try { S.runStaleCheck(); } catch (err) { console.error('ตรวจงานเงียบไม่สำเร็จ', err); } }
+  /* Sprint 4 — เตือนงานไม่มีความเคลื่อนไหว ตรวจตอนเปิดแอปและทุกชั่วโมง (เฉพาะโปรเจกต์ที่ตั้งไว้) */
+  function runStale() { try { S.runStaleCheck(); } catch (err) { console.error('ตรวจงานไม่มีความเคลื่อนไหวไม่สำเร็จ', err); } }
   setTimeout(runStale, 6000);
   /* Sprint 4c - เตือนฉันต่องาน */
   function runRemind() { try { S.runReminders(); } catch (err) { console.error('เตือนงานไม่สำเร็จ', err); } }
@@ -14230,6 +14362,7 @@
     state: state, S: S, R: R, L: L, I: I, esc: esc,
     renderAll: renderAll, renderViewBody: renderViewBody, renderTopbar: renderTopbar, refreshView: refreshView,
     openModal: openModal, closeModal: closeModal, toast: toast,
+    quickParse: quickParse, quickHint: quickHint,
     askText: askText, askConfirm: askConfirm, askChoice: askChoice, openPop: openPop, closePops: closePops,
     denyToast: denyToast, downloadText: downloadText, safeFileName: safeFileName,
     confirmReveal: confirmReveal, confirmRevealNew: confirmRevealNew,     // ถามก่อนให้คนนอกโปรเจกต์ปิดเห็นงาน
