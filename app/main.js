@@ -2124,6 +2124,23 @@
     });
   });
 
+  /* Sprint 4 — เลือกฟิลด์ที่ต้องกรอกก่อนทำเสร็จ (ต่อโปรเจกต์) */
+  function requiredFieldsModal(projectId) {
+    var p = S.project(projectId);
+    if (!p) return '';
+    var cur = p.requiredFields || [];
+    var list = (p.fields || []).filter(function (f) { return f.type !== 'id' && f.type !== 'formula'; });
+    var h = '<h2>' + L('ฟิลด์ที่ต้องกรอกก่อนทำเสร็จ') + '</h2><p class="modal-sub">' +
+      R.esc(L('งานที่ฟิลด์เหล่านี้ยังว่างจะกดทำเสร็จไม่ได้ (งานอนุมัติและกฎอัตโนมัติไม่ถูกกั้น)')) + '</p>';
+    if (!list.length) h += '<div class="ovw-empty">' + L('โปรเจกต์นี้ยังไม่มีฟิลด์') + '</div>';
+    list.forEach(function (f) {
+      h += '<label class="chk"><input type="checkbox" class="rf-cb" data-id="' + R.esc(f.id) + '"' + (cur.indexOf(f.id) >= 0 ? ' checked' : '') + '> ' + R.esc(f.name) + '</label>';
+    });
+    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="save-required-fields">' + L('บันทึก') + '</button></div>';
+    return h;
+  }
+
   function projectModal(existing) {
     var p = existing || { name: '', icon: '📁', color: S.PALETTE[0], description: '' };
     var h = '<h2>' + (existing ? L('แก้ไขโปรเจกต์') : L('สร้างโปรเจกต์ใหม่')) + '</h2>';
@@ -2316,6 +2333,8 @@
     h += '<div class="pop-sep"></div>';
     if (canStruct) {
       h += item('manage-fields', 'filter', L('จัดการฟิลด์'));
+      h += item('required-fields', 'check', L('ฟิลด์ที่ต้องกรอกก่อนทำเสร็จ…'));   // Sprint 4
+      h += item('stale-days', 'bell', L('เตือนงานเงียบ…'));
       h += item('auto-open', 'bolt', L('ระบบอัตโนมัติ'));
     }
     h += item('forms-open', 'note', L('ฟอร์ม'));          // ฟอร์มเปิดให้คนนอกส่งเรื่องเข้ามาได้โดยตั้งใจ
@@ -6119,7 +6138,7 @@
     h += '<div class="field" style="margin-top:14px"><label>' + L('โอนให้ใคร') + '</label>' +
       '<select id="hoTo">';
     staff.forEach(function (x) {
-      h += '<option value="' + R.esc(x.id) + '">' + R.esc(x.name) +
+      h += '<option value="' + R.esc(x.id) + '"' + (x.id === u.managerId ? ' selected' : '') + '>' + R.esc(x.name) + (x.id === u.managerId ? ' (' + L('หัวหน้า') + ')' : '') +
         (x.title ? ' — ' + R.esc(x.title) : '') + '</option>';
     });
     if (showGuests && guests.length) {
@@ -8464,6 +8483,8 @@
     put('structure', ['sv-rename', 'sv-move', 'sv-update', 'sv-delete', 'tab-default',
       'dup-section', 'do-dup-section']);
     put('write', ['carry-over', 'slip-overdue', 'pg-move', 'set-next-meeting']);
+    put('structure', ['required-fields', 'save-required-fields', 'stale-days']);
+    put('manage', ['fix-user-name', 'set-manager']);        // Sprint 4 — เฉพาะผู้ดูแลระบบ        // Sprint 4
     put('manage', ['set-org-lang', 'set-org-privacy']);       // Sprint 3 — เฉพาะผู้ดูแลระบบ        // Sprint 3 — ย้ายงานระหว่างเซกชัน = แก้งาน ไม่ใช่แก้โครงสร้าง
     put('write:task', ['set-cover', 'clear-cover', 'cell-set-priority']);
     put('create', ['tl-new']);
@@ -8589,6 +8610,10 @@
   function justDenied() { return Date.now() - deniedAt < 400; }
   S.onDeny(function (why) {
     deniedAt = Date.now();
+    if (typeof why === 'string' && why.indexOf('required:') === 0) {      // Sprint 4 — ฟิลด์ที่ต้องกรอกก่อนทำเสร็จยังว่าง
+      toast(L('กรอกให้ครบก่อนทำเสร็จ: {f}', { f: why.slice(9) }));
+      return;
+    }
     if (why === 'approval') {
       toast(L('งานขออนุมัติต้องให้ผู้อนุมัติตัดสิน — กดอนุมัติหรือปฏิเสธแล้วงานจะปิดให้เอง'));
       return;
@@ -9417,6 +9442,22 @@
             if (moved) toast(L('เลื่อน {n} งานแล้ว', { n: moved }), L('ย้อนกลับ'), 'undo');
           } };
         }));
+        break;
+      }
+      /* Sprint 4 — เตือนงานเงียบ: เลือกกี่วัน (ทำงานตอนมีคนเปิด Orbit เท่านั้น ยังไม่มีเซิร์ฟเวอร์รันให้ตลอด) */
+      case 'stale-days': {
+        closePops();
+        var sdPid = state.route.id, sdCur = (S.project(sdPid) || {}).staleDays || 0;
+        askChoice(L('เตือนงานเงียบ'), L('งานที่ไม่มีความเคลื่อนไหวเกินกำหนดจะแจ้งผู้รับผิดชอบ และเกิน 2 เท่าจะเพิ่มเจ้าของโปรเจกต์เป็นผู้ติดตาม ทำงานเฉพาะตอนมีคนเปิด Orbit อยู่ ปัจจุบัน: {d}', { d: sdCur ? L('{n} วัน', { n: sdCur }) : L('ปิดการเตือน') }),
+          [[0, L('ปิดการเตือน')], [7, L('7 วัน')], [14, L('14 วัน')], [30, L('30 วัน')]].map(function (o) {
+            return { label: o[1], run: function () { if (S.setStaleDays(sdPid, o[0])) { toast(L('ตั้งเตือนงานเงียบแล้ว')); S.runStaleCheck(); } } };
+          }));
+        break;
+      }
+      case 'required-fields': closePops(); openModal(requiredFieldsModal(state.route.id)); break;
+      case 'save-required-fields': {
+        var rfIds = Array.prototype.map.call(document.querySelectorAll('.rf-cb:checked'), function (x) { return x.dataset.id; });
+        if (S.setRequiredFields(state.route.id, rfIds)) { closeModal(); toast(L('บันทึกแล้ว')); }
         break;
       }
       case 'set-next-meeting': {
@@ -12099,6 +12140,25 @@
       }
 
       /* --- บทบาทในหน้าผู้ดูแล --- */
+      case 'set-manager': {        // Sprint 4 — ผู้ดูแลระบบตั้งหัวหน้าของสมาชิก
+        var smU = S.user(id), smId = id;
+        if (!smU) break;
+        var smChoices = S.db.users.filter(function (x) { return x.id !== smId && x.active !== false && x.role !== 'viewer' && x.role !== 'guest'; }).slice(0, 14).map(function (x) {
+          return { label: x.name, run: function () { if (S.setManager(smId, x.id)) toast(L('ตั้งหัวหน้าแล้ว')); } };
+        });
+        smChoices.push({ label: L('ไม่มีหัวหน้า'), run: function () { if (S.setManager(smId, null)) toast(L('ตั้งหัวหน้าแล้ว')); } });
+        askChoice(L('หัวหน้าของ {n}', { n: smU.name }), L('ใช้เลือกผู้รับโอนงานให้อัตโนมัติตอนปิดบัญชี'), smChoices);
+        break;
+      }
+      case 'fix-user-name': {        // Sprint 4 — ผู้ดูแลระบบแก้ชื่อที่แสดง (ชื่อที่เป็นอีเมล)
+        var fnU = S.user(id), fnId = id;
+        if (!fnU) break;
+        askText(L('ชื่อที่แสดงของ {e}', { e: fnU.name }), '', function (v) {
+          if (!v || /@/.test(v)) { toast(L('ใส่ชื่อ ไม่ใช่อีเมล')); return; }
+          if (S.setUserName(fnId, v)) toast(L('แก้ชื่อแล้ว'));
+        }, { ok: L('บันทึก'), placeholder: L('เช่น สมชาย ใจดี') });
+        break;
+      }
       case 'pick-role': {
         if (popIsOpenFor(el)) { closePops(); break; }
         var pu = S.user(id);
@@ -14131,6 +14191,10 @@
     try { S.wakeSnoozed(); } catch (err) { console.error('ปลุกรายการที่เลื่อนเตือนไม่สำเร็จ', err); }
   }
   setTimeout(runSnoozeWake, 2000);
+  /* Sprint 4 — เตือนงานเงียบ ตรวจตอนเปิดแอปและทุกชั่วโมง (เฉพาะโปรเจกต์ที่ตั้งไว้) */
+  function runStale() { try { S.runStaleCheck(); } catch (err) { console.error('ตรวจงานเงียบไม่สำเร็จ', err); } }
+  setTimeout(runStale, 6000);
+  setInterval(runStale, 60 * 60 * 1000);
   setInterval(runSnoozeWake, 60 * 1000);
 
   /* ---------- 4b — ส่วนขยาย ----------

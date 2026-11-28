@@ -886,7 +886,9 @@
     var subs = S.subtasks(t.id);
     if (subs.length) {
       var doneSubs = subs.filter(function (s) { return s.completed; }).length;
-      h += '<span class="chip">' + I('subtask', 11) + ' ' + doneSubs + '/' + subs.length + '</span>';
+      /* Sprint 4 — นับทุกชั้นงานย่อย + แสดง % ใน tooltip */
+      var rollA = S.subRollup(t.id);
+      h += '<span class="chip" title="' + (rollA.total ? Math.round(100 * rollA.done / rollA.total) + '%' : '') + '">' + I('subtask', 11) + ' ' + rollA.done + '/' + rollA.total + '</span>';
     }
     if (t.attachments.length) h += '<span class="chip">' + I('paperclip', 11) + ' ' + t.attachments.length + '</span>';
     if (t.likes.length) h += '<span class="chip">' + I('heart', 11) + ' ' + t.likes.length + '</span>';
@@ -5824,6 +5826,14 @@
           'ต้องเพิ่มหรือเอาออกจากไซต์ SharePoint ควบคู่กันเสมอ') + '</div></div>';
     }
 
+    /* Sprint 4 — ชื่อที่เป็นอีเมล (มักมาจากบัญชีองค์กรที่ไม่มีชื่อที่แสดง) ขึ้นเต็มตามงาน ความเห็น และการ์ด เตือนให้ผู้ดูแลแก้ */
+    var emailNamed = db.users.filter(function (u) { return u.active !== false && /@/.test(String(u.name || '')); });
+    if (emailNamed.length) {
+      h += '<div class="admin-demo">' + I('alert', 15) + '<div><b>' + esc(L('มีสมาชิก {n} คนที่ชื่อที่แสดงเป็นอีเมล', { n: emailNamed.length })) + '</b> ' +
+        emailNamed.map(function (u) {
+          return '<span class="adm-email">' + esc(u.name) + ' <button class="as-link" data-act="fix-user-name" data-id="' + esc(u.id) + '">' + esc(L('แก้ชื่อ')) + '</button></span>';
+        }).join(' · ') + '</div></div>';
+    }
     h += '<div class="admin-tbl">';
     h += '<div class="admin-tr admin-th"><span>' + L('ชื่อ') + '</span><span>' +
       L('บทบาท') + '</span><span>' + L('เข้าใช้ล่าสุด') + '</span><span></span></div>';
@@ -5836,7 +5846,10 @@
       h += '<span class="admin-who">' + avatar(u) +
         '<span><b>' + esc(u.name) + (isMe ? ' <i>' + L('(คุณ)') + '</i>' : '') +
         (off ? '<span class="pill-off">' + L('ปิดใช้งาน') + '</span>' : '') + '</b>' +
-        '<em>' + esc(u.email || '—') + authTag(u) + '</em></span></span>';
+        '<em>' + esc(u.email || '—') + authTag(u) + '</em>' +
+        /* Sprint 4 — หัวหน้า (ใช้เลือกผู้รับโอนงานตอนปิดบัญชีให้อัตโนมัติ) */
+        '<em><button class="as-link" data-act="set-manager" data-id="' + esc(u.id) + '">' +
+        esc(u.managerId && S.user(u.managerId) ? L('หัวหน้า: {m}', { m: S.user(u.managerId).name }) : L('ตั้งหัวหน้า')) + '</button></em></span></span>';
 
       h += '<span><button class="role-pill' + (u.role === 'admin' ? ' is-admin' : '') +
         '" data-act="pick-role" data-id="' + esc(u.id) + '">' +
