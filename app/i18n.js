@@ -2719,6 +2719,9 @@
     'รวมฟิลด์แล้ว ย้ายค่า {n} รายการ': 'Fields merged, {n} values moved', 'ได้รวมฟิลด์ใน': 'merged fields in',
     'รวมฟิลด์ “{a}” เข้า “{b}”': 'Merge field “{a}” into “{b}”', 'รวมฟิลด์ “{a}” เข้า “{b}” ย้ายค่า {n} รายการ': 'Merged field “{a}” into “{b}”, {n} values moved',
     'ฟิลด์สำคัญ': 'Important field',
+    'ย้ายงานเงียบ 30 วันไปเซกชัน…': 'Move tasks quiet for 30 days to a section…', 'ย้ายงานที่เงียบเกิน 30 วันไปเซกชัน': 'Move tasks quiet for over 30 days to a section',
+    'ต้องเปิดเตือนงานเงียบไว้ด้วย งานจะถูกย้ายครั้งเดียวและมีบันทึกในประวัติงาน ปัจจุบัน: {s}': 'Quiet-task reminders must be on. Each task moves once and it is logged on the task. Current: {s}',
+    'ไม่ย้าย': 'Don\'t move', 'เงียบนานกว่า 30 วัน — ย้ายไปเซกชัน “{s}” อัตโนมัติ': 'Quiet for over 30 days — moved to section “{s}” automatically',
   };
 
   /* ข้อความที่เก็บไว้ในบันทึก/การแจ้งเตือนเก่าเป็นคีย์ไทยเดิมที่เรียกเซกชันว่า "คอลัมน์"

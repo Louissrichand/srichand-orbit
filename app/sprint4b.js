@@ -209,6 +209,18 @@
     });
     document.addEventListener('dragend', function () { secDrag = null; clearMarks(); });
 
+    /* เซกชันปลายทางของงานที่เงียบเกิน 30 วัน (ใช้ร่วมกับกล่อง "เตือนงานเงียบ") */
+    R.s4bStaleMove = function (pid) {
+      var p = S.project(pid);
+      if (!p) return;
+      var cur = p.staleMoveTo ? (S.section(pid, p.staleMoveTo) || {}).name : null;
+      api.askChoice(L('ย้ายงานที่เงียบเกิน 30 วันไปเซกชัน'),
+        L('ต้องเปิดเตือนงานเงียบไว้ด้วย งานจะถูกย้ายครั้งเดียวและมีบันทึกในประวัติงาน ปัจจุบัน: {s}', { s: cur || L('ไม่ย้าย') }),
+        [{ label: L('ไม่ย้าย'), run: function () { if (S.setStaleMoveTo(pid, null)) api.toast(L('บันทึกแล้ว')); } }].concat(
+          p.sections.map(function (s) {
+            return { label: s.name, run: function () { if (S.setStaleMoveTo(pid, s.id)) { api.toast(L('บันทึกแล้ว')); S.runStaleCheck(); } } };
+          })));
+    };
     api.act(function (act, el) {
       if (act === 's4b-bulk-sec') {
         api.closePops();

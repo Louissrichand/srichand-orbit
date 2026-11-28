@@ -9458,7 +9458,7 @@
         askChoice(L('เตือนงานเงียบ'), L('งานที่ไม่มีความเคลื่อนไหวเกินกำหนดจะแจ้งผู้รับผิดชอบ และเกิน 2 เท่าจะเพิ่มเจ้าของโปรเจกต์เป็นผู้ติดตาม ทำงานเฉพาะตอนมีคนเปิด Orbit อยู่ ปัจจุบัน: {d}', { d: sdCur ? L('{n} วัน', { n: sdCur }) : L('ปิดการเตือน') }),
           [[0, L('ปิดการเตือน')], [7, L('7 วัน')], [14, L('14 วัน')], [30, L('30 วัน')]].map(function (o) {
             return { label: o[1], run: function () { if (S.setStaleDays(sdPid, o[0])) { toast(L('ตั้งเตือนงานเงียบแล้ว')); S.runStaleCheck(); } } };
-          }));
+          }).concat(R.s4bStaleMove ? [{ label: L('ย้ายงานเงียบ 30 วันไปเซกชัน…'), run: function () { R.s4bStaleMove(sdPid); } }] : []));
         break;
       }
       case 'required-fields': closePops(); openModal(requiredFieldsModal(state.route.id)); break;

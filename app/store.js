@@ -6625,6 +6625,16 @@
     });
     return last;
   }
+  /** Sprint 4b — เซกชันที่งานเงียบเกิน 30 วันจะถูกย้ายไป (null = ไม่ย้าย) */
+  function setStaleMoveTo(projectId, sectionId) {
+    var p = project(projectId);
+    if (!p || !can('structure') || !canInProject(projectId, 'edit')) return false;
+    if (sectionId && !section(projectId, sectionId)) return false;
+    snapshot('ตั้งเตือนงานเงียบ');
+    p.staleMoveTo = sectionId || null;
+    commit();
+    return true;
+  }
   function setStaleDays(projectId, days) {
     var p = project(projectId);
     if (!p || !can('structure') || !canInProject(projectId, 'edit')) return false;
@@ -6654,6 +6664,16 @@
           t.stale.a = new Date().toISOString();
           sys('เงียบมา {n} วันแล้ว — ขอให้ผู้รับผิดชอบอัปเดตสถานะ', { n: Math.floor(days) });
           notifyOnly(t.id, [t.assigneeId], 'งาน “{t}” เงียบมา {n} วันแล้ว อัปเดตสถานะหน่อย', 'activity', { t: t.name, n: Math.floor(days) }, true);
+          changed++;
+        }
+        /* Sprint 4b — เงียบครบ 30 วัน ย้ายไปเซกชันที่โปรเจกต์ตั้งไว้ (ถ้าตั้ง) ครั้งเดียวต่องาน */
+        if (days >= 30 && p.staleMoveTo && !t.stale.c && section(p.id, p.staleMoveTo)) {
+          t.stale.c = new Date().toISOString();
+          var sm = db.memberships.filter(function (mm) { return mm.taskId === t.id && mm.projectId === p.id; })[0];
+          if (sm && sm.sectionId !== p.staleMoveTo) {
+            setSectionRaw(sm, p.staleMoveTo, nextPosition(p.id, p.staleMoveTo));
+            sys('เงียบนานกว่า 30 วัน — ย้ายไปเซกชัน “{s}” อัตโนมัติ', { s: section(p.id, p.staleMoveTo).name });
+          }
           changed++;
         }
         if (days >= 2 * N && !t.stale.b && p.owner) {
@@ -12918,7 +12938,7 @@
     deleteProject: deleteProject, duplicateProject: duplicateProject, projectFirstDate: projectFirstDate,
     setProjectStatus: setProjectStatus, statusLog: statusLog, archiveProject: archiveProject,
     addSection: addSection, renameSection: renameSection,
-    mergeFields: mergeFields, deleteSection: deleteSection, moveSection: moveSection, addSections: addSections, reorderSection: reorderSection,
+    setStaleMoveTo: setStaleMoveTo, mergeFields: mergeFields, deleteSection: deleteSection, moveSection: moveSection, addSections: addSections, reorderSection: reorderSection,
     addField: addField, renameField: renameField, deleteField: deleteField,
     colWidth: colWidth, setColWidth: setColWidth, resetColWidths: resetColWidths,
     saveView: saveView, deleteSavedView: deleteSavedView,
