@@ -2610,6 +2610,7 @@
     '{n} งานที่เลยกำหนดจะถูกเลื่อน และนับว่าเลื่อนแล้วหนึ่งครั้ง': '[n|1 overdue task|{n} overdue tasks] will be pushed and counted as slipped once',
     'พรุ่งนี้': 'Tomorrow', 'วันจันทร์หน้า': 'Next Monday', 'อีก 7 วัน': 'In 7 days',
     'เลื่อน {n} งานแล้ว': 'Pushed [n|1 task|{n} tasks]', 'เลื่อนมาแล้ว {n} ครั้ง': 'Slipped {n}×',
+    'ค้นหาชื่อ': 'Search people',
     /* Sprint 3 — อภิธานศัพท์ */
     'ศัพท์ที่ใช้ใน Orbit': 'Orbit glossary',
     'กลุ่มงานที่ทำเรื่องเดียวกัน มีเซกชัน สมาชิก และมุมมองของตัวเอง': 'A group of work on one topic, with its own sections, members and views',

@@ -2066,6 +2066,27 @@
     return h;
   }
 
+  /* Sprint 3 — ช่องค้นหาในรายชื่อคน (ผู้รับผิดชอบ ผู้ติดตาม) เมื่อมีคนเกิน 6 คน หาชื่อไทย/อังกฤษได้โดยไม่ต้องไล่เลื่อน
+   * กรองด้วยการซ่อนปุ่ม ไม่สร้างรายการใหม่ จึงไม่กระทบการทำงานของปุ่มเดิม ปุ่ม "ยังไม่มอบหมาย" (data-user="") อยู่เสมอ */
+  function peopleFilterHtml() {
+    return S.db.users.length > 6
+      ? '<input class="pop-filter" type="search" autocomplete="off" placeholder="' + R.esc(L('ค้นหาชื่อ')) + '" aria-label="' + R.esc(L('ค้นหาชื่อ')) + '">'
+      : '';
+  }
+  function focusPopFilter() {
+    var f = document.querySelector('.pop .pop-filter');
+    if (f) setTimeout(function () { f.focus(); }, 0);
+  }
+  document.addEventListener('input', function (e) {
+    var el = e.target;
+    if (!el || !el.classList || !el.classList.contains('pop-filter')) return;
+    var q = el.value.trim().toLowerCase(), pop = el.closest('.pop');
+    if (!pop) return;
+    Array.prototype.forEach.call(pop.querySelectorAll('button[data-user]'), function (b) {
+      b.style.display = (!q || b.dataset.user === '' || b.textContent.toLowerCase().indexOf(q) >= 0) ? '' : 'none';
+    });
+  });
+
   function projectModal(existing) {
     var p = existing || { name: '', icon: '📁', color: S.PALETTE[0], description: '' };
     var h = '<h2>' + (existing ? L('แก้ไขโปรเจกต์') : L('สร้างโปรเจกต์ใหม่')) + '</h2>';
@@ -8704,6 +8725,7 @@
         });
         fh += '</div>';
         openPop(el, fh);
+        focusPopFilter();
         break;
       }
       case 'pick-ftype':
@@ -9717,7 +9739,7 @@
       /* --- pickers --- */
       case 'pick-assignee': {
         if (popIsOpenFor(el)) { closePops(); break; }
-        var ph = '<button data-act="set-assignee" data-id="' + R.esc(state.openTaskId) +
+        var ph = peopleFilterHtml() + '<button data-act="set-assignee" data-id="' + R.esc(state.openTaskId) +
           '" data-user="">' + R.avatar(null) + ' ' + L('ยังไม่มอบหมาย') + '</button>';
         S.db.users.forEach(function (u) {
           ph += '<button data-act="set-assignee" data-id="' + R.esc(state.openTaskId) +
@@ -9727,6 +9749,7 @@
         ph += '<div class="pop-sep"></div><button data-act="assign-copies" data-id="' +
           R.esc(state.openTaskId) + '">' + I('users', 15) + ' ' + L('มอบสำเนาให้หลายคน…') + '</button>';
         openPop(el, ph);
+        focusPopFilter();
         break;
       }
       case 'set-assignee': {
@@ -9775,7 +9798,7 @@
         break;
       case 'pick-follower': {
         if (popIsOpenFor(el)) { closePops(); break; }
-        var fh = '';
+        var fh = peopleFilterHtml();
         S.db.users.forEach(function (u) {
           fh += '<button data-act="do-follow" data-id="' + R.esc(id) + '" data-user="' +
             R.esc(u.id) + '">' + R.avatar(u) + ' ' + R.esc(u.name) + '</button>';
