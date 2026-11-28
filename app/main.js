@@ -2124,6 +2124,23 @@
     });
   });
 
+  /* Sprint 4 — เลือกฟิลด์ที่ต้องกรอกก่อนทำเสร็จ (ต่อโปรเจกต์) */
+  function requiredFieldsModal(projectId) {
+    var p = S.project(projectId);
+    if (!p) return '';
+    var cur = p.requiredFields || [];
+    var list = (p.fields || []).filter(function (f) { return f.type !== 'id' && f.type !== 'formula'; });
+    var h = '<h2>' + L('ฟิลด์ที่ต้องกรอกก่อนทำเสร็จ') + '</h2><p class="modal-sub">' +
+      R.esc(L('งานที่ฟิลด์เหล่านี้ยังว่างจะกดทำเสร็จไม่ได้ (งานอนุมัติและกฎอัตโนมัติไม่ถูกกั้น)')) + '</p>';
+    if (!list.length) h += '<div class="ovw-empty">' + L('โปรเจกต์นี้ยังไม่มีฟิลด์') + '</div>';
+    list.forEach(function (f) {
+      h += '<label class="chk"><input type="checkbox" class="rf-cb" data-id="' + R.esc(f.id) + '"' + (cur.indexOf(f.id) >= 0 ? ' checked' : '') + '> ' + R.esc(f.name) + '</label>';
+    });
+    h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
+      '<button class="btn btn-primary" data-act="save-required-fields">' + L('บันทึก') + '</button></div>';
+    return h;
+  }
+
   function projectModal(existing) {
     var p = existing || { name: '', icon: '📁', color: S.PALETTE[0], description: '' };
     var h = '<h2>' + (existing ? L('แก้ไขโปรเจกต์') : L('สร้างโปรเจกต์ใหม่')) + '</h2>';
@@ -2316,6 +2333,7 @@
     h += '<div class="pop-sep"></div>';
     if (canStruct) {
       h += item('manage-fields', 'filter', L('จัดการฟิลด์'));
+      h += item('required-fields', 'check', L('ฟิลด์ที่ต้องกรอกก่อนทำเสร็จ…'));   // Sprint 4
       h += item('auto-open', 'bolt', L('ระบบอัตโนมัติ'));
     }
     h += item('forms-open', 'note', L('ฟอร์ม'));          // ฟอร์มเปิดให้คนนอกส่งเรื่องเข้ามาได้โดยตั้งใจ
@@ -8464,6 +8482,7 @@
     put('structure', ['sv-rename', 'sv-move', 'sv-update', 'sv-delete', 'tab-default',
       'dup-section', 'do-dup-section']);
     put('write', ['carry-over', 'slip-overdue', 'pg-move', 'set-next-meeting']);
+    put('structure', ['required-fields', 'save-required-fields']);        // Sprint 4
     put('manage', ['set-org-lang', 'set-org-privacy']);       // Sprint 3 — เฉพาะผู้ดูแลระบบ        // Sprint 3 — ย้ายงานระหว่างเซกชัน = แก้งาน ไม่ใช่แก้โครงสร้าง
     put('write:task', ['set-cover', 'clear-cover', 'cell-set-priority']);
     put('create', ['tl-new']);
@@ -8589,6 +8608,10 @@
   function justDenied() { return Date.now() - deniedAt < 400; }
   S.onDeny(function (why) {
     deniedAt = Date.now();
+    if (typeof why === 'string' && why.indexOf('required:') === 0) {      // Sprint 4 — ฟิลด์ที่ต้องกรอกก่อนทำเสร็จยังว่าง
+      toast(L('กรอกให้ครบก่อนทำเสร็จ: {f}', { f: why.slice(9) }));
+      return;
+    }
     if (why === 'approval') {
       toast(L('งานขออนุมัติต้องให้ผู้อนุมัติตัดสิน — กดอนุมัติหรือปฏิเสธแล้วงานจะปิดให้เอง'));
       return;
@@ -9417,6 +9440,12 @@
             if (moved) toast(L('เลื่อน {n} งานแล้ว', { n: moved }), L('ย้อนกลับ'), 'undo');
           } };
         }));
+        break;
+      }
+      case 'required-fields': closePops(); openModal(requiredFieldsModal(state.route.id)); break;
+      case 'save-required-fields': {
+        var rfIds = Array.prototype.map.call(document.querySelectorAll('.rf-cb:checked'), function (x) { return x.dataset.id; });
+        if (S.setRequiredFields(state.route.id, rfIds)) { closeModal(); toast(L('บันทึกแล้ว')); }
         break;
       }
       case 'set-next-meeting': {

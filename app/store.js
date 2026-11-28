@@ -4032,9 +4032,39 @@
     return 'แก้ไขงาน “{t}”';
   }
 
+  /* Sprint 4 — ฟิลด์ที่โปรเจกต์กำหนดว่า "ต้องกรอกก่อนทำเสร็จ" (เช่น Actual Finish Date) ที่งานนี้ยังว่างอยู่ คืนรายชื่อฟิลด์ที่ขาด
+   * ระบบอัตโนมัติไม่โดนกั้น (กฎตั้งค่าและปิดงานเองเป็นเจตนาของคนตั้งกฎ) งานอนุมัติปิดด้วยผลอนุมัติเสมอ */
+  function missingRequiredFields(taskId) {
+    var t = task(taskId);
+    if (!t) return [];
+    var out = [];
+    (index().memByTask[rootOf(t).id] || []).forEach(function (m) {
+      var p = project(m.projectId);
+      ((p && p.requiredFields) || []).forEach(function (fid) {
+        var def = fieldDef(fid), fv = db.fieldValues.filter(function (v) { return v.taskId === taskId && v.fieldId === fid; })[0];
+        var empty = !fv || fv.value === null || fv.value === '' || (fv.value && fv.value.length === 0 && typeof fv.value !== 'number');
+        if (def && empty && out.indexOf(def.name) < 0) out.push(def.name);
+      });
+    });
+    return out;
+  }
+  function setRequiredFields(projectId, ids) {
+    var p = project(projectId);
+    if (!p || !can('structure') || !canInProject(projectId, 'edit')) return false;
+    var valid = (ids || []).filter(function (fid) { var d = (p.fields || []).filter(function (f) { return f.id === fid; })[0]; return d && d.type !== 'id' && d.type !== 'formula'; });
+    snapshot('ตั้งฟิลด์ที่ต้องกรอกก่อนทำเสร็จ');
+    p.requiredFields = valid;
+    commit();
+    return true;
+  }
+
   function updateTask(id, patch, opts) {
     var t = task(id);
     if (!t) return null;
+    if (patch && patch.completed && !t.completed && !autoCtx && t.type !== 'approval') {
+      var reqMiss = missingRequiredFields(id);
+      if (reqMiss.length) { denied('required:' + reqMiss.join(', ')); return null; }
+    }
 
     /* Sprint 1B — งานขออนุมัติ ผลอนุมัติเป็นตัวเปิด/ปิดงาน แบบเดียวกับ Asana
      *   อนุมัติ / ปฏิเสธ  = ตัดสินแล้ว งานเสร็จเอง (เดิมอนุมัติแล้วงานยังค้าง นับเป็นงานไม่เสร็จ)
@@ -9623,7 +9653,35 @@
           [L('ตั้งเป้าหมาย 30 วันแรก'), 1, 3, 6, 9],
           [L('ทบทวนงานเดือนแรก'), 2, 0, null, 25],
           [L('ประเมินผลทดลองงาน'), 3, 0, null, 64, 'approval', 'high']
-        ], deps: [[2, 1], [6, 5]] }
+        ], deps: [[2, 1], [6, 5]] },
+      /* Sprint 4 — เทมเพลตพัฒนาสินค้าใหม่ (เครื่องสำอาง) ของศรีจันทร์: 8 ขั้นตอน มีจุดอนุมัติ 4 จุด (Gate 1–4) และงานตั้งต้นพร้อมระยะเวลา/ลำดับก่อนหลัง
+       * ตัวเลขวันนับจากวันเริ่มโปรเจกต์ (ค่าประมาณ ปรับได้ตอนใช้เทมเพลต) */
+      { id: 'npd', icon: '🧴', color: '#e8384f', name: L('พัฒนาสินค้าใหม่ (เครื่องสำอาง)'),
+        desc: L('ตั้งแต่ไอเดียถึงวันเปิดตัว: พัฒนาสูตร ทดสอบ จดแจ้ง อย. บรรจุภัณฑ์ และผลิตล็อตแรก พร้อมจุดอนุมัติ 4 จุด'),
+        secs: [L('ไอเดียและคอนเซ็ปต์'), L('พัฒนาสูตร'), L('ทดสอบความคงตัว (Stability)'), L('SPF และความปลอดภัย'), L('บรรจุภัณฑ์และอาร์ตเวิร์ก'), L('จดแจ้ง อย.'), L('ผลิตล็อตแรก'), L('วันเปิดตัว')],
+        fields: [['SKU', 'text'],
+                 [L('ต้นทุนต่อชิ้น (บาท)'), 'number', [], { kind: 'currency', currency: 'THB', unit: '', decimals: 2 }],
+                 [L('สถานะ อย.'), 'select', [L('ยังไม่ยื่น'), L('ยื่นแล้ว'), L('ได้รับเลขจดแจ้ง')]],
+                 ['Actual Start Date', 'date'], ['Actual Finish Date', 'date']],
+        roles: [L('R&D'), L('QA'), L('Regulatory'), L('Packaging'), L('ทีมการตลาด')],
+        tasks: [
+          [L('สรุปคอนเซ็ปต์และกลุ่มเป้าหมาย'), 0, 4, 0, 7],
+          [L('อนุมัติคอนเซ็ปต์ (Gate 1)'), 0, 4, null, 10, 'approval', 'high'],
+          [L('ร่างสูตรต้นแบบ'), 1, 0, 10, 30],
+          [L('ปรับสูตรรอบที่ 2'), 1, 0, 30, 45],
+          [L('อนุมัติสูตร (Gate 2)'), 1, 0, null, 47, 'approval', 'high'],
+          [L('ทดสอบ Stability 3 เดือน'), 2, 1, 47, 140, null, null, [L('Stability อุณหภูมิห้อง'), L('Stability เร่ง 40°C')]],
+          [L('ทดสอบ SPF และความปลอดภัย'), 3, 1, 47, 90, null, 'high'],
+          [L('ออกแบบบรรจุภัณฑ์และอาร์ตเวิร์ก'), 4, 3, 47, 80],
+          [L('ตรวจข้อความบนฉลากกับฝ่ายกฎหมาย'), 4, 2, 80, 90],
+          [L('อนุมัติอาร์ตเวิร์ก (Gate 3)'), 4, 4, null, 92, 'approval', 'high'],
+          [L('ยื่นจดแจ้ง อย.'), 5, 2, 90, 120, null, 'urgent'],
+          [L('ผลิตล็อตแรก'), 6, 0, 120, 150],
+          [L('ตรวจคุณภาพล็อตแรก (QC)'), 6, 1, 150, 155, null, 'high'],
+          [L('อนุมัติปล่อยสินค้า (Gate 4)'), 6, 1, null, 157, 'approval', 'urgent'],
+          [L('วันเปิดตัวสินค้า'), 7, 4, null, 180, 'milestone', 'urgent']
+        ], deps: [[1, 0], [2, 1], [3, 2], [4, 3], [5, 4], [6, 4], [7, 4], [8, 7], [9, 8], [10, 6], [10, 9], [11, 10], [12, 11], [13, 12], [14, 13]] }
+
     ];
     return list.map(function (o) {
       (o.autos || []).forEach(function (a) { if (a._sec != null) { a.trigger.sec = 'bs_' + o.id + '_' + a._sec; delete a._sec; } });
@@ -12770,7 +12828,7 @@
     accessRequestFor: accessRequestFor,
     canAnswerAccess: canAnswerAccess, answerAccess: answerAccess, accessOwner: accessOwner,
     convertToProject: convertToProject,
-    setNextMeeting: setNextMeeting, setOrgLang: setOrgLang, setOrgPrivacy: setOrgPrivacy, slipOverdue: slipOverdue, bulkAddToProject: bulkAddToProject, bulkMoveSection: bulkMoveSection, bulkSetField: bulkSetField,
+    missingRequiredFields: missingRequiredFields, setRequiredFields: setRequiredFields, setNextMeeting: setNextMeeting, setOrgLang: setOrgLang, setOrgPrivacy: setOrgPrivacy, slipOverdue: slipOverdue, bulkAddToProject: bulkAddToProject, bulkMoveSection: bulkMoveSection, bulkSetField: bulkSetField,
     bulkAddFollowers: bulkAddFollowers, bulkAddTag: bulkAddTag, bulkDependOn: bulkDependOn,
     bulkMerge: bulkMerge,
 
