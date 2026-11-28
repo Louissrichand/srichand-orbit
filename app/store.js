@@ -3430,10 +3430,52 @@
 
   /* ---------- มุมมองที่ทำงานอยู่ของแต่ละคน ---------- */
 
-  /** มุมมองล่าสุดที่คนนี้ใช้ในโปรเจกต์นี้ (เติมค่าเริ่มต้นแล้ว) */
-  function projView(projectId) {
+  /* View save — ค่าเริ่มต้นของโปรเจกต์ต่อชนิดมุมมอง p.viewDefaults = { [kind]: viewDiff }
+   * มุมมองส่วนตัว (pv[pid]) เป็นก้อนเดียวต่อโปรเจกต์ ทุกชนิดใช้คีย์ร่วมกัน (gCols ของ Gantt, bGroup ของบอร์ด …)
+   * ค่าเริ่มต้นจึงเก็บเฉพาะคีย์ของชนิดนั้น + คีย์ที่ใช้ร่วมกัน (ตัวกรอง การเรียง) */
+  var VIEW_SHARED_KEYS = ['filters', 'sorts', 'sort', 'sortDir', 'showCompleted', 'showEmpty'];
+  var VIEW_KIND_KEYS = {
+    list: ['group', 'cols', 'colShow', 'foot', 'collapsed'],
+    board: ['bGroup', 'bSwim', 'bSize', 'bCard', 'bCollapsed'],
+    timeline: ['tColorBy', 'critical'],
+    gantt: ['gZoom', 'gColorBy', 'gCols', 'gSubtasks', 'gShowBaseline', 'critical'],
+    calendar: ['cMode', 'cWeekends', 'cColorBy']
+  };
+
+  function pickViewKind(diff, kind) {
+    var keys = (VIEW_KIND_KEYS[kind] || []).concat(VIEW_SHARED_KEYS), out = {};
+    keys.forEach(function (k) { if (k in diff) out[k] = clone(diff[k]); });
+    return out;
+  }
+
+  /** ค่าเริ่มต้นของโปรเจกต์สำหรับชนิดมุมมองนี้ (ไม่รวมของส่วนตัว) */
+  function projectViewDefault(projectId, kind) {
+    var p = project(projectId);
+    return fillView(clone((p && p.viewDefaults && p.viewDefaults[kind]) || {}));
+  }
+
+  /** มุมมองล่าสุดที่คนนี้ใช้ในโปรเจกต์นี้ (เติมค่าเริ่มต้นแล้ว)
+   *  คีย์ที่คนนี้ไม่เคยตั้ง ใช้ค่าเริ่มต้นของโปรเจกต์ตามชนิดมุมมอง (kind) แทนค่าในตัว */
+  function projView(projectId, kind) {
     var pv = personalOf().pv || {};
-    return fillView(clone(pv[projectId] || {}));
+    var p = project(projectId);
+    var d = (kind && p && p.viewDefaults && p.viewDefaults[kind]) ? clone(p.viewDefaults[kind]) : {};
+    var mine = pv[projectId] || {};
+    Object.keys(mine).forEach(function (k) { d[k] = clone(mine[k]); });
+    return fillView(d);
+  }
+
+  /** ตั้งมุมมองนี้เป็นค่าเริ่มต้นของทุกคนในโปรเจกต์ (เฉพาะคนที่แก้โครงสร้างโปรเจกต์ได้) */
+  function setProjectViewDefault(projectId, kind, view) {
+    var p = project(projectId);
+    if (!p || !canStructureProject(projectId) || !VIEW_KIND_KEYS[kind]) return false;
+    snapshot('ตั้งค่าเริ่มต้นของมุมมอง');
+    var d = pickViewKind(viewDiff(clone(view)), kind);
+    if (!p.viewDefaults || typeof p.viewDefaults !== 'object') p.viewDefaults = {};
+    if (Object.keys(d).length) p.viewDefaults[kind] = d; else delete p.viewDefaults[kind];
+    audit('project.view', p.name, kind);
+    commit();
+    return true;
   }
 
   /** จำมุมมองที่ทำงานอยู่ — ไม่มี snapshot ไม่วาดใหม่ เขียนลงที่เก็บเฉย ๆ
@@ -13356,7 +13398,7 @@
     lastModified: lastModified, setSorts: setSorts, viewDiff: viewDiff, groupItems: groupItems,
     viewItems: viewItems, LIST_COLS: LIST_COLS, listColumns: listColumns, FOOT_FNS: FOOT_FNS,
     footValue: footValue, CARD_PARTS: CARD_PARTS, cardShows: cardShows, dropToGroups: dropToGroups,
-    colorChoices: colorChoices, projView: projView, setProjView: setProjView,
+    colorChoices: colorChoices, projView: projView, projectViewDefault: projectViewDefault, setProjectViewDefault: setProjectViewDefault, setProjView: setProjView,
     calPrefs: calPrefs, setCalPrefs: setCalPrefs, SEC_DUP_KEYS: SEC_DUP_KEYS,
     duplicateSection: duplicateSection, isImageAtt: isImageAtt, setCover: setCover, coverOf: coverOf,
     createTaskNear: createTaskNear,

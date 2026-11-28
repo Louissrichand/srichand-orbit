@@ -72,7 +72,14 @@
         return S.fillView(state.svWork[r.sv]);
       }
     }
-    if (!state.views[projectId]) state.views[projectId] = S.projView(projectId);
+    /* View save — ค่าเริ่มต้นของโปรเจกต์ขึ้นกับชนิดมุมมอง สลับชนิดแล้วโหลดใหม่ (ของส่วนตัวถูกจำไว้ทุกครั้งที่วาด) */
+    var vk = (r.type === 'project' && r.id === projectId) ? r.view : null;
+    if (S.SV_KINDS.indexOf(vk) < 0) vk = null;
+    state.viewsKind = state.viewsKind || {};
+    if (!state.views[projectId] || (vk && state.viewsKind[projectId] !== vk)) {
+      state.views[projectId] = S.projView(projectId, vk);
+      if (vk) state.viewsKind[projectId] = vk;
+    }
     /* มุมมองที่โหลดมาจากที่บันทึกไว้อาจเก่ากว่าตัวเลือกที่มีตอนนี้ เติมคีย์ที่ขาดทุกครั้ง
      * ถูกกว่าการไล่เช็ค undefined ทีละจุดตอนวาด */
     return S.fillView(state.views[projectId]);
@@ -911,7 +918,7 @@
       L('แท็บที่บันทึกไว้ {n}/{max}', { n: p.savedViews.length, max: S.SV_MAX }) + '</label>';
     if (!p.savedViews.length) {
       h += '<p class="opt-note" style="margin-top:0">' +
-        L('ตั้งตัวกรอง เรียง จัดกลุ่มให้ถูกใจ แล้วกด “บันทึกเป็นแท็บใหม่” แท็บจะขึ้นต่อท้ายแท็บของโปรเจกต์ให้ทุกคนใช้') + '</p>';
+        L('ตั้งตัวกรอง เรียง จัดกลุ่มให้ถูกใจ แล้วกด “บันทึกเป็นแท็บใหม่…” ถ้าต้องการแท็บแยก แท็บจะขึ้นต่อท้ายแท็บของโปรเจกต์ให้ทุกคนใช้') + '</p>';
     } else {
       h += '<div class="opt-views">';
       p.savedViews.forEach(function (sv) {
@@ -927,14 +934,17 @@
   }
 
   function optFoot() {
-    var dsv = dirtySv();
-    return '<div class="opt-foot">' +
+    var r = state.route, canDef = r.type === 'project' && S.SV_KINDS.indexOf(r.view) >= 0 && S.canStructureProject(r.id);
+    return '<div class="opt-foot opt-foot-v">' +
+      '<p class="opt-note opt-foot-note">' + L('เปลี่ยนแล้วแสดงผลทันที') + '</p>' +
+      (canDef ? '<label class="opt-chk"><input type="checkbox" id="ovDefault"> ' + L('ใช้แบบนี้เป็นค่าเริ่มต้นของทุกคนในโปรเจกต์') + '</label>' : '') +
+      '<div class="opt-foot-btns">' +
       '<button class="btn btn-ghost btn-sm" data-act="reset-view" title="' +
       L('คืนตัวกรอง เรียง จัดกลุ่ม และคอลัมน์เป็นค่าเริ่มต้น') + '">' + L('รีเซ็ต') + '</button>' +
       '<span class="grow"></span>' +
-      (dsv && S.can('structure') ? '<button class="btn btn-sm" data-act="sv-update" data-id="' + esc(dsv) + '">' +
-        L('บันทึกทับแท็บนี้') + '</button>' : '') +
-      '<button class="btn btn-primary btn-sm" data-act="save-view">' + L('บันทึกเป็นแท็บใหม่') + '</button></div>';
+      '<button class="btn btn-primary btn-sm" data-act="save-opts">' + L('บันทึก') + '</button></div>' +
+      (S.can('structure') ? '<button class="opt-link" data-act="save-view">' + L('บันทึกเป็นแท็บใหม่…') + '</button>' : '') +
+      '</div>';
   }
 
   /* ---------- ส่วนประกอบของแผงตัวเลือก (2b) ---------- */
@@ -3229,23 +3239,76 @@
 
   /* ---------- เพิ่มงานต่อจากแถว (Enter / Shift+Enter ในรายการ) ---------- */
   function addNear(refId, above) {
-    var row = $view.querySelector('.tr[data-id="' + refId + '"]:not(.sub)');
-    if (!row || state.route.type !== 'project') return false;
+    if (state.route.type !== 'project') return false;
+    var row = $view.querySelector('.tr[data-id="' + refId + '"]:not(.sub), .card[data-id="' + refId + '"]');
+    if (!row) return false;
+    return openAddRow(row.parentNode, above ? row : row.nextSibling, { refId: refId, above: !!above, secId: null });
+  }
+
+  /* Inline add — ปุ่ม "+ เพิ่มงาน" ในโปรเจกต์ = แทรกแถว/การ์ดว่างบนสุดของเซกชันแรก พิมพ์ได้เลย (เหมือน Asana)
+   * คืน false = แทรกไม่ได้ (ให้ผู้เรียกใช้หน้าต่างถามชื่อแทน) */
+  function addTop(retry) {
+    var pid = state.route.id, p = S.project(pid);
+    if (state.route.type !== 'project' || !p) return false;
+    if (!S.canCreateTask(pid)) { denyToast(); return true; }
+    var vw = state.route.view || 'list';
+    if (vw !== 'list' && vw !== 'board') {
+      state.route.view = 'list';
+      delete state.route.sv;
+      renderAll();
+      vw = 'list';
+    }
+    var host = vw === 'board'
+      ? $view.querySelector('.col:not(.folded) > .col-body')
+      : $view.querySelector('.sec-body');
+    if (!host) {
+      if (retry) return false;
+      var cv = viewFor(pid);                  // เซกชันแรกถูกย่ออยู่ — ขยายแล้วลองใหม่
+      if (cv.collapsed) { delete cv.collapsed[p.sections[0].id]; delete cv.collapsed._; }
+      if (cv.bCollapsed) { delete cv.bCollapsed[p.sections[0].id]; delete cv.bCollapsed._; }
+      renderAll();
+      return addTop(true);
+    }
+    var first = host.querySelector('.tr[data-id]:not(.sub), .card[data-id]');
+    return openAddRow(host, host.firstChild, {
+      refId: first ? first.getAttribute('data-id') : null, above: true,
+      secId: host.getAttribute('data-section') || p.sections[0].id
+    });
+  }
+
+  function openAddRow(parent, before, o) {
     var old = $view.querySelector('.tr-new');
     if (old) old.parentNode.removeChild(old);
     var pid = state.route.id;
+    var isCard = parent.classList.contains('col-body');
     var box = document.createElement('div');
-    box.className = 'tr tr-new';
-    box.innerHTML = '<div class="td td-name"><span class="sub-caret-sp"></span>' +
-      '<input class="cell-input tr-new-input" placeholder="' + esc(L('ชื่องาน แล้วกด Enter')) + '"></div>';
-    row.parentNode.insertBefore(box, above ? row : row.nextSibling);
+    box.className = (isCard ? 'card' : 'tr') + ' tr-new';
+    box.innerHTML = (isCard ? '' : '<div class="td td-name"><span class="sub-caret-sp"></span>') +
+      '<input class="cell-input tr-new-input inline-add-input" placeholder="' +
+      esc(L('ชื่องาน แล้วกด Enter (วางหลายบรรทัด = หลายงาน)')) + '">' + (isCard ? '' : '</div>');
+    parent.insertBefore(box, before);
     var inp = box.querySelector('input');
+    inp.dataset.project = pid;
+    var refSec = o.secId;
+    if (!refSec && o.refId) {
+      var mm = S.projectsOfTask(o.refId).filter(function (x) { return x.project.id === pid; })[0];
+      refSec = mm && mm.membership.sectionId;
+    }
+    inp.dataset.section = refSec || '';
     inp.focus();
+    var narrow = global.matchMedia && global.matchMedia('(max-width:700px)').matches;
+    try { box.scrollIntoView({ block: narrow ? 'center' : 'nearest' }); } catch (e) { /* ignore */ }
     var done = false;
     function finish() {
       if (done) return;
       done = true;
       if (box.parentNode) box.parentNode.removeChild(box);
+    }
+    function save(v) {
+      var q = S.quickAdd(v, pid);
+      return (o.refId && !q.sectionId)
+        ? S.createTaskNear(q, pid, o.refId, !!o.above)
+        : S.createTask(q, pid, q.sectionId || refSec || S.project(pid).sections[0].id);
     }
     inp.addEventListener('keydown', function (ev) {
       ev.stopPropagation();
@@ -3255,14 +3318,21 @@
       var v = inp.value.trim();
       if (!v) { finish(); return; }
       done = true;
-      var t = S.createTaskNear(S.quickAdd(v, pid, true), pid, refId, !!above);
+      var t = save(v);
       if (t) {
         state.cursor = t.id;
         state.reopenNear = { ref: t.id, above: false };
         resumeNear();
       } else { done = false; finish(); }     // Sprint 1B — ถูกปฏิเสธ เก็บช่องพิมพ์ทิ้ง ไม่ค้างไว้
     });
-    inp.addEventListener('blur', function () { setTimeout(finish, 0); });
+    inp.addEventListener('blur', function () {
+      if (done) return;
+      var v = inp.value.trim();
+      if (!v) { setTimeout(finish, 0); return; }
+      done = true;                            // คลิกที่อื่น/Tab ทั้งที่มีข้อความ = บันทึก
+      var t = save(v);
+      if (t) state.cursor = t.id; else { done = false; finish(); }
+    });
     return true;
   }
 
@@ -9751,9 +9821,34 @@
       }
       case 'reset-view':
         if (state.route.sv) delete state.svWork[state.route.sv];
-        else state.views[state.route.id] = S.defaultView();
+        else state.views[state.route.id] = S.projectViewDefault(state.route.id, state.route.view);
         refreshView();
         break;
+      case 'save-opts': {
+        /* View save — ยืนยันการตั้งค่าของมุมมองนี้ ปิดแผง แล้วแจ้ง (บนแท็บที่บันทึกไว้และมีแก้ค้าง = บันทึกลงแท็บ) */
+        var oPid = state.route.id, oKind = state.route.view;
+        var oChk = document.getElementById('ovDefault');
+        var oDef = !!(oChk && oChk.checked) && S.canStructureProject(oPid);
+        var oLabel = L((S.PROJECT_VIEWS.filter(function (x) { return x.id === oKind; })[0] || {}).label || '');
+        var oDsv = dirtySv();
+        if (oDsv && S.can('structure')) {
+          var osv = S.savedView(oPid, oDsv);
+          S.updateSavedView(oPid, oDsv, state.svWork[oDsv]);
+          delete state.svWork[oDsv];
+          if (oDef) S.setProjectViewDefault(oPid, oKind, viewFor(oPid));
+          closeOpts();
+          refreshView();
+          toast(L('บันทึกแท็บ “{n}” แล้ว ทุกคนจะเห็นแบบนี้', { n: osv.name }), L('ย้อนกลับ'), 'undo');
+          break;
+        }
+        if (!state.route.sv) persistView();
+        if (oDef) S.setProjectViewDefault(oPid, oKind, viewFor(oPid));
+        closeOpts();
+        refreshView();
+        toast(L('บันทึกการตั้งค่าของ {v} แล้ว', { v: oLabel }) + (oDef ? ' · ' + L('เป็นค่าเริ่มต้นของโปรเจกต์') : ''),
+          oDef ? L('ย้อนกลับ') : undefined, oDef ? 'undo' : undefined);
+        break;
+      }
       case 'save-view': {
         /* บันทึกเป็นแท็บใหม่ของโปรเจกต์ ใช้ชื่อในแผงตัวเลือกถ้าเปิดอยู่ ไม่งั้นถาม */
         var svPid = state.route.id, svKind = state.route.view;
@@ -10015,6 +10110,7 @@
       case 'quick-add': {
         var qp = S.project(state.route.id);
         if (!qp) break;
+        if (addTop()) break;               // Inline add — พิมพ์ในรายการเลย; หน้าต่างถามชื่อเหลือไว้เป็นทางสำรอง
         var qaCtx = { projectId: qp.id, sectionId: qp.sections[0].id };
         askText(L('ชื่องานใหม่'), '', function (v) {
           if (!v) return;
