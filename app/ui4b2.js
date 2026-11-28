@@ -181,10 +181,15 @@
     }
     function bnCheck() {
       var me = S.db.currentUserId;
-      var mine = S.db.notifications.filter(function (n) { return n.userId === me && !n.read && !n.archived; });
-      var latest = mine.reduce(function (a, n) { return n.createdAt > a ? n.createdAt : a; }, '');
+      /* Sprint 2B — รายการที่เลื่อนเตือนไว้ไม่เด้ง จนกว่าจะถึงเวลา (กลับมาแล้วนับเวลาที่กลับมา — S.notifAt)
+       * รายการที่รวมกลุ่มอัปเดตเวลาเอง แจ้งซ้ำด้วย tag เดิม เบราว์เซอร์แทนที่ของเดิมแทนการเด้งเพิ่ม */
+      var at = S.notifAt || function (n) { return n.createdAt; };
+      var mine = S.db.notifications.filter(function (n) {
+        return n.userId === me && !n.read && !n.archived && !(S.isSnoozed && S.isSnoozed(n));
+      });
+      var latest = mine.reduce(function (a, n) { return at(n) > a ? at(n) : a; }, '');
       if (bnSeen === null || bnSeen.uid !== me) { bnSeen = { uid: me, at: latest }; return 0; }
-      var fresh = mine.filter(function (n) { return n.createdAt > bnSeen.at; });
+      var fresh = mine.filter(function (n) { return at(n) > bnSeen.at; });
       if (latest > bnSeen.at) bnSeen.at = latest;
       if (!fresh.length || !bnOn() || bnPerm() !== 'granted' || S.isDnd()) return 0;
       /* เด้งเฉพาะตอนที่ไม่ได้ดูแอปอยู่ — ดูอยู่แล้วมีป้ายในแอปบอกเอง */
@@ -197,7 +202,17 @@
           x.onclick = function () {
             global.focus();
             state.route = { type: 'inbox' };
-            if (n.taskId && S.task(n.taskId) && S.canSeeTask(n.taskId)) api.openTask(n.taskId);
+            if (n.taskId && S.task(n.taskId) && S.canSeeTask(n.taskId)) {
+              api.openTask(n.taskId);
+              /* Sprint 2B — ความเห็น/การพูดถึง พาไปที่ความเห็นนั้นเหมือนกดจากกล่องข้อความ */
+              var sp = S.notifParts ? S.notifParts(n).filter(function (p) { return p.story; })[0] : null;
+              var st = sp ? S.story(sp.story) : null;
+              if (st && !st.deleted && st.taskId === n.taskId) {
+                state.actTab = 'comments';
+                if (st.parentId) state.openThreads[st.parentId] = true;
+                state.flashStory = st.id;
+              }
+            }
             api.renderAll();
             x.close();
           };
