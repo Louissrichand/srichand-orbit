@@ -611,7 +611,8 @@
     'ไม่มีคนให้เพิ่มแล้ว': 'Everyone has already been added',
     'ล็อกรายชื่อสมาชิกแล้ว': 'Member list locked', 'ปลดล็อกแล้ว': 'Unlocked',
     'โปรเจกต์ปิด': 'Private project',
-    'ผู้ดูแลโปรเจกต์': 'Project admin', 'จัดการสมาชิกและลบโปรเจกต์ได้': 'Manage members and delete the project',
+    'ผู้ดูแลโปรเจกต์': 'Project admin', 'จัดการสมาชิกและสิทธิ์ในโปรเจกต์ได้ (การลบโปรเจกต์เป็นของผู้ดูแลระบบ)': 'Manage members and access in the project (only an admin can delete the project)',
+    'ความเห็นที่ถูกลบ': 'Comment',   // ถังขยะ — คีย์เดี่ยว ไม่ใช้ "ความเห็น"=Comments (พหูพจน์)
     'แก้ไขได้': 'Editor', 'สร้างและแก้งาน จัดโครงสร้างโปรเจกต์ได้': 'Create and edit tasks, change project structure',
     'แสดงความเห็นได้': 'Commenter', 'ดูและคอมเมนต์ได้ แต่แก้งานไม่ได้': 'View and comment, but cannot edit tasks',
     'เปิดดูได้ แก้และคอมเมนต์ไม่ได้': 'View only — cannot edit or comment',
