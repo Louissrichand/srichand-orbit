@@ -5838,3 +5838,6 @@ label.pf-pick-row { cursor: pointer; }
 .opt-chk input { margin-top: 3px; }
 .opt-link { align-self: center; background: none; border: 0; padding: 2px 4px; font-size: 12px; color: var(--fg-soft); text-decoration: underline; cursor: pointer; }
 .opt-link:hover { color: var(--fg); }
+
+/* Auto QA */
+.au-warn { display: flex; align-items: center; gap: 4px; margin-top: 3px; font-size: 12px; font-weight: 600; color: var(--danger, #c0392b); }

@@ -4375,6 +4375,8 @@
     return d ? L(d.label) : a.type;
   }
 
+  function autoBad(pid, a) { return a.on !== false && pid !== '@me' ? S.autoIssue(pid, a) : null; }
+
   function autoTitle(pid, a) {
     if (a.name) return a.name;
     var acts = [];
@@ -4483,7 +4485,7 @@
         h += '<div class="au-row' + (a.on ? '' : ' off') + '">' +
           '<button class="switch' + (a.on ? ' on' : '') + '" data-act="auto-toggle" data-auto="' + esc(a.id) + '" role="switch" aria-checked="' +
             (a.on ? 'true' : 'false') + '" title="' + esc(a.on ? L('ปิดอัตโนมัตินี้') : L('เปิดอัตโนมัตินี้')) + '"' + (canEdit ? '' : ' disabled') + '><i></i></button>' +
-          '<div class="grow"><b>' + esc(autoTitle(pid, a)) + '</b><div class="sub">' + esc(meta.join(' · ')) + '</div></div>' +
+          '<div class="grow"><b>' + esc(autoTitle(pid, a)) + '</b><div class="sub">' + esc(meta.join(' · ')) + '</div>' + (autoBad(pid, a) ? '<div class="au-warn">' + I('alert', 12) + ' ' + esc(L('ต้องแก้: {m}', { m: L(autoBad(pid, a)) })) + '</div>' : '') + '</div>' +
           '<span class="au-row-acts">' +
           (canEdit ? '<button class="btn btn-sm btn-ghost" data-act="auto-edit" data-auto="' + esc(a.id) + '" title="' + esc(L('แก้ไข')) + '">' + I('pencil', 13) + '</button>' +
             '<button class="btn btn-sm btn-ghost" data-act="auto-dup" data-auto="' + esc(a.id) + '" title="' + esc(L('ทำสำเนา')) + '">' + I('copy', 13) + '</button>' +
@@ -4675,7 +4677,7 @@
           h2 += auSel('ae-tp', days, String(+tr.day || 1), d('day') + ' data-t="num"');
         }
         h2 += auSel('ae-tp', [['once', L('ทำครั้งเดียว (เช่น สร้างงาน)')], ['tasks', L('ทำกับทุกงานที่ยังไม่เสร็จที่ตรงเงื่อนไข')]], tr.scope || 'once', d('scope'));
-        return h2;
+        return h2 + '<div class="opt-note au-hint">' + esc(L('ทำงานครั้งแรกที่มีคนเปิด Orbit ในวันนั้น (ยังตั้งเวลาเป็นชั่วโมงไม่ได้)')) + '</div>';
       }
     }
     return '';
@@ -11725,7 +11727,7 @@
         break;
       }
       case 'auto-dup':
-        if (S.duplicateAutomation(state.auto.pid, el.dataset.auto)) {
+        if (S.duplicateAutomation(state.auto.pid, el.dataset.auto, (function (da) { return da && !da.name ? autoTitle(state.auto.pid, da) : ''; })(S.automation(state.auto.pid, el.dataset.auto)))) {
           refreshAuto();
           toast(L('ทำสำเนาแล้ว (ปิดไว้ก่อน)'), L('ย้อนกลับ'), 'undo');
         } else toast(L('ทำสำเนาไม่ได้ (สูงสุด 50 รายการต่อโปรเจกต์)'));

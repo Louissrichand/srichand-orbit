@@ -2871,6 +2871,8 @@
     'บันทึกการตั้งค่าของ {v} แล้ว': 'Saved {v} settings',
     'เป็นค่าเริ่มต้นของโปรเจกต์': 'set as project default',
     // Auto QA
+    'ทำงานครั้งแรกที่มีคนเปิด Orbit ในวันนั้น (ยังตั้งเวลาเป็นชั่วโมงไม่ได้)': 'Runs the first time anyone opens Orbit that day (time of day cannot be set yet)',
+    'ต้องแก้: {m}': 'Needs fixing: {m}', 'เซกชันถูกลบ': 'section was deleted', 'ฟิลด์ถูกลบ': 'field was deleted', 'คนที่เลือกไม่อยู่แล้ว': 'the chosen person is no longer available',
     'คนที่กดอยู่ตอนนั้น': 'Whoever triggers it',
     'ตั้งค่าเริ่มต้นของมุมมอง': 'Set view default',
     'ตั้งตัวกรอง เรียง จัดกลุ่มให้ถูกใจ แล้วกด “บันทึกเป็นแท็บใหม่…” ถ้าต้องการแท็บแยก แท็บจะขึ้นต่อท้ายแท็บของโปรเจกต์ให้ทุกคนใช้':
