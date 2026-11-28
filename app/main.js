@@ -1113,7 +1113,7 @@
         I('arrowLeft', 14) + '</button>' +
         '<button class="g-today-btn" data-act="g-today">' + L('วันนี้') + '</button>' +
         '<button data-act="g-pan" data-d="1" title="' + L('เลื่อนไปทางขวา') + '">' +
-        I('arrowRight', 14) + '</button></div>',
+        I('arrowRight', 14) + '</button></div>' + (R.s4bGanttBtns ? R.s4bGanttBtns(state.route.id) : ''),
       right: '<div class="g-zoomctl">' +
         '<span class="lbl" data-act="g-zoom-menu" role="button" tabindex="0">' +
         R.esc(zoomLabel(v.gZoom)) + '</span>' +
@@ -2065,7 +2065,7 @@
     h += '<div class="field"><label>' + L('ชื่อฟิลด์') + ' *</label>' +
       '<input id="nfName" placeholder="' + L('เช่น สถานะ, ผู้อนุมัติ, งบ') + '"></div>';
 
-    h += '<div class="field"><label>' + L('ชนิด') + '</label><select id="nfType" data-act="nf-type">';
+    h += '<div class="field"><label title="' + R.esc(L('ชนิดกำหนดรูปแบบค่าที่กรอก เช่น ข้อความ ตัวเลข ตัวเลือก วันที่ — เปลี่ยนภายหลังไม่ได้')) + '">' + L('ชนิด') + ' <span class="fld-info">ⓘ</span></label><select id="nfType" data-act="nf-type">';
     types.forEach(function (x) {
       h += '<option value="' + x.id + '"' + (x.id === ft.id ? ' selected' : '') +
         '>' + L(x.label) + '</option>';
@@ -2344,8 +2344,9 @@
       h += item('reset-cols', 'arrowLeft', L('คืนความกว้างคอลัมน์เดิม'));
     }
     h += '<div class="pop-sep"></div>';
-    if (canStruct && canCreate) h += item('import-csv', 'archive', L('นำเข้างานจาก CSV'));
+    if (canStruct && canCreate) h += item('import-csv', 'archive', L('นำเข้างานจาก CSV / Excel'));
     h += item('export-csv', 'send', L('ส่งออกเป็น CSV'));
+    h += item('export-xlsx', 'send', L('ส่งออกเป็น Excel (.xlsx)'));          // Sprint 4c
     h += item('time-csv', 'send', L('ส่งออกเวลาที่บันทึก (CSV)'));          // 3c
     h += item('export-json', 'send', L('ส่งออกเป็น JSON'));
     h += item('export-ics', 'calendar', L('ดาวน์โหลดปฏิทิน .ics'));
@@ -3409,6 +3410,7 @@
     if (S.can('structure')) {
       h += '<button data-act="add-section">' + I('grid', 15) +
         '<span class="grow">' + L('เพิ่มเซกชัน') + '</span></button>';
+      h += '<button data-act="s4b-bulk-sec">' + I('plus', 15) + '<span class="grow">' + L('เพิ่มหลายเซกชัน…') + '</span></button>';
       h += '<div class="pop-sep"></div>';
       h += '<button data-act="import-csv" data-id="' + R.esc(projectId) + '">' +
         I('arrowUp', 15) + '<span class="grow">' + L('นำเข้างานจาก CSV') + '</span></button>';
@@ -5445,6 +5447,7 @@
     h += '<div class="field"><label>' + L('ชื่อฟิลด์') + ' *</label><input id="feName" value="' + R.esc(f.name) + '"></div>';
     h += '<div class="field"><label>' + L('คำอธิบาย') + '</label><textarea id="feDesc" rows="2" placeholder="' +
       L('บอกทีมว่าฟิลด์นี้ใช้กรอกอะไร') + '">' + R.esc(f.desc || '') + '</textarea></div>';
+    h += '<div class="field"><label class="chk"><input type="checkbox" id="feImportant"' + (f.important ? ' checked' : '') + '> ' + L('สำคัญ — แสดงบนการ์ด') + '</label><div class="fld-hint">' + L('แสดงค่าของฟิลด์นี้บนการ์ดบอร์ดและขึ้นก่อนในรายการ แม้ไม่ได้เปิดคอลัมน์ไว้') + '</div></div>';
     if (f.type === 'id') {
       h += '<div class="field"><label>' + L('คำนำหน้ารหัส') + '</label><input id="fePrefix" value="' + R.esc(f.prefix) +
         '" maxlength="8"><div class="fld-hint">' + L('ตัวอักษรอังกฤษหรือตัวเลข เช่น REQ → REQ-12 เลขถัดไปคือ {n}', { n: f.next }) + '</div></div>';
@@ -6277,13 +6280,20 @@
   function pickCsvFile(projectId) {
     var inp = document.createElement('input');
     inp.type = 'file';
-    inp.accept = '.csv,text/csv';
+    inp.accept = '.csv,.xlsx,.xls,text/csv';          // Sprint 4c - รับ Excel ด้วย
     inp.addEventListener('change', function () {
       var f = inp.files[0];
       if (!f) return;
       if (f.size > 5 * 1024 * 1024) { toast(L('ไฟล์ใหญ่เกิน 5 MB')); return; }
       /* 2c — ดูก่อนนำเข้า: จับคู่คอลัมน์ เลือกการเข้ารหัส แล้วค่อยกดนำเข้า */
       state.csv = { pid: projectId, file: f, text: '', enc: 'utf-8', map: null };
+      if (/\.xlsx?$/i.test(f.name) && global.Orbit4c) {          // Sprint 4c - Excel: แปลงเป็น CSV แล้วใช้ตัวจับคู่คอลัมน์เดิม
+        var xc = state.csv;
+        toast(L('กำลังอ่านไฟล์ Excel…'));
+        global.Orbit4c.xlsxToCsv(f, function (txt) { xc.text = txt; xc.map = null; openModal(csvMapModal(), true); },
+          function () { state.csv = null; toast(L('อ่านไฟล์ Excel ไม่สำเร็จ ลองบันทึกเป็น CSV UTF-8 แทน')); });
+        return;
+      }
       readCsvFile('utf-8');
     });
     inp.click();
@@ -7140,7 +7150,7 @@
         return true;
       }
       case 'pg-open': pageRoute(el.dataset.project || '', id); return true;
-      case 'pg-side-toggle': S.setPref('pgFull', !S.pref('pgFull')); return true;      // Sprint 3 — ค่าส่วนตัว ไม่แก้ข้อมูลร่วม
+      case 'pg-side-toggle': S.setPref('pgFull', !document.querySelector('.pg.nosd')); return true;      // Sprint 3 — ค่าส่วนตัว ไม่แก้ข้อมูลร่วม
       case 'pg-del':
         askConfirm(L('ลบหน้านี้?'), L('ความเห็นและประวัติเวอร์ชันของหน้านี้หายไปด้วย ย้อนกลับได้ทันทีหลังลบ'), function () {
           var l = S.pageLoc(id);
@@ -8914,6 +8924,7 @@
           if (!fePatch.options.length) { toast(L('ใส่ตัวเลือกอย่างน้อย 1 รายการ')); break; }
           fePatch.notify = !!(document.getElementById('feNotify') || {}).checked;
         }
+        if (document.getElementById('feImportant')) fePatch.important = document.getElementById('feImportant').checked;
         if (document.getElementById('fePrefix')) fePatch.prefix = document.getElementById('fePrefix').value;
         if (document.getElementById('nfKind')) fePatch.format = readNumberFormat();
         if (document.getElementById('nfExpr')) {          // 3c — สูตร
@@ -8965,6 +8976,7 @@
           (fmObj && fmObj.type === 'number'
             ? '<button data-act="field-format" data-field="' + R.esc(fid) + '">' +
               I('hash', 14) + ' ' + L('รูปแบบตัวเลข…') + '</button>' : '') +
+          (S.isAdmin() ? '<button data-act="s4b-merge-field" data-field="' + R.esc(fid) + '">' + I('copy', 14) + ' ' + L('รวมกับฟิลด์อื่น…') + '</button>' : '') +
           '<button data-act="drop-field" data-field="' + R.esc(fid) + '">' +
           I('trash', 14) + ' ' + L('ลบ') + '</button>');
         break;
@@ -9413,6 +9425,9 @@
         if (smSec && canSt) {
           smh += '<div class="pop-sep"></div>' +
             '<button data-act="rename-section" data-section="' + esc(smSec) + '">' + I('pencil', 14) + ' ' + L('เปลี่ยนชื่อ') + '</button>' +
+            '<button data-act="move-section" data-delta="-1" data-section="' + esc(smSec) + '">' + I('arrowUp', 14) + ' ' + L('เลื่อนขึ้น') + '</button>' +
+            '<button data-act="move-section" data-delta="1" data-section="' + esc(smSec) + '">' + I('arrowDown', 14) + ' ' + L('เลื่อนลง') + '</button>' +
+            '<button data-act="s4b-bulk-sec">' + I('plus', 14) + ' ' + L('เพิ่มหลายเซกชัน…') + '</button>' +
             '<button data-act="dup-section" data-section="' + esc(smSec) + '">' + I('copy', 14) + ' ' + L('ทำสำเนาเซกชัน…') + '</button>' +
             '<button data-act="delete-section" data-section="' + esc(smSec) + '">' + I('trash', 14) + ' ' + L('ลบคอลัมน์') + '</button>';
         }
@@ -9451,7 +9466,7 @@
         askChoice(L('เตือนงานเงียบ'), L('งานที่ไม่มีความเคลื่อนไหวเกินกำหนดจะแจ้งผู้รับผิดชอบ และเกิน 2 เท่าจะเพิ่มเจ้าของโปรเจกต์เป็นผู้ติดตาม ทำงานเฉพาะตอนมีคนเปิด Orbit อยู่ ปัจจุบัน: {d}', { d: sdCur ? L('{n} วัน', { n: sdCur }) : L('ปิดการเตือน') }),
           [[0, L('ปิดการเตือน')], [7, L('7 วัน')], [14, L('14 วัน')], [30, L('30 วัน')]].map(function (o) {
             return { label: o[1], run: function () { if (S.setStaleDays(sdPid, o[0])) { toast(L('ตั้งเตือนงานเงียบแล้ว')); S.runStaleCheck(); } } };
-          }));
+          }).concat(R.s4bStaleMove ? [{ label: L('ย้ายงานเงียบ 30 วันไปเซกชัน…'), run: function () { R.s4bStaleMove(sdPid); } }] : []));
         break;
       }
       case 'required-fields': closePops(); openModal(requiredFieldsModal(state.route.id)); break;
@@ -9846,12 +9861,25 @@
       case 'quick-add': {
         var qp = S.project(state.route.id);
         if (!qp) break;
+        var qaCtx = { projectId: qp.id, sectionId: qp.sections[0].id };
         askText(L('ชื่องานใหม่'), '', function (v) {
           if (!v) return;
-          var nt = S.createTask({ name: v }, qp.id, qp.sections[0].id);
+          var qsel = document.getElementById('qaSec');
+          var nt = S.createTask({ name: v }, qp.id, (qsel && qsel.value) || qaCtx.sectionId);
           if (nt) openTask(nt.id);          // Sprint 1B — ถูกด่านสร้างงานปฏิเสธ = null (ขึ้นข้อความแล้ว)
-        }, { ok: L('เพิ่มงาน'), pasteCtx: { projectId: qp.id, sectionId: qp.sections[0].id },
+        }, { ok: L('เพิ่มงาน'), pasteCtx: qaCtx,
              note: L('วางข้อความหลายบรรทัดเพื่อสร้างหลายงานพร้อมกัน') });
+        /* Sprint 4b — เลือกเซกชันก่อนเพิ่ม (ค่าเริ่มต้น = เซกชันแรก) */
+        var qaIn = document.getElementById('askInput');
+        if (qaIn && qp.sections.length > 1) {
+          var qaBox = document.createElement('div');
+          qaBox.className = 'field';
+          qaBox.innerHTML = '<label>' + L('เซกชัน') + '</label><select id="qaSec">' + qp.sections.map(function (s) {
+            return '<option value="' + R.esc(s.id) + '">' + R.esc(s.name) + '</option>';
+          }).join('') + '</select>';
+          qaIn.parentNode.parentNode.insertBefore(qaBox, qaIn.parentNode.nextSibling);
+          document.getElementById('qaSec').addEventListener('change', function (ev) { qaCtx.sectionId = ev.target.value; });
+        }
         break;
       }
       case 'inline-add': inlineAdd(el, sectionId); break;
@@ -9912,14 +9940,7 @@
                     : L('เลือกผู้อนุมัติก่อน แล้วผู้อนุมัติจึงตัดสินได้'));
           break;
         }
-        var apV = el.dataset.v, apId = id;
-        if (apV === 'rejected') {
-          askConfirm(L('ปฏิเสธ “{t}”?', { t: apT.name }),
-            L('งานจะถูกปิดเป็น “ไม่อนุมัติ” และแจ้งคนขอทันที ถ้าแค่อยากให้แก้บางจุด ใช้ “ขอแก้ไข” แทน'),
-            function () { S.updateTask(apId, { approval: 'rejected' }); }, { ok: L('ปฏิเสธ') });
-          break;
-        }
-        S.updateTask(id, { approval: apV });
+        apvDecide(id, el.dataset.v);       // 4c - ผ่านตัวตัดสินกลาง (ลงประวัติ + หลายผู้อนุมัติ)
         break;
       }
       case 'approval-resubmit':
@@ -14168,13 +14189,13 @@
     if (v === 'rejected') {
       askConfirm(L('ปฏิเสธ “{t}”?', { t: nm }),
         L('งานจะถูกปิดเป็น “ไม่อนุมัติ” และแจ้งคนขอทันที ถ้าแค่อยากให้แก้บางจุด ใช้ “ขอแก้ไข” แทน'),
-        function () { S.updateTask(tid, { approval: 'rejected' }); done('ปฏิเสธแล้ว: {t}'); }, { ok: L('ปฏิเสธ') });
+        function () { S.decideApproval(tid, 'rejected'); done('ปฏิเสธแล้ว: {t}'); }, { ok: L('ปฏิเสธ') });
       return;
     }
     if (v === 'changes') {
       askText(L('ขอแก้ไขงาน “{t}”', { t: nm }), '', function (note) {
         S.batch('ขอแก้ไข “{t}”', { t: nm.slice(0, 60) }, function () {
-          S.updateTask(tid, { approval: 'changes' });
+          S.decideApproval(tid, 'changes', note);
           if (note) S.addComment(tid, note);
         });
         done('ขอแก้ไขแล้ว: {t}');
@@ -14182,8 +14203,8 @@
            note: L('ข้อความนี้จะลงเป็นความเห็นในงาน คนขอได้รับแจ้งพร้อมผลอนุมัติ') });
       return;
     }
-    S.updateTask(tid, { approval: 'approved' });
-    done('อนุมัติแล้ว: {t}');
+    S.decideApproval(tid, v === 'pending' ? 'pending' : 'approved');
+    done(v === 'pending' ? 'กลับไปรออนุมัติ: {t}' : 'อนุมัติแล้ว: {t}');
   }
 
   /* เลื่อนเตือน — ถึงเวลาแล้วกลับมาเป็นรายการใหม่ ตรวจตอนเปิดแอปและทุกนาทีที่เปิดค้างไว้ (ไม่มีเซิร์ฟเวอร์ปลุก) */
@@ -14194,6 +14215,10 @@
   /* Sprint 4 — เตือนงานเงียบ ตรวจตอนเปิดแอปและทุกชั่วโมง (เฉพาะโปรเจกต์ที่ตั้งไว้) */
   function runStale() { try { S.runStaleCheck(); } catch (err) { console.error('ตรวจงานเงียบไม่สำเร็จ', err); } }
   setTimeout(runStale, 6000);
+  /* Sprint 4c - เตือนฉันต่องาน */
+  function runRemind() { try { S.runReminders(); } catch (err) { console.error('เตือนงานไม่สำเร็จ', err); } }
+  setTimeout(runRemind, 3000);
+  setInterval(runRemind, 30 * 1000);
   setInterval(runStale, 60 * 60 * 1000);
   setInterval(runSnoozeWake, 60 * 1000);
 

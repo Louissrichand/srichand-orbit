@@ -1482,6 +1482,10 @@
       (p.pages || []).forEach(function (pg) {
         if (hit(pg.title) || hit(pg.body)) out.push({ kind: 'page', id: pg.id, title: pg.title || '', project: p, snip: snip(pg.body) });
       });
+      (p.statusLog || []).slice().reverse().forEach(function (s) {       // Sprint 4c - ค้นเจอจากรายงานสถานะของโปรเจกต์
+        var body = (s.blocks || []).map(function (b) { return (b.title || '') + ' ' + (b.text || ''); }).join(' ') || s.text || '';
+        if (hit(s.title) || hit(body)) out.push({ kind: "status", id: s.id, title: s.title || "", project: p, snip: snip(body), at: s.at });
+      });
       (p.messages || []).forEach(function (m) {
         if (hit(m.title) || hit(m.body)) out.push({ kind: 'message', id: m.id, title: m.title || String(m.body || '').split('\n')[0].slice(0, 60), project: p, snip: snip(m.body) });
       });
@@ -3197,7 +3201,7 @@
     var order = (v.cols || []);
     all.sort(function (a, b) {
       var ia = order.indexOf(a.id), ib = order.indexOf(b.id);
-      if (ia < 0 && ib < 0) return 0;
+      if (ia < 0 && ib < 0) return a.field && b.field ? (b.field.important ? 1 : 0) - (a.field.important ? 1 : 0) : 0;   // 4b ฟิลด์สำคัญขึ้นก่อน
       if (ia < 0) return 1;
       if (ib < 0) return -1;
       return ia - ib;
@@ -4269,6 +4273,8 @@
       }
     }
 
+    if ('assigneeId' in patch && !('approvers' in patch) && t.approvers) patch.approvers = null;    // 4c - เปลี่ยนผู้อนุมัติทางช่องเดี่ยว = กลับเป็นคนเดียว
+    if (patch.approval === 'pending') t.approvalVotes = {};
     Object.keys(patch).forEach(function (k) { t[k] = patch[k]; });
     if (t.type !== 'approval') t.approval = null;
     else if (!t.approval) t.approval = 'pending';
@@ -5681,6 +5687,29 @@
   }
 
 
+
+  /* Sprint 4b — เพิ่มหลายเซกชันรวดเดียว (ย้อนกลับครั้งเดียว) และย้ายไปตำแหน่งที่ลากไปวาง */
+  function addSections(projectId, names) {
+    var p = project(projectId);
+    names = (names || []).map(function (x) { return String(x).trim(); }).filter(Boolean).slice(0, 100);
+    if (!p || !names.length) return [];
+    snapshot('เพิ่มหลายเซกชัน');
+    var out = names.map(function (n) { var s = { id: uid('s'), name: n.slice(0, 120) }; p.sections.push(s); return s; });
+    commit();
+    return out;
+  }
+  function reorderSection(projectId, sectionId, toIndex) {
+    var p = project(projectId);
+    if (!p) return false;
+    var i = -1;
+    p.sections.forEach(function (s, idx) { if (s.id === sectionId) i = idx; });
+    toIndex = Math.max(0, Math.min(p.sections.length - 1, toIndex));
+    if (i < 0 || i === toIndex) return false;
+    snapshot('ย้ายลำดับเซกชัน');
+    p.sections.splice(toIndex, 0, p.sections.splice(i, 1)[0]);
+    commit();
+    return true;
+  }
   /* ---------- 2b — ทำสำเนาคอลัมน์ รูปปก และเพิ่มงานต่อจากแถว ---------- */
 
   var SEC_DUP_KEYS = ['assignee', 'dates', 'notes', 'subtasks', 'tags', 'followers', 'attachments', 'fields'];
@@ -5843,6 +5872,36 @@
     p.fields = p.fields.filter(function (x) { return x.id !== fieldId; });
     db.fieldValues = db.fieldValues.filter(function (v) { return !goes(v); });
     commit();
+  }
+
+  /* Sprint 4b — รวมฟิลด์ซ้ำ: ย้ายค่าของ A ไป B เฉพาะงานที่ B ยังว่าง แล้วลบ A (เฉพาะผู้ดูแล, ชนิดเดียวกัน, ไม่ใช่ฟิลด์คลัง) */
+  function mergeFields(projectId, fromId, intoId) {
+    var p = project(projectId);
+    if (!p || !isAdmin(db.currentUserId) || fromId === intoId) return false;
+    var a = (p.fields || []).filter(function (f) { return f.id === fromId; })[0];
+    var b = (p.fields || []).filter(function (f) { return f.id === intoId; })[0];
+    if (!a || !b || a.type !== b.type || a.lib || b.lib) return false;
+    if (a.type === 'id' || a.type === 'formula') return false;
+    snapshot('รวมฟิลด์ “{a}” เข้า “{b}”', { a: a.name, b: b.name });
+    var isEmpty = function (v) { return v === null || v === undefined || v === '' || (Array.isArray(v) && !v.length); };
+    var moved = 0;
+    if ((a.type === 'select' || a.type === 'multi') && a.options) {
+      b.options = b.options || [];
+      a.options.forEach(function (o) {
+        if (!b.options.some(function (x) { return x.name === o.name; })) b.options.push(clone(o));
+      });
+    }
+    db.fieldValues.slice().forEach(function (v) {
+      if (v.fieldId !== fromId) return;
+      var tgt = db.fieldValues.filter(function (x) { return x.taskId === v.taskId && x.fieldId === intoId; })[0];
+      if (!tgt) { v.fieldId = intoId; moved++; }
+      else if (isEmpty(tgt.value)) { tgt.value = v.value; moved++; }
+    });
+    db.fieldValues = db.fieldValues.filter(function (v) { return v.fieldId !== fromId; });
+    p.fields = p.fields.filter(function (f) { return f.id !== fromId; });
+    audit('field.merge', p.name, 'รวมฟิลด์ “{a}” เข้า “{b}” ย้ายค่า {n} รายการ', { a: a.name, b: b.name, n: moved });
+    commit();
+    return moved;
   }
 
   /** รูปแบบการแสดงของฟิลด์ตัวเลข — ค่าที่กรอกไว้ไม่เปลี่ยน เปลี่ยนแค่หน้าตา */
@@ -6326,7 +6385,14 @@
     var t = task(taskId);
     if (!t || t.type !== 'approval') return false;
     if (!can('write')) return false;                   // ดูอย่างเดียว/ปิดบัญชี กดอะไรไม่ได้เลย
-    return !!t.assigneeId && t.assigneeId === db.currentUserId;
+    return approverIds(t).indexOf(db.currentUserId) >= 0;     // Sprint 4c - ผู้อนุมัติหลายคน
+  }
+
+  /** Sprint 4c - ผู้อนุมัติของงาน: หลายคนเก็บใน t.approvers (คนแรก = ผู้รับผิดชอบ) งานเก่าไม่มีฟิลด์นี้ = ผู้รับผิดชอบคนเดียว */
+  function approverIds(t) {
+    if (!t) return [];
+    var a = (t.approvers || []).filter(function (u) { return user(u); });
+    return a.length ? a : (t.assigneeId ? [t.assigneeId] : []);
   }
 
   /** ข้อความแจ้งคนที่เพิ่งได้รับงาน — งานขออนุมัติบอกว่า "ขออนุมัติจากคุณ" */
@@ -6353,10 +6419,11 @@
     snapshot('ส่งขออนุมัติอีกครั้ง');
     /* ไม่ผ่าน updateTask เพราะข้อความแจ้งต้องถึงผู้อนุมัติ ("ขออนุมัติจากคุณ")
      * ไม่ใช่ถึงคนขอแบบผลอนุมัติทั่วไป */
-    t.approval = 'pending';
+    t.approval = 'pending'; t.approvalVotes = {};
     if (t.completed) { t.completed = false; t.completedAt = null; t.completedBy = null; }
-    log(taskId, 'ส่งงานนี้ขออนุมัติอีกครั้ง', null, t.assigneeId ? [t.assigneeId] : null);
-    if (t.assigneeId) notifyOnly(taskId, [t.assigneeId], 'ส่ง “{t}” ขออนุมัติจากคุณอีกครั้ง', 'assigned', { t: t.name });
+    var apvIds = approverIds(t);
+    log(taskId, 'ส่งงานนี้ขออนุมัติอีกครั้ง', null, apvIds);
+    if (apvIds.length) notifyOnly(taskId, apvIds, 'ส่ง “{t}” ขออนุมัติจากคุณอีกครั้ง', 'assigned', { t: t.name });
     autoFire('approval', taskId, { v: 'pending' });
     commit();
     return t;
@@ -6572,6 +6639,16 @@
     });
     return last;
   }
+  /** Sprint 4b — เซกชันที่งานเงียบเกิน 30 วันจะถูกย้ายไป (null = ไม่ย้าย) */
+  function setStaleMoveTo(projectId, sectionId) {
+    var p = project(projectId);
+    if (!p || !can('structure') || !canInProject(projectId, 'edit')) return false;
+    if (sectionId && !section(projectId, sectionId)) return false;
+    snapshot('ตั้งเตือนงานเงียบ');
+    p.staleMoveTo = sectionId || null;
+    commit();
+    return true;
+  }
   function setStaleDays(projectId, days) {
     var p = project(projectId);
     if (!p || !can('structure') || !canInProject(projectId, 'edit')) return false;
@@ -6601,6 +6678,16 @@
           t.stale.a = new Date().toISOString();
           sys('เงียบมา {n} วันแล้ว — ขอให้ผู้รับผิดชอบอัปเดตสถานะ', { n: Math.floor(days) });
           notifyOnly(t.id, [t.assigneeId], 'งาน “{t}” เงียบมา {n} วันแล้ว อัปเดตสถานะหน่อย', 'activity', { t: t.name, n: Math.floor(days) }, true);
+          changed++;
+        }
+        /* Sprint 4b — เงียบครบ 30 วัน ย้ายไปเซกชันที่โปรเจกต์ตั้งไว้ (ถ้าตั้ง) ครั้งเดียวต่องาน */
+        if (days >= 30 && p.staleMoveTo && !t.stale.c && section(p.id, p.staleMoveTo)) {
+          t.stale.c = new Date().toISOString();
+          var sm = db.memberships.filter(function (mm) { return mm.taskId === t.id && mm.projectId === p.id; })[0];
+          if (sm && sm.sectionId !== p.staleMoveTo) {
+            setSectionRaw(sm, p.staleMoveTo, nextPosition(p.id, p.staleMoveTo));
+            sys('เงียบนานกว่า 30 วัน — ย้ายไปเซกชัน “{s}” อัตโนมัติ', { s: section(p.id, p.staleMoveTo).name });
+          }
           changed++;
         }
         if (days >= 2 * N && !t.stale.b && p.owner) {
@@ -7135,6 +7222,7 @@
     snapshot('แก้ไขฟิลด์ “{f}”', { f: f.name });
     if (typeof patch.name === 'string' && patch.name.trim()) f.name = patch.name.trim().slice(0, 80);
     if (typeof patch.desc === 'string') f.desc = patch.desc.trim().slice(0, 300);
+    if ('important' in patch) f.important = !!patch.important;   // Sprint 4b — แสดงบนการ์ด
     if ('notify' in patch) f.notify = !!patch.notify && (f.type === 'select' || f.type === 'multi');
     if (f.type === 'id' && patch.prefix) f.prefix = cleanPrefix(patch.prefix);
     if ((f.type === 'number' || f.type === 'formula') && 'format' in patch) f.format = normalizeFormat(patch.format);
@@ -12864,7 +12952,7 @@
     deleteProject: deleteProject, duplicateProject: duplicateProject, projectFirstDate: projectFirstDate,
     setProjectStatus: setProjectStatus, statusLog: statusLog, archiveProject: archiveProject,
     addSection: addSection, renameSection: renameSection,
-    deleteSection: deleteSection, moveSection: moveSection,
+    setStaleMoveTo: setStaleMoveTo, mergeFields: mergeFields, deleteSection: deleteSection, moveSection: moveSection, addSections: addSections, reorderSection: reorderSection,
     addField: addField, renameField: renameField, deleteField: deleteField,
     colWidth: colWidth, setColWidth: setColWidth, resetColWidths: resetColWidths,
     saveView: saveView, deleteSavedView: deleteSavedView,
@@ -14524,7 +14612,8 @@
   function approvalsWaiting(userId) {
     var who = userId || db.currentUserId;
     return db.tasks.filter(function (t) {
-      return t.type === 'approval' && !t.completed && t.assigneeId === who &&
+      return t.type === 'approval' && !t.completed && approverIds(t).indexOf(who) >= 0 &&
+        !(t.approvalVotes && t.approvalVotes[who]) &&
         (t.approval || 'pending') === 'pending' && canSeeTask(t.id);
     }).sort(function (a, b) {
       var x = a.dueOn || '9999-99-99', y = b.dueOn || '9999-99-99';
@@ -14605,5 +14694,143 @@
     pfFollowing: pfFollowing, setPfFollow: setPfFollow, pfFollowers: pfFollowers
   };
   Object.keys(X2B).forEach(function (k) { global.Store[k] = X2B[k]; });
+
+  /* ---------- Sprint 4c — ผู้อนุมัติหลายคน + ประวัติการอนุมัติ ----------
+   * t.approvers [userId] · t.approvalMode 'all'|'any' · t.approvalVotes {userId: decision รอบนี้} · t.approvalTrail [{u,d,at,note}]
+   * ไม่มีฟิลด์เหล่านี้ = ผู้อนุมัติคนเดียว (ผู้รับผิดชอบ) ทำงานเหมือนเดิมทุกอย่าง ไม่ต้องเพิ่ม SCHEMA */
+  function approvalMode(t) { return t && t.approvalMode === 'any' ? 'any' : 'all'; }
+
+  function setApprovers(taskId, ids, mode) {
+    var t = task(taskId);
+    if (!t || t.type !== 'approval' || !can('write', taskId)) return denied('approval');
+    ids = (ids || []).filter(function (u, i, a) { return user(u) && a.indexOf(u) === i; });
+    if (!ids.length) return false;
+    var before = approverIds(t);
+    snapshot('เปลี่ยนผู้อนุมัติ');
+    t.approvers = ids.length > 1 ? ids : null;
+    t.approvalMode = mode === 'any' ? 'any' : 'all';
+    t.assigneeId = ids[0];
+    if (!t.assignedAt || before[0] !== ids[0]) t.assignedAt = new Date().toISOString();
+    t.assignedBy = db.currentUserId;
+    t.approvalVotes = {};
+    var fresh = ids.filter(function (u) { return before.indexOf(u) < 0; });
+    log(taskId, 'ตั้งผู้อนุมัติ {n} คน', { n: ids.length });
+    if (fresh.length) notifyOnly(taskId, fresh, 'ขออนุมัติ “{t}” จากคุณ', 'assigned', { t: t.name });
+    commit();
+    return t;
+  }
+
+  /** ตัดสินงานขออนุมัติ — ลงประวัติ แล้วสรุปผลรวมตามโหมด (ทุกคน / คนใดคนหนึ่ง) */
+  function decideApproval(taskId, v, note) {
+    var t = task(taskId);
+    if (!t || !canApprove(taskId)) return denied('approval');
+    if (v === 'pending') { updateTask(taskId, { approval: 'pending' }); return t; }
+    if (['approved', 'changes', 'rejected'].indexOf(v) < 0) return false;
+    var me0 = db.currentUserId, ids = approverIds(t);
+    snapshot('เปลี่ยนผลอนุมัติของ “{t}”', { t: String(t.name || '').slice(0, 60) });
+    t.approvalVotes = t.approvalVotes || {};
+    t.approvalVotes[me0] = v;
+    t.approvalTrail = (t.approvalTrail || []).concat([{ u: me0, d: v, at: new Date().toISOString(), note: String(note || '').slice(0, 500) }]).slice(-100);
+    var all = approvalMode(t) === 'all' && ids.length > 1, res = v;
+    if (all && v === 'approved') {
+      res = ids.every(function (u) { return t.approvalVotes[u] === 'approved'; }) ? 'approved' : 'pending';
+    }
+    if (res === 'pending') {
+      var st = APPROVAL_STATES.filter(function (x) { return x.id === v; })[0];
+      var askers = [t.createdBy].concat(t.followers || []).filter(function (u, i, a) { return u && u !== me0 && a.indexOf(u) === i; });
+      log(taskId, 'ลงมติ “{s}” ในการอนุมัติ ({k}/{n})', {
+        s: st.label, k: ids.filter(function (u) { return t.approvalVotes[u] === 'approved'; }).length, n: ids.length }, askers);
+      commit();
+      return t;
+    }
+    if (res === t.approval) { commit(); return t; }
+    updateTask(taskId, { approval: res }, { quiet: true });
+    return t;
+  }
+
+  /* ---------- Sprint 4c — เตือนฉันต่องาน ----------
+   * t.reminders [{id,u,at,done}] ทุกคนเห็นเฉพาะของตัวเอง ถึงเวลาแล้ว (ตอนเปิดแอปอยู่) แจ้งคนตั้ง */
+  function myReminders(taskId) {
+    var t = task(taskId);
+    return ((t && t.reminders) || []).filter(function (r) { return r.u === db.currentUserId && !r.done; });
+  }
+  function reminderChoices(taskId) {
+    var t = task(taskId), now = new Date();
+    var out = [{ id: 'hour', label: 'อีก 1 ชั่วโมง', at: new Date(now.getTime() + 3600000).toISOString() }];
+    var tm = new Date(now); tm.setDate(tm.getDate() + 1); tm.setHours(9, 0, 0, 0);
+    out.push({ id: 'tomorrow', label: 'พรุ่งนี้ 9:00', at: tm.toISOString() });
+    if (t && t.dueOn) {
+      var d = new Date(t.dueOn + 'T09:00:00'); d.setDate(d.getDate() - 1);
+      if (d.getTime() > now.getTime()) out.push({ id: 'before', label: 'วันก่อนครบกำหนด 9:00', at: d.toISOString() });
+    }
+    return out;
+  }
+  function addReminder(taskId, atIso) {
+    var t = task(taskId), at = Date.parse(atIso);
+    if (!t || !isActive() || !canSeeTask(taskId) || !(at > Date.now())) return false;
+    snapshot('ตั้งเตือนงาน');
+    t.reminders = (t.reminders || []).filter(function (r) { return !r.done; });
+    t.reminders.push({ id: uid('rm'), u: db.currentUserId, at: new Date(at).toISOString(), done: false });
+    commit();
+    return true;
+  }
+  function removeReminder(taskId, rid) {
+    var t = task(taskId);
+    if (!t || !t.reminders) return false;
+    snapshot('ลบการเตือน');
+    t.reminders = t.reminders.filter(function (r) { return !(r.id === rid && r.u === db.currentUserId); });
+    commit();
+    return true;
+  }
+  /** เรียกตอนเปิดแอปและทุกนาที — แจ้งเตือนของฉันที่ถึงเวลา */
+  function runReminders() {
+    var now = Date.now(), n = 0, me0 = db && db.currentUserId;
+    if (!me0) return 0;
+    db.tasks.forEach(function (t) {
+      (t.reminders || []).forEach(function (r) {
+        if (r.done || r.u !== me0 || Date.parse(r.at) > now) return;
+        r.done = true; n++;
+        if (canSeeTask(t.id)) pushNotif({ userId: me0, taskId: t.id, key: 'เตือนตามที่ตั้งไว้: “{t}”', params: { t: t.name }, kind: 'due', dedupe: 'rm:' + r.id });
+      });
+    });
+    if (n) commit();
+    return n;
+  }
+
+  /* ---------- Sprint 4c - เพิ่มสมาชิกหลายคนพร้อมกัน (อีเมลทีละบรรทัด / CSV) ----------
+   * rows [{email, name, team}] -> { added:[], dup:[], bad:[] } ใช้ addUser/emailProblem ชุดเดิม ย้อนกลับได้ทีเดียว */
+  function bulkAddUsers(rows, role) {
+    var out = { added: [], dup: [], bad: [] };
+    if (!isAdmin()) { denied('members'); return out; }
+    var seen = {};
+    batch('เพิ่มสมาชิกหลายคน', null, function () {
+      (rows || []).forEach(function (r) {
+        var em = String(r.email || '').trim(), key = em.toLowerCase();
+        if (!em) return;
+        var prob = emailProblem(em);
+        if (prob) { (prob.key.indexOf('มีอยู่แล้ว') >= 0 ? out.dup : out.bad).push(em); return; }
+        if (seen[key]) { out.dup.push(em); return; }
+        seen[key] = 1;
+        var nm = String(r.name || '').trim() || em.split('@')[0];
+        var u = addUser({ name: nm, email: em, role: role || 'member' });
+        if (!u) { out.bad.push(em); return; }
+        out.added.push(u);
+        var tn = String(r.team || '').trim().toLowerCase();
+        if (tn) {
+          var tm = (db.teams || []).filter(function (x) { return String(x.name || '').trim().toLowerCase() === tn; })[0];
+          if (tm) addTeamMember(tm.id, u.id, 'member');
+        }
+      });
+    });
+    return out;
+  }
+
+  var X4C = {
+    parseCsv: parseCsv, bulkAddUsers: bulkAddUsers, approverIds: approverIds, approvalMode: approvalMode, setApprovers: setApprovers, decideApproval: decideApproval,
+    myReminders: myReminders, reminderChoices: reminderChoices, addReminder: addReminder, removeReminder: removeReminder,
+    runReminders: runReminders
+  };
+  Object.keys(X4C).forEach(function (k) { global.Store[k] = X4C[k]; });
+
 
 })(window);

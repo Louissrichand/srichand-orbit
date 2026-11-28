@@ -5605,3 +5605,55 @@ span.tb-people.ro { pointer-events: none; }
 .pg.nosd .pg-side { display: none; }
 .pg.nosd .pg-main { max-width: none; }
 .pg.nosd { grid-template-columns: minmax(0, 1fr); }
+
+/* Sprint 4b */
+.g-off { position: absolute; top: 0; bottom: 0; background: var(--bg-sunk); opacity: .75; pointer-events: none; }
+.g-off.hol { background: repeating-linear-gradient(135deg, var(--bg-sunk), var(--bg-sunk) 4px, var(--line-soft) 4px, var(--line-soft) 6px); opacity: 1; pointer-events: auto; }
+.g-pstart { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px dashed var(--accent); z-index: 2; pointer-events: none; }
+.g-pstart span { position: absolute; top: 2px; left: 4px; font-size: 10.5px; color: var(--accent); background: var(--bg); padding: 0 4px; border-radius: 4px; white-space: nowrap; }
+.g-s4b-btn { margin-left: 6px; }
+.ps-gantt .pg-wrap { position: relative; }
+.ps-gantt .pg-row { display: grid; grid-template-columns: 62mm 1fr 18mm; align-items: center; min-height: 6mm; border-bottom: 1px solid var(--line-soft); font-size: 8.5pt; position: relative; z-index: 1; }
+.ps-gantt .pg-name { padding: 0 2mm; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ps-gantt .pg-sec { background: var(--bg-sunk); font-weight: 700; }
+.ps-gantt .pg-dur { text-align: right; padding-right: 2mm; color: var(--fg-soft); }
+.ps-gantt .pg-area { position: relative; height: 5mm; }
+.ps-gantt .pg-ticks { height: 5mm; }
+.ps-gantt .pg-tick { position: absolute; top: 0; font-size: 8pt; color: var(--fg-soft); border-left: 1px solid var(--line); padding-left: 1mm; }
+.ps-gantt .pg-bar { position: absolute; top: 1mm; height: 3mm; border-radius: 1mm; background: var(--chart-2); }
+.ps-gantt .pg-bar.done { background: var(--ok); }
+.ps-gantt .pg-base { position: absolute; top: 4mm; height: .8mm; background: #9a9da3; }
+.ps-gantt .pg-ms { position: absolute; top: 1.2mm; width: 2.6mm; height: 2.6mm; background: var(--chart-4); transform: rotate(45deg); }
+.ps-gantt .pg-over { position: absolute; left: 62mm; right: 18mm; top: 0; bottom: 0; pointer-events: none; z-index: 0; }
+.ps-gantt .pg-overarea { position: relative; height: 100%; }
+.ps-gantt .pg-off { position: absolute; top: 0; bottom: 0; background: #f0f1f3; }
+.ps-gantt .pg-off.hol { background: #e6e8eb; }
+.ps-gantt .pg-pstart, .ps-gantt .pg-today { position: absolute; top: 0; bottom: 0; width: 0; text-decoration: none; }
+.ps-gantt .pg-pstart { border-left: 1.5px dashed var(--accent); }
+.ps-gantt .pg-today { border-left: 1.5px solid var(--danger); }
+[data-s4b-sec] { cursor: grab; }
+.s4b-dragging { opacity: .5; }
+.tbl-sec.s4b-drop-b { box-shadow: 0 -2px 0 0 var(--accent); }
+.tbl-sec.s4b-drop-a { box-shadow: 0 2px 0 0 var(--accent); }
+.col-head.s4b-drop-b { box-shadow: -3px 0 0 0 var(--accent); }
+.col-head.s4b-drop-a { box-shadow: 3px 0 0 0 var(--accent); }
+.fld-imp { color: var(--warn, #f5a623); font-size: 11px; margin-left: 3px; }
+.fld-info { color: var(--fg-faint); font-size: 12px; margin-left: 4px; cursor: help; }
+@media (max-width: 640px) { .g-s4b-btn[data-act="g-set-baseline"] { display: none; } .g-s4b-btn { margin-left: 2px; } }
+/* Sprint 4c */
+.apv4c { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+.apv4c-mode { font-size: 12.5px; color: var(--fg-soft); }
+.apv4c-list { display: flex; flex-direction: column; gap: 6px; }
+.apv4c-p, .apv4c-t { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; }
+.apv4c-p { align-items: center; }
+.apv4c-p .grow, .apv4c-t .grow { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.apv4c-trail { border-top: 1px solid var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.apv4c-note { margin-top: 2px; color: var(--fg-soft); font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.apv4c-picks { display: flex; flex-direction: column; gap: 4px; max-height: 280px; overflow: auto; }
+.apv4c-pick { display: flex; align-items: center; gap: 8px; padding: 6px 4px; cursor: pointer; border-radius: 6px; }
+.apv4c-pick:hover { background: rgba(128,128,128,.12); }
+.rm4c { flex-wrap: wrap; gap: 6px; }
+.rm4c-x { border: 0; background: none; color: inherit; cursor: pointer; padding: 0 0 0 2px; opacity: .7; }
+.rm4c-x:hover { opacity: 1; }
+.bi-sum { margin: 0 0 8px; padding-left: 18px; line-height: 1.7; overflow-wrap: anywhere; }
+.modal textarea.inp { width: 100%; resize: vertical; font: inherit; }

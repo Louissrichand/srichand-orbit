@@ -275,6 +275,7 @@
       var due = s ? (s[0] === s[1] ? R.fmtDate(s[1])
                                    : R.fmtDate(s[0]) + ' – ' + R.fmtDate(s[1])) : '—';
       var dur = S.taskDuration(t);
+      var wdur = R.s4bWorkDays && (t.startOn || t.dueOn) ? R.s4bWorkDays(t.startOn, t.dueOn) : null;   // 4b วันทำการ
 
       h += '<div class="g-lrow g-task' + (t.completed ? ' done' : '') +
         (r.depth ? ' g-sub' : '') + (q && !hit(t) ? ' g-dim' : '') +
@@ -291,7 +292,7 @@
           h += '<span class="g-c-due' + R.dueClass(t.dueOn, t.completed) + '">' + due + '</span>';
         } else if (c.id === 'duration') {
           h += '<span class="g-c-duration">' +
-            (dur ? L('{n} วัน', { n: dur }) : '<span class="g-muted">—</span>') + '</span>';
+            (dur ? '<span title="' + esc(L('{n} วันตามปฏิทิน', { n: dur })) + '">' + L('{n} วันทำการ', { n: wdur == null ? dur : wdur }) + '</span>' : '<span class="g-muted">—</span>') + '</span>';
         } else if (c.id === 'blockedBy') {
           h += '<span class="g-c-blockedBy g-c-dep">' + depChips(t.dependsOn.map(function (dp) {
             return { task: S.task(dp.id), type: dp.type, id: dp.id };
@@ -335,6 +336,8 @@
       mi++;
     }
 
+    if (R.s4bGanttBg) h += R.s4bGanttBg(from, days, W, p);   // Sprint 4b — วันหยุด + วันเริ่มโปรเจกต์
+
     rows.forEach(function (r, i) {
       var top = i * G_ROW;
       h += '<div class="g-rrow" style="top:' + top + 'px" data-row="' + i + '"></div>';
@@ -355,6 +358,7 @@
       var blocked = !t.completed && S.isBlocked(t.id);
       var color = barColor(t, p, colorBy);
       var dim = q && !hit(t) ? ' g-dim' : '';
+      var wdur = R.s4bWorkDays ? R.s4bWorkDays(s[0], s[1]) : null;   // 4b
 
       /* เส้นฐานวาดไว้ใต้แท่งจริง เห็นทั้งสองเส้นพร้อมกันจึงรู้ว่าเลื่อนไปกี่วัน */
       if (showBase) {
@@ -382,7 +386,7 @@
         var bx = xAt(s[0]), bw = Math.max(xEnd(s[1]) - bx, 6);
         h += '<div class="g-bar' + (t.completed ? ' done' : '') + (blocked ? ' blocked' : '') + dim + (crit && crit.ids[t.id] ? ' crit' : '') +
           '" data-act="open-task" data-id="' + esc(t.id) + '" data-tid="' + esc(t.id) +
-          '" data-role="move" title="' + esc(t.name) +
+          '" data-role="move" title="' + esc(t.name + (wdur ? ' · ' + L('{n} วันทำการ', { n: wdur }) : '')) +
           '" style="left:' + bx + 'px;width:' + bw + 'px;top:' + (top + 8) +
           'px;background:' + color + '">' +
           '<span class="g-h l" data-role="start" data-tid="' + esc(t.id) + '"></span>' +
