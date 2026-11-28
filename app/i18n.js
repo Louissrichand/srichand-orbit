@@ -2626,6 +2626,12 @@
     'ไม่มีโปรเจกต์ที่คุณเพิ่มหน้าได้': 'No project you can add pages to', 'ย้ายหน้าเข้า “{p}” แล้ว': 'Moved the page to “{p}”',
     'ย้ายหน้าไม่ได้ (สิทธิ์หรือครบจำนวนแล้ว)': 'Couldn’t move the page (permissions or page limit)',
     'ได้ย้ายหน้าเข้าโปรเจกต์': 'moved a page into a project',
+    'ตั้งวันประชุมถัดไป…': 'Set next meeting date…', 'วันประชุมถัดไป': 'Next meeting',
+    'อ่านวันที่ไม่ออก ลองพิมพ์ เช่น ศุกร์นี้ หรือ 5 ธ.ค.': 'Couldn’t read the date — try something like “Friday” or “5 Dec”',
+    'ตั้งวันประชุมถัดไปเป็น {d} แล้ว': 'Next meeting set to {d}', 'เช่น ศุกร์นี้ หรือ 5 ธ.ค.': 'e.g. Friday or 5 Dec',
+    'ยกมาจาก {d}': 'Carried over from {d}',
+    'ใน {s}': 'in {s}',
+    'ช่วยเหลือและศัพท์': 'Help & glossary', 'ซ่อน/แสดงแผงความเห็น (เขียนเต็มความกว้าง)': 'Hide/show the comments panel (full-width writing)',
     /* Sprint 3 — อภิธานศัพท์ */
     'ศัพท์ที่ใช้ใน Orbit': 'Orbit glossary',
     'กลุ่มงานที่ทำเรื่องเดียวกัน มีเซกชัน สมาชิก และมุมมองของตัวเอง': 'A group of work on one topic, with its own sections, members and views',

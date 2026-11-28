@@ -3784,12 +3784,12 @@
   var QA_MON_FULL = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
                      'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
   var QA_MON_SHORT = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-  function quickAdd(text, projectId) {
+  function quickAdd(text, projectId, noSection) {
     var orig = String(text == null ? '' : text).trim();
     var out = { name: orig };
     if (!orig) return out;
     var rest = ' ' + orig + ' ';
-    var assignee = null, due = null, t0 = today();
+    var assignee = null, due = null, secId = null, t0 = today();
     var am = rest.match(/\s@(\S+)/);
     if (am) {
       var q = am[1].toLowerCase();
@@ -3798,6 +3798,14 @@
           (!projectId || !!projectAccess(projectId, u.id));
       });
       if (hits.length === 1) { assignee = hits[0].id; rest = rest.replace(am[0], ' '); }
+    }
+    /* "#เซกชัน" ในบรรทัด = ใส่งานในเซกชันนั้น (ชื่อขึ้นต้นตรงและมีอันเดียวเท่านั้น) ไม่เจอ = คงข้อความเดิม */
+    var pj = projectId && !noSection ? project(projectId) : null;
+    var sm = pj ? rest.match(/\s#(\S+)/) : null;
+    if (sm) {
+      var sq = sm[1].toLowerCase();
+      var secHits = (pj.sections || []).filter(function (x) { return String(x.name).toLowerCase().indexOf(sq) === 0; });
+      if (secHits.length === 1) { secId = secHits[0].id; rest = rest.replace(sm[0], ' '); }
     }
     function take(re, fn) {
       if (due) return;
@@ -3844,10 +3852,11 @@
     });
     take(/\s(\d{1,2})\/(\d{1,2})(?![\d\/])/, function (x) { return mkDate(x[1], x[2]); });
     var name = rest.replace(/\s{2,}/g, ' ').trim();
-    if (!name || (!assignee && !due)) return out;               // ไม่เจออะไร หรือเหลือชื่อว่าง = ไม่แตะ
+    if (!name || (!assignee && !due && !secId)) return out;               // ไม่เจออะไร หรือเหลือชื่อว่าง = ไม่แตะ
     out.name = name;
     if (assignee) out.assigneeId = assignee;
     if (due) out.dueOn = due;
+    if (secId) out.sectionId = secId;
     return out;
   }
 
@@ -3869,9 +3878,9 @@
     snapshot('สร้าง {n} งาน', { n: list.length });
     var out = list.map(function (n) {
       /* Sprint 3 — วางหลายบรรทัด: แต่ละบรรทัดแยก @ชื่อ/วันที่ให้เหมือนพิมพ์ทีละงาน */
-      var attrs = quickAdd(n, projectId);
+      var attrs = quickAdd(n, projectId, !!parentId);
       attrs.parentId = parentId || null;
-      return createTaskRaw(attrs, projectId, sectionId);
+      return createTaskRaw(attrs, projectId, attrs.sectionId || sectionId);
     });
     commit();
     return out;
@@ -7851,6 +7860,17 @@
   /* Sprint 3 — เลื่อนงานที่เลยกำหนดไปวันเดียวกันรวดเดียว (ประชุมรอบหน้า) และนับ "เลื่อนมาแล้ว N ครั้ง" ต่องาน
    * คนเห็นว่างานไหนถูกเลื่อนซ้ำ ๆ (≥3 ครั้งไฮไลต์) เรื่องที่ค้างเพราะไม่มีใครทำจริงจะไม่หายเงียบ ๆ
    * ย้อนกลับครั้งเดียว วันที่เปลี่ยนผ่าน updateTask จึงลงบันทึกของแต่ละงานตามปกติ */
+  /** วันประชุมถัดไปของโปรเจกต์ (ISO หรือ null) ใช้เป็นตัวเลือกแรกตอนเลื่อนงานเลยกำหนด */
+  function setNextMeeting(projectId, isoDate) {
+    var p = project(projectId);
+    if (!p || !can('write') || !canInProject(projectId, 'edit')) return false;
+    if (isoDate && !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(isoDate)) return false;
+    snapshot('ตั้งวันประชุมถัดไป');
+    p.nextMeeting = isoDate || null;
+    commit();
+    return true;
+  }
+
   function slipOverdue(projectId, newDate) {
     if (!project(projectId) || !newDate || !can('write') || !canInProject(projectId, 'edit')) return 0;
     var t0 = today();
@@ -12750,7 +12770,7 @@
     accessRequestFor: accessRequestFor,
     canAnswerAccess: canAnswerAccess, answerAccess: answerAccess, accessOwner: accessOwner,
     convertToProject: convertToProject,
-    setOrgLang: setOrgLang, setOrgPrivacy: setOrgPrivacy, slipOverdue: slipOverdue, bulkAddToProject: bulkAddToProject, bulkMoveSection: bulkMoveSection, bulkSetField: bulkSetField,
+    setNextMeeting: setNextMeeting, setOrgLang: setOrgLang, setOrgPrivacy: setOrgPrivacy, slipOverdue: slipOverdue, bulkAddToProject: bulkAddToProject, bulkMoveSection: bulkMoveSection, bulkSetField: bulkSetField,
     bulkAddFollowers: bulkAddFollowers, bulkAddTag: bulkAddTag, bulkDependOn: bulkDependOn,
     bulkMerge: bulkMerge,
 

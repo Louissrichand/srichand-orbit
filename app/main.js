@@ -1967,6 +1967,12 @@
 
   /* ---------- inline add ---------- */
 
+  /* Sprint 3 — พิมพ์เร็ว: ใส่ @ชื่อ วันที่ และ #เซกชัน ในบรรทัดเดียว */
+  function quickCreate(v, projectId, sectionId) {
+    var q = S.quickAdd(v, projectId);
+    return S.createTask(q, projectId, q.sectionId || sectionId);
+  }
+
   function inlineAdd(btn, sectionId) {
     var projectId = state.route.id;
     var input = document.createElement('input');
@@ -1989,6 +1995,7 @@
       var q = S.quickAdd(input.value.trim(), projectId), bits = [];
       if (q.assigneeId) { var qu = S.user(q.assigneeId); if (qu) bits.push(L('มอบให้ {who}', { who: qu.name })); }
       if (q.dueOn) bits.push(L('ส่ง {d}', { d: R.fmtDate(q.dueOn) }));
+      if (q.sectionId) { var qs = S.section(projectId, q.sectionId); if (qs) bits.push(L('ใน {s}', { s: qs.name })); }
       hint.hidden = !bits.length;
       hint.textContent = bits.length ? '→ ' + q.name + ' · ' + bits.join(' · ') : '';
     });
@@ -1999,7 +2006,7 @@
       input.remove();
       hint.remove();
       btn.style.display = '';
-      if (v) S.createTask(S.quickAdd(v, projectId), projectId, sectionId);
+      if (v) quickCreate(v, projectId, sectionId);
     }
     input.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') {
@@ -2008,7 +2015,7 @@
         input.value = '';
         if (v) {
           state.reopenAddIn = sectionId;
-          S.createTask(S.quickAdd(v, projectId), projectId, sectionId);
+          quickCreate(v, projectId, sectionId);
         }
       } else if (e.key === 'Escape') {
         input.value = '';
@@ -2302,7 +2309,10 @@
       h += item('dup-project', 'copy', L('คัดลอกโปรเจกต์'));
       h += item('pt-save', 'star', L('บันทึกเป็นเทมเพลตโปรเจกต์…'));
     }
-    if (S.can('write') && S.canInProject(projectId, 'edit')) h += item('slip-overdue', 'calendar', L('เลื่อนงานเลยกำหนดไปรอบถัดไป…'));   // Sprint 3
+    if (S.can('write') && S.canInProject(projectId, 'edit')) {      // Sprint 3
+      h += item('slip-overdue', 'calendar', L('เลื่อนงานเลยกำหนดไปรอบถัดไป…'));
+      h += item('set-next-meeting', 'calendar', L('ตั้งวันประชุมถัดไป…'));
+    }
     h += '<div class="pop-sep"></div>';
     if (canStruct) {
       h += item('manage-fields', 'filter', L('จัดการฟิลด์'));
@@ -3176,7 +3186,7 @@
       var v = inp.value.trim();
       if (!v) { finish(); return; }
       done = true;
-      var t = S.createTaskNear(S.quickAdd(v, pid), pid, refId, !!above);
+      var t = S.createTaskNear(S.quickAdd(v, pid, true), pid, refId, !!above);
       if (t) {
         state.cursor = t.id;
         state.reopenNear = { ref: t.id, above: false };
@@ -7111,6 +7121,7 @@
         return true;
       }
       case 'pg-open': pageRoute(el.dataset.project || '', id); return true;
+      case 'pg-side-toggle': S.setPref('pgFull', !S.pref('pgFull')); return true;      // Sprint 3 — ค่าส่วนตัว ไม่แก้ข้อมูลร่วม
       case 'pg-del':
         askConfirm(L('ลบหน้านี้?'), L('ความเห็นและประวัติเวอร์ชันของหน้านี้หายไปด้วย ย้อนกลับได้ทันทีหลังลบ'), function () {
           var l = S.pageLoc(id);
@@ -8452,7 +8463,7 @@
      * ส่วนตัวกรอง เรียง จัดกลุ่ม คอลัมน์ การ์ด และปฏิทินเป็นมุมมองของแต่ละคน จำลง db.personal */
     put('structure', ['sv-rename', 'sv-move', 'sv-update', 'sv-delete', 'tab-default',
       'dup-section', 'do-dup-section']);
-    put('write', ['carry-over', 'slip-overdue', 'pg-move']);
+    put('write', ['carry-over', 'slip-overdue', 'pg-move', 'set-next-meeting']);
     put('manage', ['set-org-lang', 'set-org-privacy']);       // Sprint 3 — เฉพาะผู้ดูแลระบบ        // Sprint 3 — ย้ายงานระหว่างเซกชัน = แก้งาน ไม่ใช่แก้โครงสร้าง
     put('write:task', ['set-cover', 'clear-cover', 'cell-set-priority']);
     put('create', ['tl-new']);
@@ -9396,14 +9407,26 @@
         if (!spN) { toast(L('ไม่มีงานที่เลยกำหนด')); break; }
         var spDow = new Date(spT + 'T00:00:00').getDay();
         var spMon = S.addDays(spT, ((8 - spDow) % 7) || 7);              // วันจันทร์ถัดไป
-        askChoice(L('เลื่อนงานเลยกำหนดไปวันไหน'), L('{n} งานที่เลยกำหนดจะถูกเลื่อน และนับว่าเลื่อนแล้วหนึ่งครั้ง', { n: spN }), [
+        var spNext = S.project(spPid).nextMeeting;      // วันประชุมถัดไปที่ตั้งไว้ (ถ้ายังไม่ถึง) มาเป็นตัวเลือกแรก
+        askChoice(L('เลื่อนงานเลยกำหนดไปวันไหน'), L('{n} งานที่เลยกำหนดจะถูกเลื่อน และนับว่าเลื่อนแล้วหนึ่งครั้ง', { n: spN }),
+          (spNext && spNext > spT ? [[L('วันประชุมถัดไป'), spNext]] : []).concat([
           [L('พรุ่งนี้'), S.addDays(spT, 1)], [L('วันจันทร์หน้า'), spMon], [L('อีก 7 วัน'), S.addDays(spT, 7)]
-        ].map(function (o) {
+        ]).map(function (o) {
           return { label: o[0] + (R.fmtDate(o[1]) !== o[0] ? ' · ' + R.fmtDate(o[1]) : ''), run: function () {
             var moved = S.slipOverdue(spPid, o[1]);
             if (moved) toast(L('เลื่อน {n} งานแล้ว', { n: moved }), L('ย้อนกลับ'), 'undo');
           } };
         }));
+        break;
+      }
+      case 'set-next-meeting': {
+        closePops();
+        var nmPid = state.route.id, nmCur = S.project(nmPid) && S.project(nmPid).nextMeeting;
+        askText(L('วันประชุมถัดไป'), nmCur ? R.fmtDate(nmCur) : '', function (v) {
+          var nq = S.quickAdd('x ' + (v || ''), null);          // ใช้ตัวอ่านวันที่เดียวกับพิมพ์เร็ว (ศุกร์นี้ 5 ธ.ค. 5/12)
+          if (!nq.dueOn) { toast(L('อ่านวันที่ไม่ออก ลองพิมพ์ เช่น ศุกร์นี้ หรือ 5 ธ.ค.')); return; }
+          if (S.setNextMeeting(nmPid, nq.dueOn)) toast(L('ตั้งวันประชุมถัดไปเป็น {d} แล้ว', { d: R.fmtDate(nq.dueOn) }));
+        }, { ok: L('บันทึก'), placeholder: L('เช่น ศุกร์นี้ หรือ 5 ธ.ค.') });
         break;
       }
       /* Sprint 3 — ยกงานค้าง: ย้ายงานที่ยังไม่เสร็จในเซกชันนี้ไปเซกชันอื่นรวดเดียว (เช่น ประชุมครั้งก่อน → ครั้งนี้)
@@ -9419,6 +9442,11 @@
           coP.sections.filter(function (x) { return x.id !== coFrom; }).map(function (x) {
             return { label: x.name, run: function () {
               var moved = S.bulkMoveSection(coOpen, coPid, x.id);
+              /* ติดแท็ก "ยกมาจาก <วันที่>" ให้รู้ว่างานนี้ค้างข้ามรอบมา (ประวัติการย้ายอยู่ในบันทึกงานตามเดิม) */
+              var coTag = L('ยกมาจาก {d}', { d: S.today() });      // วันที่แบบ ISO ตายตัว (แท็กไม่ถูกแปลตามภาษา และ "วันนี้" จะไม่มีความหมายพรุ่งนี้)
+              if (moved) S.batch('ติดแท็กงานที่ยกมา', null, function () {
+                coOpen.forEach(function (tid) { var tk = S.task(tid); if (tk && (tk.tags || []).indexOf(coTag) < 0) S.updateTask(tid, { tags: (tk.tags || []).concat([coTag]) }, { quiet: true }); });
+              });
               if (moved) toast(L('ย้าย {n} งานไป “{s}” แล้ว', { n: moved, s: x.name }), L('ย้อนกลับ'), 'undo');
             } };
           }));

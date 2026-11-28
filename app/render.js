@@ -435,7 +435,7 @@
         (S.isAdmin() ? go('admin', route.type === 'admin', 'shield', 'ผู้ดูแลระบบ') : '') +
         go('trash', route.type === 'trash', 'trash', 'ถังขยะ') +
         item(false, 'data-act="show-shortcuts"', I('keyboard'), L('คีย์ลัด')) +
-        item(false, 'data-act="show-glossary"', I('note'), L('ศัพท์ที่ใช้ใน Orbit')) +
+        item(false, 'data-act="show-glossary"', I('note'), L('ช่วยเหลือและศัพท์')) +
         (global.OrbitPWA && global.OrbitPWA.canInstall() ? '<button class="sb-item sb-install" data-act="pwa-install" title="' +
           esc(L('ติดตั้งเป็นแอปบนเครื่องนี้ เปิดได้จากหน้าจอหลัก')) + '">' + I('install') + '<span class="grow">' + L('ติดตั้ง Orbit') + '</span>' +
           '<span class="sb-x" data-act="pwa-dismiss" title="' + esc(L('ไม่ต้องแสดงอีก')) + '">' + I('close', 11) + '</span></button>' : ''));
@@ -6231,7 +6231,7 @@
     var by = S.user(x.editedBy || x.by);
     var open = x.comments.filter(function (c) { return !c.resolved; });
     var done = x.comments.filter(function (c) { return c.resolved; });
-    var h = '<div class="pg" data-page="' + esc(id) + '"><div class="pg-main">';
+    var h = '<div class="pg' + (S.pref('pgFull') ? ' nosd' : '') + '" data-page="' + esc(id) + '"><div class="pg-main">';
     h += '<div class="pg-head"><span class="pg-icon">' + esc(x.icon || '📄') + '</span>' +
       (canEdit && !x.notepad ? '<input class="pg-title" data-act="pg-title" data-id="' + esc(id) + '" value="' + esc(x.title) +
         '" placeholder="' + esc(L('ไม่มีชื่อ')) + '" maxlength="200">'
@@ -6240,6 +6240,7 @@
       (l.project ? '<span class="chip"><span class="swatch" style="background:' + esc(l.project.color) + '"></span>' + esc(l.project.name) + '</span>' : '') +
       '<em>' + esc(L('แก้ล่าสุดโดย {u} · {w}', { u: by ? by.name : '—', w: fmtWhen(x.editedAt || x.at) })) + '</em>' +
       '<span class="grow"></span>';
+    h += '<button class="btn btn-sm btn-ghost" data-act="pg-side-toggle" title="' + esc(L('ซ่อน/แสดงแผงความเห็น (เขียนเต็มความกว้าง)')) + '">' + I(S.pref('pgFull') ? 'expand' : 'shrink', 13) + '</button>';   // Sprint 3
     if (canC) {
       h += '<button class="btn btn-sm btn-ghost" data-act="pg-comment" data-id="' + esc(id) + '" title="' +
         esc(L('เลือกข้อความในหน้าแล้วกดเพื่อแสดงความเห็น')) + '">' + I('send', 13) + '<span class="hide-sm"> ' + L('ความเห็น') + '</span></button>';
