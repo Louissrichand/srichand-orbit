@@ -45,10 +45,13 @@
       var r = S.report(route.id);
       if (!r) return '';
       var h = '';
-      if (r.owner === S.db.currentUserId) h += '<button class="btn" data-act="rp-share" data-id="' + esc(r.id) + '">' + I('users', 14) + '<span class="hide-sm"> ' + L('แชร์') + '</span></button>';
-      if (S.canEditReport(r.id)) h += '<button class="btn btn-primary" data-act="rp-wadd" data-id="' + esc(r.id) + '"' +
+      /* Sprint 2C — จอแคบป้ายคำหายเหลือแต่ไอคอน ใส่ title/aria-label ให้รู้ว่าปุ่มทำอะไร */
+      if (r.owner === S.db.currentUserId) h += '<button class="btn" data-act="rp-share" data-id="' + esc(r.id) + '" title="' + esc(L('แชร์รายงานนี้')) +
+        '" aria-label="' + esc(L('แชร์รายงานนี้')) + '">' + I('users', 14) + '<span class="hide-sm"> ' + L('แชร์') + '</span></button>';
+      if (S.canEditReport(r.id)) h += '<button class="btn btn-primary" data-act="rp-wadd" data-id="' + esc(r.id) + '" title="' + esc(L('เพิ่มวิดเจ็ต')) +
+        '" aria-label="' + esc(L('เพิ่มวิดเจ็ต')) + '"' +
         (r.widgets.length >= S.REPORT_W_MAX ? ' disabled' : '') + '>' + I('plus', 13) + '<span class="hide-sm"> ' + L('เพิ่มวิดเจ็ต') + '</span></button>';
-      h += '<button class="btn btn-ghost" data-act="rp-menu" data-id="' + esc(r.id) + '" title="' + L('ตัวเลือก') + '">' + I('more') + '</button>';
+      h += '<button class="btn btn-ghost" data-act="rp-menu" data-id="' + esc(r.id) + '" title="' + L('ตัวเลือก') + '" aria-label="' + esc(L('เมนูรายงาน')) + '">' + I('more') + '</button>';
       return h;
     }
     return '';
@@ -444,8 +447,10 @@
       var srcLbl = (S.REPORT_SRCS.filter(function (x) { return x[0] === w.src; })[0] || ['', ''])[1];
       h += '<section class="dw' + (w.full ? ' full' : '') + (w.kind === 'number' ? ' num' : '') + '" data-w="' + esc(w.id) + '"><header><b class="grow">' +
         esc(w.title ? L(w.title) : L(srcLbl)) + '</b><span class="dw-flt">' + esc(L(srcLbl)) + '</span>' +
-        '<button class="btn btn-sm btn-ghost" data-act="rp-png" data-id="' + esc(r.id) + '" data-w="' + esc(w.id) + '" title="' + L('ส่งออกเป็นรูป PNG') + '">' + I('image', 13) + '</button>' +
-        (canEd ? '<button class="btn btn-sm btn-ghost" data-act="rp-wmenu" data-id="' + esc(r.id) + '" data-w="' + esc(w.id) + '" data-i="' + i + '" title="' + L('ตัวเลือก') + '">' + I('more', 14) + '</button>' : '') +
+        '<button class="btn btn-sm btn-ghost" data-act="rp-png" data-id="' + esc(r.id) + '" data-w="' + esc(w.id) + '" title="' + L('ส่งออกเป็นรูป PNG') +
+        '" aria-label="' + esc(L('ส่งออกเป็นรูป PNG')) + '">' + I('image', 13) + '</button>' +
+        (canEd ? '<button class="btn btn-sm btn-ghost" data-act="rp-wmenu" data-id="' + esc(r.id) + '" data-w="' + esc(w.id) + '" data-i="' + i + '" title="' + L('ตัวเลือก') +
+          '" aria-label="' + esc(L('ตัวเลือกของวิดเจ็ต')) + '">' + I('more', 14) + '</button>' : '') +
         '</header><div class="dw-chart">' + global.Charts.svg(rpSpec(r, w)) + '</div></section>';
     });
     return h + '</div></div>';
@@ -554,7 +559,8 @@
     topbarExt: topbarExt, topbarActsExt: topbarActsExt, adminExt: adminExt,
     workloadView: workloadView, awayModal: awayModal, timesheetsView: timesheetsView,
     reportsView: reportsView, reportView: reportView, rpSpec: rpSpec, rpXOptions: rpXOptions, rpYOptions: rpYOptions,
-    tsGridHtml: tsGridHtml, wlSeg: seg, wlSel: sel, pill: pill
+    tsGridHtml: tsGridHtml, wlSeg: seg, wlSel: sel, pill: pill,
+    rpScopeText: scopeText            // Sprint 2C — หัวกระดาษของรายงานที่พิมพ์
   };
   Object.keys(X).forEach(function (k) { R[k] = X[k]; });
 
