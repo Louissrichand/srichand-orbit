@@ -4906,3 +4906,83 @@ input.inp-bad, .field input.inp-bad { border-color: var(--danger) !important; bo
 /* บทบาทในโปรเจกต์ของคนที่ไม่ได้เป็นสมาชิกแล้ว */
 .ovw-role.gone b, .ovw-role.gone em { color: var(--fg-faint); }
 .ovw-role.gone .avatar { opacity: .5; }
+
+/* ---------- Sprint 2B ---------- */
+/* ตัวเลขบนแท็บ "รออนุมัติจากฉัน" และหัววิดเจ็ตหน้าแรก */
+.tab-n { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 2px;
+  border-radius: 9px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; line-height: 1; }
+.hcard-head .tab-n { margin-left: -2px; }
+/* แถวรวมกลุ่ม: ปุ่ม +N กางดูทีละรายการ แถวลูกเยื้องเข้า */
+.nrow-more { display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; padding: 0 6px; height: 19px;
+  border-radius: 10px; background: var(--bg-inset); color: var(--fg-soft); font-size: 11.5px; font-weight: 700;
+  vertical-align: 1px; cursor: pointer; }
+.nrow-more:hover, .nrow-more.on { background: var(--accent-bg); color: var(--accent); }
+/* แบบกะทัดรัดตัดข้อความยาวด้วย … แต่ปุ่ม +N ต้องเห็นเสมอ */
+.inbox-wrap.dense .nrow .txt { display: flex; align-items: center; }
+.inbox-wrap.dense .nrow .ntxt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inbox-wrap.dense .nrow-more { flex: none; }
+.nrow.nrow-sub { padding-left: 30px; background: var(--bg-sunk); }
+.nrow.nrow-sub.unread { background: var(--accent-bg); }
+.inbox-wrap.dense .nrow.nrow-sub { padding-left: 24px; }
+/* เนื้อความเห็น 1–2 บรรทัดแรก (ทั้งแบบละเอียดและกะทัดรัด) */
+.nrow-quote { margin-top: 4px; padding: 3px 0 3px 9px; border-left: 2px solid var(--line-strong);
+  font-size: 13px; line-height: 1.45; color: var(--fg-soft); white-space: pre-line; word-break: break-word;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.nrow-quote.one { -webkit-line-clamp: 1; line-clamp: 1; }
+.nrow-quote.gone { font-style: italic; color: var(--fg-faint); }
+.inbox-wrap.dense .nrow-quote { margin-top: 2px; padding-top: 1px; padding-bottom: 1px; font-size: 12.5px; }
+.nrow-status { display: flex; align-items: center; gap: 7px; margin-top: 4px; min-width: 0; font-size: 13px; color: var(--fg-soft); }
+.nrow-status .approval-pill { flex: none; }
+.nrow-status-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nrow-snz { display: flex; align-items: center; gap: 5px; color: var(--warn-fg); }
+.nrow .nact-snz.on { color: var(--warn-fg); }
+.nrow-apv { margin-top: 7px; }
+/* แถบ "เลื่อนเตือนไว้ n รายการ" */
+.inbox-snz { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; padding: 8px 12px; margin: 0 0 8px;
+  border-radius: var(--radius); background: var(--bg-sunk); color: var(--fg-soft); font-size: 13px; }
+.inbox-snz .grow { flex: 1; min-width: 160px; }
+.pop .pop-hint { flex: none; font-size: 12px; color: var(--fg-faint); }
+/* หน้าว่างที่บอกว่าทำอะไรต่อได้ */
+.inbox-empty { padding: 48px 20px; }
+.inbox-empty-t { font-size: 14.5px; color: var(--fg-soft); font-weight: 600; }
+.inbox-empty-s { max-width: 420px; margin: 6px auto 0; font-size: 13px; line-height: 1.5; }
+.inbox-empty-acts { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+/* ศูนย์อนุมัติ — แถวงาน + ปุ่มอนุมัติ/ขอแก้ไข/ปฏิเสธ */
+.apv-note { display: flex; align-items: center; gap: 7px; margin: 2px 0 10px; font-size: 13px; color: var(--fg-faint); }
+.apv-list { border-top: 1px solid var(--line-soft); }
+.apv-row { display: flex; align-items: flex-start; gap: 10px; padding: 11px 8px; border-bottom: 1px solid var(--line-soft);
+  cursor: pointer; }
+.apv-row:hover { background: var(--bg-sunk); }
+.apv-row.compact { padding: 8px 8px; border-bottom-color: transparent; border-radius: var(--radius); }
+.apv-av { flex: none; margin-top: 1px; }
+.apv-body { flex: 1; min-width: 0; }
+.apv-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.apv-sub { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-top: 2px; font-size: 12px; color: var(--fg-faint); }
+.apv-sub .hchip { max-width: 150px; }
+.apv-acts { display: inline-flex; flex: none; flex-wrap: wrap; gap: 6px; align-items: center; }
+.apv-acts .btn { white-space: nowrap; }
+.apv-acts .apv-no:hover { color: var(--danger); background: var(--danger-bg); }
+.apv-row.compact .apv-acts .btn-sm { height: 26px; padding: 0 8px; font-size: 12.5px; }
+.hcard .apv-row.compact .apv-acts { margin-top: 1px; }
+.hcard.half .apv-row.compact { flex-wrap: wrap; }
+.hcard.half .apv-row.compact .apv-acts { width: 100%; padding-left: 36px; }
+/* ปุ่มติดตามบนหัวโปรเจกต์/พอร์ตโฟลิโอ */
+.tb-follow { flex: none; }
+.tb-follow.on { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
+.tb-follow-n { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+  background: var(--bg-inset); color: var(--fg-soft); font-size: 11px; font-weight: 700; }
+.tb-follow.on .tb-follow-n { background: var(--accent); color: #fff; }
+@media (max-width: 620px) {
+  /* หัวโปรเจกต์บนมือถือเต็มอยู่แล้ว (ชื่อ ดาว สถานะ ค้นหา) — ติดตามจากเมนู ⋯ แทน */
+  .tb-follow { display: none; }
+  .apv-row { flex-wrap: wrap; }
+  .apv-row .apv-acts { width: 100%; padding-left: 36px; }
+  .nrow.nrow-sub { padding-left: 18px; }
+  .nrow-apv .apv-acts { width: 100%; }
+  /* แบบกะทัดรัดบนจอแคบ: ข้อความเต็มบรรทัด เวลากับปุ่มลงบรรทัดถัดไป (ปุ่มเพิ่มเป็นห้าปุ่มแล้ว ข้อความเหลือไม่กี่ตัวอักษร) */
+  .inbox-wrap.dense .nrow .body { flex: 1 1 calc(100% - 24px); }
+  .inbox-wrap.dense .nrow .nrow-when { margin-left: 18px; align-self: center; }
+  .inbox-wrap.dense .nrow .acts { margin-left: auto; }
+  .inbox-tabs { overflow-x: auto; scrollbar-width: none; }
+  .inbox-tabs::-webkit-scrollbar { display: none; }
+}
