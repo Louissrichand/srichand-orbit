@@ -2618,6 +2618,8 @@
     'ภาษาเริ่มต้นขององค์กร': 'Organization default language', 'ตั้งภาษาเริ่มต้นขององค์กรแล้ว': 'Organization default language set',
     'ได้ตั้งภาษาเริ่มต้นขององค์กรเป็น': 'set the organization default language to',
     'เปลี่ยน {f} จาก {a} เป็น {b}': 'changed {f} from {a} to {b}', 'ล้างค่า {f} (เดิม {a})': 'cleared {f} (was {a})',
+    'โปรเจกต์ใหม่เริ่มต้นที่': 'New projects start as', 'ปิด (เฉพาะคนที่เชิญ)': 'Private (invited only)', 'ตั้งค่าเริ่มต้นแล้ว': 'Default set',
+    'ได้ตั้งความเป็นส่วนตัวเริ่มต้นของโปรเจกต์ใหม่เป็น': 'set the default privacy of new projects to',
     /* Sprint 3 — อภิธานศัพท์ */
     'ศัพท์ที่ใช้ใน Orbit': 'Orbit glossary',
     'กลุ่มงานที่ทำเรื่องเดียวกัน มีเซกชัน สมาชิก และมุมมองของตัวเอง': 'A group of work on one topic, with its own sections, members and views',

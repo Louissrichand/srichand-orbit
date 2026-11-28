@@ -5580,7 +5580,7 @@ body.print-preview .print-sheet { display: block; width: 210mm; min-height: 297m
 
 /* Sprint 3 — ผลค้นหาหน้า/ข้อความ */
 .sdocs { padding-top: 0; }
-.sdoc { display: flex; align-items: center; gap: 10px; padding: 9px 8px; border-bottom: 1px solid var(--line); color: var(--fg); text-decoration: none; }
+.sdoc { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 9px 8px; border-bottom: 1px solid var(--line); color: var(--fg); text-decoration: none; }
 .sdoc:hover { background: var(--bg-sunk); }
 .sdoc .nm { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sdoc .sub { flex: none; font-size: 12.5px; color: var(--fg-faint); }
@@ -5600,3 +5600,4 @@ body.print-preview .print-sheet { display: block; width: 210mm; min-height: 297m
 button.check.ro { opacity: .55; }
 .td-edit.ro:hover { background: transparent; }
 span.tb-people.ro { pointer-events: none; }
+.sdoc .snip { flex: 1 0 100%; font-size: 12.5px; color: var(--fg-faint); padding-left: 25px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

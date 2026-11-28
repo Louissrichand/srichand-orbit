@@ -2142,7 +2142,7 @@
     if (!existing) {
       h += '<div class="field"><label>' + L('ใครเห็นโปรเจกต์นี้') + '</label><select id="pVis">' +
         '<option value="org">' + L('เปิดให้ทั้งองค์กร') + '</option>' +
-        '<option value="private">' + L('ปิด เห็นเฉพาะคนที่เชิญ') + '</option></select></div>';
+        '<option value="private"' + (S.db.settings && S.db.settings.orgPrivacy === 'private' ? ' selected' : '') + '>' + L('ปิด เห็นเฉพาะคนที่เชิญ') + '</option></select></div>';
       /* Sprint 3 — แชร์ให้ทีมตั้งแต่สร้าง (ไม่บังคับ) ทีมได้สิทธิ์แก้ไขงาน เปลี่ยนทีหลังได้ในหน้าต่างสิทธิ์ของโปรเจกต์ */
       var npTeams = S.teams();
       if (npTeams.length) {
@@ -5866,6 +5866,10 @@
           segmented('set-org-lang', [['th', 'ไทย'], ['en', 'English']], (S.db.settings && S.db.settings.orgLang) || 'th') + '</div>';
       }
       h += '</div>';
+      if (S.isAdmin()) {      // Sprint 3 — ค่าเริ่มต้นความเป็นส่วนตัวของโปรเจกต์ใหม่ (ผู้ดูแลระบบ)
+        h += '<label class="opt-lbl">' + L('โปรเจกต์ใหม่เริ่มต้นที่') + '</label>' +
+          segmented('set-org-privacy', [['org', L('เปิดให้ทั้งองค์กร')], ['private', L('ปิด (เฉพาะคนที่เชิญ)')]], (S.db.settings && S.db.settings.orgPrivacy) || 'org');
+      }
       h += '<div class="opt-sep"></div>';
       h += '<label class="opt-lbl">' + L('หน้าที่เปิดเมื่อเข้าแอป') + '</label>' +
         segmented('set-landing', [['home', L('หน้าแรก')], ['mytasks', L('งานของฉัน')],
@@ -8433,7 +8437,7 @@
     put('structure', ['sv-rename', 'sv-move', 'sv-update', 'sv-delete', 'tab-default',
       'dup-section', 'do-dup-section']);
     put('write', ['carry-over', 'slip-overdue']);
-    put('manage', ['set-org-lang']);       // Sprint 3 — เฉพาะผู้ดูแลระบบ        // Sprint 3 — ย้ายงานระหว่างเซกชัน = แก้งาน ไม่ใช่แก้โครงสร้าง
+    put('manage', ['set-org-lang', 'set-org-privacy']);       // Sprint 3 — เฉพาะผู้ดูแลระบบ        // Sprint 3 — ย้ายงานระหว่างเซกชัน = แก้งาน ไม่ใช่แก้โครงสร้าง
     put('write:task', ['set-cover', 'clear-cover', 'cell-set-priority']);
     put('create', ['tl-new']);
     put('self', [
@@ -12238,6 +12242,9 @@
         closePops();
         state.setTab = el.dataset.tab || state.setTab || 'general';
         openModal(settingsModal(state.setTab), true);
+        break;
+      case 'set-org-privacy':
+        if (S.setOrgPrivacy(el.dataset.v)) { toast(L('ตั้งค่าเริ่มต้นแล้ว')); openModal(settingsModal(state.setTab), true); }
         break;
       case 'set-org-lang':
         if (S.setOrgLang(el.dataset.v)) { toast(L('ตั้งภาษาเริ่มต้นขององค์กรแล้ว')); openModal(settingsModal(state.setTab), true); }

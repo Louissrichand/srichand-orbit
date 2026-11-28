@@ -4465,7 +4465,8 @@
       var href = d.kind === 'page' ? '#/page/' + d.id : '#/project/' + d.project.id + '/messages';
       h += '<a class="sdoc" href="' + esc(href) + '">' + I(d.kind === 'page' ? 'note' : 'send', 15) +
         '<span class="nm">' + esc(d.title || L('ไม่มีชื่อ')) + '</span><span class="sub">' +
-        (d.kind === 'page' ? L('หน้าเอกสาร') : L('ข้อความโปรเจกต์')) + (d.project ? ' · ' + esc(d.project.name) : '') + '</span></a>';
+        (d.kind === 'page' ? L('หน้าเอกสาร') : L('ข้อความโปรเจกต์')) + (d.project ? ' · ' + esc(d.project.name) : '') + '</span>' +
+        (d.snip ? '<span class="snip">' + esc(d.snip) + '</span>' : '') + '</a>';
     });
     return h + '</div>';
   }
@@ -5740,6 +5741,7 @@
     'project.team': 'ได้แชร์โปรเจกต์ให้ทีม', 'portfolio.nest': 'ได้ใส่พอร์ตโฟลิโอย่อย',
     'goal.create': 'ได้สร้างเป้าหมาย', 'goal.delete': 'ได้ลบเป้าหมาย', 'goal.close': 'ได้ปิดเป้าหมาย',
     'settings.orgLang': 'ได้ตั้งภาษาเริ่มต้นขององค์กรเป็น',
+    'settings.orgPrivacy': 'ได้ตั้งความเป็นส่วนตัวเริ่มต้นของโปรเจกต์ใหม่เป็น',
     'settings.goals': 'ได้เปลี่ยนการตั้งค่าเป้าหมาย',
     /* 4b */
     'user.capacity': 'ได้ตั้งความจุงาน', 'time.submit': 'ได้ส่งไทม์ชีต', 'time.recall': 'ได้ดึงไทม์ชีตกลับ',

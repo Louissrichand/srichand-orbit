@@ -1470,17 +1470,24 @@
     var needle = String(q || '').trim().toLowerCase();
     if (!needle) return [];
     function hit(s) { return plainText(s, true).toLowerCase().indexOf(needle) >= 0; }
+    /* ข้อความตัวอย่างรอบคำที่ค้นเจอ (ไม่มี = ค้นเจอที่ชื่ออย่างเดียว) */
+    function snip(text) {
+      var p = plainText(text, true).replace(/\s+/g, ' '), i = p.toLowerCase().indexOf(needle);
+      if (i < 0) return '';
+      var a = Math.max(0, i - 30), e = Math.min(p.length, i + needle.length + 60);
+      return (a ? '…' : '') + p.slice(a, e) + (e < p.length ? '…' : '');
+    }
     var out = [];
     visibleProjects().forEach(function (p) {
       (p.pages || []).forEach(function (pg) {
-        if (hit(pg.title) || hit(pg.body)) out.push({ kind: 'page', id: pg.id, title: pg.title || '', project: p });
+        if (hit(pg.title) || hit(pg.body)) out.push({ kind: 'page', id: pg.id, title: pg.title || '', project: p, snip: snip(pg.body) });
       });
       (p.messages || []).forEach(function (m) {
-        if (hit(m.title) || hit(m.body)) out.push({ kind: 'message', id: m.id, title: m.title || String(m.body || '').split('\n')[0].slice(0, 60), project: p });
+        if (hit(m.title) || hit(m.body)) out.push({ kind: 'message', id: m.id, title: m.title || String(m.body || '').split('\n')[0].slice(0, 60), project: p, snip: snip(m.body) });
       });
     });
     myPages().forEach(function (pg) {
-      if (hit(pg.title) || hit(pg.body)) out.push({ kind: 'page', id: pg.id, title: pg.title || '', project: null });
+      if (hit(pg.title) || hit(pg.body)) out.push({ kind: 'page', id: pg.id, title: pg.title || '', project: null, snip: snip(pg.body) });
     });
     return out.slice(0, 30);
   }
@@ -3803,10 +3810,23 @@
     take(/พรุ่งนี้|\btomorrow\b/i, function () { return addDays(t0, 1); });
     take(/วันนี้|\btoday\b/i, function () { return t0; });
     take(/สัปดาห์หน้า|อาทิตย์หน้า|\bnext week\b/i, function () { return addDays(t0, 7); });
-    take(new RegExp('วัน(' + QA_DOW.join('|').replace('พฤหัสบดี', 'พฤหัสบดี|พฤหัส') + ')(?:หน้า|นี้)?'), function (x) {
-      var idx = QA_DOW.indexOf(x[1] === 'พฤหัส' ? 'พฤหัสบดี' : x[1]);
-      var diff = (idx - new Date(t0 + 'T00:00:00').getDay() + 7) % 7;
-      return addDays(t0, diff === 0 ? 7 : diff);        // ชื่อวันที่ตรงกับวันนี้ = สัปดาห์หน้า (วันนี้ใช้คำว่า "วันนี้")
+    /* วันในสัปดาห์: "วันศุกร์" / "ศุกร์นี้" / "ศุกร์หน้า" (ไม่มี "วัน" ต้องมี นี้/หน้า กำกับ ไม่งั้น "พระจันทร์" ฯลฯ โดนตัด)
+     * "หน้า" = สัปดาห์ถัดไป นอกนั้นคือวันนั้นที่จะถึงก่อน (ชื่อวันตรงกับวันนี้ = สัปดาห์หน้า วันนี้ใช้คำว่า "วันนี้") */
+    var dowAlt = QA_DOW.join('|').replace('พฤหัสบดี', 'พฤหัสบดี|พฤหัส');
+    function dowDate(idx, nextWeek) {
+      var dow0 = new Date(t0 + 'T00:00:00').getDay();
+      if (nextWeek) return addDays(addDays(t0, ((8 - dow0) % 7) || 7), (idx + 6) % 7);
+      var diff = (idx - dow0 + 7) % 7;
+      return addDays(t0, diff === 0 ? 7 : diff);
+    }
+    function thDowIdx(nm) { return QA_DOW.indexOf(nm === 'พฤหัส' ? 'พฤหัสบดี' : nm); }
+    take(new RegExp('วัน(' + dowAlt + ')(หน้า|นี้)?|(' + dowAlt + ')(หน้า|นี้)'), function (x) {
+      return dowDate(thDowIdx(x[1] || x[3]), (x[2] || x[4]) === 'หน้า');
+    });
+    /* อังกฤษ: ชื่อเต็ม หรือย่อ 3 ตัว (ยกเว้น Sun/Sat ที่ชนกับชื่อคน/บริษัทบ่อย ต้องเขียนเต็ม) */
+    var EN_DOW = { sunday: 0, monday: 1, mon: 1, tuesday: 2, tue: 2, tues: 2, wednesday: 3, wed: 3, thursday: 4, thu: 4, thur: 4, thurs: 4, friday: 5, fri: 5, saturday: 6 };
+    take(/\b(?:(next)\s+)?(sunday|monday|mon|tuesday|tues|tue|wednesday|wed|thursday|thurs|thur|thu|friday|fri|saturday)\b/i, function (x) {
+      return dowDate(EN_DOW[x[2].toLowerCase()], !!x[1]);
     });
     var monAlt = QA_MON_FULL.concat(QA_MON_SHORT).map(function (s) { return s.split('.').join('[.]'); }).join('|');
     function mkDate(d, mo) {
@@ -3848,7 +3868,10 @@
     if (!canCreateTask(projectId, parentId)) { denied('create'); return []; }
     snapshot('สร้าง {n} งาน', { n: list.length });
     var out = list.map(function (n) {
-      return createTaskRaw({ name: n, parentId: parentId || null }, projectId, sectionId);
+      /* Sprint 3 — วางหลายบรรทัด: แต่ละบรรทัดแยก @ชื่อ/วันที่ให้เหมือนพิมพ์ทีละงาน */
+      var attrs = quickAdd(n, projectId);
+      attrs.parentId = parentId || null;
+      return createTaskRaw(attrs, projectId, sectionId);
     });
     commit();
     return out;
@@ -6086,6 +6109,18 @@
     db.settings = db.settings || {};
     db.settings.orgLang = lang;
     audit('settings.orgLang', lang === 'en' ? 'English' : 'ไทย');
+    commit();
+    return true;
+  }
+
+  /* Sprint 3 — ค่าเริ่มต้นความเป็นส่วนตัวของโปรเจกต์ใหม่ทั้งองค์กร (ผู้ดูแลระบบตั้ง) 'private' = ช่อง "ใครเห็น" ในหน้าสร้างโปรเจกต์เริ่มที่ปิด
+   * คนสร้างยังเลือกเองได้ทุกครั้ง ไม่แตะโปรเจกต์ที่มีอยู่แล้ว */
+  function setOrgPrivacy(v) {
+    if (!isAdmin() || (v !== 'org' && v !== 'private')) return false;
+    snapshot('ตั้งความเป็นส่วนตัวเริ่มต้น');
+    db.settings = db.settings || {};
+    db.settings.orgPrivacy = v;
+    audit('settings.orgPrivacy', v === 'private' ? 'ปิด' : 'เปิดให้ทั้งองค์กร');
     commit();
     return true;
   }
@@ -12692,7 +12727,7 @@
     accessRequestFor: accessRequestFor,
     canAnswerAccess: canAnswerAccess, answerAccess: answerAccess, accessOwner: accessOwner,
     convertToProject: convertToProject,
-    setOrgLang: setOrgLang, slipOverdue: slipOverdue, bulkAddToProject: bulkAddToProject, bulkMoveSection: bulkMoveSection, bulkSetField: bulkSetField,
+    setOrgLang: setOrgLang, setOrgPrivacy: setOrgPrivacy, slipOverdue: slipOverdue, bulkAddToProject: bulkAddToProject, bulkMoveSection: bulkMoveSection, bulkSetField: bulkSetField,
     bulkAddFollowers: bulkAddFollowers, bulkAddTag: bulkAddTag, bulkDependOn: bulkDependOn,
     bulkMerge: bulkMerge,
 
