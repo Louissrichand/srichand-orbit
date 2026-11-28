@@ -2790,6 +2790,9 @@
     'วันที่เริ่มทำงานจริง ใช้เทียบกับแผน': 'The day work actually started, to compare with the plan',
     'วันที่ทำงานเสร็จจริง ใช้เทียบกับแผน': 'The day work actually finished, to compare with the plan',
     //@@B
+    // QA-A
+    'วันเริ่มต้องไม่เกินวันกำหนดส่ง — ปรับให้เป็นวันเดียวกันแล้ว': 'The start date can’t be after the due date — set to the same day',
+    'ไม่มีอะไรให้ทำซ้ำ': 'Nothing to redo', 'ทำซ้ำแล้ว:': 'Redone:',
   };
 
   /* ข้อความที่เก็บไว้ในบันทึก/การแจ้งเตือนเก่าเป็นคีย์ไทยเดิมที่เรียกเซกชันว่า "คอลัมน์"

@@ -5674,3 +5674,23 @@ label.pf-pick-row { cursor: pointer; }
 .ask-body { white-space: pre-line; }
 .card-fv { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; }
 .card-fv .card-fn { color: var(--text-3, #7a8599); font-size: 11px; white-space: nowrap; }
+
+/* QA-A — มือถือ: แถบแก้หลายงานเหลือปุ่มหลัก 4 + เพิ่มเติม, เป้าสัมผัส ≥ 40px, Gantt ชื่องานแคบลง */
+.qa-mob-only { display: none; }
+.qa-mob-only select { display: block; width: calc(100% - 16px); margin: 4px 8px; min-height: 36px; }
+@media (max-width: 700px) {
+  .qa-mob-only { display: block; }
+  .bulkbar .bulk-desk, .bulkbar .m2a-touch-only, .bulkbar .bulk-sum { display: none !important; }
+  .g-left { max-width: 35vw; }
+}
+@media (pointer: coarse) {
+  .check, .sec-caret, .toast button, .vtb-btn, .vtb-btn.icon, .bulkbar button, .bulkbar select,
+  [data-act="send-comment"], .row-more, .selbox { position: relative; }
+  .check::after, .selbox::after { content: ''; position: absolute; inset: -12px; }
+  .sec-caret { min-width: 40px; min-height: 40px; }
+  .toast button { min-height: 40px; min-width: 40px; padding: 0 14px; }
+  .bulkbar button, .bulkbar select, .bulkbar .bulk-x { min-height: 40px; }
+  [data-act="send-comment"] { min-height: 40px; min-width: 40px; }
+  .vtb-btn, .vtb-btn.icon { min-height: 40px; min-width: 40px; }
+  .row-more { min-width: 40px; min-height: 40px; }
+}
