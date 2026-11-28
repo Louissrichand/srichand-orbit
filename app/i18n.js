@@ -2791,6 +2791,7 @@
     'วันที่ทำงานเสร็จจริง ใช้เทียบกับแผน': 'The day work actually finished, to compare with the plan',
     //@@B
     // QA-A
+    'ลบเซกชัน': 'Delete section',
     'วันเริ่มต้องไม่เกินวันกำหนดส่ง — ปรับให้เป็นวันเดียวกันแล้ว': 'The start date can’t be after the due date — set to the same day',
     'ไม่มีอะไรให้ทำซ้ำ': 'Nothing to redo', 'ทำซ้ำแล้ว:': 'Redone:', 'ทำซ้ำสิ่งที่เพิ่งย้อนกลับ': 'Redo what you just undid',
   };

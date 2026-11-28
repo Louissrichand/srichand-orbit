@@ -5720,6 +5720,7 @@ label.pf-pick-row { cursor: pointer; }
   .bulkbar { gap: 6px; padding-left: 10px; }
   .bulkbar .n { font-size: 12px; }
   .bulkbar .bulk-acts { gap: 4px; padding-right: 0; -webkit-mask-image: none; mask-image: none; }
-  .bulkbar button { padding: 0 8px; }
+  .bulkbar button { padding: 0 7px; }
+  .bulkbar .bulk-acts { gap: 2px; }
   .bulkbar { padding-right: 6px; }
 }

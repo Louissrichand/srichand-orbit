@@ -5693,7 +5693,7 @@
   function deleteSection(projectId, sectionId) {
     var p = project(projectId);
     if (p.sections.length <= 1) return false;
-    snapshot('ลบคอลัมน์');
+    snapshot('ลบเซกชัน');
     var fallback = p.sections.filter(function (s) { return s.id !== sectionId; })[0];
     db.memberships.forEach(function (m) {
       if (m.projectId === projectId && m.sectionId === sectionId) {

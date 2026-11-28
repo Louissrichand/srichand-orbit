@@ -9517,7 +9517,7 @@
             '<button data-act="move-section" data-delta="1" data-section="' + esc(smSec) + '">' + I('arrowDown', 14) + ' ' + L('เลื่อนลง') + '</button>' +
             '<button data-act="s4b-bulk-sec">' + I('plus', 14) + ' ' + L('เพิ่มหลายเซกชัน…') + '</button>' +
             '<button data-act="dup-section" data-section="' + esc(smSec) + '">' + I('copy', 14) + ' ' + L('ทำสำเนาเซกชัน…') + '</button>' +
-            '<button data-act="delete-section" data-section="' + esc(smSec) + '">' + I('trash', 14) + ' ' + L('ลบคอลัมน์') + '</button>';
+            '<button data-act="delete-section" data-section="' + esc(smSec) + '">' + I('trash', 14) + ' ' + (smBoard ? L('ลบคอลัมน์') : L('ลบเซกชัน')) + '</button>';
         }
         if (smSec && S.can('write') && S.canInProject(state.route.id, 'edit')) {
           smh += '<div class="pop-sep"></div><button data-act="tt-pick" data-section="' + esc(smSec) + '">' + I('star', 14) + ' ' +
