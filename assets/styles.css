@@ -4920,6 +4920,8 @@ input.inp-bad, .field input.inp-bad { border-color: var(--danger) !important; bo
 
 /* viewport-fit=cover (index.html) ทำให้ iPhone แนวนอนวาดเลยเข้าไปใต้รอยบาก — เว้นขอบซ้ายขวาให้เนื้อหา */
 .app { padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
+.drawer { padding-right: env(safe-area-inset-right, 0px); }
+@media (max-width: 860px) { .sidebar { padding-left: env(safe-area-inset-left, 0px); } }
 
 /* ของที่มีเฉพาะมือถือ / ซ่อนบนมือถือ */
 .m2a-only, .m2a-touch-only, .search-x, .m2a-bnav, .dw-back, .dw-done-short { display: none; }
