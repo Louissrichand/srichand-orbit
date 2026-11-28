@@ -466,7 +466,7 @@
     users.forEach(function (u) {
       var c = S.capacityOf(u.id), aw = S.awayRanges(u.id).filter(function (r) { return r.to >= S.today(); }).length;
       var inp = function (k) {
-        return '<span><input class="opt-select cap-in" type="number" min="0" max="1000" step="0.5" data-act="cap-set" data-uid="' + esc(u.id) + '" data-k="' + k + '" value="' + c[k] + '"></span>';
+        return '<span><input class="opt-select cap-in" type="number" min="0" max="1000" step="0.5" data-act="cap-set" aria-label="' + esc(L('ชั่วโมงทำงาน')) + '" data-uid="' + esc(u.id) + '" data-k="' + k + '" value="' + c[k] + '"></span>';
       };
       h += '<div class="cap-row">' + '<span class="grow">' + avatar(u, 'sm') + ' ' + esc(u.name) + '</span>' + inp('h') + inp('count') + inp('pt') +
         '<span><button class="btn btn-sm" data-act="set-away" data-uid="' + esc(u.id) + '">' + (aw ? esc(L('{n} ช่วง', { n: aw })) : L('ตั้ง')) + '</button></span></div>';

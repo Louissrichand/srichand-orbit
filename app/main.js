@@ -372,7 +372,7 @@
       if (!pgl) return null;
       return { route: pgl.project ? { type: 'project', id: pgl.project.id, view: 'pages', page: seg[1] } : { type: 'pages', page: seg[1] }, taskId: taskId };
     }
-    if (['home', 'mytasks', 'inbox', 'calendar', 'admin', 'projects', 'trash'].indexOf(type) >= 0) {
+    if (['home', 'mytasks', 'inbox', 'calendar', 'admin', 'projects', 'trash', 'portfolios'].indexOf(type) >= 0) {
       return { route: { type: type }, taskId: taskId };
     }
     return null;

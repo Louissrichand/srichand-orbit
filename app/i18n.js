@@ -1303,7 +1303,7 @@
 
     /* --- ตัวแก้ไขแบบเห็นภาพ / ความเห็นแบบเธรด (ชิ้นงาน 0 + 1a) --- */
     'ตัวหนา': 'Bold', 'ตัวเอียง': 'Italic', 'ขีดเส้นใต้': 'Underline', 'ขีดฆ่า': 'Strikethrough',
-    'โค้ด': 'Code', 'หัวข้อย่อย': 'Bulleted list', 'ลำดับเลข': 'Numbered list',
+    'โค้ด': 'Code', 'หัวข้อย่อย': 'Heading 3', 'ลำดับเลข': 'Numbered list',
     'หัวข้อ': 'Heading', 'ลิงก์': 'Link',
     'อ้างถึงคน งาน หรือโปรเจกต์': 'Mention a person, task or project',
     'ใส่ลิงก์': 'Add link', 'เว้นว่างแล้วกดตกลงเพื่อเอาลิงก์ออก': 'Leave empty and press OK to remove the link',
@@ -2790,6 +2790,8 @@
     'วันที่เริ่มทำงานจริง ใช้เทียบกับแผน': 'The day work actually started, to compare with the plan',
     'วันที่ทำงานเสร็จจริง ใช้เทียบกับแผน': 'The day work actually finished, to compare with the plan',
     //@@B
+    // QA-C
+    'ชั่วโมงทำงาน': 'Working hours', 'รายการแบบจุด': 'Bulleted list',
   };
 
   /* ข้อความที่เก็บไว้ในบันทึก/การแจ้งเตือนเก่าเป็นคีย์ไทยเดิมที่เรียกเซกชันว่า "คอลัมน์"

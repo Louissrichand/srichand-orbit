@@ -2878,7 +2878,7 @@
       var act = x.kind === 'task' ? ' data-act="open-task" data-id="' + esc(x.id) + '"' : ' data-act="go" data-route="' + x.kind + '" data-id="' + esc(x.id) + '"';
       return '<span class="mchip ' + (x.kind === 'task' ? 'mchip-task' : 'mchip-proj') + (x.done ? ' done' : '') + '"' + act + '>' +
         (x.kind === 'task' ? '<span class="mi">' + (x.done ? '✓' : '○') + '</span>' : '<span class="mi sw" style="background:' + esc(x.color || 'var(--accent)') + '"></span>') +
-        esc(x.name) + (removable ? '<button class="x" data-act="goal-rel" data-id="' + esc(gid) + '" data-item="' + esc(x.id) + '">✕</button>' : '') + '</span>';
+        esc(x.name) + (removable ? '<button class="x" data-act="goal-rel" data-id="' + esc(gid) + '" data-item="' + esc(x.id) + '" title="' + L('เอาออก') + '" aria-label="' + L('เอาออก') + '">✕</button>' : '') + '</span>';
     }).join('');
   }
 
@@ -3470,12 +3470,13 @@
         '<button data-act="home-w-top" data-i="' + i + '"' + (i === 0 ? ' disabled' : '') +
         ' title="' + L('ย้ายไปบนสุด') + '" aria-label="' + L('ย้ายไปบนสุด') + '">' + I('toTop', 13) + '</button>' +
         '<button data-act="home-w-move" data-i="' + i + '" data-d="-1"' + (i === 0 ? ' disabled' : '') +
-        ' title="' + L('ย้ายขึ้น') + '">' + I('arrowUp', 13) + '</button>' +
+        ' title="' + L('ย้ายขึ้น') + '" aria-label="' + L('ย้ายขึ้น') + '">' + I('arrowUp', 13) + '</button>' +
         '<button data-act="home-w-move" data-i="' + i + '" data-d="1"' + (i === n - 1 ? ' disabled' : '') +
-        ' title="' + L('ย้ายลง') + '">' + I('arrowDown', 13) + '</button>' +
+        ' title="' + L('ย้ายลง') + '" aria-label="' + L('ย้ายลง') + '">' + I('arrowDown', 13) + '</button>' +
         '<button data-act="home-w-size" data-i="' + i + '" title="' +
+        (x.full ? L('ครึ่งแถว') : L('เต็มแถว')) + '" aria-label="' +
         (x.full ? L('ครึ่งแถว') : L('เต็มแถว')) + '">' + I(x.full ? 'shrink' : 'expand', 13) + '</button>' +
-        '<button data-act="home-w-remove" data-i="' + i + '" title="' + L('เอาออก') + '">' + I('close', 13) + '</button>' +
+        '<button data-act="home-w-remove" data-i="' + i + '" title="' + L('เอาออก') + '" aria-label="' + L('เอาออก') + '">' + I('close', 13) + '</button>' +
         '</div>';
     }
     return hcard(o);
@@ -6000,7 +6001,7 @@
           '" data-act="audit-group" data-g="' + esc(g) + '">' + L(auditGroupLabel(g)) + '</button>';
       });
       h += '<input class="audit-q" id="auditQ" data-act="audit-q" placeholder="' +
-        L('ค้นหาในบันทึก…') + '" value="' + esc(f.q || '') + '">';
+        L('ค้นหาในบันทึก…') + '" aria-label="' + L('ค้นหาในบันทึก…') + '" value="' + esc(f.q || '') + '">';
       h += '</div>';
     }
 
