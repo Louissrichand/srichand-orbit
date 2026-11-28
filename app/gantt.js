@@ -237,15 +237,16 @@
     colDefs.forEach(function (c) { h += '<span class="g-c-' + c.id + '">' + c.label + '</span>'; });
     h += '</div>';
 
-    function depChips(list, showType) {
+    function depChips(list, showType, tid) {
       var out = '';
       list.forEach(function (x) {
         var b = x.task || x;
         if (!b) return;
-        out += '<span class="g-depchip" data-act="open-task" data-id="' + esc(b.id) +
-          '" title="' + esc(b.name + (x.type ? ' · ' + depTypeHint(x.type) : '')) + '">' +
-          (b.completed ? '✓ ' : '') + esc(b.name) +
-          (showType && x.type ? '<span class="g-deptag">' + esc(x.type) + '</span>' : '') +
+        out += '<span class="g-depchip' + (b.completed ? ' done' : '') + '" data-act="' + (tid ? 'g-dep-pop' : 'open-task') +
+          '" data-id="' + esc(tid || b.id) + '"' + (tid ? ' data-blocker="' + esc(b.id) + '"' : '') +
+          ' title="' + esc(b.name + (x.type ? ' · ' + depTypeHint(x.type) : '')) + '">' +
+          (b.completed ? '✓ ' : '') + '<span class="g-depnm">' + esc(b.name) + '</span>' +
+          (showType && x.type ? '<span class="g-deptag"> · ' + esc(x.type) + '</span>' : '') +
           '</span>';
       });
       return out || '<span class="g-muted">—</span>';
@@ -298,7 +299,7 @@
             return { task: S.task(dp.id), type: dp.type, id: dp.id };
           }).filter(function (x) { return x.task; }).map(function (x) {
             return { id: x.task.id, name: x.task.name, completed: x.task.completed, type: x.type };
-          }), true) + '</span>';
+          }), true, t.id) + '</span>';
         } else {
           h += '<span class="g-c-blocking g-c-dep">' + depChips(S.blocking(t.id)) + '</span>';
         }
@@ -446,16 +447,20 @@
         var y1 = rowOf[b.id] * G_ROW + G_ROW / 2;
         var d = elbow(x1, y1, x2, ys, x2 < x1);
         var ce = crit && crit.edges[b.id + '>' + t.id];
-        paths += '<path d="' + d + '" class="g-dep-line' + (ce ? ' crit' : '') + '" marker-end="url(#' + (ce ? 'gArrowC' : 'gArrow') + ')"/>';
-        hits += '<path d="' + d + '" class="g-dep-hit" data-act="g-del-dep" data-id="' +
+        var sel = R.depSel && R.depSel.id === t.id && R.depSel.blocker === b.id;
+        var bad = S.depConflict(t.id, b.id, type);
+        paths += '<path d="' + d + '" class="g-dep-line t-' + type + (ce ? ' crit' : '') + (bad ? ' conflict' : '') + (sel ? ' sel' : '') +
+          '" marker-end="url(#' + (bad ? 'gArrowX' : ce ? 'gArrowC' : 'gArrow') + ')"/>';
+        hits += '<path d="' + d + '" class="g-dep-hit" data-act="g-dep-pop" data-id="' +
           esc(t.id) + '" data-blocker="' + esc(b.id) + '"><title>' +
-          esc(b.name + ' → ' + t.name + ' (' + type + L(') — คลิกเพื่อลบ')) + '</title></path>';
+          esc(b.name + ' → ' + t.name + ' (' + type + ')' + (bad ? ' — ' + L('วันที่ขัดกับงานที่ต้องรอ') : '')) + '</title></path>';
       });
     });
 
     h += '<svg class="g-dep" width="' + chartW + '" height="' + (rows.length * G_ROW) + '">' +
       '<defs><marker id="gArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" ' +
       'orient="auto"><path d="M0 0.5 L8 4 L0 7.5 z" fill="var(--fg-soft)"/></marker>' +
+      '<marker id="gArrowX" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0.5 L8 4 L0 7.5 z" fill="var(--danger)"/></marker>' +
       '<marker id="gArrowC" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0.5 L8 4 L0 7.5 z" fill="var(--crit)"/></marker></defs>' +
       paths + hits + '</svg>';
 

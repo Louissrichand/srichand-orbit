@@ -5841,3 +5841,19 @@ label.pf-pick-row { cursor: pointer; }
 
 /* Auto QA */
 .au-warn { display: flex; align-items: center; gap: 4px; margin-top: 3px; font-size: 12px; font-weight: 600; color: var(--danger, #c0392b); }
+
+/* Deps */
+.g-dep-line.sel { stroke: var(--accent); stroke-width: 2.6; opacity: 1; }
+.g-dep-line.conflict { stroke: var(--danger); stroke-dasharray: 4 3; opacity: 1; }
+.g-dep-line.t-SS, .g-dep-line.t-FF, .g-dep-line.t-SF { stroke-dasharray: 5 3; }
+.g-dep-line.conflict.t-SS, .g-dep-line.conflict.t-FF, .g-dep-line.conflict.t-SF { stroke-dasharray: 4 3; }
+.g-dep-hit:hover { stroke: var(--accent); opacity: .3; }
+.g-depchip { cursor: pointer; max-width: 100%; }
+.g-depchip .g-depnm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 110px; display: inline-block; vertical-align: bottom; }
+.g-depchip.done { opacity: .7; }
+.pop.dep-pop { min-width: 230px; padding: 4px; }
+.dep-pop .dep-pop-hd { font-size: 11px; color: var(--fg-faint); padding: 6px 10px 4px; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dep-pop button { display: flex; align-items: center; gap: 6px; width: 100%; }
+.dep-pop .dep-ck { width: 14px; color: var(--accent); }
+.dep-pop .dep-del { color: var(--danger); border-top: 1px solid var(--line, #0001); margin-top: 3px; }
+.dep-pop kbd { margin-left: auto; font: 11px inherit; color: var(--fg-faint); }

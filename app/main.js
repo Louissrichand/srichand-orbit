@@ -8621,7 +8621,7 @@
       'edit-type', 'edit-recur', 'edit-recur-n', 'recur-day', 'stop-recur', 'fit-parent-dates',
       'edit-field', 'edit-dep-type',
       'pick-assignee', 'set-assignee', 'pick-priority', 'set-priority', 'set-approval',
-      'add-dependency', 'do-add-dependency', 'remove-dependency', 'g-del-dep',
+      'add-dependency', 'do-add-dependency', 'remove-dependency', 'g-del-dep', 'g-dep-pop', 'g-dep-type',
       'add-attachment', 'remove-attachment',
       'add-tag', 'remove-tag',
       'edit-cell', 'cell-set-assignee', 'cell-set-option', 'cell-toggle-option',
@@ -9368,6 +9368,35 @@
       case 'g-expand-all':
         state.ganttCollapsed = {};
         renderViewBody();
+        break;
+      case 'g-dep-pop': {
+        var dpA = S.task(id), dpB = S.task(el.dataset.blocker);
+        if (!dpA || !dpB) break;
+        var dpCur = (dpA.dependsOn.filter(function (x) { return x.id === dpB.id; })[0] || {}).type || 'FS';
+        var DPL = { FS: 'เสร็จแล้วจึงเริ่ม', SS: 'เริ่มพร้อมกัน', FF: 'เสร็จพร้อมกัน', SF: 'เริ่มแล้วจึงเสร็จ' };
+        var dph = '<div class="dep-pop-hd">' + esc(dpB.name) + ' → ' + esc(dpA.name) + '</div>' +
+          S.DEP_TYPES.map(function (d) {
+            return '<button data-act="g-dep-type" data-id="' + esc(id) + '" data-blocker="' + esc(dpB.id) + '" data-v="' + d.id + '">' +
+              '<span class="dep-ck">' + (d.id === dpCur ? '✓' : '') + '</span>' + esc(L(DPL[d.id])) + ' · ' + d.id + '</button>';
+          }).join('') +
+          '<button class="dep-del" data-act="remove-dependency" data-id="' + esc(id) + '" data-blocker="' + esc(dpB.id) + '">' +
+          esc(L('ลบความเชื่อมโยง')) + '<kbd>Bksp</kbd></button>';
+        closePops();
+        if (el.classList.contains('g-dep-hit')) {
+          var ev0 = global.__depClick || { x: 0, y: 0 };
+          R.depSel = { id: id, blocker: dpB.id };
+          renderViewBody();
+          var anch = { getBoundingClientRect: function () { return { left: ev0.x, right: ev0.x, top: ev0.y - 4, bottom: ev0.y + 4, width: 0, height: 8 }; } };
+          var pp = openPop(anch, dph); if (pp) pp.classList.add('dep-pop');
+        } else {
+          var pp2 = openPop(el, dph); if (pp2) pp2.classList.add('dep-pop');
+        }
+        break;
+      }
+      case 'g-dep-type':
+        closePops();
+        S.setDependencyType(id, el.dataset.blocker, el.dataset.v);
+        toast(L('เปลี่ยนชนิดเป็น') + ' ' + el.dataset.v, L('ย้อนกลับ'), 'undo');
         break;
       case 'g-del-dep': {
         var gb = S.task(el.dataset.blocker), gt = S.task(id);
@@ -10233,7 +10262,11 @@
           toast(L('เพิ่มไม่ได้ — จะทำให้เกิดการรอวนกัน'));
         }
         break;
-      case 'remove-dependency': S.removeDependency(id, el.dataset.blocker); break;
+      case 'remove-dependency':
+        closePops(); R.depSel = null;
+        S.removeDependency(id, el.dataset.blocker);
+        toast(L('ลบลำดับแล้ว'), L('ย้อนกลับ'), 'undo');
+        break;
 
       /* --- attachments --- */
       case 'add-attachment': openModal(attachmentModal(id)); break;
@@ -13423,11 +13456,30 @@
   });
   global.addEventListener('blur', function () { tabHeld = false; });
 
+document.addEventListener('click', function (e) { global.__depClick = { x: e.clientX, y: e.clientY }; }, true);
   document.addEventListener('keydown', function (e) {
     /* ตัวแก้ไขแบบเห็นภาพเป็น div ไม่ใช่ช่องกรอก ต้องนับเป็น "กำลังพิมพ์" ด้วย
      * ไม่งั้น Ctrl+Z, / และ Tab+ปุ่ม จะถูกแอปแย่งไปขณะพิมพ์รายละเอียด */
     var typing = ['INPUT', 'TEXTAREA', 'SELECT'].indexOf(e.target.tagName) >= 0 ||
       !!e.target.isContentEditable;
+
+    /* Deps — เส้นลำดับที่เลือกอยู่: Backspace/Delete ลบ, Esc เลิกเลือก */
+    if (R.depSel && !typing) {
+      if (e.key === 'Backspace' || e.key === 'Delete') {
+        var dsel = R.depSel;
+        e.preventDefault();
+        closePops(); R.depSel = null;
+        if (S.task(dsel.id) && S.can('write', dsel.id)) {
+          S.removeDependency(dsel.id, dsel.blocker);
+          toast(L('ลบลำดับแล้ว'), L('ย้อนกลับ'), 'undo');
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        closePops(); R.depSel = null; renderViewBody();
+        return;
+      }
+    }
 
     /* เพิ่มงานย่อยด้วยการกด Enter แล้วช่องยังโฟกัสอยู่
      * พิมพ์รายการยาว ๆ ต่อได้รวดเดียวโดยไม่ต้องกดปุ่มใหม่ทุกครั้ง */

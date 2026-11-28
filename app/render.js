@@ -5163,10 +5163,19 @@
         '">' + I('close', 13) + '</button>' : '') + '</div>';
     });
     blocks.forEach(function (b) {
+      var bdType = ((b.dependsOn || []).filter(function (x) { return x.id === t.id; })[0] || {}).type;
       h += '<div class="dep-row"><span class="dot" style="background:var(--fg-faint)"></span>' +
-        '<span style="font-size:12px;color:var(--fg-faint)">' + L('บล็อก') + '</span>' +
+        '<span style="font-size:12px;color:var(--fg-faint)">' + L('งานที่รองานนี้') + '</span>' +
+        (bdType ? '<span class="dep-type" title="' + esc(depTypeHint(bdType)) + '">' + esc(bdType) + '</span>' : '') +
         '<span class="nm" data-act="open-task" data-id="' + esc(b.id) +
-        '" style="cursor:pointer">' + esc(b.name) + '</span>' + depWhen(b) + '</div>';
+        '" style="cursor:pointer">' + esc(b.name) + '</span>' + depWhen(b) +
+        (bdType ? '<select class="dep-sel" data-act="edit-dep-type" data-id="' + esc(b.id) +
+        '" data-blocker="' + esc(t.id) + '"' + (S.can('write', b.id) ? '' : ' disabled') + '>' +
+        S.DEP_TYPES.map(function (d) {
+          return '<option value="' + d.id + '"' + (d.id === bdType ? ' selected' : '') + '>' + esc(L(d.label)) + '</option>';
+        }).join('') + '</select>' : '') +
+        (S.can('write', b.id) ? '<button class="btn btn-sm btn-ghost" data-act="remove-dependency" data-id="' + esc(b.id) +
+        '" data-blocker="' + esc(t.id) + '" title="' + L('เอาลำดับก่อนหลังนี้ออก') + '">' + I('close', 13) + '</button>' : '') + '</div>';
     });
 
     // ไฟล์แนบ
