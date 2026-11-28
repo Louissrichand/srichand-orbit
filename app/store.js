@@ -9721,7 +9721,7 @@
       sections: o.secs.map(function (n, i) { return { id: 'bs_' + id + '_' + i, name: n }; }),
       fields: (o.fields || []).map(function (f, i) {
         return normalizeFieldDef({ id: 'bf_' + id + '_' + i, name: f[0], type: f[1],
-          options: f[2] || [], format: f[3] || null });
+          options: f[2] || [], format: f[3] || null, desc: f[4] || '' });
       }),
       roles: (o.roles || []).map(function (n, i) { return { k: 'r' + i, name: n, user: null, text: true }; }),
       types: (o.types || []).map(function (ty, i) {
@@ -9874,10 +9874,10 @@
       { id: 'npd', icon: '🧴', color: '#e8384f', name: L('พัฒนาสินค้าใหม่ (เครื่องสำอาง)'),
         desc: L('ตั้งแต่ไอเดียถึงวันเปิดตัว: พัฒนาสูตร ทดสอบ จดแจ้ง อย. บรรจุภัณฑ์ และผลิตล็อตแรก พร้อมจุดอนุมัติ 4 จุด'),
         secs: [L('ไอเดียและคอนเซ็ปต์'), L('พัฒนาสูตร'), L('ทดสอบความคงตัว (Stability)'), L('SPF และความปลอดภัย'), L('บรรจุภัณฑ์และอาร์ตเวิร์ก'), L('จดแจ้ง อย.'), L('ผลิตล็อตแรก'), L('วันเปิดตัว')],
-        fields: [['SKU', 'text'],
-                 [L('ต้นทุนต่อชิ้น (บาท)'), 'number', [], { kind: 'currency', currency: 'THB', unit: '', decimals: 2 }],
-                 [L('สถานะ อย.'), 'select', [L('ยังไม่ยื่น'), L('ยื่นแล้ว'), L('ได้รับเลขจดแจ้ง')]],
-                 ['Actual Start Date', 'date'], ['Actual Finish Date', 'date']],
+        fields: [['SKU', 'text', [], null, L('รหัสสินค้า (Stock Keeping Unit) ใช้อ้างอิงสินค้าตัวนี้ในคลังและยอดขาย')],
+                 [L('ต้นทุนต่อชิ้น (บาท)'), 'number', [], { kind: 'currency', currency: 'THB', unit: '', decimals: 2 }, L('ต้นทุนผลิตโดยประมาณต่อหนึ่งชิ้น ไม่รวมค่าการตลาดและค่าขนส่ง')],
+                 [L('สถานะ อย.'), 'select', [L('ยังไม่ยื่น'), L('ยื่นแล้ว'), L('ได้รับเลขจดแจ้ง')], null, L('ความคืบหน้าการจดแจ้งเครื่องสำอางกับ อย.')],
+                 [L('วันเริ่มจริง'), 'date', [], null, L('วันที่เริ่มทำงานจริง ใช้เทียบกับแผน')], [L('วันเสร็จจริง'), 'date', [], null, L('วันที่ทำงานเสร็จจริง ใช้เทียบกับแผน')]],
         roles: [L('R&D'), L('QA'), L('Regulatory'), L('Packaging'), L('ทีมการตลาด')],
         tasks: [
           [L('สรุปคอนเซ็ปต์และกลุ่มเป้าหมาย'), 0, 4, 0, 7],

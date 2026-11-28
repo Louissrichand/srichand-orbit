@@ -5665,3 +5665,5 @@ label.pf-pick-row { cursor: pointer; }
 .xo-pf-empty { margin-top: 6px; }
 .xo-pf-empty .as-link { margin-left: 4px; }
 .ask-body { white-space: pre-line; }
+.card-fv { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; }
+.card-fv .card-fn { color: var(--text-3, #7a8599); font-size: 11px; white-space: nowrap; }

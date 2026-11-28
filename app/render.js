@@ -1007,7 +1007,7 @@
         if (!show('field:' + f.id) && !f.important) return;   // 4b — ฟิลด์สำคัญแสดงเสมอ
         var fv = S.fieldValue(t.id, f.id);
         if (fv === null || fv === undefined || fv === '' || (Array.isArray(fv) && !fv.length)) return;
-        foot += '<span class="card-fv" title="' + esc(f.name) + '">' + fieldCell(t, f) + '</span>';
+        foot += '<span class="card-fv" title="' + esc(f.name) + '"><span class="card-fn">' + esc(f.name) + ': </span>' + fieldCell(t, f) + '</span>';
       });
     }
     if (show('assignee')) {

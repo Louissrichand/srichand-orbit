@@ -2768,6 +2768,12 @@
     'เช่น': 'e.g.',
     'รวม “{a}” เข้า “{b}”?': 'Merge “{a}” into “{b}”?',
     'รวมฟิลด์': 'Merge fields',
+    'รหัสสินค้า (Stock Keeping Unit) ใช้อ้างอิงสินค้าตัวนี้ในคลังและยอดขาย': 'Stock Keeping Unit: the code used to refer to this product in stock and sales',
+    'ต้นทุนผลิตโดยประมาณต่อหนึ่งชิ้น ไม่รวมค่าการตลาดและค่าขนส่ง': 'Estimated production cost per unit, excluding marketing and shipping',
+    'ความคืบหน้าการจดแจ้งเครื่องสำอางกับ อย.': 'Progress of the cosmetic notification with the Thai FDA',
+    'วันเริ่มจริง': 'Actual start date', 'วันเสร็จจริง': 'Actual finish date',
+    'วันที่เริ่มทำงานจริง ใช้เทียบกับแผน': 'The day work actually started, to compare with the plan',
+    'วันที่ทำงานเสร็จจริง ใช้เทียบกับแผน': 'The day work actually finished, to compare with the plan',
     //@@B
   };
 
