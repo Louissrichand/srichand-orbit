@@ -807,6 +807,7 @@
    * ประวัติย้อนกลับก็ถือข้อมูลชุดเดียวกันไว้ ต้องล้างด้วย */
   function wipeLocal() {
     undoStack.length = 0;
+    redoStack.length = 0;
     suppressRemote = true;
     db = migrate(seed());
     dropIndex();
@@ -1071,18 +1072,35 @@
     if (batchDepth) return;            // ชุดคำสั่งเดียวกันย้อนกลับได้ในครั้งเดียว
     undoStack.push({ label: label, params: params || null, data: JSON.stringify(db) });
     if (undoStack.length > 25) undoStack.shift();
+    redoStack.length = 0;              // QA-A — ทำอะไรใหม่หลังย้อนกลับ = ล้างประวัติทำซ้ำ
   }
 
   function undo() {
     var s = undoStack.pop();
     if (!s) return null;
     autoQueue.length = 0;
+    redoStack.push({ label: s.label, params: s.params, data: JSON.stringify(db) });   // QA-A
     db = JSON.parse(s.data);
     dropIndex();
     commit();
     lastUndo = { label: s.label, params: s.params };
     return s.label;
   }
+
+  /* QA-A — ทำซ้ำ (Ctrl+Shift+Z / Ctrl+Y): คืนสถานะก่อนที่จะกดย้อนกลับ */
+  var redoStack = [];
+  function redo() {
+    var s = redoStack.pop();
+    if (!s) return null;
+    autoQueue.length = 0;
+    undoStack.push({ label: s.label, params: s.params, data: JSON.stringify(db) });
+    db = JSON.parse(s.data);
+    dropIndex();
+    commit();
+    lastUndo = { label: s.label, params: s.params };
+    return s.label;
+  }
+  function canRedo() { return redoStack.length > 0; }
 
   /* คีย์กับค่าแทนที่ของการย้อนกลับครั้งล่าสุด ให้ฝั่งหน้าจอเอาไปแปลเอง */
   var lastUndo = null;
@@ -5682,7 +5700,7 @@
   function deleteSection(projectId, sectionId) {
     var p = project(projectId);
     if (p.sections.length <= 1) return false;
-    snapshot('ลบคอลัมน์');
+    snapshot('ลบเซกชัน');
     var fallback = p.sections.filter(function (s) { return s.id !== sectionId; })[0];
     db.memberships.forEach(function (m) {
       if (m.projectId === projectId && m.sectionId === sectionId) {
@@ -13094,7 +13112,7 @@
     setRemoteSave: setRemoteSave, replaceDb: replaceDb, snapshotJSON: snapshotJSON,
     wipeLocal: wipeLocal,
     onChange: onChange, commit: commit,
-    snapshot: snapshot, undo: undo, canUndo: canUndo, undoLabel: undoLabel,
+    snapshot: snapshot, undo: undo, canUndo: canUndo, redo: redo, canRedo: canRedo, undoLabel: undoLabel,
     saveError: saveError_,
 
     uid: uid, today: today, addDays: addDays, addMonths: addMonths,

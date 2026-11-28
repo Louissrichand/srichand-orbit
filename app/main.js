@@ -5094,6 +5094,7 @@
       ['/', L('ไปที่ช่องค้นหา')],
       ['Esc', L('ปิดหน้าต่าง / แผงรายละเอียด')],
       ['Ctrl + Z', L('ย้อนกลับการกระทำล่าสุด')],
+      ['Ctrl + Shift + Z', L('ทำซ้ำสิ่งที่เพิ่งย้อนกลับ')],
       ['Ctrl + Enter', L('ส่งความเห็น / ประกาศ (เมื่อเคอร์เซอร์อยู่ในช่องพิมพ์)')],
       ['? / Ctrl + /', L('เปิดหน้าคีย์ลัดนี้')],
       ['Tab + H', L('ไปหน้าแรก')],
@@ -5641,6 +5642,13 @@
     function item(act, icon, label, extra) {
       return '<button data-act="' + act + '"' + (extra || '') + '>' + I(icon, 14) + '<span class="grow">' + label + '</span></button>';
     }
+    /* QA-A — มือถือ: ปุ่มที่ซ่อนจากแถบหลัก (.bulk-desk) ย้ายมารวมในเมนูนี้ */
+    h += '<div class="qa-mob-only">' + item('bulk-due', 'calendar', L('ตั้งกำหนดส่ง')) + item('bulk-reopen', 'repeat', L('เปิดใหม่')) +
+      '<select data-act="bulk-assignee" aria-label="' + R.esc(L('มอบหมายให้…')) + '"><option value="">' + L('มอบหมายให้…') + '</option>' +
+      S.db.users.map(function (u) { return '<option value="' + R.esc(u.id) + '">' + R.esc(u.name) + '</option>'; }).join('') + '</select>' +
+      '<select data-act="bulk-priority" aria-label="' + R.esc(L('ความสำคัญ…')) + '"><option value="">' + L('ความสำคัญ…') + '</option>' +
+      S.PRIORITIES.map(function (p) { return '<option value="' + p.id + '">' + R.esc(L(p.label)) + '</option>'; }).join('') + '</select>' +
+      '<div class="pop-sep"></div></div>';
     if (r.type === 'project' && S.project(r.id)) h += item('bulk-section', 'grid', L('ย้ายไปเซกชัน…'));
     h += item('bulk-project', 'plus', L('เพิ่มเข้าโปรเจกต์…'));
     h += item('bulk-field', 'hash', L('ตั้งค่าฟิลด์…'));
@@ -6474,6 +6482,15 @@
     toast(L('ย้อนกลับแล้ว:') + ' ' + L(u.label, u.params || undefined));
   }
 
+  function doRedo() {
+    if (!S.canRedo()) { toast(L('ไม่มีอะไรให้ทำซ้ำ')); return; }
+    clearSel();
+    S.redo();
+    var u = S.undoLabel();
+    if (state.openTaskId && !S.task(state.openTaskId)) state.openTaskId = null;
+    toast(L('ทำซ้ำแล้ว:') + ' ' + L(u.label, u.params || undefined));
+  }
+
   /* ---------- click delegation ---------- */
 
   // เวลาที่ลากแท่งไทม์ไลน์เสร็จล่าสุด
@@ -6516,6 +6533,16 @@
     return R.fmtDate(s) + ' – ' + R.fmtDate(d);
   }
   function setDates(taskId, patch, done) {
+    /* QA-A — วันเริ่มต้องไม่เกินวันกำหนดส่ง: ถ้าชนกัน ปรับค่าที่เพิ่งแก้ให้เท่ากับอีกฝั่งแล้วบอกผู้ใช้ */
+    var qt = S.task(taskId);
+    if (qt) {
+      var qs = 'startOn' in patch ? patch.startOn : qt.startOn, qd = 'dueOn' in patch ? patch.dueOn : qt.dueOn;
+      if (qs && qd && qs > qd) {
+        if ('startOn' in patch) patch.startOn = qd; else patch.dueOn = qs;
+        toast(L('วันเริ่มต้องไม่เกินวันกำหนดส่ง — ปรับให้เป็นวันเดียวกันแล้ว'));
+        setTimeout(renderAll, 0);
+      }
+    }
     var list = S.task(taskId) ? S.previewDates(taskId, patch) : [];
     if (!list.length) {
       S.updateTask(taskId, patch);
@@ -9509,7 +9536,7 @@
             '<button data-act="move-section" data-delta="1" data-section="' + esc(smSec) + '">' + I('arrowDown', 14) + ' ' + L('เลื่อนลง') + '</button>' +
             '<button data-act="s4b-bulk-sec">' + I('plus', 14) + ' ' + L('เพิ่มหลายเซกชัน…') + '</button>' +
             '<button data-act="dup-section" data-section="' + esc(smSec) + '">' + I('copy', 14) + ' ' + L('ทำสำเนาเซกชัน…') + '</button>' +
-            '<button data-act="delete-section" data-section="' + esc(smSec) + '">' + I('trash', 14) + ' ' + L('ลบคอลัมน์') + '</button>';
+            '<button data-act="delete-section" data-section="' + esc(smSec) + '">' + I('trash', 14) + ' ' + (smBoard ? L('ลบคอลัมน์') : L('ลบเซกชัน')) + '</button>';
         }
         if (smSec && S.can('write') && S.canInProject(state.route.id, 'edit')) {
           smh += '<div class="pop-sep"></div><button data-act="tt-pick" data-section="' + esc(smSec) + '">' + I('star', 14) + ' ' +
@@ -13354,6 +13381,12 @@
 
     /* แป้นภาษาไทย: ดูตำแหน่งปุ่ม (e.code) ไม่ใช่ตัวอักษรที่ได้ — Ctrl+Z / Ctrl+/ ด้วย */
     var kc = keyOf(e);
+    if (e.ctrlKey && ((kc === 'z' && e.shiftKey) || kc === 'y') && !typing) {     // QA-A — ทำซ้ำ
+      e.preventDefault();
+      if (!S.can('write')) { denyToast(); return; }
+      doRedo();
+      return;
+    }
     if (e.ctrlKey && kc === 'z' && !typing) {
       e.preventDefault();
       if (!S.can('write')) { denyToast(); return; }
@@ -14293,7 +14326,7 @@
         S.snoozeChoices().forEach(function (c) {
           var d = new Date(c.at);
           /* Pre-pilot A — หนึ่งบรรทัดต่อหนึ่งตัวเลือก "อีก 1 ชั่วโมง · 15:35" (ไม่ซ้ำเวลา 9:00/09:00) */
-          var sbase = String(L(c.label)).replace(/\s*\([^)]*\d{1,2}:\d{2}\)\s*$/, '').replace(/\s*\d{1,2}:\d{2}\s*$/, '');
+          var sbase = String(L(c.label)).replace(/\s*\([^)]*\d{1,2}:\d{2}\)\s*$/, '').replace(/\s*\d{1,2}:\d{2}\s*$/, '').replace(/[,，\s]+$/, '');
           var sday = S.iso(d) === S.today() ? '' : (R.fmtDate(S.iso(d)) + ' ');
           sh += '<button data-act="notif-snooze-set" data-ids="' + R.esc(ids) + '" data-at="' + R.esc(c.at) + '">' +
             I('clock', 14) + '<span class="grow">' + R.esc(sbase + ' · ' + (c.id === 'week' ? sday : '') + R.fmtTime(d)) + '</span></button>';
@@ -14513,5 +14546,24 @@
       toast(L('โหมดทดลอง — ข้อมูลจะหายเมื่อรีเฟรช กด “ดาวน์โหลดสำรอง” เพื่อเก็บงานไว้'));
     }, 700);
   }
+
+
+  /* QA-A — ปุ่มไอคอนล้วนที่มี title แต่ไม่มี aria-label: คัดลอกข้อความ title เป็น aria-label ให้โปรแกรมอ่านจอ
+   * (ทำครั้งเดียวทั้งหน้าและทุกครั้งที่ DOM เปลี่ยน — title ผ่าน L() มาแล้ว จึงเป็นข้อความเดียวกัน) */
+  (function () {
+    function label(root) {
+      if (!root || root.nodeType !== 1) return;
+      var list = root.matches && root.matches('button[title],[role=button][title],a[title],select[title]') ? [root] : [];
+      Array.prototype.forEach.call(root.querySelectorAll('button[title],[role=button][title],a[title],select[title]'), function (b) { list.push(b); });
+      list.forEach(function (b) {
+        if (!b.hasAttribute('aria-label') && !(b.textContent || '').trim()) b.setAttribute('aria-label', b.getAttribute('title'));
+      });
+    }
+    var pend = false;
+    function run() { pend = false; label(document.body); }
+    label(document.body);
+    new MutationObserver(function () { if (!pend) { pend = true; setTimeout(run, 60); } })
+      .observe(document.body, { childList: true, subtree: true });
+  })();
 
 })(window);

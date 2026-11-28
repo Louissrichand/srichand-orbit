@@ -5694,3 +5694,52 @@ label.pf-pick-row { cursor: pointer; }
 .au2-tr, .au2-ac { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line-soft); }
 .au2-tr { opacity: .7; }
 .au2-ac.bad { border-color: #d94a4a; color: #d94a4a; }
+/* QA-A — มือถือ: แถบแก้หลายงานเหลือปุ่มหลัก 4 + เพิ่มเติม, เป้าสัมผัส ≥ 40px, Gantt ชื่องานแคบลง */
+.qa-mob-only { display: none; }
+.qa-mob-only select { display: block; width: calc(100% - 16px); margin: 4px 8px; min-height: 36px; }
+@media (max-width: 700px) {
+  .qa-mob-only { display: block; }
+  .bulkbar .bulk-desk, .bulkbar .m2a-touch-only, .bulkbar .bulk-sum { display: none !important; }
+  .g-left { max-width: 35vw; }
+}
+@media (pointer: coarse) {
+  .check, .sec-caret, .toast button, .vtb-btn, .vtb-btn.icon, .bulkbar button, .bulkbar select,
+  [data-act="send-comment"], .row-more, .selbox { position: relative; }
+  .check::after, .selbox::after { content: ''; position: absolute; inset: -12px; }
+  .sec-caret { min-width: 40px; min-height: 40px; }
+  .toast button { min-height: 40px; min-width: 40px; padding: 0 14px; }
+  .bulkbar button, .bulkbar select, .bulkbar .bulk-x { min-height: 40px; }
+  [data-act="send-comment"] { min-height: 40px; min-width: 40px; }
+  .vtb-btn, .vtb-btn.icon { min-height: 40px; min-width: 40px; }
+  .row-more { min-width: 40px; min-height: 40px; }
+}
+@media (pointer: coarse) {
+  /* ปุ่มไอคอนเล็กในแถบบน/หัวเซกชัน/ปฏิทิน/Gantt: ขยายพื้นที่แตะเป็น ≥ 40px โดยไม่เปลี่ยนหน้าตา */
+  [data-act="toggle-star"], [data-act="view-menu"], [data-act="quick-add"], [data-act="add-menu"], [data-act="status-menu"],
+  [data-act="auto-sec"], [data-act="sec-menu"], [data-act="rename-section"], [data-act="move-section"], [data-act="sub-toggle"],
+  [data-act="g-toggle-sec"], [data-act="g-pan"], [data-act="g-zoom-step"], [data-act="g-today"], [data-act="calx-nav"],
+  [data-act="calx-day"], [data-act="mt-collapse"], [data-act="mt-sec-move"], [data-act="mt-sec-rename"],
+  [data-act="mt-sec-delete"], [data-act="mt-add-top"], [data-act="inbox-dense"], [data-act="inbox-snoozed"], [data-act="toggle"],
+  [data-act="g-filter"], [data-act="g-sort"], [data-act="g-group"], [data-act="g-options"], [data-act="f-q-open"],
+  [data-act="notif-bookmark"], [data-act="notif-read"], [data-act="notif-snooze"], [data-act="archive-notif"] { position: relative; }
+  [data-act="toggle-star"]::after, [data-act="view-menu"]::after, [data-act="quick-add"]::after, [data-act="add-menu"]::after,
+  [data-act="status-menu"]::after, [data-act="auto-sec"]::after, [data-act="sec-menu"]::after, [data-act="rename-section"]::after,
+  [data-act="move-section"]::after, [data-act="sub-toggle"]::after, [data-act="g-toggle-sec"]::after, [data-act="g-pan"]::after,
+  [data-act="g-zoom-step"]::after, [data-act="g-today"]::after, [data-act="calx-nav"]::after, [data-act="calx-add"]::after,
+  [data-act="calx-day"]::after, [data-act="mt-collapse"]::after, [data-act="mt-sec-move"]::after, [data-act="mt-sec-rename"]::after,
+  [data-act="mt-sec-delete"]::after, [data-act="mt-add-top"]::after, [data-act="inbox-dense"]::after, [data-act="inbox-snoozed"]::after,
+  [data-act="toggle"]::after, [data-act="g-filter"]::after, [data-act="g-sort"]::after, [data-act="g-group"]::after,
+  [data-act="g-options"]::after, [data-act="f-q-open"]::after, [data-act="notif-bookmark"]::after, [data-act="notif-read"]::after,
+  [data-act="notif-snooze"]::after, [data-act="archive-notif"]::after {
+    content: ''; position: absolute; left: 50%; top: 50%; min-width: 40px; min-height: 40px; width: 100%; height: 100%;
+    transform: translate(-50%, -50%); box-sizing: border-box;
+  }
+}
+@media (max-width: 700px) {
+  .bulkbar { gap: 6px; padding-left: 10px; }
+  .bulkbar .n { font-size: 12px; }
+  .bulkbar .bulk-acts { gap: 4px; padding-right: 0; -webkit-mask-image: none; mask-image: none; }
+  .bulkbar button { padding: 0 7px; }
+  .bulkbar .bulk-acts { gap: 2px; }
+  .bulkbar { padding-right: 6px; }
+}

@@ -4611,18 +4611,18 @@
     h += '<div class="bulk-acts">';
     if (global.Render.bulkExt) h += global.Render.bulkExt(ids) || '';     // Sprint 2A — ย้ายไปเซกชัน/คอลัมน์
     h += '<button data-act="bulk-complete">' + L('ทำเสร็จ') + '</button>';
-    h += '<button data-act="bulk-reopen">' + L('เปิดใหม่') + '</button>';
-    h += '<select data-act="bulk-assignee"><option value="">' + L('มอบหมายให้…') + '</option>';
+    h += '<button class="bulk-desk" data-act="bulk-reopen">' + L('เปิดใหม่') + '</button>';
+    h += '<select class="bulk-desk" data-act="bulk-assignee" aria-label="' + esc(L('มอบหมายให้…')) + '"><option value="">' + L('มอบหมายให้…') + '</option>';
     S.db.users.forEach(function (u) {
       h += '<option value="' + esc(u.id) + '">' + esc(u.name) + '</option>';
     });
     h += '</select>';
-    h += '<select data-act="bulk-priority"><option value="">' + L('ความสำคัญ…') + '</option>';
+    h += '<select class="bulk-desk" data-act="bulk-priority" aria-label="' + esc(L('ความสำคัญ…')) + '"><option value="">' + L('ความสำคัญ…') + '</option>';
     S.PRIORITIES.forEach(function (p) {
       h += '<option value="' + p.id + '">' + esc(L(p.label)) + '</option>';
     });
     h += '</select>';
-    h += '<button data-act="bulk-due">' + L('ตั้งกำหนดส่ง') + '</button>';
+    h += '<button class="bulk-desk" data-act="bulk-due">' + L('ตั้งกำหนดส่ง') + '</button>';
     h += '<button data-act="bulk-more">' + L('เพิ่มเติม') + ' ' + I('chevronDown', 12) + '</button>';
     h += '<button data-act="bulk-delete">' + L('ลบ') + '</button>';
     /* ผลรวมของฟิลด์ตัวเลขในงานที่เลือก (ฟิลด์ของโปรเจกต์ที่งานอยู่) */
