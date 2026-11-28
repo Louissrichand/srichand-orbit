@@ -1149,11 +1149,11 @@
     if (c.id === 'due') {
       return '<div class="td td-edit' + dueClass(t.dueOn, t.completed) +
         '" data-act="edit-cell" data-cell="due" data-id="' + id + '">' +
-        (t.dueOn ? '<span class="cell-txt">' + fmtDate(t.dueOn) + '</span>' : '<span class="cell-empty">—</span>') + '</div>';
+        (t.dueOn ? '<span class="cell-txt">' + fmtDate(t.dueOn) + '</span>' : '<span class="cell-empty cell-date-empty" data-hint="+ ' + esc(L('เพิ่มวันที่')) + '"></span>') + '</div>';
     }
     if (c.id === 'start') {
       return '<div class="td td-edit" data-act="edit-cell" data-cell="start" data-id="' + id + '">' +
-        (t.startOn ? '<span class="cell-txt">' + fmtDate(t.startOn) + '</span>' : '<span class="cell-empty">—</span>') + '</div>';
+        (t.startOn ? '<span class="cell-txt">' + fmtDate(t.startOn) + '</span>' : '<span class="cell-empty cell-date-empty" data-hint="+ ' + esc(L('เพิ่มวันที่')) + '"></span>') + '</div>';
     }
     if (c.id === 'priority') {
       var pr = prio(t.priority);
@@ -4896,16 +4896,16 @@
     var showRecur = more || !!t.recur;
 
     h += '<div class="fld"><label>' + L('วันเริ่ม') + '</label><div class="val fld-inline">' +
-      '<input class="inp" type="date" data-act="edit-start" value="' + esc(t.startOn || '') +
-      '" style="flex:1">' +
+      '<button type="button" class="inp date-btn' + (t.startOn ? '' : ' empty') + '" data-act="dp-open" data-f="start" data-id="' + esc(t.id) + '" style="flex:1">' +
+      (t.startOn ? esc(fmtDate(t.startOn)) : L('ไม่มีกำหนด')) + '</button>' +
       (showTime
         ? '<input class="inp" type="time" data-act="edit-starttime" value="' + esc(t.startTime || '') +
           '" style="flex:0 0 110px" title="' + L('เวลาเริ่ม (ไม่บังคับ)') + '">'
         : '') + '</div></div>';
 
     h += '<div class="fld"><label>' + L('กำหนดส่ง') + '</label><div class="val fld-inline">' +
-      '<input class="inp" type="date" data-act="edit-due" value="' + esc(t.dueOn || '') +
-      '" style="flex:1">' +
+      '<button type="button" class="inp date-btn' + (t.dueOn ? '' : ' empty') + '" data-act="dp-open" data-f="due" data-id="' + esc(t.id) + '" style="flex:1">' +
+      (t.dueOn ? esc(fmtDate(t.dueOn)) : L('ไม่มีกำหนด')) + '</button>' +
       (showTime
         ? '<input class="inp" type="time" data-act="edit-duetime" value="' + esc(t.dueTime || '') +
           '" style="flex:0 0 110px" title="' + L('เวลา (ไม่บังคับ') + ')">'
@@ -5163,10 +5163,19 @@
         '">' + I('close', 13) + '</button>' : '') + '</div>';
     });
     blocks.forEach(function (b) {
+      var bdType = ((b.dependsOn || []).filter(function (x) { return x.id === t.id; })[0] || {}).type;
       h += '<div class="dep-row"><span class="dot" style="background:var(--fg-faint)"></span>' +
-        '<span style="font-size:12px;color:var(--fg-faint)">' + L('บล็อก') + '</span>' +
+        '<span style="font-size:12px;color:var(--fg-faint)">' + L('งานที่รองานนี้') + '</span>' +
+        (bdType ? '<span class="dep-type" title="' + esc(depTypeHint(bdType)) + '">' + esc(bdType) + '</span>' : '') +
         '<span class="nm" data-act="open-task" data-id="' + esc(b.id) +
-        '" style="cursor:pointer">' + esc(b.name) + '</span>' + depWhen(b) + '</div>';
+        '" style="cursor:pointer">' + esc(b.name) + '</span>' + depWhen(b) +
+        (bdType ? '<select class="dep-sel" data-act="edit-dep-type" data-id="' + esc(b.id) +
+        '" data-blocker="' + esc(t.id) + '"' + (S.can('write', b.id) ? '' : ' disabled') + '>' +
+        S.DEP_TYPES.map(function (d) {
+          return '<option value="' + d.id + '"' + (d.id === bdType ? ' selected' : '') + '>' + esc(L(d.label)) + '</option>';
+        }).join('') + '</select>' : '') +
+        (S.can('write', b.id) ? '<button class="btn btn-sm btn-ghost" data-act="remove-dependency" data-id="' + esc(b.id) +
+        '" data-blocker="' + esc(t.id) + '" title="' + L('เอาลำดับก่อนหลังนี้ออก') + '">' + I('close', 13) + '</button>' : '') + '</div>';
     });
 
     // ไฟล์แนบ
@@ -6162,8 +6171,8 @@
       h += '<div class="ms-row' + (t.completed ? ' done' : '') + '">' +
         (w ? checkbox(t) : '<span class="check ro' + (t.completed ? ' on' : '') + ' milestone" aria-hidden="true"><span>' + ICON.check + '</span></span>') +
         '<button class="grow ms-nm" data-act="open-task" data-id="' + esc(t.id) + '">' + esc(t.name) + '</button>' +
-        (w ? '<input type="date" class="ms-date' + dueClass(t.dueOn, t.completed) + '" data-act="ms-due" data-id="' + esc(t.id) +
-          '" value="' + esc(t.dueOn || '') + '">'
+        (w ? '<button type="button" class="ms-date' + dueClass(t.dueOn, t.completed) + '" data-act="dp-open" data-id="' + esc(t.id) +
+          '" data-f="due">' + (t.dueOn ? fmtDate(t.dueOn) : '<span class="g-muted">+ ' + esc(L('เพิ่มวันที่')) + '</span>') + '</button>'
            : '<span class="chip' + dueClass(t.dueOn, t.completed) + '">' + (t.dueOn ? fmtDate(t.dueOn) : '—') + '</span>') + '</div>';
     });
     h += '</section>';
