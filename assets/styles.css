@@ -5571,3 +5571,9 @@ body.print-preview .print-sheet { display: block; width: 210mm; min-height: 297m
   .bulkbar .bulk-acts { gap: 5px; }
   .bulkbar button, .bulkbar select { padding: 0 10px; font-size: 12.5px; }
 }
+
+/* Sprint 3 — สลับภาษาไทย/English ที่หน้าเข้าสู่ระบบ */
+.gate-lang { display: inline-flex; gap: 2px; padding: 2px; margin: 14px auto 0; border: 1px solid var(--line); border-radius: 999px; }
+.gate-lang button { padding: 4px 12px; border-radius: 999px; font-size: 12.5px; color: var(--fg-soft); }
+.gate-lang button.on { background: var(--fg); color: var(--bg); font-weight: 600; }
+.gate-card .gate-lang { display: flex; width: max-content; }

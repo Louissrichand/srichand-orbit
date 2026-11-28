@@ -573,7 +573,7 @@
       });
     });
     d.trash = purgeOldTrash(d.trash || []);
-    /* v9 — งานของฉันแบบมีเซกชัน กล่องข้อความแบบบุ๊กมาร์ก หน้าแรกที่จัดเองได้
+    /* v9 — งานของฉันแบบมีเซกชัน กล่องแจ้งเตือนแบบบุ๊กมาร์ก หน้าแรกที่จัดเองได้
      *   task.assignedAt / assignedBy   ได้รับมอบหมายเมื่อไร โดยใคร (งานเก่า = null ถือว่าเห็นแล้ว)
      *   notification.bookmarked / actorId
      *   personal[userId]  ของส่วนตัวแต่ละคน เก็บในข้อมูลกลางเพื่อให้ตามไปทุกเครื่อง
@@ -1594,7 +1594,7 @@
   /* ======================================================================
    * ของส่วนตัวของแต่ละคน (ชิ้นงาน 2a)
    *
-   * งานของฉัน (เซกชัน ลำดับ มุมมอง) หน้าแรก (วิดเจ็ต) กล่องข้อความ (เรียง ความหนาแน่น)
+   * งานของฉัน (เซกชัน ลำดับ มุมมอง) หน้าแรก (วิดเจ็ต) กล่องแจ้งเตือน (เรียง ความหนาแน่น)
    * และสมุดโน้ต เก็บใน db.personal[userId] ไม่ใช่ localStorage
    * เพราะในโหมดทีมคนเดียวกันเปิดจากหลายเครื่อง ของที่จัดไว้ต้องตามไปด้วย
    * เก็บแต่รหัสกับตัวเลข ไม่คัดลอกตัวงาน ไฟล์กลางจึงโตตามจำนวนงานที่จัดเท่านั้น
@@ -2127,7 +2127,7 @@
     return { days: list, week: week, prevWeek: prev, month: month };
   }
 
-  /* ---------- กล่องข้อความ ---------- */
+  /* ---------- กล่องแจ้งเตือน ---------- */
 
   /** การแจ้งเตือนของงานที่เห็นไม่ได้แล้ว (งานส่วนตัวของคนอื่น โปรเจกต์ปิดที่ถูกเอาออก) ไม่แสดง */
   function notifVisible(n) {
@@ -2168,7 +2168,7 @@
                      comment: 20, message: 15, status: 15, newtask: 10, activity: 0 };
 
   /**
-   * รายการในกล่องข้อความ
+   * รายการในกล่องแจ้งเตือน
    * @param opts { tab: activity|bookmarks|archive, from, project, mention, toMe, byMe, unread,
    *               sort: new|relevance }
    */
@@ -2256,7 +2256,7 @@
   /* ---------- ห้ามรบกวน ----------
    * prefs.dnd = { until: ISO|null, from: 'HH:MM'|null, to: 'HH:MM'|null }
    * ยังสร้างการแจ้งเตือนตามปกติ แค่ไม่ขึ้นตัวเลขแดงที่แถบซ้ายและไม่เด้งข้อความ
-   * เปิดกล่องข้อความดูเองเมื่อไรก็เห็นครบ ไม่มีอะไรหาย */
+   * เปิดกล่องแจ้งเตือนดูเองเมื่อไรก็เห็นครบ ไม่มีอะไรหาย */
   function dndOf(userId) {
     var u = user(userId || db.currentUserId);
     var d = u && u.prefs && u.prefs.dnd;
@@ -2359,7 +2359,7 @@
   ];
 
   var GROUPS = [
-    { id: 'section',  label: 'คอลัมน์' },
+    { id: 'section',  label: 'เซกชัน' },
     { id: 'assignee', label: 'ผู้รับผิดชอบ' },
     { id: 'priority', label: 'ความสำคัญ' },
     { id: 'due',      label: 'ช่วงกำหนดส่ง' },
@@ -2630,7 +2630,7 @@
   var FILTER_BUILTIN = [
     { id: 'assignee',    label: 'ผู้รับผิดชอบ',  kind: 'person' },
     { id: 'createdBy',   label: 'สร้างโดย',      kind: 'person' },
-    { id: 'section',     label: 'คอลัมน์',       kind: 'select' },
+    { id: 'section',     label: 'เซกชัน',       kind: 'select' },
     { id: 'priority',    label: 'ความสำคัญ',    kind: 'select' },
     { id: 'type',        label: 'ชนิดงาน',      kind: 'select' },
     { id: 'cstatus',     label: 'สถานะ (ชนิดงาน)', kind: 'select' },
@@ -2666,7 +2666,7 @@
    * ใช้ projectId = '*' กับ filterFields / filterField / filterChoices */
   var SEARCH_BUILTIN = [
     { id: 'project',    label: 'โปรเจกต์',          kind: 'multi' },
-    { id: 'psection',   label: 'คอลัมน์ (เซกชัน)',   kind: 'multi' },
+    { id: 'psection',   label: 'เซกชัน (เซกชัน)',   kind: 'multi' },
     { id: 'assignedBy', label: 'มอบหมายโดย',        kind: 'person' },
     { id: 'followers',  label: 'ผู้ติดตาม',          kind: 'multi' },
     { id: 'attachment', label: 'มีไฟล์แนบ',         kind: 'bool' },
@@ -3430,7 +3430,7 @@
   /* ชนิดของการแจ้งเตือน ผู้ใช้ปิดเป็นรายชนิดได้จากหน้าตั้งค่า
    *
    * ที่ต้องแยกชนิด เพราะคนที่ติดตามงานเยอะจะโดนถล่มด้วยรายการเล็ก ๆ น้อย ๆ
-   * จนเลิกอ่านกล่องข้อความไปเลย ซึ่งแย่กว่าไม่มีกล่องข้อความตั้งแต่แรก
+   * จนเลิกอ่านกล่องแจ้งเตือนไปเลย ซึ่งแย่กว่าไม่มีกล่องแจ้งเตือนตั้งแต่แรก
    */
   var NOTIFY_KINDS = [
     { id: 'assigned', label: 'มีคนมอบหมายงานให้ฉัน',
@@ -3459,7 +3459,7 @@
     { id: 'milestone', label: 'หมุดหมายสำเร็จในโปรเจกต์ที่ติดตาม',
       desc: 'เมื่อมีคนทำหมุดหมายของโปรเจกต์ที่ติดตามเสร็จ' },
     /* Sprint 2B — บันทึกเวลา/ตั้งเวลาประมาณ ปิดไว้เป็นค่าเริ่มต้น (def: false)
-     * ผลทดสอบกับผู้ใช้: ผู้ติดตามได้ "ลงเวลา 1m" "ตั้งเวลาประมาณ 4h" ทั้งวันจนกล่องข้อความไม่มีใครอ่าน
+     * ผลทดสอบกับผู้ใช้: ผู้ติดตามได้ "ลงเวลา 1m" "ตั้งเวลาประมาณ 4h" ทั้งวันจนกล่องแจ้งเตือนไม่มีใครอ่าน
      * คนที่อยากรู้จริง (หัวหน้าที่ดูชั่วโมงงาน) เปิดเองได้ที่ตั้งค่า */
     { id: 'timelog',  label: 'บันทึกเวลาและเวลาประมาณ',
       desc: 'มีคนลงเวลาหรือเปลี่ยนเวลาประมาณในงานที่ติดตาม (ปิดไว้เป็นค่าเริ่มต้น)', def: false }
@@ -3529,7 +3529,7 @@
   }
 
   /**
-   * @param extra { story, ref } — Sprint 2B ความเห็นที่ทำให้เกิดการแจ้งเตือน (กล่องข้อความโชว์เนื้อหาและพาไปที่ความเห็นนั้น)
+   * @param extra { story, ref } — Sprint 2B ความเห็นที่ทำให้เกิดการแจ้งเตือน (กล่องแจ้งเตือนโชว์เนื้อหาและพาไปที่ความเห็นนั้น)
    */
   function notify(taskId, text, exceptUserId, extraUserIds, kind, excludeIds,
                   key, params, actor, extra) {
@@ -3546,7 +3546,7 @@
       /* Sprint 2B — ผ่านตัวรวมกลุ่ม (pushNotif) ทุกครั้ง ไม่ push ตรง */
       pushNotif({
         userId: target, taskId: taskId, text: text,
-        /* เก็บคีย์ไว้ด้วยเมื่อมี กล่องข้อความจะได้แปลตอนอ่าน
+        /* เก็บคีย์ไว้ด้วยเมื่อมี กล่องแจ้งเตือนจะได้แปลตอนอ่าน
          * ไม่ใช่ค้างภาษาของคนที่ทำให้เกิดการแจ้งเตือน */
         key: key || null, params: params || null,
         actorName: actor ? actor.name : null, actorId: actor ? actor.id : null,
@@ -3585,7 +3585,7 @@
       pushNotif({
         userId: target, taskId: taskId,
         /* ประกาศของโปรเจกต์ไม่มีงานให้ชี้ เก็บรหัสโปรเจกต์ไว้แทน
-         * กล่องข้อความจะได้พาไปที่หน้าประกาศ ไม่ใช่ขึ้นว่างานถูกลบแล้ว */
+         * กล่องแจ้งเตือนจะได้พาไปที่หน้าประกาศ ไม่ใช่ขึ้นว่างานถูกลบแล้ว */
         projectId: (extra && extra.projectId) || null,
         route: (extra && extra.route) || null,
         text: fill(key, params), kind: kind || null,
@@ -3721,6 +3721,70 @@
       notifyNewTask(t, projectId);
     }
     return t;
+  }
+
+  /* ---------- Sprint 3 — พิมพ์เร็ว: "@ชื่อ" กับวันที่แบบไทยในชื่องาน ----------
+   * พิมพ์ "ส่งใบเสนอราคา @สมชาย พรุ่งนี้" ในช่องเพิ่มงาน → ชื่องาน "ส่งใบเสนอราคา" มอบให้สมชาย กำหนดส่งพรุ่งนี้
+   * ตั้งใจให้ระวังไว้ก่อน: @ชื่อ ต้องตรงกับคนเดียวที่เข้าโปรเจกต์ได้เท่านั้น (ไม่ตรงหรือซ้ำ = คงข้อความเดิม ไม่เดา)
+   * และถ้าตัดแล้วชื่องานว่าง ก็ไม่แยกอะไรเลย ชื่องานเดิมจึงไม่มีทางหายไป
+   * วันที่รู้จัก: วันนี้ พรุ่งนี้ มะรืน สัปดาห์หน้า วันจันทร์…วันอาทิตย์ 15 ธ.ค. / 15 ธันวาคม / 15/12
+   * (ปีไม่ได้พิมพ์ = ครั้งถัดไปที่ยังไม่ผ่าน) */
+  var QA_DOW = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+  var QA_MON_FULL = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+                     'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+  var QA_MON_SHORT = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+  function quickAdd(text, projectId) {
+    var orig = String(text == null ? '' : text).trim();
+    var out = { name: orig };
+    if (!orig) return out;
+    var rest = ' ' + orig + ' ';
+    var assignee = null, due = null, t0 = today();
+    var am = rest.match(/\s@(\S+)/);
+    if (am) {
+      var q = am[1].toLowerCase();
+      var hits = (db.users || []).filter(function (u) {
+        return u && u.name && !u.disabled && u.active !== false && u.name.toLowerCase().indexOf(q) === 0 &&
+          (!projectId || !!projectAccess(projectId, u.id));
+      });
+      if (hits.length === 1) { assignee = hits[0].id; rest = rest.replace(am[0], ' '); }
+    }
+    function take(re, fn) {
+      if (due) return;
+      var x = rest.match(re);
+      if (!x) return;
+      var v = fn(x);
+      if (v) { due = v; rest = rest.replace(x[0], ' '); }
+    }
+    take(/มะรืน(?:นี้)?/, function () { return addDays(t0, 2); });
+    take(/พรุ่งนี้|\btomorrow\b/i, function () { return addDays(t0, 1); });
+    take(/วันนี้|\btoday\b/i, function () { return t0; });
+    take(/สัปดาห์หน้า|อาทิตย์หน้า|\bnext week\b/i, function () { return addDays(t0, 7); });
+    take(new RegExp('วัน(' + QA_DOW.join('|').replace('พฤหัสบดี', 'พฤหัสบดี|พฤหัส') + ')(?:หน้า|นี้)?'), function (x) {
+      var idx = QA_DOW.indexOf(x[1] === 'พฤหัส' ? 'พฤหัสบดี' : x[1]);
+      var diff = (idx - new Date(t0 + 'T00:00:00').getDay() + 7) % 7;
+      return addDays(t0, diff === 0 ? 7 : diff);        // ชื่อวันที่ตรงกับวันนี้ = สัปดาห์หน้า (วันนี้ใช้คำว่า "วันนี้")
+    });
+    var monAlt = QA_MON_FULL.concat(QA_MON_SHORT).map(function (s) { return s.split('.').join('[.]'); }).join('|');
+    function mkDate(d, mo) {
+      d = +d; mo = +mo;
+      if (d < 1 || d > 31 || mo < 1 || mo > 12) return null;
+      var y = new Date(t0 + 'T00:00:00').getFullYear();
+      var c = new Date(y, mo - 1, d);
+      if (c.getMonth() !== mo - 1) return null;              // 31 ก.พ. ฯลฯ — ไม่มีวันนี้จริง
+      if (iso(c) < t0) c = new Date(y + 1, mo - 1, d);
+      return c.getMonth() === mo - 1 ? iso(c) : null;
+    }
+    take(new RegExp('([0-9]{1,2}) *(' + monAlt + ')'), function (x) {
+      var mi = QA_MON_FULL.indexOf(x[2]); if (mi < 0) mi = QA_MON_SHORT.indexOf(x[2]);
+      return mkDate(x[1], mi + 1);
+    });
+    take(/\s(\d{1,2})\/(\d{1,2})(?![\d\/])/, function (x) { return mkDate(x[1], x[2]); });
+    var name = rest.replace(/\s{2,}/g, ' ').trim();
+    if (!name || (!assignee && !due)) return out;               // ไม่เจออะไร หรือเหลือชื่อว่าง = ไม่แตะ
+    out.name = name;
+    if (assignee) out.assigneeId = assignee;
+    if (due) out.dueOn = due;
+    return out;
   }
 
   function createTask(attrs, projectId, sectionId) {
@@ -4573,7 +4637,7 @@
     var from = m.sectionId;
     if (moved) {
       var s = section(m.projectId, sectionId);
-      if (s) log(m.taskId, 'ย้ายไปคอลัมน์ {c}', { c: s.name });
+      if (s) log(m.taskId, 'ย้ายไปเซกชัน {c}', { c: s.name });
     }
     m.sectionId = sectionId;
     if (position != null) m.position = position;
@@ -4780,14 +4844,14 @@
     /* คนที่ถูกพูดถึงกับคนที่แค่ติดตาม ต้องแยกชนิดกัน
      * เพราะคนปิด "ความเห็นใหม่" ทิ้งได้ แต่ไม่มีใครอยากพลาดตอนถูกเรียกชื่อ */
     /* Sprint 2B — ทุกการแจ้งเตือนของความเห็นจำรหัสความเห็นไว้ (story)
-     * กล่องข้อความจะโชว์เนื้อความสองบรรทัดแรก และกดแล้วพาไปที่ความเห็นนั้นพร้อมไฮไลต์ */
+     * กล่องแจ้งเตือนจะโชว์เนื้อความสองบรรทัดแรก และกดแล้วพาไปที่ความเห็นนั้นพร้อมไฮไลต์ */
     var sx = { story: s.id };
     if (mentioned.length) {
       notifyOnly(taskId, mentioned, 'พูดถึงคุณในความเห็น', 'mention', null, false, sx);
     }
     if (parent) {
       /* คำตอบในเธรดแจ้งเฉพาะคนที่อยู่ในบทสนทนานั้น ไม่กระจายไปหาผู้ติดตามทั้งงาน
-       * งานที่มีคนติดตามยี่สิบคน ถ้าทุกคำตอบสั้น ๆ เด้งหาทุกคน กล่องข้อความจะไม่มีใครอ่าน */
+       * งานที่มีคนติดตามยี่สิบคน ถ้าทุกคำตอบสั้น ๆ เด้งหาทุกคน กล่องแจ้งเตือนจะไม่มีใครอ่าน */
       var inThread = [parent.actorId];
       repliesOf(parent.id).forEach(function (r) {
         if (inThread.indexOf(r.actorId) < 0) inThread.push(r.actorId);
@@ -5226,7 +5290,7 @@
     if (p.statusLog.length > 30) p.statusLog = p.statusLog.slice(-30);
     var watchers = projectWatchers(id, 'status');
     if (watchers.length) {
-      /* Sprint 2B — ref = รายการในประวัติสถานะ กล่องข้อความโชว์สถานะกับบรรทัดแรกได้โดยไม่ต้องเปิดโปรเจกต์ */
+      /* Sprint 2B — ref = รายการในประวัติสถานะ กล่องแจ้งเตือนโชว์สถานะกับบรรทัดแรกได้โดยไม่ต้องเปิดโปรเจกต์ */
       notifyOnly(null, watchers, 'อัปเดตสถานะของ {p}', 'status', { p: p.name }, false,
         { projectId: id, route: 'p-overview', ref: psId });
     }
@@ -5436,7 +5500,7 @@
   function addSection(projectId, name) {
     var p = project(projectId);
     if (!p) return null;
-    snapshot('เพิ่มคอลัมน์');           // 2c — เดิมเพิ่มแล้วย้อนกลับไม่ได้
+    snapshot('เพิ่มเซกชัน');           // 2c — เดิมเพิ่มแล้วย้อนกลับไม่ได้
     var s = { id: uid('s'), name: name || 'คอลัมน์ใหม่' };
     p.sections.push(s);
     commit();
@@ -5445,7 +5509,7 @@
 
   function renameSection(projectId, sectionId, name) {
     var s = section(projectId, sectionId);
-    if (s && s.name !== name) { snapshot('เปลี่ยนชื่อคอลัมน์'); s.name = name; commit(); }
+    if (s && s.name !== name) { snapshot('เปลี่ยนชื่อเซกชัน'); s.name = name; commit(); }
   }
 
   function deleteSection(projectId, sectionId) {
@@ -5499,7 +5563,7 @@
       projects: false, deps: false, dates: keep.dates, fields: keep.fields };
     var name = String(o.name || '').trim().slice(0, 120) || (src.name + ' ' + L('(สำเนา)'));
     var roots = tasksInSection(projectId, sectionId).map(function (x) { return x.task; });
-    snapshot('ทำสำเนาคอลัมน์ “{s}”', { s: src.name });
+    snapshot('ทำสำเนาเซกชัน “{s}”', { s: src.name });
     var ns = { id: uid('s'), name: name };
     /* ในโปรเจกต์เดิมวางต่อจากคอลัมน์ต้นฉบับ โปรเจกต์อื่นวางท้ายสุด */
     var at = toPid === projectId ? dest.sections.indexOf(src) + 1 : dest.sections.length;
@@ -6397,7 +6461,7 @@
     });
 
     /* แจ้งครั้งเดียวสำหรับทั้งชุด ไม่ใช่ยิงทีละงาน
-     * คนที่รับช่วงงานสามสิบงานไม่ควรเจอสามสิบแถวในกล่องข้อความ */
+     * คนที่รับช่วงงานสามสิบงานไม่ควรเจอสามสิบแถวในกล่องแจ้งเตือน */
     if (to) {
       notifyOnly(list[0].id, [to.id],
         'โอนงานที่ยังไม่เสร็จ {n} งาน จาก {who} มาให้คุณ', 'assigned',
@@ -7007,6 +7071,10 @@
     var parts = [t.name, plainText(t.notes, true), (t.tags || []).join(' ')];
     var u = i.user[t.assigneeId];
     if (u) parts.push(u.name);
+    /* Sprint 3 — ค้นเจอจากข้อความในความเห็นด้วย (คนมักจำว่า "มีคนพูดเรื่องนี้ในงานไหน" มากกว่าชื่องาน) */
+    (i.storyByTask[t.id] || []).forEach(function (s) {
+      if (s.type === 'comment' && s.text) parts.push(plainText(s.text, true));
+    });
     (i.memByTask[rootOf(t).id] || []).forEach(function (m) {
       var p = i.project[m.projectId];
       if (p) parts.push(p.name);
@@ -7176,7 +7244,7 @@
     { id: 'ignore',        label: 'ไม่นำเข้า' },
     { id: 'name',          label: 'ชื่องาน',               names: ['Name', 'Task Name', 'Task', 'ชื่องาน', 'ชื่อ'] },
     { id: 'notes',         label: 'รายละเอียด',            names: ['Notes', 'Description', 'รายละเอียด'] },
-    { id: 'section',       label: 'คอลัมน์ (เซกชัน)',       names: ['Section/Column', 'Section', 'Column', 'คอลัมน์', 'เซกชัน'] },
+    { id: 'section',       label: 'เซกชัน (เซกชัน)',       names: ['Section/Column', 'Section', 'Column', 'เซกชัน', 'เซกชัน'] },
     { id: 'assignee',      label: 'ผู้รับผิดชอบ',           names: ['Assignee', 'ผู้รับผิดชอบ'] },
     { id: 'assigneeEmail', label: 'อีเมลผู้รับผิดชอบ',       names: ['Assignee Email'] },
     { id: 'collaborators', label: 'ผู้ร่วมงาน (ผู้ติดตาม)', names: ['Collaborators', 'Followers', 'ผู้ติดตาม', 'ผู้ร่วมงาน'] },
@@ -7558,8 +7626,8 @@
     return r && (!r.taskId || task(r.taskId)) ? r : null;
   }
 
-  /* Sprint 1B — คำขอสิทธิ์เป็นรายการในกล่องข้อความของเจ้าของ (มีปุ่มให้สิทธิ์/ปฏิเสธในแถวนั้นเลย)
-   * เดิมสร้างเป็นงานมอบหมายให้เจ้าของ ได้สองรายการในกล่องข้อความ (มอบหมาย + สร้างงาน)
+  /* Sprint 1B — คำขอสิทธิ์เป็นรายการในกล่องแจ้งเตือนของเจ้าของ (มีปุ่มให้สิทธิ์/ปฏิเสธในแถวนั้นเลย)
+   * เดิมสร้างเป็นงานมอบหมายให้เจ้าของ ได้สองรายการในกล่องแจ้งเตือน (มอบหมาย + สร้างงาน)
    * ชื่องานติดภาษาของคนขอ และค้างอยู่ในงานของฉันของผู้ดูแล ปนกับงานจริง
    * ตอนนี้เก็บแค่ { userId, at, note } ที่โปรเจกต์ ข้อความแจ้งเก็บเป็นคีย์ แปลตามภาษาคนอ่าน */
   function requestAccess(projectId, note) {
@@ -7581,7 +7649,7 @@
     return { ok: true, owner: owner };
   }
 
-  /** คำขอจากรายการในกล่องข้อความ — ยังรอตอบอยู่และคนที่เปิดดูตอบได้ไหม */
+  /** คำขอจากรายการในกล่องแจ้งเตือน — ยังรอตอบอยู่และคนที่เปิดดูตอบได้ไหม */
   function accessRequestFor(n) {
     if (!n || n.kind !== 'access' || !n.projectId || !n.actorId) return null;
     var r = pendingRequest(n.projectId, n.actorId);
@@ -7780,7 +7848,7 @@
   /* time: ตรวจตามเวลา  manual: กดรันเอง  personal: ใช้ในงานของฉันได้ */
   var AUTO_TRIGGERS = [
     { id: 'added',       label: 'งานถูกเพิ่มเข้าโปรเจกต์', match: always },
-    { id: 'moved',       label: 'งานถูกย้ายเข้าคอลัมน์',
+    { id: 'moved',       label: 'งานถูกย้ายเข้าเซกชัน',
       match: function (tr, ev) { return !tr.sec || ev.info.sec === tr.sec; } },
     { id: 'completed',   label: 'งานทำเสร็จ / เปิดใหม่', personal: true,
       match: function (tr, ev) { return (tr.v !== false) === !!ev.info.v; } },
@@ -7939,11 +8007,11 @@
   }
 
   var AUTO_ACTIONS = [
-    { id: 'section', label: 'ย้ายไปคอลัมน์', task: true, run: function (a, ctx) {
+    { id: 'section', label: 'ย้ายไปเซกชัน', task: true, run: function (a, ctx) {
       var t = needTask(ctx), p = ctx.p;
       var m = p && db.memberships.filter(function (x) { return x.taskId === t.id && x.projectId === p.id; })[0];
       if (!m) throw autoErr('งานไม่ได้อยู่ในโปรเจกต์นี้');
-      if (!section(p.id, a.sec)) throw autoErr('คอลัมน์ปลายทางถูกลบไปแล้ว');
+      if (!section(p.id, a.sec)) throw autoErr('เซกชันปลายทางถูกลบไปแล้ว');
       if (m.sectionId !== a.sec) setSectionRaw(m, a.sec, nextPosition(p.id, a.sec));
     } },
     { id: 'complete', label: 'ทำเครื่องหมายเสร็จ / เปิดใหม่', task: true, run: function (a, ctx) {
@@ -9743,7 +9811,7 @@
     var watchers = projectWatchers(pid, 'status');
     if (watchers.length) {
       notifyOnly(null, watchers, 'อัปเดตสถานะของ {p}', 'status', { p: p.name }, false,
-        { projectId: pid, route: 'p-overview', ref: entry.id });      // Sprint 2B — โชว์สถานะ+บรรทัดแรกในกล่องข้อความ
+        { projectId: pid, route: 'p-overview', ref: entry.id });      // Sprint 2B — โชว์สถานะ+บรรทัดแรกในกล่องแจ้งเตือน
     }
     closeRemindTask(p);
     commit();
@@ -10024,7 +10092,7 @@
     ['bar', 'แท่ง'], ['stack', 'แท่งซ้อน'], ['group', 'แท่งกลุ่ม'], ['line', 'เส้น'], ['burnup', 'เบิร์นอัพ'],
     ['burndown', 'เบิร์นดาวน์'], ['donut', 'โดนัท'], ['number', 'ตัวเลข'], ['lollipop', 'อมยิ้ม'], ['text', 'ข้อความ']
   ];
-  var DASH_X = [['assignee', 'ผู้รับผิดชอบ'], ['section', 'คอลัมน์'], ['priority', 'ความสำคัญ'], ['type', 'ชนิดงาน'],
+  var DASH_X = [['assignee', 'ผู้รับผิดชอบ'], ['section', 'เซกชัน'], ['priority', 'ความสำคัญ'], ['type', 'ชนิดงาน'],
     ['cstatus', 'สถานะ (ชนิดงาน)'], ['completed', 'เสร็จ/ยังไม่เสร็จ'], ['period', 'ช่วงเวลา']];
   var DASH_UNITS = [['day', 'วัน'], ['week', 'สัปดาห์'], ['month', 'เดือน']];
   var DASH_DATES = [['completedOn', 'วันที่ทำเสร็จ'], ['created', 'วันที่สร้าง'], ['due', 'กำหนดส่ง']];
@@ -10053,7 +10121,7 @@
       { id: 'dw_d3', kind: 'number', title: 'เลยกำหนด', y: 'count', filters: [{ f: 'due', op: 'overdue', v: null }, { f: 'completed', op: 'no', v: null }] },
       { id: 'dw_d4', kind: 'donut', title: 'ความคืบหน้ารวม', x: 'completed' },
       { id: 'dw_d5', kind: 'stack', title: 'งานตามผู้รับผิดชอบ', x: 'assignee', split: 'completed' },
-      { id: 'dw_d6', kind: 'bar', title: 'งานตามคอลัมน์', x: 'section' },
+      { id: 'dw_d6', kind: 'bar', title: 'งานตามเซกชัน', x: 'section' },
       { id: 'dw_d7', kind: 'burnup', title: 'เบิร์นอัพ', unit: 'week', n: 8, full: true }
     ].map(normalizeWidget);
   }
@@ -11557,7 +11625,7 @@
     if (/^pf_/.test(id)) return { route: 'portfolio:' + id + ':messages' };
     return { projectId: id };
   }
-  /** ชื่อของปลายทางในกล่องข้อความ (route ของ 4a) */
+  /** ชื่อของปลายทางในกล่องแจ้งเตือน (route ของ 4a) */
   function routeLabel(r) {
     var m = /^(team|portfolio|goal):([^:]+)/.exec(String(r || ''));
     if (!m) return null;
@@ -12328,7 +12396,7 @@
     });
     return '﻿' + rows.map(function (r) { return r.map(q).join(','); }).join('\r\n');
   }
-  /** เตือนเจ้าของเป้าหมายที่ยังเปิดอยู่ให้อัปเดตสถานะ — ไม่ได้อัปเดตเกิน 7 วัน เตือนสัปดาห์ละครั้ง (dedupe ในกล่องข้อความ)
+  /** เตือนเจ้าของเป้าหมายที่ยังเปิดอยู่ให้อัปเดตสถานะ — ไม่ได้อัปเดตเกิน 7 วัน เตือนสัปดาห์ละครั้ง (dedupe ในกล่องแจ้งเตือน)
    *  และบันทึกจุดกราฟความคืบหน้าของวันนี้ (เงียบ ๆ ไม่เป็นจุดย้อนกลับ) */
   function checkGoalReminders(opts) {
     if (!db || !isActive() || !(db.goals || []).length) return 0;
@@ -12401,7 +12469,7 @@
     setBaseline: setBaseline, clearBaseline: clearBaseline, baselineOf: baselineOf,
     sortItems: sortItems, projectStats: projectStats,
 
-    createTask: createTask, createTasks: createTasks, updateTask: updateTask, deleteTask: deleteTask,
+    quickAdd: quickAdd, createTask: createTask, createTasks: createTasks, updateTask: updateTask, deleteTask: deleteTask,
     deleteTasks: deleteTasks, duplicateTask: duplicateTask, moveTask: moveTask,
     DUP_KEYS: DUP_KEYS, assignCopies: assignCopies, mergeDuplicate: mergeDuplicate,
     createFollowUp: createFollowUp, setParent: setParent, promoteSubtask: promoteSubtask,
@@ -12433,7 +12501,7 @@
     markRead: markRead, markAllRead: markAllRead,
     archiveNotification: archiveNotification, archiveAll: archiveAll,
 
-    /* 2a — งานส่วนตัว งานของฉัน กล่องข้อความ หน้าแรก */
+    /* 2a — งานส่วนตัว งานของฉัน กล่องแจ้งเตือน หน้าแรก */
     rootOf: rootOf, isPrivate: isPrivate,
     MT_RECENT: MT_RECENT, MT_GROUPS: MT_GROUPS, MT_SORTS: MT_SORTS, NOTEPAD_MAX: NOTEPAD_MAX,
     personalOf: personalOf, mtTasks: mtTasks, mtGroups: mtGroups, mtSectionOf: mtSectionOf,
@@ -13873,7 +13941,7 @@
 
   /* ====================== Sprint 2B — การแจ้งเตือน ศูนย์อนุมัติ การติดตามโปรเจกต์ ======================
    *
-   * ผลทดสอบกับผู้ใช้: กล่องข้อความ "เสียงดังแต่อ่านไม่รู้เรื่อง" และหางานรออนุมัติไม่เจอ
+   * ผลทดสอบกับผู้ใช้: กล่องแจ้งเตือน "เสียงดังแต่อ่านไม่รู้เรื่อง" และหางานรออนุมัติไม่เจอ
    * การกระทำเดียวได้หลายรายการ (มอบหมาย + ตั้งวัน + แก้รายละเอียด = 3, ส่งฟอร์ม = 3, ขออนุมัติ = 5)
    *
    * รูปข้อมูลที่เพิ่ม (SCHEMA 19) ทุกช่องไม่บังคับ ไม่มี = แบบเดิม

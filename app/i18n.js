@@ -11,9 +11,9 @@
   var EN = {
     /* Sprint 2A */
     'ตัวเลือกของงาน': 'Task options', 'ค้นหางาน': 'Search tasks', 'ปิดช่องค้นหา': 'Close search',
-    'เมนูงานของฉัน': 'My Tasks menu', 'เมนูกล่องข้อความ': 'Inbox menu', 'เมนูหลัก': 'Main menu',
+    'เมนูงานของฉัน': 'My Tasks menu', 'เมนูกล่องแจ้งเตือน': 'Inbox menu', 'เมนูหลัก': 'Main menu',
     'เลิกเลือก': 'Done', 'เลือกหลายงาน': 'Select tasks', 'สัปดาห์หน้า': 'Next week',
-    'ย้ายไปเซกชัน': 'Move to section', 'ย้ายไปเซกชัน…': 'Move to section…', 'ย้ายคอลัมน์ในโปรเจกต์…': 'Move within the project…',
+    'ย้ายไปเซกชัน': 'Move to section', 'ย้ายไปเซกชัน…': 'Move to section…', 'ย้ายเซกชันในโปรเจกต์…': 'Move within the project…',
     'ย้ายไป {s} แล้ว': 'Moved to {s}', 'ย้าย {n} งานไปเซกชัน': 'Move [n|1 task|{n} tasks] to section',
     'ไม่มีงานที่ย้ายได้': 'None of these tasks can be moved',
     'เพิ่มในโปรเจกต์ {p}': 'Adds to {p}',
@@ -38,7 +38,7 @@
     'ฟอร์มนี้ใช้ได้เฉพาะพนักงานที่ล็อกอิน Orbit แล้ว': 'This form is only for staff signed in to Orbit.',
     'อัตโนมัติตามเวลา (ใกล้ครบกำหนด เลยกำหนด ตามกำหนดเวลา) ทำงานเมื่อมีคนเปิด Orbit อยู่ ตรวจทุก 5 นาที ถ้าช่วงนั้นไม่มีใครเปิด จะทำตามหลังทันทีที่มีคนเปิด และแต่ละรอบทำครั้งเดียวแม้หลายคนเปิดพร้อมกัน':
       'Time-based automations (due date approaching, overdue, scheduled) run while someone has Orbit open, checked every 5 minutes. If nobody has it open, they run as soon as someone opens it, and each run happens only once even if several people have Orbit open.',
-    'ยังไม่มีการแจ้งเตือนทางอีเมล ทุกอย่างจะเข้ากล่องข้อความใน Orbit': 'Email notifications aren’t available yet. Everything arrives in your Orbit inbox.',
+    'ยังไม่มีการแจ้งเตือนทางอีเมล ทุกอย่างจะเข้ากล่องแจ้งเตือนใน Orbit': 'Email notifications aren’t available yet. Everything arrives in your Orbit inbox.',
     'เข้าระบบด้วยบัญชี Microsoft ของบริษัท เปลี่ยนรหัสผ่านหรือตั้งการยืนยันสองชั้นได้ที่บัญชี Microsoft ของคุณ':
       'You sign in with your company Microsoft account. Change your password or two-step verification in your Microsoft account.',
     'ถ้าต้องการให้คนระดับ “ดูอย่างเดียว” แก้ข้อมูลไม่ได้จริง ให้ตั้งสิทธิ์ของคนนั้นบนไซต์ SharePoint เป็น Read ด้วย':
@@ -90,7 +90,7 @@
     'บันทึกหน้าที่เปิดเมื่อเข้าแอปแล้ว': 'Start page saved',
     'พิมพ์ / บันทึก PDF': 'Print / save as PDF', 'พิมพ์ / PDF': 'Print / PDF', 'พิมพ์เมื่อ {d} โดย {u}': 'Printed {d} by {u}',
     'เจ้าของ {n}': 'Owner: {n}', 'งานเสร็จ': 'Tasks done', 'สถานะล่าสุด': 'Latest status', 'งานเลยกำหนด ({n})': 'Overdue tasks ({n})',
-    'เลยมา (วัน)': 'Days overdue', 'หมุดหมายที่ยังไม่ถึง': 'Upcoming milestones', 'ความคืบหน้าตามคอลัมน์': 'Progress by section',
+    'เลยมา (วัน)': 'Days overdue', 'หมุดหมายที่ยังไม่ถึง': 'Upcoming milestones', 'ความคืบหน้าตามเซกชัน': 'Progress by section',
     'ถาม/ตอบ ({n})': 'Questions & replies ({n})', 'สถานะทุกโปรเจกต์': 'Status of every project', 'ยังไม่มีวิดเจ็ต': 'No widgets yet',
     /* เข้าสู่ระบบหมดอายุ */
     'การเข้าสู่ระบบหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง': 'Your sign-in has expired. Please sign in again.',
@@ -143,7 +143,7 @@
     '{n} นาทีที่แล้ว': '{n} min ago', '{n} ชม.ที่แล้ว': '{n} hr ago',
 
     /* --- แถบซ้าย --- */
-    'งานของฉัน': 'My Tasks', 'กล่องข้อความ': 'Inbox', 'ปฏิทินรวม': 'All calendars',
+    'งานของฉัน': 'My Tasks', 'กล่องแจ้งเตือน': 'Inbox', 'ปฏิทินรวม': 'All calendars',
     'โปรเจกต์': 'Projects', 'เก็บเข้าคลัง': 'Archived', 'คีย์ลัด': 'Shortcuts',
     'สมาชิกทีม': 'Team members', 'ตั้งค่า / สำรองข้อมูล': 'Settings / Backup',
 
@@ -169,7 +169,7 @@
     'ทุกกำหนด': 'Any due date', 'เลยกำหนด': 'Overdue', 'ครบวันนี้': 'Due today',
     'ภายใน 7 วัน': 'Next 7 days', 'ไม่มีกำหนด': 'No due date',
     'ลำดับที่จัดเอง': 'Manual order', 'ชื่อ ก-ฮ': 'Name A–Z',
-    'วันที่สร้าง': 'Date created', 'คอลัมน์': 'Section',
+    'วันที่สร้าง': 'Date created', 'เซกชัน': 'Section',
     'ช่วงกำหนดส่ง': 'Due date range', 'ไม่จัดกลุ่ม': 'No grouping',
     'ยังไม่มอบหมาย': 'Unassigned', 'สัปดาห์นี้': 'This week',
     'หลังจากนั้น': 'Later', 'ไม่มีงานค้างเลย': 'Nothing due — all clear',
@@ -197,13 +197,13 @@
     'ทำเสร็จ': 'Mark complete', 'ทำเครื่องหมายว่าเสร็จ': 'Mark complete',
     'ทำเสร็จแล้ว': 'Completed', 'ถูกบล็อก': 'Blocked',
     'รองานอื่นให้เสร็จก่อน': 'Waiting on another task', 'ทำซ้ำ': 'Repeats',
-    'เพิ่มคอลัมน์': 'Add section', '+ เพิ่มคอลัมน์': '+ Add section',
+    'เพิ่มเซกชัน': 'Add section', '+ เพิ่มเซกชัน': '+ Add section',
     'เปลี่ยนชื่อ': 'Rename', 'ย้ายขึ้น': 'Move up', 'ย้ายลง': 'Move down',
     'ย้ายซ้าย': 'Move left', 'ย้ายขวา': 'Move right',
-    'ชื่อคอลัมน์ใหม่': 'New section name', 'เปลี่ยนชื่อคอลัมน์': 'Rename section',
-    'ลบคอลัมน์นี้? งานข้างในจะย้ายไปคอลัมน์แรก':
+    'ชื่อเซกชันใหม่': 'New section name', 'เปลี่ยนชื่อเซกชัน': 'Rename section',
+    'ลบเซกชันนี้? งานข้างในจะย้ายไปเซกชันแรก':
       'Delete this section? Its tasks move to the first section',
-    'ต้องเหลืออย่างน้อย 1 คอลัมน์': 'At least one section must remain',
+    'ต้องเหลืออย่างน้อย 1 เซกชัน': 'At least one section must remain',
     'ชื่องาน แล้วกด Enter': 'Task name, then press Enter',
     'ชื่องานใหม่': 'New task name', 'ชื่องานย่อย': 'Subtask name',
     'เลือก {n} งาน': '{n} selected', 'มอบหมายให้…': 'Assign to…',
@@ -261,13 +261,13 @@
     'งานทั้งหมด': 'Total tasks', 'ยังค้าง': 'Open',
     'ครบใน 7 วัน': 'Due in 7 days', 'ความคืบหน้ารวม {p}%': 'Overall progress {p}%',
     'ตามผู้รับผิดชอบ': 'By assignee', 'ตามความสำคัญ': 'By priority',
-    'ตามคอลัมน์': 'By section', 'ยังไม่มีข้อมูล': 'No data yet',
+    'ตามเซกชัน': 'By section', 'ยังไม่มีข้อมูล': 'No data yet',
     'แท่ง = สัดส่วนงานที่เสร็จของแต่ละคน': 'Bar = share of that person’s tasks completed',
     'สรุปให้ทีมอ่าน': 'Summary for the team',
     'งานเดินถึงไหน ติดอะไร ต้องการอะไร': 'Where things stand, what is blocked, what is needed',
     'อัปเดตสถานะแล้ว': 'Status updated',
 
-    /* --- กล่องข้อความ --- */
+    /* --- กล่องแจ้งเตือน --- */
     'ยังไม่เก็บ': 'Unarchived', 'เก็บแล้ว': 'Archived',
     'ไม่มีการแจ้งเตือนใหม่': 'No new notifications',
     'ยังไม่มีรายการที่เก็บไว้': 'Nothing archived yet',
@@ -286,7 +286,7 @@
     'ตั้งกำหนดส่ง {date}': 'set the due date to {date}',
     'ลบกำหนดส่ง': 'removed the due date',
     'เปลี่ยนสถานะอนุมัติเป็น “{state}”': 'set approval to “{state}”',
-    'ย้ายไปคอลัมน์ {name}': 'moved it to {name}',
+    'ย้ายไปเซกชัน {name}': 'moved it to {name}',
     'ถูกทำเครื่องหมายเสร็จโดยกฎอัตโนมัติ': 'was completed by an automation rule',
     'เพิ่มเข้าโปรเจกต์ {name}': 'added it to {name}',
     'รอ “{name}” ให้เสร็จก่อน': 'now waits for “{name}”',
@@ -296,7 +296,7 @@
     'สร้างโปรเจกต์ใหม่': 'New project', 'แก้ไขโปรเจกต์': 'Edit project',
     'ชื่อโปรเจกต์': 'Project name', 'คำอธิบาย': 'Description',
     'ไอคอน': 'Icon', 'สี': 'Colour',
-    'คอลัมน์เริ่มต้น (คั่นด้วยจุลภาค)': 'Starting sections (comma separated)',
+    'เซกชันเริ่มต้น (คั่นด้วยจุลภาค)': 'Starting sections (comma separated)',
     'เช่น เปิดตัวสินค้าใหม่ 2026': 'e.g. Product launch 2026',
     '✎ แก้ไขชื่อ / สี / ไอคอน': '✎ Edit name / colour / icon',
     '◆ อัปเดตสถานะโปรเจกต์': '◆ Update project status',
@@ -351,11 +351,11 @@
 
     /* --- กฎอัตโนมัติ --- */
     'กฎอัตโนมัติ — {name}': 'Automation rules — {name}',
-    'เมื่อลากงานเข้าคอลัมน์ที่กำหนด ให้ทำสิ่งเหล่านี้อัตโนมัติ':
+    'เมื่อลากงานเข้าเซกชันที่กำหนด ให้ทำสิ่งเหล่านี้อัตโนมัติ':
       'When a task is dragged into a section, do this automatically',
     'ยังไม่มีกฎ': 'No rules yet', 'เมื่อย้ายเข้า “{name}”': 'When moved into “{name}”',
     'ยังไม่ได้ตั้งการกระทำ': 'No actions set',
-    'เมื่อย้ายเข้าคอลัมน์': 'When moved into section',
+    'เมื่อย้ายเข้าเซกชัน': 'When moved into section',
     'ให้ทำเครื่องหมายเสร็จ': 'Mark complete', 'ไม่': 'No', 'ใช่': 'Yes',
     'มอบหมายให้': 'Assign to', 'ไม่เปลี่ยน': 'Leave unchanged',
     'ตั้งความสำคัญ': 'Set priority', 'ติดแท็ก': 'Add tag',
@@ -427,7 +427,7 @@
     'ปิดหน้าต่าง / ยกเลิกการเลือก': 'Close dialog / clear selection',
     'ส่งความเห็น': 'Post comment', 'เปิดหน้าคีย์ลัดนี้': 'Open this shortcut list',
     'ไปหน้าแรก': 'Go to Home',
-    'ไปงานของฉัน': 'Go to My Tasks', 'ไปกล่องข้อความ': 'Go to Inbox',
+    'ไปงานของฉัน': 'Go to My Tasks', 'ไปกล่องแจ้งเตือน': 'Go to Inbox',
     'เพิ่มงานด่วน': 'Quick add task',
     'มอบหมายงานที่เปิดอยู่ให้ตัวเอง': 'Assign the open task to me',
     'ไปที่ช่องความเห็น': 'Jump to the comment box',
@@ -507,7 +507,7 @@
     'ย้อนกลับการกระทำล่าสุด': 'Undo the last action',
     '◆ หมุดหมาย': '◆ Milestone', '⛔ ถูกบล็อก': '⛔ Blocked',
     '⛔ รออยู่:': '⛔ Waiting on:', '✓ งานของฉัน': '✓ My Tasks',
-    '📅 ปฏิทินรวม': '📅 All calendars', '🔔 กล่องข้อความ': '🔔 Inbox',
+    '📅 ปฏิทินรวม': '📅 All calendars', '🔔 กล่องแจ้งเตือน': '🔔 Inbox',
     '— ลากเพื่อเลื่อนวัน': '— drag to move',
     '— ลากเพื่อเลื่อน ลากขอบเพื่อยืด/หด': '— drag to move, drag edges to resize',
     'ลากแท่ง = เลื่อนวัน · ลากขอบ = ยืด/หด ·':
@@ -818,7 +818,7 @@
     'ส่งออกไฟล์ CSV แล้ว': 'CSV exported', 'คัดลอกลิงก์แล้ว': 'Link copied',
     'นำเข้าไม่สำเร็จ:': 'Import failed:',
     'นำเข้า {n} งานแล้ว': 'Imported {n} [n|task|tasks]',
-    'นำเข้า {n} งาน และสร้างคอลัมน์ใหม่ {s} คอลัมน์': 'Imported {n} [n|task|tasks] and created {s} new [s|section|sections]',
+    'นำเข้า {n} งาน และสร้างเซกชันใหม่ {s} เซกชัน': 'Imported {n} [n|task|tasks] and created {s} new [s|section|sections]',
     'บันทึกการตั้งค่าแล้ว': 'Settings saved',
 
     'รายละเอียดโปรเจกต์': 'Project details', 'ลำดับก่อนหลัง': 'Dependencies',
@@ -902,7 +902,7 @@
       'What you work on, what you are good at, the fastest way to reach you',
     'บันทึกโปรไฟล์แล้ว': 'Profile saved',
 
-    'เลือกว่าเรื่องไหนควรขึ้นในกล่องข้อความ ปิดเรื่องที่ไม่สำคัญออก กล่องข้อความจะได้ยังน่าอ่าน':
+    'เลือกว่าเรื่องไหนควรขึ้นในกล่องแจ้งเตือน ปิดเรื่องที่ไม่สำคัญออก กล่องแจ้งเตือนจะได้ยังน่าอ่าน':
       'Choose what lands in your inbox. Switch off what does not matter to you and the inbox stays worth reading.',
     'มีคนมอบหมายงานให้ฉัน': 'A task is assigned to me',
     'ได้รับงานใหม่ หรือถูกเปลี่ยนตัวผู้รับผิดชอบ': 'A new task, or the assignee changed to you',
@@ -916,7 +916,7 @@
     'เปลี่ยนวัน เปลี่ยนความสำคัญ ติ๊กว่าเสร็จ และอื่น ๆ':
       'Date changes, priority changes, completions and so on',
     'มีคนพูดถึงคุณในความเห็น': 'mentioned you in a comment',
-    'การแจ้งเตือนทางอีเมลยังไม่เปิด จะทำได้เมื่อเชื่อมต่อระบบส่วนกลางแล้ว ตอนนี้ทุกอย่างอยู่ในกล่องข้อความของแอป':
+    'การแจ้งเตือนทางอีเมลยังไม่เปิด จะทำได้เมื่อเชื่อมต่อระบบส่วนกลางแล้ว ตอนนี้ทุกอย่างอยู่ในกล่องแจ้งเตือนของแอป':
       'Email notifications are not available yet — they need the central system. For now everything lands in the in-app inbox.',
 
     'องค์กร': 'Organisation', 'อีเมลที่ใช้เข้าระบบ': 'Sign-in email',
@@ -995,7 +995,7 @@
     /* --- ข้อความบันทึกความเคลื่อนไหวของงาน --- */
     'ตั้งกำหนดส่ง {d}': 'set the due date to {d}',
     'เปลี่ยนสถานะอนุมัติเป็น “{s}”': 'set the approval to “{s}”',
-    'ย้ายไปคอลัมน์ {c}': 'moved it to {c}',
+    'ย้ายไปเซกชัน {c}': 'moved it to {c}',
     'เพิ่มเข้าโปรเจกต์ {p}': 'added it to {p}',
     'รอ “{t}” ให้เสร็จก่อน': 'set it to wait for “{t}”',
     'แนบ “{f}”': 'attached “{f}”',
@@ -1015,7 +1015,7 @@
     'งานที่อยู่เฉพาะโปรเจกต์นี้ถูกลบไปด้วย': 'tasks that lived only here were deleted too',
     'ล้างข้อมูลทั้งหมดและเริ่มใหม่': 'cleared everything and started over',
 
-    /* --- ข้อความในกล่องข้อความ --- */
+    /* --- ข้อความในกล่องแจ้งเตือน --- */
     'มอบหมายงาน “{t}” ให้คุณ': 'assigned “{t}” to you',
     'งาน “{t}” พร้อมทำต่อแล้ว': '“{t}” is ready to move on',
     'พูดถึงคุณในความเห็น': 'mentioned you in a comment',
@@ -1090,11 +1090,11 @@
     'ตั้งใหม่': 'Set new',
     'ลบลำดับก่อนหลังนี้?': 'Remove this dependency?',
     'ลบลำดับ': 'Remove',
-    'ลบคอลัมน์นี้?': 'Delete this section?',
-    'ลบคอลัมน์นี้': 'Delete section',
+    'ลบเซกชันนี้?': 'Delete this section?',
+    'ลบเซกชันนี้': 'Delete section',
     'ลบเส้นฐานนี้': 'Delete baseline',
     'สร้างพอร์ตโฟลิโอ': 'Create portfolio',
-    'งานข้างในจะย้ายไปคอลัมน์แรก': 'Tasks inside move to the first section.',
+    'งานข้างในจะย้ายไปเซกชันแรก': 'Tasks inside move to the first section.',
     'ลบพอร์ตโฟลิโอ “{name}”?': 'Delete the portfolio “{name}”?',
     'โปรเจกต์ข้างในจะยังอยู่ครบ ลบแค่กล่องที่ใช้จัดกลุ่ม':
       'The projects inside stay — only the grouping is removed.',
@@ -1103,7 +1103,7 @@
     'คัดลอกโปรเจกต์': 'Duplicate project',
     'จะเอางานทั้งหมดไปด้วยไหม': 'Should the tasks come along?',
     'คัดลอกงานไปด้วย': 'Copy the tasks too',
-    'เอาแค่โครงคอลัมน์และฟิลด์': 'Just the sections and fields',
+    'เอาแค่โครงเซกชันและฟิลด์': 'Just the sections and fields',
     'ลบโปรเจกต์ “{name}”?': 'Delete the project “{name}”?',
     'งานที่อยู่เฉพาะในโปรเจกต์นี้จะถูกลบด้วย': 'Tasks that live only in this project are deleted too.',
     'ลบโปรเจกต์': 'Delete project',
@@ -1369,7 +1369,7 @@
     'ใส่ชื่องานก่อน': 'Enter a task name first',
     'คัดลอกมาจาก “{t}”': 'duplicated this from “{t}”',
     'สร้างงานติดตามผล': 'Create follow-up task', 'สร้างงานติดตามผลแล้ว': 'Follow-up task created',
-    'มอบหมายให้คุณ อยู่โปรเจกต์และคอลัมน์เดียวกับงานเดิม และลิงก์กลับไปที่งานเดิมในรายละเอียด':
+    'มอบหมายให้คุณ อยู่โปรเจกต์และเซกชันเดียวกับงานเดิม และลิงก์กลับไปที่งานเดิมในรายละเอียด':
       'Assigned to you, in the same project and section, with a link back to the original task in the description.',
     'ติดตาม:': 'Follow up:', 'ติดตามผลจาก': 'Follow-up from',
     'สร้างงานติดตามผล “{t}”': 'created follow-up task “{t}”',
@@ -1500,7 +1500,7 @@
       'Add this task to a project — everyone who can see that project will see it (and its subtasks).',
     'ยังไม่มีโปรเจกต์ที่คุณแก้ไขได้': 'There is no project you can edit yet', 'เลือกโปรเจกต์ก่อน': 'Pick a project first',
     'งานนี้อยู่ใน {p} แล้ว ทุกคนที่เห็นโปรเจกต์เห็นงานนี้ด้วย': 'The task is now in {p} and visible to everyone who can see the project',
-    /* 2a — กล่องข้อความ */
+    /* 2a — กล่องแจ้งเตือน */
     'กิจกรรม': 'Activity', 'บุ๊กมาร์ก': 'Bookmarks', 'เก็บถาวร': 'Archive', 'ยังไม่อ่าน': 'Unread only',
     '@พูดถึงฉัน': '@Mentioned me', 'มอบหมายให้ฉัน': 'Assigned to me', 'ที่ฉันมอบหมาย': 'Assigned by me',
     'แสดงเฉพาะ': 'Show only', 'จากใคร': 'From', 'จาก {who}': 'From {who}',
@@ -1528,7 +1528,7 @@
     'อยู่ในช่วงห้ามรบกวนที่ตั้งไว้ {a}–{b}': 'Inside your quiet hours {a}–{b}',
     'ไม่ขึ้นตัวเลขแดงและไม่เด้งเตือน': 'no red badge and no pop-ups',
     'ห้ามรบกวนทุกวันตามช่วงเวลา': 'Daily quiet hours',
-    'ในช่วงนี้ไม่ขึ้นตัวเลขแดงและไม่เด้งเตือน รายการยังเข้ากล่องข้อความครบ':
+    'ในช่วงนี้ไม่ขึ้นตัวเลขแดงและไม่เด้งเตือน รายการยังเข้ากล่องแจ้งเตือนครบ':
       'No red badge or pop-ups during these hours — everything still arrives in your inbox.',
     'ตั้งแต่': 'From', 'ถึง': 'to',
     'การแจ้งเตือนของโปรเจกต์นี้': 'Notifications for this project', 'การแจ้งเตือนของ {p}': 'Notifications for {p}',
@@ -1593,20 +1593,20 @@
     'รีเซ็ต': 'Reset', 'บันทึกทับแท็บนี้': 'Save to this tab', 'บันทึกเป็นแท็บใหม่': 'Save as new tab',
     'ยังไม่มีตัวเลือกให้เลือก': 'Nothing to choose yet', 'พิมพ์คำ': 'Type a word',
     'วันที่ทำเสร็จ': 'Completed on', 'แก้ไขล่าสุด': 'Last modified', 'สร้างโดย': 'Created by',
-    'ไม่แบ่งแถว': 'No rows', 'คอลัมน์ของโปรเจกต์': 'Project sections',
+    'ไม่แบ่งแถว': 'No rows', 'เซกชันของโปรเจกต์': 'Project sections',
     'คอลัมน์ที่แสดง': 'Visible columns', 'จัดลำดับคอลัมน์…': 'Reorder columns…', 'เพิ่มฟิลด์ใหม่': 'Add a new field',
     'บันทึกการเปลี่ยนแปลง': 'Save changes', 'ทิ้งการเปลี่ยนแปลง': 'Discard changes',
     'ย้ายไปทางซ้าย': 'Move left', 'ย้ายไปทางขวา': 'Move right', 'ตั้งเป็นมุมมองเริ่มต้น': 'Set as default view',
     'ลบแท็บ': 'Delete tab', 'เฉพาะคนที่แก้โครงสร้างโปรเจกต์ได้จึงแก้แท็บนี้ได้': 'Only people who can edit the project structure can change this tab',
     'นี่คือมุมมองเริ่มต้นของโปรเจกต์': 'This is the project’s default view',
     'วันเริ่มและกำหนดส่ง': 'Start and due dates', 'ค่าฟิลด์ที่สร้างเอง': 'Custom field values',
-    'ทำสำเนาคอลัมน์': 'Duplicate section', '“{s}” มีงาน {n} งาน': '“{s}” has [n|1 task|{n} tasks]',
+    'ทำสำเนาเซกชัน': 'Duplicate section', '“{s}” มีงาน {n} งาน': '“{s}” has [n|1 task|{n} tasks]',
     'วางไว้ในโปรเจกต์': 'Put it in project', '(โปรเจกต์นี้)': '(this project)',
     'ค่าฟิลด์ที่สร้างเองคัดลอกได้เฉพาะในโปรเจกต์เดียวกัน เพราะฟิลด์เป็นของแต่ละโปรเจกต์':
       'Custom field values are only copied within the same project, because fields belong to each project.',
     'ทำสำเนา': 'Duplicate', 'เลิกเรียงก่อน จึงจะเลื่อนลำดับเองได้': 'Turn off sorting first to reorder by hand',
-    'ย่อคอลัมน์นี้': 'Collapse this column', 'ทำสำเนาคอลัมน์…': 'Duplicate section…',
-    'ทำสำเนาคอลัมน์แล้ว ({n} งาน)': 'Section duplicated ([n|1 task|{n} tasks])',
+    'ย่อคอลัมน์นี้': 'Collapse this column', 'ทำสำเนาเซกชัน…': 'Duplicate section…',
+    'ทำสำเนาเซกชันแล้ว ({n} งาน)': 'Section duplicated ([n|1 task|{n} tasks])',
     'ทำสำเนาไปที่ “{p}” แล้ว ({n} งาน)': 'Duplicated to “{p}” ([n|1 task|{n} tasks])',
     'ตั้งเป็นมุมมองเริ่มต้นของโปรเจกต์แล้ว': 'Set as the project’s default view',
     'เปลี่ยนชื่อแท็บ': 'Rename tab', 'บันทึกแท็บ “{n}” แล้ว ทุกคนจะเห็นแบบนี้': 'Saved tab “{n}” — everyone will see it this way',
@@ -1633,7 +1633,7 @@
     'และอีก {n} งาน': 'and [n|1 more task|{n} more tasks]', 'เสาร์-อาทิตย์': 'Weekends',
     'งานของฉันที่ยังไม่มีวัน': 'My tasks without dates',
     'เอารูปปกออก': 'Remove cover', 'ตั้งเป็นรูปปก': 'Set as cover', 'รูปปก': 'Cover',
-    'ได้บันทึกแท็บมุมมองในโปรเจกต์': 'saved a view tab in project', 'ได้ทำสำเนาคอลัมน์ในโปรเจกต์': 'duplicated a section in project',
+    'ได้บันทึกแท็บมุมมองในโปรเจกต์': 'saved a view tab in project', 'ได้ทำสำเนาเซกชันในโปรเจกต์': 'duplicated a section in project',
     'มุมมอง': 'View', 'ถูกบล็อกอยู่': 'Is blocked',
     'เป็น': 'is', 'ไม่เป็น': 'is not', 'ว่าง': 'is empty', 'ไม่ว่าง': 'is set',
     'มีอย่างใดอย่างหนึ่ง': 'has any of', 'มีครบทุกค่า': 'has all of',
@@ -1646,14 +1646,14 @@
     'จำนวนที่กรอก': 'Count', 'จำนวนงานย่อย': 'Subtask count',
     'ตั้ง {f} เป็น {v}': 'set {f} to {v}', 'ล้างค่า {f}': 'cleared {f}',
     'บันทึกมุมมอง “{n}”': 'Save view “{n}”', 'เปลี่ยนชื่อมุมมอง': 'Rename view', 'ย้ายแท็บมุมมอง': 'Move view tab',
-    'ตั้งมุมมองเริ่มต้น': 'Set default view', 'ทำสำเนาคอลัมน์ “{s}”': 'Duplicate section “{s}”',
+    'ตั้งมุมมองเริ่มต้น': 'Set default view', 'ทำสำเนาเซกชัน “{s}”': 'Duplicate section “{s}”',
     'ตั้งรูปปก': 'Set cover', 'ตั้งรูปปกของการ์ด': 'set the card cover', 'เอารูปปกของการ์ดออก': 'removed the card cover',
     'ลบแท็บมุมมอง': 'Delete view tab',
 
-    'เพิ่มคอลัมน์ใหม่ในโปรเจกต์': 'Add a section to the project',
+    'เพิ่มเซกชันใหม่ในโปรเจกต์': 'Add a section to the project',
     'เพิ่มงานใต้ / เหนือแถวที่เลือก (มุมมองรายการ)': 'Add a task below / above the selected row (List)',
-    'เลื่อนงานขึ้น / ลงในคอลัมน์': 'Move task up / down in its section',
-    'ย้ายงานไปคอลัมน์ก่อนหน้า / ถัดไป': 'Move task to the previous / next section',
+    'เลื่อนงานขึ้น / ลงในเซกชัน': 'Move task up / down in its section',
+    'ย้ายงานไปเซกชันก่อนหน้า / ถัดไป': 'Move task to the previous / next section',
     'เลือกหลายงานเป็นช่วง / ทีละงาน': 'Select a range of tasks / one at a time',
 
     /* 2c — ค้นหาขั้นสูง การค้นหาที่บันทึก */
@@ -1674,7 +1674,7 @@
     'ทุกเงื่อนไขต้องตรงพร้อมกัน ค้นได้ทุกโปรเจกต์ที่คุณเห็น งานส่วนตัวของคนอื่นไม่แสดง': 'All filters must match. Searches every project you can see; other people\'s private tasks are never shown.',
     'ไม่มีวัน': 'No date',
     'มอบหมายโดย': 'Assigned by', 'มีไฟล์แนบ': 'Has attachment', 'กำลังบล็อกงานอื่น': 'Is blocking',
-    'เป็นงานย่อย': 'Is a subtask', 'คอลัมน์ (เซกชัน)': 'Section',
+    'เป็นงานย่อย': 'Is a subtask', 'เซกชัน (เซกชัน)': 'Section',
     'ตัวดำเนินการในช่องค้นหา: วลี หรือ ไม่เอา ขึ้นต้นด้วย จัดกลุ่ม': 'Search operators: phrase, or, exclude, prefix, grouping',
 
     /* 2c — คีย์ลัด */
@@ -1684,8 +1684,8 @@
     'มอบหมายงาน': 'Assign task', 'เพิ่มแท็ก': 'Add tag', 'เพิ่มผู้ติดตาม': 'Add followers',
     'ติดตาม / เลิกติดตามงาน': 'Follow / unfollow task', 'ถูกใจงาน': 'Like task', 'แก้รายละเอียด': 'Edit description',
     'ลบงานที่เลือก': 'Delete the selected task',
-    'กล่องข้อความ: รายการถัดไป / ก่อนหน้า': 'Inbox: next / previous item',
-    'กล่องข้อความ: บุ๊กมาร์ก / เก็บ / อ่านแล้ว-ยังไม่อ่าน': 'Inbox: bookmark / archive / read-unread',
+    'กล่องแจ้งเตือน: รายการถัดไป / ก่อนหน้า': 'Inbox: next / previous item',
+    'กล่องแจ้งเตือน: บุ๊กมาร์ก / เก็บ / อ่านแล้ว-ยังไม่อ่าน': 'Inbox: bookmark / archive / read-unread',
     'แป้นภาษาไทย': 'Thai keyboard',
     'คีย์ลัดทุกตัวใช้ได้ทั้งแป้นอังกฤษและแป้นไทย (ดูตำแหน่งปุ่ม ไม่ใช่ตัวอักษร)': 'All shortcuts work on English and Thai layouts (by key position, not the typed letter)',
     'อ้างถึงคน งาน หรือโปรเจกต์ (พิมพ์รหัสงานเช่น @REQ-12 ได้)': 'Mention people, tasks or projects (task IDs like @REQ-12 work too)',
@@ -1697,7 +1697,7 @@
 
     /* 2c — แก้หลายงาน */
     'เพิ่มเติม': 'More', 'ผลรวมของงานที่เลือก': 'Sum of the selected tasks',
-    'ย้ายไปคอลัมน์…': 'Move to section…', 'เพิ่มเข้าโปรเจกต์…': 'Add to project…',
+    'ย้ายไปเซกชัน…': 'Move to section…', 'เพิ่มเข้าโปรเจกต์…': 'Add to project…',
     'ตั้งค่าฟิลด์…': 'Set field…', 'เพิ่มผู้ติดตาม…': 'Add followers…', 'เพิ่มแท็ก…': 'Add tag…',
     'ทำเป็นหมุดหมาย': 'Mark as milestone', 'ทำเป็นงานขออนุมัติ': 'Mark as approval', 'ทำเป็นงานธรรมดา': 'Mark as task',
     'ให้รองานอื่น…': 'Make dependent on…', 'รวมเป็นงานซ้ำ…': 'Merge duplicates…', 'คัดลอกลิงก์': 'Copy links',
@@ -1772,7 +1772,7 @@
     '(ไม่มีชื่อ)': '(no header)', 'ไม่นำเข้า': 'Don\'t import', 'อีเมลผู้รับผิดชอบ': 'Assignee email',
     'ผู้ร่วมงาน (ผู้ติดตาม)': 'Collaborators (followers)', 'รองาน (ถูกบล็อกโดย)': 'Blocked by (dependencies)',
     'งานที่รองานนี้ (กำลังบล็อก)': 'Dependents (blocking)', 'เป็นงานย่อยของ': 'Parent task', 'ทำเสร็จเมื่อ': 'Completed at',
-    'คอลัมน์ใหม่ {n}': '{n} new [n|section|sections]', 'ฟิลด์ใหม่ {n}': '{n} new [n|field|fields]',
+    'เซกชันใหม่ {n}': '{n} new [n|section|sections]', 'ฟิลด์ใหม่ {n}': '{n} new [n|field|fields]',
     'งานย่อย {n}': '{n} [n|subtask|subtasks]', 'ลำดับก่อนหลัง {n}': '{n} [n|dependency|dependencies]',
     'ต้องเลือกคอลัมน์ที่เป็นชื่องาน': 'Pick the column that holds the task name',
     'ไฟล์ว่างหรือไม่มีบรรทัดข้อมูล': 'The file is empty or has no data rows', 'ไฟล์ใหญ่เกิน 5 MB': 'File is larger than 5 MB',
@@ -1816,23 +1816,23 @@
     'ระบบอัตโนมัติ': 'Automations', 'โดยอัตโนมัติ': 'Automation', 'เขียนโดยอัตโนมัติ': 'Written by an automation',
     'ทำโดยอัตโนมัติ': 'Done by an automation', 'เพิ่มความเห็น': 'Add comment', 'เปลี่ยนผู้ติดตาม': 'Change followers',
     'แก้ค่าฟิลด์': 'Edit field value',
-    'งานถูกเพิ่มเข้าโปรเจกต์': 'Task added to project', 'งานถูกย้ายเข้าคอลัมน์': 'Task moved to a section',
+    'งานถูกเพิ่มเข้าโปรเจกต์': 'Task added to project', 'งานถูกย้ายเข้าเซกชัน': 'Task moved to a section',
     'งานทำเสร็จ / เปิดใหม่': 'Task completed / reopened', 'ผู้รับผิดชอบเปลี่ยน': 'Assignee changed',
     'กำหนดส่งเปลี่ยน': 'Due date changed', 'วันเริ่มเปลี่ยน': 'Start date changed', 'ค่าฟิลด์เปลี่ยน': 'Field changed',
     'มีความเห็นใหม่': 'Comment added', 'มีไฟล์แนบใหม่': 'Attachment added', 'มีผู้ติดตามเพิ่ม': 'Follower added',
     'งานไม่ถูกบล็อกแล้ว': 'Task is no longer blocked', 'สถานะอนุมัติเปลี่ยน': 'Approval status changed',
     'ใกล้ครบกำหนด': 'Due date approaching', 'กดรันเอง': 'Run manually', 'ตามกำหนดเวลา': 'On a schedule',
-    'ย้ายไปคอลัมน์': 'Move to section', 'ทำเครื่องหมายเสร็จ / เปิดใหม่': 'Mark complete / reopen',
+    'ย้ายไปเซกชัน': 'Move to section', 'ทำเครื่องหมายเสร็จ / เปิดใหม่': 'Mark complete / reopen',
     'ตั้งวันเริ่ม': 'Set start date', 'ตั้งค่าฟิลด์': 'Set field', 'เพิ่มเข้าโปรเจกต์อื่น': 'Add to another project',
     'สร้างงาน / งานย่อย / ขออนุมัติ': 'Create task / subtask / approval', 'ย้ายไปเซกชันในงานของฉัน': 'Move to my section',
-    'ย้ายเข้า “{s}”': 'Moved to “{s}”', 'ย้ายคอลัมน์': 'Moved to any section', 'งานถูกเปิดใหม่': 'Task reopened',
+    'ย้ายเข้า “{s}”': 'Moved to “{s}”', 'ย้ายเซกชัน': 'Moved to any section', 'งานถูกเปิดใหม่': 'Task reopened',
     'งานทำเสร็จ': 'Task completed', 'เอาผู้รับผิดชอบออก': 'Assignee removed', 'มอบหมายให้ {u}': 'Assigned to {u}',
     '{f} เป็น “{v}”': '{f} is “{v}”', '{f} เปลี่ยน': '{f} changed', '(ฟิลด์ถูกลบ)': '(field deleted)',
     'สถานะอนุมัติเป็น “{s}”': 'Approval status is “{s}”', 'อีก {n} วันครบกำหนด': 'Due in {n} [n|day|days]',
     'เลยกำหนด {n} {u}': '{n} {u} overdue', 'ชั่วโมง': 'hours', 'ทุกวัน{d}': 'Every {d}', 'ทุกวันที่ {d} ของเดือน': 'Monthly on day {d}',
     'วันที่ทำงาน': 'the run date', 'ฟิลด์วันที่': 'a date field', '{n} {u} ก่อน{f}': '{n} {u} before {f}', '{n} {u} หลัง{f}': '{n} {u} after {f}',
     'ไม่มีผู้รับผิดชอบ': 'No assignee', 'หมุนเวียน {n} คน': 'Round-robin across {n} [n|person|people]', 'คนจากฟิลด์': 'Person from a field',
-    '(คอลัมน์ถูกลบ)': '(section deleted)', '(ไม่พบคน)': '(unknown person)', '(เซกชันถูกลบ)': '(section deleted)',
+    '(เซกชันถูกลบ)': '(section deleted)', '(ไม่พบคน)': '(unknown person)', '(เซกชันถูกลบ)': '(section deleted)',
     'ย้ายไป “{s}”': 'Move to “{s}”', 'เปิดงานใหม่': 'Reopen task', 'กำหนดส่ง = {d}': 'Due = {d}', 'วันเริ่ม = {d}': 'Start = {d}',
     'ตั้ง {f}': 'Set {f}', 'ความสำคัญ = {p}': 'Priority = {p}', 'สร้างงานย่อยขออนุมัติ': 'Create approval subtask',
     'สร้างงานย่อย': 'Create subtask', 'เพิ่มเข้า {p}': 'Add to {p}', 'ยังไม่มีการกระทำ': 'No actions yet',
@@ -1850,7 +1850,7 @@
       'You can only view these. People who can edit the project create and edit automations, but what you do to tasks (like commenting) still triggers them, and you can run “Run manually” automations from a task menu.',
     'ยังไม่มีการรัน': 'No runs yet', 'สำเร็จ': 'Done', 'ผิดพลาด': 'Failed', 'หยุดกันวน': 'Loop stopped',
     '(อัตโนมัติถูกลบ)': '(automation deleted)', '(ลบแล้ว)': '(deleted)', 'เส้นทาง “อื่น ๆ”': '“Otherwise” path', 'เส้นทาง {n}': 'Path {n}',
-    'คอลัมน์ใดก็ได้': 'Any section', 'เปลี่ยนเป็นใครก็ได้': 'Changed to anyone', 'เปลี่ยนแบบใดก็ได้': 'Any change',
+    'เซกชันใดก็ได้': 'Any section', 'เปลี่ยนเป็นใครก็ได้': 'Changed to anyone', 'เปลี่ยนแบบใดก็ได้': 'Any change',
     'ถูกตั้งหรือเลื่อน': 'Set or moved', 'ถูกลบ': 'Removed', 'โปรเจกต์นี้ยังไม่มีฟิลด์': 'This project has no fields yet',
     'ค่าใดก็ได้': 'Any value', 'ใครก็ได้': 'Anyone', 'สถานะใดก็ได้': 'Any status', 'ก่อนครบกำหนด': 'Before the due date',
     'เลยกำหนดไป': 'Overdue by', 'ชื่อปุ่ม เช่น ส่งตรวจ': 'Button label, e.g. Send for review',
@@ -1863,7 +1863,7 @@
     'เช่น {assignee} ช่วยตรวจ {task} ก่อน {due} ด้วยครับ': 'e.g. {assignee}, please review {task} before {due}',
     'งานย่อยของงานนี้': 'Subtask of this task', 'งานย่อยขออนุมัติ': 'Approval subtask', 'งานใหม่ในโปรเจกต์นี้': 'New task in this project',
     'ชื่องาน เช่น ตรวจ {task}': 'Task name, e.g. Review {task}', 'รายละเอียด (ไม่บังคับ) ใส่ {link} เพื่อลิงก์กลับ': 'Description (optional), add {link} to link back',
-    'คอลัมน์เดียวกับงานที่ทำให้ทำงาน': 'Same section as the triggering task', 'เลือกโปรเจกต์': 'Choose a project', 'คอลัมน์แรก': 'First section',
+    'เซกชันเดียวกับงานที่ทำให้ทำงาน': 'Same section as the triggering task', 'เลือกโปรเจกต์': 'Choose a project', 'เซกชันแรก': 'First section',
     'เพิ่มการกระทำ…': 'Add action…', 'เอาการกระทำนี้ออก': 'Remove this action', 'แก้อัตโนมัติ': 'Edit automation',
     'ชื่อ (ไม่บังคับ)': 'Name (optional)', 'เมื่อ': 'When',
     'กดรันได้จากเมนู ⋯ ของงาน หรือเลือกได้ถึง 50 งานแล้วกด “เพิ่มเติม → รันอัตโนมัติ”': 'Run it from a task ⋯ menu, or select up to 50 tasks and press “More → Run automation”',
@@ -1874,7 +1874,7 @@
     'อื่น ๆ — เมื่อไม่ตรงเส้นทางไหนเลย': 'Otherwise — when no path matches', 'ให้อัตโนมัติอื่นปลุกตัวนี้ได้': 'Can be triggered by other automations',
     'ปิดไว้ = ทำงานเฉพาะเมื่อคนทำ ถ้าเปิด การกระทำของอัตโนมัติอื่นก็ปลุกได้ ลึกได้ไม่เกิน {n} ชั้น และตัวเดิมรันกับงานเดิมได้ครั้งเดียวต่อหนึ่งการกด':
       'Off = runs only on what people do. When on, other automations can trigger it too, at most {n} levels deep, and it runs once per task per action.',
-    'ทำได้สูงสุด {a} การกระทำต่อเส้นทาง {p} เส้นทาง เส้นทางแรกที่ตรงเงื่อนไขครบได้ทำ การกระทำใช้ไม่ได้ (เช่น คอลัมน์ถูกลบ) จะลงประวัติการรันเป็นผิดพลาด':
+    'ทำได้สูงสุด {a} การกระทำต่อเส้นทาง {p} เส้นทาง เส้นทางแรกที่ตรงเงื่อนไขครบได้ทำ การกระทำใช้ไม่ได้ (เช่น เซกชันถูกลบ) จะลงประวัติการรันเป็นผิดพลาด':
       'Up to {a} actions per path and {p} paths. The first path whose conditions all match runs. Actions that cannot run (e.g. deleted section) are logged as failed in the run history.',
     'ใกล้ครบกำหนด → ย้ายไปเซกชัน': 'Due date approaching → move to section', 'เลยกำหนด → ย้ายไปเซกชัน': 'Overdue → move to section',
     'ทำเสร็จ → ย้ายไปเซกชัน': 'Completed → move to section', 'อัตโนมัติของงานของฉัน': 'My Tasks automations',
@@ -1884,8 +1884,8 @@
     'ทำงานเมื่อคุณเปิดแอปอยู่ ตรวจทุก 5 นาที งานที่เสร็จจากเครื่องอื่นจะย้ายตอนคุณเปิดแอปครั้งถัดไป': 'Runs while you have the app open, checked every 5 minutes. Tasks completed elsewhere move the next time you open the app.',
     'รันอัตโนมัติ': 'Run automation', 'รันอัตโนมัติ…': 'Run automation…', 'กับ {n} งาน': 'On {n} [n|task|tasks]',
     'รันได้ครั้งละไม่เกิน {n} งาน': 'At most {n} tasks per run', 'ยังไม่มีอัตโนมัติแบบ “กดรันเอง” ในโปรเจกต์นี้': 'This project has no “Run manually” automations yet',
-    'อัตโนมัติของคอลัมน์นี้ {n} รายการ': '{n} [n|automation|automations] on this section', 'เพิ่มอัตโนมัติให้คอลัมน์นี้': 'Add an automation to this section',
-    'ย้ายไปคอลัมน์อื่น': 'Move to another section', 'เปิดอยู่ {n}': '{n} on',
+    'อัตโนมัติของเซกชันนี้ {n} รายการ': '{n} [n|automation|automations] on this section', 'เพิ่มอัตโนมัติให้เซกชันนี้': 'Add an automation to this section',
+    'ย้ายไปเซกชันอื่น': 'Move to another section', 'เปิดอยู่ {n}': '{n} on',
     'ปิดอัตโนมัติแล้ว': 'Automation turned off', 'เปิดอัตโนมัติแล้ว': 'Automation turned on', 'ทำสำเนาแล้ว (ปิดไว้ก่อน)': 'Duplicated (turned off)',
     'ทำสำเนาไม่ได้ (สูงสุด 50 รายการต่อโปรเจกต์)': 'Cannot duplicate (50 per project at most)', 'ลบอัตโนมัตินี้?': 'Delete this automation?',
     'ลบอัตโนมัติแล้ว': 'Automation deleted', 'ใส่การกระทำอย่างน้อยหนึ่งอย่าง': 'Add at least one action',
@@ -1897,7 +1897,7 @@
     'เปิดอัตโนมัติ': 'Turn automation on', 'ปิดอัตโนมัติ': 'Turn automation off',
     /* ข้อผิดพลาดในประวัติการรัน */
     'ไม่มีงานให้ทำ': 'No task to act on', 'งานไม่ได้อยู่ในโปรเจกต์นี้': 'The task is not in this project',
-    'คอลัมน์ปลายทางถูกลบไปแล้ว': 'The target section was deleted', 'ไม่มีวันตั้งต้นให้นับ': 'No base date to count from',
+    'เซกชันปลายทางถูกลบไปแล้ว': 'The target section was deleted', 'ไม่มีวันตั้งต้นให้นับ': 'No base date to count from',
     'ยังไม่ได้เลือกคนในรายการหมุนเวียน': 'No one is in the round-robin list', 'ทุกคนในรายการหมุนเวียนไม่อยู่': 'Everyone in the round-robin list is away',
     'ไม่พบคนที่จะมอบหมาย': 'No person to assign', 'ฟิลด์นี้ถูกลบไปแล้ว': 'This field was deleted', 'ค่าตัวเลขไม่ถูกต้อง': 'Invalid number',
     'ตัวเลือก “{v}” ถูกลบไปแล้ว': 'Option “{v}” was deleted', 'ข้อความว่าง': 'Empty text', 'ยังไม่ได้ใส่แท็ก': 'No tag given',
@@ -1946,7 +1946,7 @@
     'คำอธิบาย (ไม่บังคับ)': 'Description (optional)', 'ลบคำถามนี้': 'Delete this question', 'คำถาม': 'Question',
     'คำอธิบายใต้คำถาม (ไม่บังคับ)': 'Help text (optional)', 'ตัวเลือก (บรรทัดละหนึ่ง)': 'Options (one per line)', 'ต้องตอบ': 'Required',
     'ใส่ลงใน': 'Map to', 'แนบเข้างานที่สร้าง (ไม่เกิน 2 MB ต่อไฟล์)': 'Attached to the new task (max 2 MB per file)', 'แสดง': 'Show',
-    'เสมอ': 'always', 'เมื่อ “{q}” ตอบ…': 'when “{q}” is…', 'เพิ่มคำถาม…': 'Add question…', 'งานใหม่ไปลงคอลัมน์': 'New tasks go to section',
+    'เสมอ': 'always', 'เมื่อ “{q}” ตอบ…': 'when “{q}” is…', 'เพิ่มคำถาม…': 'Add question…', 'งานใหม่ไปลงเซกชัน': 'New tasks go to section',
     'ชื่องานมาจากคำถาม': 'Task name comes from', 'คำถามที่ผูกกับ “ชื่องาน” (หรือชื่อฟอร์ม + คนส่ง)': 'The question mapped to “Task name” (or form name + submitter)',
     'ผู้รับผิดชอบเริ่มต้น': 'Default assignee', 'คัดลอกคำตอบลงรายละเอียดงาน': 'Copy answers into the task description',
     'ให้คนส่งเป็นผู้ติดตามงาน': 'Add the submitter as a follower', 'แสดงปุ่ม “ส่งอีกครั้ง” หลังส่ง': 'Show a “Submit another” button',
@@ -1958,19 +1958,19 @@
     'ชื่อชนิดงาน เช่น คำขอ บั๊ก คอนเทนต์': 'Type name, e.g. Request, Bug, Content', 'สถานะ (เรียงตามลำดับงาน)': 'Statuses (in workflow order)',
     'เปลี่ยนสี': 'Change colour', 'นับว่าเสร็จ': 'Counts as complete', 'ลบสถานะนี้': 'Delete this status', 'เพิ่มสถานะ': 'Add status',
     'งานที่อยู่ในสถานะที่ถูกลบจะย้ายไปสถานะแรก ติ๊กงานเสร็จ = ย้ายไปสถานะแรกที่ “นับว่าเสร็จ” เปิดงานใหม่ = กลับไปสถานะแรกที่ยังไม่เสร็จ': 'Tasks in a deleted status move to the first status. Completing a task moves it to the first status that counts as complete; reopening moves it back to the first open status.',
-    'โปรเจกต์นี้ยังไม่มีชนิดงานกำหนดเอง': 'This project has no custom task types', '{n} คอลัมน์': '{n} [n|section|sections]',
+    'โปรเจกต์นี้ยังไม่มีชนิดงานกำหนดเอง': 'This project has no custom task types', '{n} เซกชัน': '{n} [n|section|sections]',
     '{n} ฟอร์ม': '{n} [n|form|forms]', '{n} ชนิดงาน': '{n} task [n|type|types]', '{n} อัตโนมัติ': '{n} [n|automation|automations]',
     'เทมเพลตตั้งต้น': 'Starter templates', 'เทมเพลตขององค์กร': 'Organization templates',
     'ยังไม่มี — เปิดโปรเจกต์ที่อยากใช้เป็นแบบ แล้วกดเมนู ⋯ → “บันทึกเป็นเทมเพลตโปรเจกต์…”': 'None yet — open a project you want to reuse and choose ⋯ → “Save as project template…”',
     'ใครใช้หรือแก้เทมเพลตนี้ได้': 'Who can use or edit this template', 'ใช้เทมเพลต “{t}”': 'Use template “{t}”',
     'วันเริ่มโปรเจกต์ (วันของงานนับจากวันนี้)': 'Project start date (task dates count from it)', 'ข้ามเสาร์-อาทิตย์ (นับเฉพาะวันทำงาน)': 'Skip weekends (count working days only)',
     'มอบบทบาทให้คน': 'Assign roles to people', 'จะได้: {c}': 'Includes: {c}', '{n} ฟิลด์': '{n} [n|field|fields]', 'กลับ': 'Back',
-    'เก็บคอลัมน์ ฟิลด์ (ฟิลด์จากคลังเก็บเป็นตัวอ้างอิง) อัตโนมัติ ฟอร์ม ชนิดงาน เทมเพลตงาน และงานพร้อมวันแบบนับจากวันเริ่ม ผู้รับผิดชอบกลายเป็นบทบาทที่เลือกคนตอนใช้': 'Keeps sections, fields (library fields by reference), automations, forms, task types, task templates, and tasks with dates relative to the start. Assignees become roles you fill when using it.',
+    'เก็บเซกชัน ฟิลด์ (ฟิลด์จากคลังเก็บเป็นตัวอ้างอิง) อัตโนมัติ ฟอร์ม ชนิดงาน เทมเพลตงาน และงานพร้อมวันแบบนับจากวันเริ่ม ผู้รับผิดชอบกลายเป็นบทบาทที่เลือกคนตอนใช้': 'Keeps sections, fields (library fields by reference), automations, forms, task types, task templates, and tasks with dates relative to the start. Assignees become roles you fill when using it.',
     'รวมงานและงานย่อย (วันนับจากวันแรกของโปรเจกต์)': 'Include tasks and subtasks (dates relative to the project’s first day)',
     'นับวันแบบข้ามเสาร์-อาทิตย์': 'Count days skipping weekends', 'ทุกคนในองค์กรใช้ได้ (แก้ได้เฉพาะคุณ เพิ่มคนแก้ได้ทีหลัง)': 'Everyone in the organization can use it (only you can edit — add editors later)',
     'บันทึกเทมเพลต': 'Save template', 'ทุกคนในองค์กรใช้ได้': 'Everyone in the organization can use it',
     '“แก้ได้” = เปลี่ยนชื่อ แชร์ และลบได้  “ใช้ได้” = สร้างโปรเจกต์จากเทมเพลตได้อย่างเดียว ผู้ดูแลระบบแก้ได้ทุกเทมเพลต': '“Can edit” = rename, share and delete. “Can use” = create projects from it only. Admins can edit every template.',
-    'แก้ได้': 'Can edit', 'ใช้ได้': 'Can use', 'กลับไปแกลเลอรี': 'Back to gallery', 'เพิ่มลงคอลัมน์ “{s}”': 'Adds to section “{s}”',
+    'แก้ได้': 'Can edit', 'ใช้ได้': 'Can use', 'กลับไปแกลเลอรี': 'Back to gallery', 'เพิ่มลงเซกชัน “{s}”': 'Adds to section “{s}”',
     'เฉพาะโปรเจกต์นี้': 'This project only', 'ใช้ได้ทุกโปรเจกต์': 'All projects', 'ครบกำหนด': 'due', 'มอบให้คนสร้าง': 'assigned to creator',
     'แก้': 'Edit', 'บันทึกเป็นเทมเพลตงาน': 'Save as task template', 'ใช้ได้ที่': 'Available in', 'เฉพาะโปรเจกต์ “{p}”': 'Only project “{p}”',
     'เก็บชื่อ รายละเอียด ชนิด ผู้รับผิดชอบ ผู้ติดตาม แท็ก ค่าฟิลด์ งานย่อย และลำดับก่อนหลังระหว่างงานย่อย วันเก็บเป็น “N วันหลังสร้างงาน” แก้ได้ในหน้าถัดไป': 'Keeps the name, description, type, assignee, followers, tags, field values, subtasks and subtask dependencies. Dates are stored as “N days after creation” — adjust them on the next screen.',
@@ -2056,7 +2056,7 @@
     '{n}/{max} วิดเจ็ต': '{n}/{max} widgets', 'กล่องโค้ด': 'Code block', 'ข้อความว่าง กด ⋯ แล้วแก้ไข': 'Empty — use ⋯ to edit',
     'ข้าม {n} ไฟล์ที่ใหญ่เกิน {m}': '[{n}|Skipped {n} file larger than {m}|Skipped {n} files larger than {m}]',
     'คงเหลือ': 'Remaining', 'ครึ่งความกว้าง': 'Half width', 'คำพูดยกมา': 'Quote', 'ค่าเฉลี่ยของ {f}': 'Average of {f}',
-    'งานตามคอลัมน์': 'Tasks by section', 'งานตามผู้รับผิดชอบ': 'Tasks by assignee', 'งานที่รออยู่จะขยับตาม': 'Dependent tasks will shift',
+    'งานตามเซกชัน': 'Tasks by section', 'งานตามผู้รับผิดชอบ': 'Tasks by assignee', 'งานที่รออยู่จะขยับตาม': 'Dependent tasks will shift',
     'จัดลำดับทรัพยากรสำคัญ': 'Reorder key resources', 'ชม.': 'h', 'ชื่อวิดเจ็ต': 'Widget title', 'ชื่อหมุดหมาย': 'Milestone name',
     'ช่วงละ': 'Period', 'ตอบ': 'Reply', 'ตอบประกาศ': 'Reply to message', 'ตอบประกาศ “{t}” ใน {p}': 'replied to “{t}” in {p}',
     'ตอบ… พิมพ์ @ เพื่ออ้างถึง': 'Reply… type @ to mention', 'ตาราง': 'Table', 'ติดตามประกาศ': 'Follow message',
@@ -2363,12 +2363,12 @@
     'ออฟไลน์อยู่ — แนบไฟล์ไม่ได้จนกว่าจะต่อเน็ต': 'Offline — can’t attach files until you reconnect', 'อัปขึ้นโฟลเดอร์ {f}/attachments ไฟล์ละไม่เกิน 100 MB': 'Uploads to {f}/attachments, up to 100 MB per file',
     'อัปเป็นชิ้น {p}%': 'Uploading in chunks {p}%', 'อัปโหลดไม่สำเร็จ': 'Upload failed', 'อัปไม่ผ่าน {n} ไฟล์ — ยังอยู่ในไฟล์ข้อมูล กดย้ายอีกครั้งเพื่อลองใหม่': '[n|{n} file|{n} files] failed and stayed in the data file — run the move again to retry',
     'เก็บบน SharePoint/OneDrive': 'Stored on SharePoint/OneDrive', 'เก็บบน SharePoint/OneDrive ของบริษัท ไฟล์ละไม่เกิน 100 MB': 'Stored on the company SharePoint/OneDrive, up to 100 MB per file',
-    'เด้งบนเครื่องเมื่อมีรายการใหม่เข้ากล่องข้อความ เฉพาะตอนเปิด Orbit ค้างไว้ในแท็บ ไม่เด้งช่วงห้ามรบกวน และใช้ชนิดที่เลือกไว้ด้านบน': 'Pop up on this device when something new reaches your inbox — only while Orbit is open in a tab, never during Do not disturb, and only for the kinds enabled above',
+    'เด้งบนเครื่องเมื่อมีรายการใหม่เข้ากล่องแจ้งเตือน เฉพาะตอนเปิด Orbit ค้างไว้ในแท็บ ไม่เด้งช่วงห้ามรบกวน และใช้ชนิดที่เลือกไว้ด้านบน': 'Pop up on this device when something new reaches your inbox — only while Orbit is open in a tab, never during Do not disturb, and only for the kinds enabled above',
     'เบราว์เซอร์นี้ไม่รองรับการแจ้งเตือน': 'This browser doesn’t support notifications', 'เบราว์เซอร์บล็อกการแจ้งเตือนของ Orbit อยู่ — อนุญาตในตั้งค่าของเว็บไซต์ก่อน': 'The browser blocks Orbit notifications — allow them in the site settings first',
     'เปิดแจ้งเตือนของเบราว์เซอร์แล้ว': 'Browser notifications on', 'เปิดในแท็บใหม่': 'Open in new tab', 'เพิ่มสื่อฝัง': 'Add embed', 'เริ่มย้าย': 'Start moving',
     'เอาสื่อฝังออกแล้ว': 'Embed removed', 'แก้สื่อฝัง': 'Edit embed', 'แจ้งเตือนของเบราว์เซอร์': 'Browser notifications', 'แจ้งเตือนบนเดสก์ท็อป/มือถือ': 'Desktop/mobile notifications',
     'แนบจาก OneDrive/SharePoint': 'Attach from OneDrive/SharePoint', 'แนบลิงก์ไฟล์ “{f}” แล้ว': 'Attached a link to “{f}”', 'แนบไฟล์ขึ้น SharePoint/OneDrive แล้ว': 'File uploaded to SharePoint/OneDrive',
-    'และอีก {n} รายการในกล่องข้อความ': 'and {n} more in your inbox', 'โฟลเดอร์': 'Folder',
+    'และอีก {n} รายการในกล่องแจ้งเตือน': 'and {n} more in your inbox', 'โฟลเดอร์': 'Folder',
     'โหมดเครื่องเดียว — ไฟล์เก็บมาทั้งไฟล์ ไม่เกิน 2 MB ต่อไฟล์': 'Single-device mode — files are stored whole, up to 2 MB each',
     'โหมดเครื่องเดียว — ไฟล์เก็บในไฟล์ข้อมูล ไม่เกิน 2 MB ต่อไฟล์': 'Single-device mode — files live in the data file, up to 2 MB each',
     'ใช้ได้เมื่อเข้าสู่ระบบโหมดทีมแล้ว ไฟล์จะถูกอัปขึ้นไดรฟ์ แล้วในข้อมูลเหลือแค่ลิงก์ (ย้อนกลับได้)': 'Available once signed in to team mode: files are uploaded to the drive and only links stay in the data (undoable)',
@@ -2503,7 +2503,7 @@
     'งานของความเห็นนี้ถูกลบไปแล้ว': 'Its task was deleted',
     'ในงาน “{t}”': 'on “{t}”',
     'ได้ลบความเห็นในงาน': 'deleted a comment on',
-    /* คำขอสิทธิ์ในกล่องข้อความ */
+    /* คำขอสิทธิ์ในกล่องแจ้งเตือน */
     'ขอสิทธิ์เข้าโปรเจกต์ {p}': 'requested access to {p}',
     'สิทธิ์ที่จะให้': 'Access to grant',
     'ตอบคำขอนี้แล้ว': 'This request has been answered',
@@ -2528,7 +2528,7 @@
     'ทำหมุดหมาย “{t}” ของ {p} สำเร็จ': 'completed the milestone “{t}” in {p}',
     'หมุดหมายสำเร็จ': 'Milestones completed',
     'เมื่อมีคนทำหมุดหมายของโปรเจกต์นี้เสร็จ': 'When someone completes a milestone in this project',
-    /* กล่องข้อความ: รวมกลุ่ม เนื้อหา เลื่อนเตือน หน้าว่าง */
+    /* กล่องแจ้งเตือน: รวมกลุ่ม เนื้อหา เลื่อนเตือน หน้าว่าง */
     '{n} งานรออนุมัติจากคุณ': '[n|{n} task|{n} tasks] waiting for your approval',
     'อีก {n} รายการของงานนี้': '[n|{n} more item|{n} more items] on this task',
     'เตือนอีกครั้ง…': 'Snooze…',
@@ -2585,6 +2585,14 @@
     'ติดตามโปรเจกต์นี้แล้ว — ได้แจ้งเตือนอัปเดตสถานะ งานใหม่ และหมุดหมายที่สำเร็จ': 'Following this project — you’ll be notified about status updates, new tasks and completed milestones'
   };
 
+  /* ข้อความที่เก็บไว้ในบันทึก/การแจ้งเตือนเก่าเป็นคีย์ไทยเดิมที่เรียกเซกชันว่า "คอลัมน์"
+   * เปลี่ยนคำเรียกแล้ว (Sprint 3) จึงผูกคีย์เก่าไว้กับคำแปลเดียวกัน ข้อมูลเก่าในภาษาอังกฤษไม่กลายเป็นภาษาไทย */
+  Object.keys(EN).forEach(function (k) {
+    if (k.indexOf('เซกชัน') < 0) return;
+    var old = k.split('เซกชัน').join('คอลัมน์');
+    if (!(old in EN)) EN[old] = EN[k];
+  });
+
   var lang = 'th';
 
   /* ---------- เอกพจน์ / พหูพจน์ ----------
@@ -2635,11 +2643,18 @@
   function getLang() { return lang; }
 
   /** ภาษาเริ่มต้นเมื่อยังไม่เคยตั้งค่า — เดาจากเบราว์เซอร์ */
+  /* Sprint 3 — ค่าเริ่มต้นขององค์กรคือภาษาไทย ไม่เดาจากเบราว์เซอร์อีกแล้ว
+   * (เครื่องที่ตั้งเป็นอังกฤษทำให้คนไทยทั้งทีมเจอเมนูอังกฤษทั้งที่ไม่ได้เลือก)
+   * คนที่อยากใช้อังกฤษเลือกได้ที่หน้าเข้าสู่ระบบ (เก็บใน localStorage เพราะตอนนั้นยังไม่มี db) หรือในตั้งค่า */
   function detect() {
     try {
-      var n = (global.navigator.language || '').toLowerCase();
-      return n.indexOf('th') === 0 ? 'th' : 'en';
-    } catch (e) { return 'th'; }
+      var g = global.localStorage.getItem('orbit.gateLang');
+      if (g === 'en' || g === 'th') return g;
+    } catch (e) { /* localStorage ใช้ไม่ได้ (โหมดส่วนตัว) — ใช้ไทย */ }
+    return 'th';
+  }
+  function rememberGateLang(l) {
+    try { global.localStorage.setItem('orbit.gateLang', l === 'en' ? 'en' : 'th'); } catch (e) { /* ไม่เป็นไร */ }
   }
 
   var TH_MON = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
@@ -2659,7 +2674,7 @@
   function yearShort(y) { return String(year(y)).slice(2); }
 
   global.I18N = {
-    t: t, setLang: setLang, getLang: getLang, detect: detect,
+    t: t, setLang: setLang, getLang: getLang, detect: detect, rememberGateLang: rememberGateLang,
     monthsShort: monthsShort, monthsFull: monthsFull, dow: dow, dowFull: dowFull,
     year: year, yearShort: yearShort
   };

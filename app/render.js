@@ -89,7 +89,7 @@
     return Math.abs(y - cy) <= 50 ? global.I18N.yearShort(y) : String(global.I18N.year(y));
   }
 
-  /* Sprint 1C — วันที่ดิบ 2026-11-28 ในข้อความที่คนอ่าน (กล่องข้อความ บันทึก) แปลงตามภาษาคนอ่าน
+  /* Sprint 1C — วันที่ดิบ 2026-11-28 ในข้อความที่คนอ่าน (กล่องแจ้งเตือน บันทึก) แปลงตามภาษาคนอ่าน
    * ค่าแทนที่เก็บเป็นรูปมาตรฐานเพื่อเทียบได้ จัดรูปตอนแสดงเท่านั้น (สลับภาษาแล้วเปลี่ยนตาม) */
   function dateParams(p) {
     if (!p) return p;
@@ -106,7 +106,7 @@
       return pre + fmtDate(d);
     });
   }
-  /** ข้อความของการแจ้งเตือน (กล่องข้อความ และแจ้งเตือนของเบราว์เซอร์) วันที่ตามภาษาคนอ่าน */
+  /** ข้อความของการแจ้งเตือน (กล่องแจ้งเตือน และแจ้งเตือนของเบราว์เซอร์) วันที่ตามภาษาคนอ่าน */
   function notifText(n) {
     if (!n.key) return legacyNotifText(n);
     /* Sprint 2B — รายการที่รวมหลายเรื่องของคนเดียวกันในงานเดียวกัน ต่อกันด้วย " · "
@@ -142,7 +142,7 @@
     return out;
   }
   /* Sprint 2B — ข้อมูลเก่าที่เก็บเป็นประโยคไทยสำเร็จรูป ("สมชาย แสดงความเห็น") ลองแปลส่วนหลังชื่อคน
-   * คนใช้ภาษาอังกฤษจะได้ไม่เห็นภาษาไทยปนกลางกล่องข้อความ (ประโยคที่ไม่มีคำแปลคงเดิม) */
+   * คนใช้ภาษาอังกฤษจะได้ไม่เห็นภาษาไทยปนกลางกล่องแจ้งเตือน (ประโยคที่ไม่มีคำแปลคงเดิม) */
   function legacyNotifText(n) {
     var tx = String(n.text == null ? '' : n.text);
     var who = n.actorName && tx.indexOf(n.actorName + ' ') === 0 ? n.actorName : null;
@@ -345,7 +345,7 @@
       /* ห้ามรบกวน — ไม่ขึ้นตัวเลขแดง แต่บอกด้วยไอคอนพระจันทร์ว่ากำลังพักอยู่ ไม่ใช่ว่าไม่มีอะไรเข้า */
       p += section('',
         go('home', route.type === 'home', 'home', 'หน้าแรก') +
-        go('inbox', route.type === 'inbox', 'bell', 'กล่องข้อความ',
+        go('inbox', route.type === 'inbox', 'bell', 'กล่องแจ้งเตือน',
           dnd ? '<span class="sb-dnd" title="' + L('ห้ามรบกวนอยู่') + '">' + I('moon', 13) + '</span>'
               : (unread ? '<span class="count alert">' + unread + '</span>' : '')) +
         go('mytasks', route.type === 'mytasks', 'checkCircle', 'งานของฉัน', mineCount ? '<span class="count">' + mineCount + '</span>' : '') +
@@ -543,7 +543,7 @@
     } else if (route.type === 'mytasks') {
       h += '<div class="tb-title">' + I('checkCircle', 20) + ' ' + L('งานของฉัน') + '</div>';
     } else if (route.type === 'inbox') {
-      h += '<div class="tb-title">' + I('bell', 20) + ' ' + L('กล่องข้อความ') + '</div>';
+      h += '<div class="tb-title">' + I('bell', 20) + ' ' + L('กล่องแจ้งเตือน') + '</div>';
     } else if (route.type === 'calendar') {
       h += '<div class="tb-title">' + I('calendar', 20) + ' ' + L('ปฏิทินรวม') + '</div>';
     } else if (route.type === 'pages') {
@@ -611,7 +611,7 @@
       h += '<button class="btn m2a-hide" data-act="inbox-archive-all" title="' + L('เก็บทั้งหมด') + '">' +
         I('archive', 14) + '<span class="hide-sm">' + L('เก็บทั้งหมด') + '</span></button>';
       h += '<button class="btn btn-ghost m2a-only m2a-inbox-more' + (dndOn ? ' btn-dnd-on' : '') +
-        '" data-act="m2a-inbox-menu" title="' + esc(L('เมนูกล่องข้อความ')) + '" aria-label="' + esc(L('เมนูกล่องข้อความ')) + '">' +
+        '" data-act="m2a-inbox-menu" title="' + esc(L('เมนูกล่องแจ้งเตือน')) + '" aria-label="' + esc(L('เมนูกล่องแจ้งเตือน')) + '">' +
         (dndOn ? I('moon', 15) : I('more')) + '</button>';
     } else if (route.type === 'portfolio') {
       h += followBtn('portfolio', route.id);          // Sprint 2B
@@ -1357,7 +1357,7 @@
     }
     if (bySection && canStruct) {
       h += '<div style="padding:10px 24px 60px"><button class="add-row" data-act="add-section">' +
-        I('plus', 14) + ' ' + L('เพิ่มคอลัมน์') + '</button></div>';
+        I('plus', 14) + ' ' + L('เพิ่มเซกชัน') + '</button></div>';
     }
     h += '</div>';
     return h;
@@ -1428,7 +1428,7 @@
         h += '</div>';
       });
       if (by === 'section' && canStruct) {
-        h += '<button class="col-new" data-act="add-section">' + L('+ เพิ่มคอลัมน์') + '</button>';
+        h += '<button class="col-new" data-act="add-section">' + L('+ เพิ่มเซกชัน') + '</button>';
       }
       return h + '</div>';
     }
@@ -2251,7 +2251,7 @@
     h += '</div>';
 
     // ตามคอลัมน์
-    h += '<div class="panel"><h3>' + L('ตามคอลัมน์') + '</h3>';
+    h += '<div class="panel"><h3>' + L('ตามเซกชัน') + '</h3>';
     p.sections.forEach(function (sec) {
       h += bar(sec.name, s.bySection[sec.id] || 0, s.total, p.color);
     });
@@ -2352,7 +2352,7 @@
       L('เรียง') + (ns ? ' <b class="vtb-n">' + ns + '</b>' : '') + '</button>';
     h += '<button class="vtb-btn' + (grp ? ' on' : '') + '" data-act="pfv-opts" data-page="group">' + I('grid', 14) + ' ' +
       L('จัดกลุ่ม') + '</button>';
-    h += '<button class="vtb-btn" data-act="pfv-opts" data-page="cols">' + I('menu', 14) + ' ' + L('คอลัมน์') + '</button>';
+    h += '<button class="vtb-btn" data-act="pfv-opts" data-page="cols">' + I('menu', 14) + ' ' + L('เซกชัน') + '</button>';
     if (cs) h += '<button class="vtb-btn" data-act="pff-manage" data-id="' + esc(f.id) + '">' + I('hash', 14) + ' ' + L('ฟิลด์') + '</button>';
     h += '<span class="grow"></span>';
     if (cs && ui.sv && ui.dirty) {
@@ -3638,7 +3638,7 @@
     var n = S.autoForSection(pid, secId).length;
     if (!n && !canStruct) return '';
     return '<button class="btn btn-sm btn-ghost sec-bolt' + (n ? ' on' : '') + '" data-act="auto-sec" data-section="' +
-      esc(secId) + '" title="' + esc(n ? L('อัตโนมัติของคอลัมน์นี้ {n} รายการ', { n: n }) : L('เพิ่มอัตโนมัติให้คอลัมน์นี้')) + '">' +
+      esc(secId) + '" title="' + esc(n ? L('อัตโนมัติของเซกชันนี้ {n} รายการ', { n: n }) : L('เพิ่มอัตโนมัติให้เซกชันนี้')) + '">' +
       I('bolt', 13) + (n > 1 ? '<span class="sec-bolt-n">' + n + '</span>' : '') + '</button>';
   }
 
@@ -4015,7 +4015,7 @@
     return h + '</div>';
   }
 
-  /* ---------- กล่องข้อความ ----------
+  /* ---------- กล่องแจ้งเตือน ----------
    * ui = { tab, f: { from, project, mention, toMe, byMe, unread } }
    * การเรียงกับความหนาแน่นจำไว้ต่อคน (personal.inbox) ตัวกรองอยู่แค่ในหน้าจอ */
   /* Sprint 2B — แท็บ "รออนุมัติจากฉัน" ต่อจากกิจกรรม (ผลทดสอบ: หางานรออนุมัติไม่เจอ) */
@@ -4208,7 +4208,7 @@
       t.assigneeId === S.db.currentUserId && S.canApprove(t.id);
   }
 
-  /** ปุ่มตัดสินในแถว — ใช้ทั้งกล่องข้อความ แท็บรออนุมัติ และวิดเจ็ตหน้าแรก */
+  /** ปุ่มตัดสินในแถว — ใช้ทั้งกล่องแจ้งเตือน แท็บรออนุมัติ และวิดเจ็ตหน้าแรก */
   function approvalBtns(t) {
     var a = ' data-id="' + esc(t.id) + '"';
     return '<span class="apv-acts">' +
@@ -4238,7 +4238,7 @@
       '</div>' + (S.canApprove(t.id) ? approvalBtns(t) : '') + '</div>';     // canApprove — บทบาทดูอย่างเดียวไม่เห็นปุ่ม
   }
 
-  /** แท็บ "รออนุมัติจากฉัน" ในกล่องข้อความ */
+  /** แท็บ "รออนุมัติจากฉัน" ในกล่องแจ้งเตือน */
   function approvalsHub() {
     var list = S.approvalsWaiting();
     var h = '<p class="apv-note">' + I('check', 14) + '<span>' +
@@ -4890,7 +4890,7 @@
         /* 3a — กดชื่อคอลัมน์เพื่อย้าย (ผ่าน S.moveTask อัตโนมัติ "ย้ายเข้าคอลัมน์" จึงทำงาน)
          * แก้งานไม่ได้ = ชื่อคอลัมน์เป็นข้อความเฉย ๆ (ย้ายคอลัมน์ก็คือแก้งาน) */
         (sec ? ' · ' + (canW ? '<button class="chip-sec" data-act="dw-sec" data-id="' + esc(t.id) + '" data-project="' +
-          esc(x.project.id) + '" title="' + esc(L('ย้ายไปคอลัมน์อื่น')) + '">' + esc(sec.name) + ' ' +
+          esc(x.project.id) + '" title="' + esc(L('ย้ายไปเซกชันอื่น')) + '">' + esc(sec.name) + ' ' +
           I('chevronDown', 10) + '</button>' : '<span class="chip-sec ro">' + esc(sec.name) + '</span>') : '') +
         (homes.length > 1 && canW ? '<button data-act="unhome" data-id="' + esc(t.id) +
           '" data-project="' + esc(x.project.id) + '" title="' +
@@ -5615,6 +5615,13 @@
     h += '<button class="gate-alt" data-act="use-local">' +
       L('ลองใช้แบบเครื่องเดียวก่อน (ข้อมูลไม่แชร์กับทีม)') + '</button>';
 
+    /* Sprint 3 — เลือกภาษาได้ตั้งแต่หน้านี้ (ก่อนเข้าระบบยังไม่มีตั้งค่าส่วนตัวให้เลือก) */
+    h += '<div class="gate-lang" role="group" aria-label="Language">' +
+      ['th', 'en'].map(function (c) {
+        return '<button data-act="gate-lang" data-v="' + c + '" class="' + (global.I18N.getLang() === c ? 'on' : '') + '">' +
+          (c === 'th' ? 'ไทย' : 'English') + '</button>';
+      }).join('') + '</div>';
+
     h += '<div class="gate-foot">' + I('shield', 14) + '<span>' +
       L('ข้อมูลเก็บอยู่ใน Microsoft 365 ของบริษัทเท่านั้น ไม่ผ่านเซิร์ฟเวอร์อื่น') +
       '</span></div>';
@@ -5673,7 +5680,7 @@
     'project.viewOn': 'ได้เปิดมุมมองในโปรเจกต์',
     'project.viewOff': 'ได้ปิดมุมมองในโปรเจกต์',
     'project.view': 'ได้บันทึกแท็บมุมมองในโปรเจกต์',
-    'section.duplicate': 'ได้ทำสำเนาคอลัมน์ในโปรเจกต์',
+    'section.duplicate': 'ได้ทำสำเนาเซกชันในโปรเจกต์',
     'project.baseline': 'ได้ตั้งเส้นฐานของ',
     'project.baselineClear': 'ได้ลบเส้นฐานของ',
     'project.import': 'ได้นำเข้างานเข้าโปรเจกต์',

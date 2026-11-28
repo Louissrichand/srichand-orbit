@@ -20,7 +20,7 @@
     route: { type: 'home' },
     openTaskId: null,
     calOffset: 0,
-    /* กล่องข้อความ — แท็บและตัวกรองอยู่แค่ในหน้าจอ (การเรียงกับความหนาแน่นจำไว้ใน db.personal) */
+    /* กล่องแจ้งเตือน — แท็บและตัวกรองอยู่แค่ในหน้าจอ (การเรียงกับความหนาแน่นจำไว้ใน db.personal) */
     /* Sprint 2B — open: งานที่กางรายการรวมกลุ่มไว้ (taskId -> true)  snoozed: กำลังดูรายการที่เลื่อนเตือนไว้ */
     inbox: { tab: 'activity', f: {}, open: {}, snoozed: false },
     /* งานของฉัน — เซกชันที่ยุบไว้ และวันที่ปฏิทินกำลังแสดง (มุมมอง/ตัวกรองจำไว้ใน db.personal) */
@@ -182,8 +182,8 @@
     $toast.innerHTML = '<span class="toast-msg">' + R.esc(msg) + '</span>' +
       (actionLabel ? ' <button data-act="' + actionAttr + '">' + R.esc(actionLabel) + '</button>' + kbd : '');
     $toast.classList.toggle('has-act', !!actionLabel);
-    /* แถบแก้หลายงานอยู่ตำแหน่งเดียวกับกล่องข้อความ (ล่างกลางจอ) — ข้อความ "ทำไม่ได้เพราะ…" ทับปุ่มในแถบ
-     * มีแถบอยู่ = ยกกล่องข้อความขึ้นไปเหนือแถบ (styles.css .toast.above-bulk) */
+    /* แถบแก้หลายงานอยู่ตำแหน่งเดียวกับกล่องแจ้งเตือน (ล่างกลางจอ) — ข้อความ "ทำไม่ได้เพราะ…" ทับปุ่มในแถบ
+     * มีแถบอยู่ = ยกกล่องแจ้งเตือนขึ้นไปเหนือแถบ (styles.css .toast.above-bulk) */
     var bb = document.querySelector('.bulkbar');
     $toast.classList.toggle('above-bulk', !!bb);
     if (bb) $toast.style.setProperty('--bulk-h', bb.getBoundingClientRect().height + 'px');
@@ -1007,7 +1007,7 @@
   /** ตัวเลือกคอลัมน์/แถวของบอร์ด — ต้องเป็นค่าที่ "ลากไปวางแล้วตั้งค่าได้" เท่านั้น */
   function boardGroupChoices(p, lanes) {
     var out = lanes ? [['none', L('ไม่แบ่งแถว')]] : [];
-    out.push(['section', L('คอลัมน์ของโปรเจกต์')], ['assignee', L('ผู้รับผิดชอบ')], ['priority', L('ความสำคัญ')]);
+    out.push(['section', L('เซกชันของโปรเจกต์')], ['assignee', L('ผู้รับผิดชอบ')], ['priority', L('ความสำคัญ')]);
     out = out.concat(typeGroupChoices(p));
     p.fields.forEach(function (f) {
       if (f.type === 'select' || f.type === 'person') out.push(['field:' + f.id, f.name]);
@@ -1969,7 +1969,7 @@
       input.value = '';
       input.remove();
       btn.style.display = '';
-      if (v) S.createTask({ name: v }, projectId, sectionId);
+      if (v) S.createTask(S.quickAdd(v, projectId), projectId, sectionId);
     }
     input.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') {
@@ -1978,7 +1978,7 @@
         input.value = '';
         if (v) {
           state.reopenAddIn = sectionId;
-          S.createTask({ name: v }, projectId, sectionId);
+          S.createTask(S.quickAdd(v, projectId), projectId, sectionId);
         }
       } else if (e.key === 'Escape') {
         input.value = '';
@@ -2083,7 +2083,7 @@
     h += '<div class="field"><label>' + L('ไอคอน') + '</label><input id="pIcon" value="' +
       R.esc(p.icon) + '" maxlength="4" style="width:80px"></div>';
     if (!existing) {
-      h += '<div class="field"><label>' + L('คอลัมน์เริ่มต้น (คั่นด้วยจุลภาค)') + '</label>' +
+      h += '<div class="field"><label>' + L('เซกชันเริ่มต้น (คั่นด้วยจุลภาค)') + '</label>' +
         '<input id="pSections" value="' + L('ค้างอยู่, กำลังทำ, รอตรวจ, เสร็จแล้ว') + '"></div>';
     }
     h += '<div class="field"><label>' + L('สี') + '</label><div class="swatch-pick" id="pColors">';
@@ -2742,7 +2742,7 @@
   function followUpModal(taskId) {
     var t = S.task(taskId);
     return '<h2>' + L('สร้างงานติดตามผล') + '</h2>' +
-      '<p class="prj-note">' + L('มอบหมายให้คุณ อยู่โปรเจกต์และคอลัมน์เดียวกับงานเดิม และลิงก์กลับไปที่งานเดิมในรายละเอียด') + '</p>' +
+      '<p class="prj-note">' + L('มอบหมายให้คุณ อยู่โปรเจกต์และเซกชันเดียวกับงานเดิม และลิงก์กลับไปที่งานเดิมในรายละเอียด') + '</p>' +
       '<div class="field"><label>' + L('ชื่องาน') + '</label><input id="fuName" value="' +
       R.esc(L('ติดตาม:') + ' ' + t.name) + '"></div>' +
       '<div class="field"><label>' + L('กำหนดส่ง') + '</label><input id="fuDue" type="date" value="' +
@@ -2752,9 +2752,9 @@
       L('สร้างงาน') + '</button></div>';
   }
 
-  /* ---------- 2a: ตัวช่วยของงานของฉัน กล่องข้อความ และปฏิทิน ---------- */
+  /* ---------- 2a: ตัวช่วยของงานของฉัน กล่องแจ้งเตือน และปฏิทิน ---------- */
 
-  /** ตัวเลือกปัจจุบันของกล่องข้อความ ส่งให้ S.inboxList */
+  /** ตัวเลือกปัจจุบันของกล่องแจ้งเตือน ส่งให้ S.inboxList */
   function inboxOpts() {
     var f = state.inbox.f || {};
     return { tab: state.inbox.tab, from: f.from, project: f.project, mention: f.mention,
@@ -2770,7 +2770,7 @@
 
   function popCheck(on) { return '<span class="pop-check">' + (on ? I('check', 13) : '') + '</span>'; }
 
-  /** แผงตัวกรองกล่องข้อความ — ติ๊กได้หลายอย่างโดยแผงไม่ปิด */
+  /** แผงตัวกรองกล่องแจ้งเตือน — ติ๊กได้หลายอย่างโดยแผงไม่ปิด */
   function inboxFilterPop() {
     var f = state.inbox.f || {};
     var h = '<div class="pop-note strong">' + R.esc(L('แสดงเฉพาะ')) + '</div>';
@@ -3021,9 +3021,9 @@
     var sec = S.section(pid, secId);
     if (!sec) return '';
     var n = S.tasksInSection(pid, secId).length;
-    var h = '<h2>' + L('ทำสำเนาคอลัมน์') + '</h2>';
+    var h = '<h2>' + L('ทำสำเนาเซกชัน') + '</h2>';
     h += '<p class="opt-note" style="margin:0 0 10px">' + esc(L('“{s}” มีงาน {n} งาน', { s: sec.name, n: n })) + '</p>';
-    h += '<div class="field"><label>' + L('ชื่อคอลัมน์ใหม่') + '</label><input id="dsecName" value="' +
+    h += '<div class="field"><label>' + L('ชื่อเซกชันใหม่') + '</label><input id="dsecName" value="' +
       esc(sec.name + ' ' + L('(สำเนา)')) + '"></div>';
     h += '<div class="field"><label>' + L('วางไว้ในโปรเจกต์') + '</label><select id="dsecProject">';
     S.visibleProjects().filter(function (p) {
@@ -3111,7 +3111,7 @@
       var v = inp.value.trim();
       if (!v) { finish(); return; }
       done = true;
-      var t = S.createTaskNear({ name: v }, pid, refId, !!above);
+      var t = S.createTaskNear(S.quickAdd(v, pid), pid, refId, !!above);
       if (t) {
         state.cursor = t.id;
         state.reopenNear = { ref: t.id, above: false };
@@ -3144,7 +3144,7 @@
       h += '<option value="' + R.esc(p.id) + '">' + R.esc(p.icon + ' ' + p.name) + '</option>';
     });
     h += '</select></div>';
-    h += '<div class="field"><label>' + L('คอลัมน์') + '</label><select id="mpSection" class="inp">' +
+    h += '<div class="field"><label>' + L('เซกชัน') + '</label><select id="mpSection" class="inp">' +
       sectionOptions(projs[0].id) + '</select></div>';
     h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
       '<button class="btn btn-primary" data-act="do-make-public" data-id="' + R.esc(taskId) + '">' +
@@ -3174,7 +3174,7 @@
     return h;
   }
 
-  /* แจ้งว่ามีรายการใหม่เข้ากล่องข้อความ (เช่นซิงก์มาจากเพื่อนร่วมทีม)
+  /* แจ้งว่ามีรายการใหม่เข้ากล่องแจ้งเตือน (เช่นซิงก์มาจากเพื่อนร่วมทีม)
    * ห้ามรบกวนอยู่ = ไม่เด้ง ตัวเลขที่แถบซ้ายก็ถูกซ่อนไว้ด้วย */
   var lastUnread = { uid: null, n: 0 };
   function noticeNewInbox() {
@@ -3314,7 +3314,7 @@
     }
     if (S.can('structure')) {
       h += '<button data-act="add-section">' + I('grid', 15) +
-        '<span class="grow">' + L('เพิ่มคอลัมน์') + '</span></button>';
+        '<span class="grow">' + L('เพิ่มเซกชัน') + '</span></button>';
       h += '<div class="pop-sep"></div>';
       h += '<button data-act="import-csv" data-id="' + R.esc(projectId) + '">' +
         I('arrowUp', 15) + '<span class="grow">' + L('นำเข้างานจาก CSV') + '</span></button>';
@@ -3613,7 +3613,7 @@
     /* ตั้งค่า */
     var textQs = f.items.filter(function (it) { return it.kind === 'text' || it.kind === 'long'; });
     h += '<div class="au-block"><div class="au-bh">' + L('ตั้งค่า') + '</div><div class="au-params">' +
-      '<label class="opt-lbl">' + L('งานใหม่ไปลงคอลัมน์') + '</label>' + auSel('fe-set', p.sections.map(function (s) { return [s.id, s.name]; }), f.sec || p.sections[0].id, ' data-k="sec"') +
+      '<label class="opt-lbl">' + L('งานใหม่ไปลงเซกชัน') + '</label>' + auSel('fe-set', p.sections.map(function (s) { return [s.id, s.name]; }), f.sec || p.sections[0].id, ' data-k="sec"') +
       '<label class="opt-lbl">' + L('ชื่องานมาจากคำถาม') + '</label>' +
       auSel('fe-set', [['', L('คำถามที่ผูกกับ “ชื่องาน” (หรือชื่อฟอร์ม + คนส่ง)')]].concat(textQs.map(function (it) { return [it.id, it.label || '?']; })), f.titleQ, ' data-k="titleQ"') +
       '<label class="opt-lbl">' + L('ผู้รับผิดชอบเริ่มต้น') + '</label>' +
@@ -3768,7 +3768,7 @@
     var d = x.data || {}, n = 0;
     var walk = function (list) { (list || []).forEach(function (t) { n++; walk(t.subs); }); };
     walk(d.tasks);
-    var parts = [L('{n} คอลัมน์', { n: (d.sections || []).length }), L('{n} งาน', { n: n })];
+    var parts = [L('{n} เซกชัน', { n: (d.sections || []).length }), L('{n} งาน', { n: n })];
     if ((d.forms || []).length) parts.push(L('{n} ฟอร์ม', { n: d.forms.length }));
     if ((d.types || []).length) parts.push(L('{n} ชนิดงาน', { n: d.types.length }));
     if ((d.automations || []).length) parts.push(L('{n} อัตโนมัติ', { n: d.automations.length }));
@@ -3835,7 +3835,7 @@
     var p = S.project(pid);
     if (!p) return '';
     var h = '<h2>' + L('บันทึกเป็นเทมเพลตโปรเจกต์') + '</h2>';
-    h += '<p class="opt-note" style="margin-top:0">' + L('เก็บคอลัมน์ ฟิลด์ (ฟิลด์จากคลังเก็บเป็นตัวอ้างอิง) อัตโนมัติ ฟอร์ม ชนิดงาน เทมเพลตงาน และงานพร้อมวันแบบนับจากวันเริ่ม ผู้รับผิดชอบกลายเป็นบทบาทที่เลือกคนตอนใช้') + '</p>';
+    h += '<p class="opt-note" style="margin-top:0">' + L('เก็บเซกชัน ฟิลด์ (ฟิลด์จากคลังเก็บเป็นตัวอ้างอิง) อัตโนมัติ ฟอร์ม ชนิดงาน เทมเพลตงาน และงานพร้อมวันแบบนับจากวันเริ่ม ผู้รับผิดชอบกลายเป็นบทบาทที่เลือกคนตอนใช้') + '</p>';
     h += '<div class="field"><label>' + L('ชื่อเทมเพลต') + '</label><input id="ptsName" maxlength="120" value="' + esc(p.name) + '"></div>';
     h += '<div class="field"><label>' + L('คำอธิบาย') + '</label><input id="ptsDesc" maxlength="1000" value="' + esc(S.plainText(p.description || '').slice(0, 200)) + '"></div>';
     h += '<label class="chk"><input type="checkbox" id="ptsTasks" checked> ' + L('รวมงานและงานย่อย (วันนับจากวันแรกของโปรเจกต์)') + '</label>';
@@ -3894,7 +3894,7 @@
     var list = S.taskTemplatesFor(pid);
     var canStruct = S.can('structure') && (!pid || S.canInProject(pid, 'edit'));
     var h = '<h2>' + L('เทมเพลตงาน') + '</h2>';
-    if (secId && p && S.section(pid, secId)) h += '<p class="opt-note" style="margin-top:0">' + esc(L('เพิ่มลงคอลัมน์ “{s}”', { s: S.section(pid, secId).name })) + '</p>';
+    if (secId && p && S.section(pid, secId)) h += '<p class="opt-note" style="margin-top:0">' + esc(L('เพิ่มลงเซกชัน “{s}”', { s: S.section(pid, secId).name })) + '</p>';
     if (!list.length) {
       h += '<div class="au-empty">' + L('ยังไม่มีเทมเพลต — เปิดงานที่ต้องการ กดปุ่ม ⋯ แล้วเลือก “บันทึกเป็นเทมเพลต”') + '</div>';
     }
@@ -4056,7 +4056,7 @@
 
   function trigDefOf(id) { return S.AUTO_TRIGGERS.filter(function (x) { return x.id === id; })[0] || null; }
   function actDefOf(id) { return S.AUTO_ACTIONS.filter(function (x) { return x.id === id; })[0] || null; }
-  function auSecName(pid, sid) { var s = S.section(pid, sid); return s ? s.name : L('(คอลัมน์ถูกลบ)'); }
+  function auSecName(pid, sid) { var s = S.section(pid, sid); return s ? s.name : L('(เซกชันถูกลบ)'); }
   function auUserName(id) { var u = S.user(id); return u ? u.name : L('(ไม่พบคน)'); }
   function auFieldOf(pid, fid) {
     var p = S.project(pid);
@@ -4066,13 +4066,13 @@
   var AU_VARS_USER = [['creator', 'คนสร้างงาน'], ['triggerer', 'คนที่ทำให้อัตโนมัติทำงาน'], ['assignee', 'ผู้รับผิดชอบเดิม']];
   var AU_VAR_LABEL = { task: 'ชื่องาน', link: 'ลิงก์งาน', assignee: 'ผู้รับผิดชอบ', creator: 'คนสร้าง',
     triggerer: 'คนที่ทำให้ทำงาน', due: 'กำหนดส่ง', start: 'วันเริ่ม', created: 'วันที่สร้าง',
-    project: 'โปรเจกต์', section: 'คอลัมน์' };
+    project: 'โปรเจกต์', section: 'เซกชัน' };
 
   /** ทริกเกอร์เป็นประโยคเดียว */
   function trigText(pid, tr) {
     var dd = trigDefOf(tr.type);
     switch (tr.type) {
-      case 'moved': return tr.sec ? L('ย้ายเข้า “{s}”', { s: auSecName(pid, tr.sec) }) : L('ย้ายคอลัมน์');
+      case 'moved': return tr.sec ? L('ย้ายเข้า “{s}”', { s: auSecName(pid, tr.sec) }) : L('ย้ายเซกชัน');
       case 'completed': return tr.v === false ? L('งานถูกเปิดใหม่') : L('งานทำเสร็จ');
       case 'assignee':
         return !tr.user ? L('ผู้รับผิดชอบเปลี่ยน') : tr.user === '@none' ? L('เอาผู้รับผิดชอบออก')
@@ -4391,7 +4391,7 @@
     var d = function (k) { return ' data-k="' + k + '"'; };
     var p = S.project(pid);
     switch (tr.type) {
-      case 'moved': return auSel('ae-tp', auSecOpts(pid, L('คอลัมน์ใดก็ได้')), tr.sec, d('sec'));
+      case 'moved': return auSel('ae-tp', auSecOpts(pid, L('เซกชันใดก็ได้')), tr.sec, d('sec'));
       case 'completed': return auSel('ae-tp', [['1', L('ทำเสร็จ')], ['0', L('เปิดใหม่')]], tr.v === false ? '0' : '1', d('v') + ' data-t="bool"');
       case 'assignee':
         return auSel('ae-tp', [['', L('เปลี่ยนเป็นใครก็ได้')], ['@none', L('ไม่มีผู้รับผิดชอบ')]].concat(auUsers()), tr.user, d('user'));
@@ -4562,7 +4562,7 @@
         h3 += '<input class="opt-select au-gap" data-act="ae-ap"' + k('name') + ' maxlength="300" value="' + esc(a.name || '') + '" placeholder="' + esc(L('ชื่องาน เช่น ตรวจ {task}')) + '">' +
           auVarChips(pid, d, 'name');
         h3 += '<textarea class="opt-select au-text au-gap" rows="2" data-act="ae-ap"' + k('notes') + ' placeholder="' + esc(L('รายละเอียด (ไม่บังคับ) ใส่ {link} เพื่อลิงก์กลับ')) + '">' + esc(a.notes || '') + '</textarea>';
-        if (a.kind === 'task') h3 += '<label class="opt-lbl">' + L('คอลัมน์') + '</label>' + auSel('ae-ap', auSecOpts(pid, L('คอลัมน์เดียวกับงานที่ทำให้ทำงาน')), a.sec, k('sec'));
+        if (a.kind === 'task') h3 += '<label class="opt-lbl">' + L('เซกชัน') + '</label>' + auSel('ae-ap', auSecOpts(pid, L('เซกชันเดียวกับงานที่ทำให้ทำงาน')), a.sec, k('sec'));
         h3 += '<label class="opt-lbl">' + L('ผู้รับผิดชอบ') + '</label>' + auUserSpec(pid, a.assign || { mode: 'none' }, d, 'assign.', true);
         var du = a.due || {};
         h3 += '<label class="chk au-gap"><input type="checkbox" data-act="ae-ap"' + k('due.on') + ' data-t="check"' + (du.on ? ' checked' : '') + '> ' + L('ตั้งกำหนดส่ง') + '</label>';
@@ -4578,7 +4578,7 @@
       case 'addproj': {
         var projs = S.visibleProjects().filter(function (q) { return q.id !== pid && !q.archived && S.canInProject(q.id, 'edit'); });
         var h4 = auSel('ae-ap', [['', L('เลือกโปรเจกต์')]].concat(projs.map(function (q) { return [q.id, (q.icon || '') + ' ' + q.name]; })), a.pid, k('pid'));
-        if (a.pid && S.project(a.pid)) h4 += auSel('ae-ap', auSecOpts(a.pid, L('คอลัมน์แรก')), a.sec, k('sec'));
+        if (a.pid && S.project(a.pid)) h4 += auSel('ae-ap', auSecOpts(a.pid, L('เซกชันแรก')), a.sec, k('sec'));
         return h4;
       }
     }
@@ -4654,7 +4654,7 @@
     }
     h += optToggle('ae-chain', L('ให้อัตโนมัติอื่นปลุกตัวนี้ได้'), a.chain,
       L('ปิดไว้ = ทำงานเฉพาะเมื่อคนทำ ถ้าเปิด การกระทำของอัตโนมัติอื่นก็ปลุกได้ ลึกได้ไม่เกิน {n} ชั้น และตัวเดิมรันกับงานเดิมได้ครั้งเดียวต่อหนึ่งการกด', { n: S.AUTO_MAX_DEPTH }));
-    h += '<p class="opt-note">' + L('ทำได้สูงสุด {a} การกระทำต่อเส้นทาง {p} เส้นทาง เส้นทางแรกที่ตรงเงื่อนไขครบได้ทำ การกระทำใช้ไม่ได้ (เช่น คอลัมน์ถูกลบ) จะลงประวัติการรันเป็นผิดพลาด',
+    h += '<p class="opt-note">' + L('ทำได้สูงสุด {a} การกระทำต่อเส้นทาง {p} เส้นทาง เส้นทางแรกที่ตรงเงื่อนไขครบได้ทำ การกระทำใช้ไม่ได้ (เช่น เซกชันถูกลบ) จะลงประวัติการรันเป็นผิดพลาด',
       { a: S.AUTO_MAX_ACTS, p: S.AUTO_MAX_PATHS }) + '</p>';
     h += '<div class="modal-acts"><button class="btn" data-act="auto-back">' + L('ยกเลิก') + '</button>' +
       '<button class="btn btn-primary" data-act="ae-save">' + L('บันทึก') + '</button></div>';
@@ -4934,7 +4934,7 @@
       ['? / Ctrl + /', L('เปิดหน้าคีย์ลัดนี้')],
       ['Tab + H', L('ไปหน้าแรก')],
       ['Tab + Z', L('ไปงานของฉัน')],
-      ['Tab + I', L('ไปกล่องข้อความ')],
+      ['Tab + I', L('ไปกล่องแจ้งเตือน')],
       ['Tab + Q', L('เพิ่มงานด่วน')],
       ['Tab + O', L('ซ่อน/แสดงแถบซ้าย')],
       ['Tab + Enter', L('เปิดรายละเอียดของงานที่เลือก')],
@@ -4954,13 +4954,13 @@
       ['Tab + Delete', L('ลบงานที่เลือก')],
       ['Tab + X', L('ขยายงานที่เปิดอยู่เต็มจอ (ไม่ได้เปิดงาน = สลับสว่าง/มืด)')],
       ['Shift + Tab + F', L('สร้างงานติดตามผลของงานที่เปิดอยู่')],
-      ['Tab + N', L('เพิ่มคอลัมน์ใหม่ในโปรเจกต์')],
-      ['J / K', L('กล่องข้อความ: รายการถัดไป / ก่อนหน้า')],
-      ['F / I / U', L('กล่องข้อความ: บุ๊กมาร์ก / เก็บ / อ่านแล้ว-ยังไม่อ่าน')],
+      ['Tab + N', L('เพิ่มเซกชันใหม่ในโปรเจกต์')],
+      ['J / K', L('กล่องแจ้งเตือน: รายการถัดไป / ก่อนหน้า')],
+      ['F / I / U', L('กล่องแจ้งเตือน: บุ๊กมาร์ก / เก็บ / อ่านแล้ว-ยังไม่อ่าน')],
       [L('แป้นภาษาไทย'), L('คีย์ลัดทุกตัวใช้ได้ทั้งแป้นอังกฤษและแป้นไทย (ดูตำแหน่งปุ่ม ไม่ใช่ตัวอักษร)')],
       ['Enter / Shift + Enter', L('เพิ่มงานใต้ / เหนือแถวที่เลือก (มุมมองรายการ)')],
-      ['Ctrl + ↑ / ↓', L('เลื่อนงานขึ้น / ลงในคอลัมน์')],
-      ['Ctrl + Shift + ↑ / ↓', L('ย้ายงานไปคอลัมน์ก่อนหน้า / ถัดไป')],
+      ['Ctrl + ↑ / ↓', L('เลื่อนงานขึ้น / ลงในเซกชัน')],
+      ['Ctrl + Shift + ↑ / ↓', L('ย้ายงานไปเซกชันก่อนหน้า / ถัดไป')],
       ['Shift + Click / Ctrl + Click', L('เลือกหลายงานเป็นช่วง / ทีละงาน')],
       [L('วางหลายบรรทัด'), L('ในช่องเพิ่มงานหรืองานย่อย = สร้างหนึ่งงานต่อบรรทัด')],
       [L('ลากแถวไปวางกลางแถวอื่น'), L('แปลงเป็นงานย่อยของงานนั้น (มุมมองรายการ)')],
@@ -5143,7 +5143,7 @@
     return true;
   }
 
-  /** ไฮไลต์รายการที่เลือกด้วยแป้นพิมพ์ในกล่องข้อความ (J/K) */
+  /** ไฮไลต์รายการที่เลือกด้วยแป้นพิมพ์ในกล่องแจ้งเตือน (J/K) */
   function markKbCursor() {
     if (state.cursor) {
       var cr = $view.querySelector('.row[data-id="' + state.cursor + '"], .card[data-id="' + state.cursor + '"]');
@@ -5420,7 +5420,7 @@
     function item(act, icon, label, extra) {
       return '<button data-act="' + act + '"' + (extra || '') + '>' + I(icon, 14) + '<span class="grow">' + label + '</span></button>';
     }
-    if (r.type === 'project' && S.project(r.id)) h += item('bulk-section', 'grid', L('ย้ายไปคอลัมน์…'));
+    if (r.type === 'project' && S.project(r.id)) h += item('bulk-section', 'grid', L('ย้ายไปเซกชัน…'));
     h += item('bulk-project', 'plus', L('เพิ่มเข้าโปรเจกต์…'));
     h += item('bulk-field', 'hash', L('ตั้งค่าฟิลด์…'));
     h += item('bulk-followers', 'users', L('เพิ่มผู้ติดตาม…'));
@@ -5448,7 +5448,7 @@
     h += '<div class="field"><label>' + L('โปรเจกต์') + '</label><select id="mpProject" data-act="mp-project">' +
       projs.map(function (p) { return '<option value="' + R.esc(p.id) + '">' + R.esc(p.icon + ' ' + p.name) + '</option>'; }).join('') +
       '</select></div>';
-    h += '<div class="field"><label>' + L('คอลัมน์') + '</label><select id="mpSection">' +
+    h += '<div class="field"><label>' + L('เซกชัน') + '</label><select id="mpSection">' +
       (first ? sectionOptions(first.id) : '') + '</select></div>';
     h += '<p class="prj-note">' + L('งานยังอยู่ในโปรเจกต์เดิมด้วย (อยู่ได้หลายโปรเจกต์) งานย่อยไม่ถูกเพิ่ม') + '</p>';
     h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button>' +
@@ -5738,7 +5738,7 @@
     if (tab === 'general') {
       h += '<label class="opt-lbl">' + L('หน้าที่เปิดเมื่อเข้าแอป') + '</label>' +
         segmented('set-landing', [['home', L('หน้าแรก')], ['mytasks', L('งานของฉัน')],
-                                  ['inbox', L('กล่องข้อความ')]], S.pref('landing'));
+                                  ['inbox', L('กล่องแจ้งเตือน')]], S.pref('landing'));
       if (R.landingPicker) h += R.landingPicker(S.pref('landing'));    // Sprint 2C — หรือพอร์ตโฟลิโอ/รายงานที่เปิดดูทุกเช้า
       h += '<div class="opt-sep"></div>';
       h += setToggle('set-shortcuts', L('เปิดใช้คีย์ลัด'), !!S.pref('shortcuts'),
@@ -5809,19 +5809,19 @@
 
     if (tab === 'notify') {
       h += '<p class="prj-note">' +
-        L('เลือกว่าเรื่องไหนควรขึ้นในกล่องข้อความ ปิดเรื่องที่ไม่สำคัญออก กล่องข้อความจะได้ยังน่าอ่าน') + '</p>';
+        L('เลือกว่าเรื่องไหนควรขึ้นในกล่องแจ้งเตือน ปิดเรื่องที่ไม่สำคัญออก กล่องแจ้งเตือนจะได้ยังน่าอ่าน') + '</p>';
       S.NOTIFY_KINDS.forEach(function (k) {
         /* Sprint 2B — ค่าเริ่มต้นตามชนิด (บันทึกเวลาปิดไว้ก่อน) อ่านจากที่เดียวกับตอนส่งจริง */
         var on = me ? S.wantsNotify(me.id, k.id) : k.def !== false;
         h += setToggle('set-notify', L(k.label), on, k.desc ? L(k.desc) : '',
           ' data-kind="' + k.id + '"');
       });
-      /* ห้ามรบกวนประจำวัน — พักแบบครั้งเดียวกดได้จากปุ่มพระจันทร์ในกล่องข้อความ */
+      /* ห้ามรบกวนประจำวัน — พักแบบครั้งเดียวกดได้จากปุ่มพระจันทร์ในกล่องแจ้งเตือน */
       var dnd = S.dndOf();
       var sched = !!(dnd.from && dnd.to);
       h += '<label class="opt-lbl">' + L('ห้ามรบกวน') + '</label>';
       h += setToggle('dnd-sched', L('ห้ามรบกวนทุกวันตามช่วงเวลา'), sched,
-        L('ในช่วงนี้ไม่ขึ้นตัวเลขแดงและไม่เด้งเตือน รายการยังเข้ากล่องข้อความครบ'));
+        L('ในช่วงนี้ไม่ขึ้นตัวเลขแดงและไม่เด้งเตือน รายการยังเข้ากล่องแจ้งเตือนครบ'));
       if (sched) {
         h += '<div class="dnd-times">' + L('ตั้งแต่') +
           ' <input class="inp" type="time" data-act="dnd-from" value="' + R.esc(dnd.from) + '"> ' + L('ถึง') +
@@ -5835,7 +5835,7 @@
       }
       if (EXT.hooks.settingsNotify) h += EXT.hooks.settingsNotify();     // 4b — แจ้งเตือนของเบราว์เซอร์
       h += '<div class="prj-warn">' + I('alert', 15) + '<span>' +
-        L('ยังไม่มีการแจ้งเตือนทางอีเมล ทุกอย่างจะเข้ากล่องข้อความใน Orbit') +      // Sprint 1A — ไม่พูดถึงระบบหลังบ้าน
+        L('ยังไม่มีการแจ้งเตือนทางอีเมล ทุกอย่างจะเข้ากล่องแจ้งเตือนใน Orbit') +      // Sprint 1A — ไม่พูดถึงระบบหลังบ้าน
         '</span></div>';
       h += '<div class="modal-acts"><button class="btn btn-primary" data-act="close-modal">' + L('ปิด') + '</button></div>';
     }
@@ -7166,7 +7166,7 @@
     clearSel();
     renderAll();
   }
-  /** ลิงก์จากกล่องข้อความ 'team:<id>[:แท็บ]' 'portfolio:<id>[:แท็บ]' 'goal:<id>' */
+  /** ลิงก์จากกล่องแจ้งเตือน 'team:<id>[:แท็บ]' 'portfolio:<id>[:แท็บ]' 'goal:<id>' */
   function openRoute4a(r) {
     if (EXT.openRoute && EXT.openRoute(r)) return true;          // 4b — ไทม์ชีต รายงาน
     var m = /^(team|portfolio|goal):([^:]+)(?::(\w+))?$/.exec(String(r || ''));
@@ -7224,7 +7224,7 @@
     var id = state.route.id, f = S.portfolio(id);
     if (!f) return '';
     var v = pfViewFor(id), page = state.pfOptPage || 'filters', key = 'pf:' + id;
-    var tabs = [['filters', L('ตัวกรอง')], ['sorts', L('เรียง')], ['group', L('จัดกลุ่ม')], ['cols', L('คอลัมน์')]];
+    var tabs = [['filters', L('ตัวกรอง')], ['sorts', L('เรียง')], ['group', L('จัดกลุ่ม')], ['cols', L('เซกชัน')]];
     var h = '<h2>' + L('ตัวเลือกมุมมองพอร์ตโฟลิโอ') + '</h2><div class="hcard-tabs pfo-tabs">';
     tabs.forEach(function (t) {
       h += '<button class="tb-tab' + (page === t[0] ? ' active' : '') + '" data-act="pfv-opts" data-page="' + t[0] + '">' + esc(t[1]) + '</button>';
@@ -8349,7 +8349,7 @@
     put('comment', ['msg-reply', 'msg-reply-del', 'msg-join', 'msg-file', 'msg-file-pick', 'msg-file-del', 'post-message']);
     put('self', ['crit-toggle']);
     /* Sprint 2B — เลื่อนเตือน ติดตามโปรเจกต์/พอร์ตโฟลิโอ เป็นของส่วนตัว
-     * ตัดสินอนุมัติจากกล่องข้อความ/หน้าแรก ใช้กติกาเดียวกับ set-approval (store.canApprove ตัดสินคนเดียว) */
+     * ตัดสินอนุมัติจากกล่องแจ้งเตือน/หน้าแรก ใช้กติกาเดียวกับ set-approval (store.canApprove ตัดสินคนเดียว) */
     put('self', ['notif-snooze', 'notif-snooze-set', 'notif-unsnooze', 'follow-toggle', 'apv-set']);
     put('write', ['bulk-chain', 'shift-apply', 'shift-only']);
     /* 3c ส่วนที่ 2 — หน้าเอกสาร (store ตรวจสิทธิ์ของหน้า: หน้าของโปรเจกต์ = แก้โปรเจกต์ได้ หน้าเดี่ยว = เจ้าของ/ทุกคน)
@@ -8474,9 +8474,9 @@
   var lastDragEnd = 0;
 
   /* Sprint 1A — คลิกนอกแผงงาน = ปิดแผง "และ" ทำสิ่งที่คลิกด้วย
-   * เดิมฉากหลังรับคลิกแรกไว้ปิดแผงอย่างเดียว (กดอวาตาร์ เมนู รายการถัดไปในกล่องข้อความ แล้วไม่เกิดอะไร)
+   * เดิมฉากหลังรับคลิกแรกไว้ปิดแผงอย่างเดียว (กดอวาตาร์ เมนู รายการถัดไปในกล่องแจ้งเตือน แล้วไม่เกิดอะไร)
    * ตอนนี้ฉากหลังปล่อยคลิกทะลุ (CSS) ตรงนี้จำไว้ว่าคลิกมาจากนอกแผง แล้วปิดแผงหลังคำสั่งของคลิกนั้นทำงานเสร็จ
-   * ถ้าคลิกนั้นเปิดงานอื่น (แถวงาน รายการในกล่องข้อความ) openTask จะล้างธงนี้ แผงแค่สลับไปงานใหม่ ไม่ปิด
+   * ถ้าคลิกนั้นเปิดงานอื่น (แถวงาน รายการในกล่องแจ้งเตือน) openTask จะล้างธงนี้ แผงแค่สลับไปงานใหม่ ไม่ปิด
    * ไม่นับ: กล่องแจ้งเตือน (ปุ่มย้อนกลับ) หน้าต่าง/เมนูลอยที่เปิดจากในแผง รายการ @ และการลากเลือกข้อความที่เริ่มในแผง */
   var outsideClose = null, downInDrawer = false;
   document.addEventListener('pointerdown', function (e) {
@@ -8531,7 +8531,7 @@
     if (act3c(act, el, e)) return;                // 3c
     if (act3c2(act, el, e)) return;
     if (act4a(act, el, e)) return;                // 4a
-    if (act2b(act, el, e)) return;                // Sprint 2B — กล่องข้อความ ศูนย์อนุมัติ ติดตาม
+    if (act2b(act, el, e)) return;                // Sprint 2B — กล่องแจ้งเตือน ศูนย์อนุมัติ ติดตาม
     for (var xa = 0; xa < EXT.acts.length; xa++) if (EXT.acts[xa](act, el, e)) return;   // 4b
 
     switch (act) {
@@ -9223,7 +9223,7 @@
         if (smSec && canSt) {
           smh += '<div class="pop-sep"></div>' +
             '<button data-act="rename-section" data-section="' + esc(smSec) + '">' + I('pencil', 14) + ' ' + L('เปลี่ยนชื่อ') + '</button>' +
-            '<button data-act="dup-section" data-section="' + esc(smSec) + '">' + I('copy', 14) + ' ' + L('ทำสำเนาคอลัมน์…') + '</button>' +
+            '<button data-act="dup-section" data-section="' + esc(smSec) + '">' + I('copy', 14) + ' ' + L('ทำสำเนาเซกชัน…') + '</button>' +
             '<button data-act="delete-section" data-section="' + esc(smSec) + '">' + I('trash', 14) + ' ' + L('ลบคอลัมน์') + '</button>';
         }
         if (smSec && S.can('write') && S.canInProject(state.route.id, 'edit')) {
@@ -9247,7 +9247,7 @@
         var dres = S.duplicateSection(state.route.id, sectionId, { toProject: dsTo, name: dsName, keep: dsKeep });
         if (dres) {
           toast(dres.projectId === state.route.id
-            ? L('ทำสำเนาคอลัมน์แล้ว ({n} งาน)', { n: dres.n })
+            ? L('ทำสำเนาเซกชันแล้ว ({n} งาน)', { n: dres.n })
             : L('ทำสำเนาไปที่ “{p}” แล้ว ({n} งาน)', { p: S.project(dres.projectId).name, n: dres.n }),
             L('ย้อนกลับ'), 'undo');
         }
@@ -10231,7 +10231,7 @@
       }
       case 'access-grant':
       case 'access-deny': {
-        /* Sprint 1B — ตอบจากกล่องข้อความได้ แต่ละแถวมีช่องเลือกสิทธิ์ของตัวเอง (data-sel) */
+        /* Sprint 1B — ตอบจากกล่องแจ้งเตือนได้ แต่ละแถวมีช่องเลือกสิทธิ์ของตัวเอง (data-sel) */
         var arAcc = (document.getElementById(el.dataset.sel || 'arAccess') || {}).value || 'edit';
         if (!S.answerAccess(id, el.dataset.user, act === 'access-grant', arAcc)) { denyToast(); break; }
         toast(act === 'access-grant' ? L('ให้สิทธิ์แล้ว') : L('ปฏิเสธคำขอแล้ว'), L('ย้อนกลับ'), 'undo');
@@ -10306,7 +10306,7 @@
             state.csv = null;
             renderAll();
             var bits = [L('นำเข้า {n} งานแล้ว', { n: cres.tasks })];
-            if (cres.sections) bits.push(L('คอลัมน์ใหม่ {n}', { n: cres.sections }));
+            if (cres.sections) bits.push(L('เซกชันใหม่ {n}', { n: cres.sections }));
             if (cres.fields) bits.push(L('ฟิลด์ใหม่ {n}', { n: cres.fields }));
             if (cres.subtasks) bits.push(L('งานย่อย {n}', { n: cres.subtasks }));
             if (cres.deps) bits.push(L('ลำดับก่อนหลัง {n}', { n: cres.deps }));
@@ -10329,7 +10329,7 @@
       case 'inbox-tab':
         state.inbox.tab = el.dataset.tab || 'activity';
         state.inbox.snoozed = false;                       // Sprint 2B
-        /* Sprint 2B — ปุ่ม "ดูทั้งหมด" ของวิดเจ็ตรออนุมัติบนหน้าแรก พาเข้ากล่องข้อความที่แท็บนั้น */
+        /* Sprint 2B — ปุ่ม "ดูทั้งหมด" ของวิดเจ็ตรออนุมัติบนหน้าแรก พาเข้ากล่องแจ้งเตือนที่แท็บนั้น */
         if (el.dataset.go && state.route.type !== 'inbox') {
           state.route = { type: 'inbox' }; clearSel(); renderAll(); break;
         }
@@ -10389,7 +10389,7 @@
         if (S.task(id)) openModal(followUpModal(id));
         break;
       case 'inbox-read-all': {
-        /* Sprint 2B — ไม่ถาม แต่ย้อนกลับได้จากกล่องข้อความด้านล่าง (หรือ Ctrl+Z) */
+        /* Sprint 2B — ไม่ถาม แต่ย้อนกลับได้จากกล่องแจ้งเตือนด้านล่าง (หรือ Ctrl+Z) */
         var nra = S.markAllRead(S.db.currentUserId);
         toast(nra ? L('ทำเป็นอ่านแล้ว {n} รายการ', { n: nra }) : L('อ่านครบทุกรายการแล้ว'),
           nra ? L('ย้อนกลับ') : null, nra ? 'undo' : null);
@@ -10675,7 +10675,7 @@
       /* --- sections --- */
       case 'add-section': {
         var secPid = state.route.id;
-        askText(L('ชื่อคอลัมน์ใหม่'), '', function (v) {
+        askText(L('ชื่อเซกชันใหม่'), '', function (v) {
           if (v) S.addSection(secPid, v);
         });
         break;
@@ -10683,17 +10683,17 @@
       case 'rename-section': {
         var cur = S.section(state.route.id, sectionId);
         var rsPid = state.route.id, rsSec = sectionId;
-        askText(L('เปลี่ยนชื่อคอลัมน์'), cur ? cur.name : '', function (v) {
+        askText(L('เปลี่ยนชื่อเซกชัน'), cur ? cur.name : '', function (v) {
           if (v) S.renameSection(rsPid, rsSec, v);
         });
         break;
       }
       case 'delete-section': {
         var dsPid = state.route.id, dsSec = sectionId;
-        askConfirm(L('ลบคอลัมน์นี้?'), L('งานข้างในจะย้ายไปคอลัมน์แรก'), function () {
-          if (!S.deleteSection(dsPid, dsSec)) toast(L('ต้องเหลืออย่างน้อย 1 คอลัมน์'));
+        askConfirm(L('ลบเซกชันนี้?'), L('งานข้างในจะย้ายไปเซกชันแรก'), function () {
+          if (!S.deleteSection(dsPid, dsSec)) toast(L('ต้องเหลืออย่างน้อย 1 เซกชัน'));
           else renderAll();
-        }, { ok: L('ลบคอลัมน์นี้') });
+        }, { ok: L('ลบเซกชันนี้') });
         break;
       }
       case 'move-section':
@@ -11914,6 +11914,11 @@
       }
 
       /* --- บัญชีบริษัทและการซิงก์ --- */
+      case 'gate-lang':                       // Sprint 3 — เปลี่ยนภาษาที่หน้าเข้าสู่ระบบ (ไม่แก้ข้อมูล จึงไม่อยู่ใน NEEDS)
+        global.I18N.setLang(el.dataset.v);
+        global.I18N.rememberGateLang(el.dataset.v);
+        showGate();
+        break;
       case 'show-gate':
         closePops();
         gate.error = null; gate.busy = false; gate.checking = false;
@@ -13016,7 +13021,7 @@
         /* Tab+N = เพิ่มคอลัมน์ (เซกชัน) ใหม่ในโปรเจกต์ */
         if (!S.can('structure') || !S.canInProject(state.route.id, 'edit')) { denyToast(); return; }
         var nPid = state.route.id;
-        askText(L('ชื่อคอลัมน์ใหม่'), '', function (v) { if (v) S.addSection(nPid, v); });
+        askText(L('ชื่อเซกชันใหม่'), '', function (v) { if (v) S.addSection(nPid, v); });
       } else if (k === 'm' && state.openTaskId) {
         if (!S.can('write', state.openTaskId)) { denyToast(); return; }
         S.updateTask(state.openTaskId, { assigneeId: S.db.currentUserId });
@@ -13052,7 +13057,7 @@
     var noMod = !e.ctrlKey && !e.metaKey && !e.altKey && !tabHeld;
     var modalOpen = $mdBack.classList.contains('open') || !!document.querySelector('.pop');
 
-    /* 2c — กล่องข้อความ J/K เลื่อน F บุ๊กมาร์ก I เก็บ U อ่านแล้ว/ยังไม่อ่าน (แป้นไทยใช้ได้ผ่าน e.code) */
+    /* 2c — กล่องแจ้งเตือน J/K เลื่อน F บุ๊กมาร์ก I เก็บ U อ่านแล้ว/ยังไม่อ่าน (แป้นไทยใช้ได้ผ่าน e.code) */
     if (state.route.type === 'inbox' && !typing && noMod && !modalOpen && !e.shiftKey &&
         ['j', 'k', 'f', 'i', 'u'].indexOf(kc) >= 0) {
       if (inboxKey(kc)) { e.preventDefault(); return; }
@@ -13792,7 +13797,7 @@
     e.returnValue = '';
   });
 
-  /* ---------- Sprint 2B — กล่องข้อความ ศูนย์อนุมัติ ติดตามโปรเจกต์ ----------
+  /* ---------- Sprint 2B — กล่องแจ้งเตือน ศูนย์อนุมัติ ติดตามโปรเจกต์ ----------
    * รวมคำสั่งใหม่ของชิ้นงานนี้ไว้ที่เดียว (เรียกจากตัวจัดการคลิกหลักก่อน switch) */
   function act2b(act, el, e) {
     var id = el.dataset.id;
@@ -13852,7 +13857,7 @@
     return false;
   }
 
-  /** ตัดสินงานขออนุมัติจากแถวในกล่องข้อความ/หน้าแรก — ใช้ฟังก์ชันของ store ชุดเดียวกับแผงงาน
+  /** ตัดสินงานขออนุมัติจากแถวในกล่องแจ้งเตือน/หน้าแรก — ใช้ฟังก์ชันของ store ชุดเดียวกับแผงงาน
    *  ปฏิเสธถามก่อน (งานปิดและแจ้งคนขอทันที) ขอแก้ไขถามว่าต้องแก้อะไร (ไม่บังคับ — ลงเป็นความเห็นในงาน) */
   function apvDecide(tid, v) {
     var t = S.task(tid);
