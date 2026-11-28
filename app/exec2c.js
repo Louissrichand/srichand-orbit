@@ -31,7 +31,8 @@
   /** ข้อความของความเคลื่อนไหวหนึ่งรายการ (ชุดเดียวกับ storyText ใน render.js) */
   function storyLine(s) {
     if (s.type === 'comment') return L('แสดงความเห็น');
-    var p = R.dateParams(s.params);
+    /* labelParams แปลป้ายสถานะอนุมัติ/ความสำคัญที่เก็บเป็นภาษาไทย ไม่งั้นอังกฤษขึ้น “อนุมัติแล้ว” กลางประโยค */
+    var p = R.labelParams(s.text, R.dateParams(s.params));
     return p ? L(s.text, p) : R.localizeIso(L(s.text));
   }
 

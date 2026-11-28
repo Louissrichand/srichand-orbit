@@ -5550,3 +5550,24 @@ body.print-preview .print-sheet { display: block; width: 210mm; min-height: 297m
   .inbox-tabs { overflow-x: auto; scrollbar-width: none; }
   .inbox-tabs::-webkit-scrollbar { display: none; }
 }
+
+/* ---------- มือถือ: แท็บกล่องข้อความ + แถบแก้หลายงาน (งานเก็บตก) ----------
+ * แท็บ "Archive" ขวาสุดล้นจอ 375px จนเหมือนปุ่มหลุดขอบ — เลื่อนได้อยู่แล้วแต่ไม่มีอะไรบอกว่ายังมีต่อ
+ * จึงบีบช่องไฟแท็บ และเติมเฟดท้ายแถวให้รู้ว่าเลื่อนต่อได้ (padding-right กันแท็บสุดท้ายถูกเฟดบัง) */
+@media (max-width: 700px) {
+  .inbox-tabs {
+    flex-wrap: nowrap; max-width: 100%;
+    padding-right: 28px; scroll-padding-right: 28px;
+    -webkit-mask-image: linear-gradient(to left, transparent, #000 26px); mask-image: linear-gradient(to left, transparent, #000 26px);
+  }
+  .inbox-tabs .tb-tab { padding-left: 10px; padding-right: 10px; flex: none; }
+  .inbox-tb { min-width: 0; }
+  .inbox-tb .segmented { flex: none; }
+}
+/* 375px แถบแก้หลายงานเหลือที่ให้ปุ่มแค่ครึ่งปุ่ม — ลดช่องไฟ/ตัวอักษรให้เห็นปุ่มมากขึ้นโดยปุ่มยังกดโดนนิ้ว (สูง 36px คงเดิม) */
+@media (max-width: 480px) {
+  .bulkbar { gap: 6px; padding: 8px 8px 8px 10px; }
+  .bulkbar .n { font-size: 12px; }
+  .bulkbar .bulk-acts { gap: 5px; }
+  .bulkbar button, .bulkbar select { padding: 0 10px; font-size: 12.5px; }
+}

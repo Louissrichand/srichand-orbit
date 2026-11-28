@@ -4384,7 +4384,7 @@
     task:    ['งาน', 'checkCircle'],
     project: ['โปรเจกต์', 'grid'],
     field:   ['ฟิลด์', 'hash'],
-    comment: ['ความเห็น', 'note']          // Sprint 1B
+    comment: ['ความเห็นที่ถูกลบ', 'note']   // Sprint 1B — คีย์เดี่ยว (อังกฤษ "Comment") ไม่ใช่ "ความเห็น" ที่แปลเป็น Comments
   };
 
   function trashView(projectId) {
@@ -4755,7 +4755,7 @@
       var mayApprove = S.canApprove(t.id);
       var apU = S.user(t.assigneeId);
       var apName = '<b>' + esc(apU ? apU.name : '?') + '</b>';
-      var ACTS = [['approved', 'อนุมัติ', 'check'], ['changes', 'ขอแก้ไข', 'pencil'],
+      var ACTS = [['approved', 'อนุมัติ', 'check'], ['changes', 'ขอให้แก้ไข', 'pencil'],   // ปุ่มเป็นคำกริยา (อังกฤษ "Request changes") ต่างจากชื่อสถานะ "ขอแก้ไข" = Changes requested
                   ['rejected', 'ปฏิเสธ', 'close']];
       h += '<div class="fld"><label>' + L('การอนุมัติ') + '</label><div class="val">' +
         '<div class="fld-inline appr-row"><span class="approval-pill" style="background:' + a.color +
@@ -5905,7 +5905,7 @@
           I(auditIcon(r.action), 14) + '</span><div>' +
           '<b>' + esc(who ? who.name : '—') + '</b> ' + esc(L(auditText(r.action))) +
           (r.target ? ' <u>' + esc(r.target) + '</u>' : '') +
-          (r.detail ? '<span class="d">' + esc(r.detailParams ? L(r.detail, dateParams(r.detailParams)) : localizeIso(L(r.detail))) + '</span>' : '') +
+          (r.detail ? '<span class="d">' + esc(r.detailParams ? L(r.detail, labelParams(r.detail, dateParams(r.detailParams))) : localizeIso(L(r.detail))) + '</span>' : '') +
           '<em title="' + esc(fmtExact(r.at)) + '">' + esc(fmtWhen(r.at)) + '</em></div></li>';
       });
       h += '</ul>';
@@ -6364,7 +6364,7 @@
     accountBlock: accountBlock, accountMenu: accountMenu, gateScreen: gateScreen,
     esc: esc, avatar: avatar, initials: initials,
     fmtDate: fmtDate, fmtWhen: fmtWhen, fmtExact: fmtExact, whenTag: whenTag,
-    yearTag: yearTag, dateParams: dateParams, localizeIso: localizeIso, notifText: notifText,   // Sprint 1C
+    yearTag: yearTag, dateParams: dateParams, labelParams: labelParams, localizeIso: localizeIso, notifText: notifText,   // Sprint 1C
     prio: prio, taskType: taskType, approvalState: approvalState,
     projectState: projectState, recurLabel: recurLabel,
     MON: MON, MONF: MONF, DOW: DOW, DOWR: DOWR, weekStart: weekStart, YR: YR, ICON: ICON,
