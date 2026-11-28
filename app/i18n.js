@@ -2713,6 +2713,12 @@
     'วางหรือพิมพ์ชื่อเซกชัน บรรทัดละหนึ่งเซกชัน': 'Paste or type section names, one per line', 'เช่น\nรอดำเนินการ\nกำลังทำ\nตรวจงาน': 'e.g.\nTo do\nIn progress\nReview',
     'เพิ่มทั้งหมด': 'Add all', 'ยังไม่ได้ใส่ชื่อเซกชัน': 'No section names entered', 'เพิ่ม {n} เซกชันแล้ว': 'Added {n} sections',
     'ลากเพื่อเรียงลำดับเซกชัน': 'Drag to reorder sections', 'ย้ายลำดับเซกชันแล้ว': 'Section order changed',
+    'สำคัญ — แสดงบนการ์ด': 'Important — show on cards', 'แสดงค่าของฟิลด์นี้บนการ์ดบอร์ดและขึ้นก่อนในรายการ แม้ไม่ได้เปิดคอลัมน์ไว้': 'Show this field\'s value on board cards and list it first, even if the column is hidden',
+    'รวมกับฟิลด์อื่น…': 'Merge into another field…', 'ไม่มีฟิลด์ชนิดเดียวกันให้รวม (ฟิลด์จากคลังรวมไม่ได้)': 'No other field of the same type to merge into (library fields can\'t be merged)',
+    'รวม “{a}” เข้ากับฟิลด์ไหน?': 'Merge “{a}” into which field?', 'ค่าของ “{a}” จะย้ายไปฟิลด์ที่เลือกเฉพาะงานที่ฟิลด์นั้นยังว่าง แล้วฟิลด์ “{a}” จะถูกลบ': '“{a}” values move to the chosen field only where it is empty, then “{a}” is removed',
+    'รวมฟิลด์แล้ว ย้ายค่า {n} รายการ': 'Fields merged, {n} values moved', 'ได้รวมฟิลด์ใน': 'merged fields in',
+    'รวมฟิลด์ “{a}” เข้า “{b}”': 'Merge field “{a}” into “{b}”', 'รวมฟิลด์ “{a}” เข้า “{b}” ย้ายค่า {n} รายการ': 'Merged field “{a}” into “{b}”, {n} values moved',
+    'ฟิลด์สำคัญ': 'Important field',
   };
 
   /* ข้อความที่เก็บไว้ในบันทึก/การแจ้งเตือนเก่าเป็นคีย์ไทยเดิมที่เรียกเซกชันว่า "คอลัมน์"

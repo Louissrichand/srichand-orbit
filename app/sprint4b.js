@@ -153,7 +153,7 @@
   global.OrbitExt = global.OrbitExt || [];
   global.OrbitExt.push(function (api) {
     var st = api.state;
-    api.needs('structure', ['s4b-bulk-sec', 's4b-bulk-ok']);
+    api.needs('structure', ['s4b-bulk-sec', 's4b-bulk-ok', 's4b-merge-field']);
 
     /* ----- เซกชัน: ลากสลับลำดับ (เดสก์ท็อป) — บนจอสัมผัสใช้ เลื่อนขึ้น/ลง ในเมนู ⋯ ----- */
     var secDrag = null;
@@ -217,6 +217,25 @@
           '<div class="modal-acts"><button class="btn" data-act="close-modal">' + esc(L('ยกเลิก')) + '</button>' +
           '<button class="btn btn-primary" data-act="s4b-bulk-ok">' + esc(L('เพิ่มทั้งหมด')) + '</button></div>');
         setTimeout(function () { var t = document.getElementById('s4bBulk'); if (t) t.focus(); }, 30);
+        return true;
+      }
+      if (act === 's4b-merge-field') {
+        api.closePops();
+        var mpid = st.route.id, mp = S.project(mpid), fa = ((mp || {}).fields || []).filter(function (f) { return f.id === el.dataset.field; })[0];
+        if (!fa) return true;
+        var cands = mp.fields.filter(function (f) { return f.id !== fa.id && f.type === fa.type && !f.lib && f.type !== 'id' && f.type !== 'formula'; });
+        if (fa.lib || !cands.length) { api.toast(L('ไม่มีฟิลด์ชนิดเดียวกันให้รวม (ฟิลด์จากคลังรวมไม่ได้)')); return true; }
+        api.askChoice(L('รวม “{a}” เข้ากับฟิลด์ไหน?', { a: fa.name }),
+          L('ค่าของ “{a}” จะย้ายไปฟิลด์ที่เลือกเฉพาะงานที่ฟิลด์นั้นยังว่าง แล้วฟิลด์ “{a}” จะถูกลบ', { a: fa.name }),
+          cands.map(function (c) {
+            return { label: c.name, run: function () {
+              api.closeModal();
+              var n = S.mergeFields(mpid, fa.id, c.id);
+              if (n === false) { api.denyToast(); return; }
+              api.renderAll();
+              api.toast(L('รวมฟิลด์แล้ว ย้ายค่า {n} รายการ', { n: n }), L('ย้อนกลับ'), 'undo');
+            } };
+          }));
         return true;
       }
       if (act === 's4b-bulk-ok') {

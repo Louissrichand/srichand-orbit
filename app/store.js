@@ -3197,7 +3197,7 @@
     var order = (v.cols || []);
     all.sort(function (a, b) {
       var ia = order.indexOf(a.id), ib = order.indexOf(b.id);
-      if (ia < 0 && ib < 0) return 0;
+      if (ia < 0 && ib < 0) return a.field && b.field ? (b.field.important ? 1 : 0) - (a.field.important ? 1 : 0) : 0;   // 4b ฟิลด์สำคัญขึ้นก่อน
       if (ia < 0) return 1;
       if (ib < 0) return -1;
       return ia - ib;
@@ -5868,6 +5868,36 @@
     commit();
   }
 
+  /* Sprint 4b — รวมฟิลด์ซ้ำ: ย้ายค่าของ A ไป B เฉพาะงานที่ B ยังว่าง แล้วลบ A (เฉพาะผู้ดูแล, ชนิดเดียวกัน, ไม่ใช่ฟิลด์คลัง) */
+  function mergeFields(projectId, fromId, intoId) {
+    var p = project(projectId);
+    if (!p || !isAdmin(db.currentUserId) || fromId === intoId) return false;
+    var a = (p.fields || []).filter(function (f) { return f.id === fromId; })[0];
+    var b = (p.fields || []).filter(function (f) { return f.id === intoId; })[0];
+    if (!a || !b || a.type !== b.type || a.lib || b.lib) return false;
+    if (a.type === 'id' || a.type === 'formula') return false;
+    snapshot('รวมฟิลด์ “{a}” เข้า “{b}”', { a: a.name, b: b.name });
+    var isEmpty = function (v) { return v === null || v === undefined || v === '' || (Array.isArray(v) && !v.length); };
+    var moved = 0;
+    if ((a.type === 'select' || a.type === 'multi') && a.options) {
+      b.options = b.options || [];
+      a.options.forEach(function (o) {
+        if (!b.options.some(function (x) { return x.name === o.name; })) b.options.push(clone(o));
+      });
+    }
+    db.fieldValues.slice().forEach(function (v) {
+      if (v.fieldId !== fromId) return;
+      var tgt = db.fieldValues.filter(function (x) { return x.taskId === v.taskId && x.fieldId === intoId; })[0];
+      if (!tgt) { v.fieldId = intoId; moved++; }
+      else if (isEmpty(tgt.value)) { tgt.value = v.value; moved++; }
+    });
+    db.fieldValues = db.fieldValues.filter(function (v) { return v.fieldId !== fromId; });
+    p.fields = p.fields.filter(function (f) { return f.id !== fromId; });
+    audit('field.merge', p.name, 'รวมฟิลด์ “{a}” เข้า “{b}” ย้ายค่า {n} รายการ', { a: a.name, b: b.name, n: moved });
+    commit();
+    return moved;
+  }
+
   /** รูปแบบการแสดงของฟิลด์ตัวเลข — ค่าที่กรอกไว้ไม่เปลี่ยน เปลี่ยนแค่หน้าตา */
   function setFieldFormat(projectId, fieldId, format) {
     var p = project(projectId);
@@ -7158,6 +7188,7 @@
     snapshot('แก้ไขฟิลด์ “{f}”', { f: f.name });
     if (typeof patch.name === 'string' && patch.name.trim()) f.name = patch.name.trim().slice(0, 80);
     if (typeof patch.desc === 'string') f.desc = patch.desc.trim().slice(0, 300);
+    if ('important' in patch) f.important = !!patch.important;   // Sprint 4b — แสดงบนการ์ด
     if ('notify' in patch) f.notify = !!patch.notify && (f.type === 'select' || f.type === 'multi');
     if (f.type === 'id' && patch.prefix) f.prefix = cleanPrefix(patch.prefix);
     if ((f.type === 'number' || f.type === 'formula') && 'format' in patch) f.format = normalizeFormat(patch.format);
@@ -12887,7 +12918,7 @@
     deleteProject: deleteProject, duplicateProject: duplicateProject, projectFirstDate: projectFirstDate,
     setProjectStatus: setProjectStatus, statusLog: statusLog, archiveProject: archiveProject,
     addSection: addSection, renameSection: renameSection,
-    deleteSection: deleteSection, moveSection: moveSection, addSections: addSections, reorderSection: reorderSection,
+    mergeFields: mergeFields, deleteSection: deleteSection, moveSection: moveSection, addSections: addSections, reorderSection: reorderSection,
     addField: addField, renameField: renameField, deleteField: deleteField,
     colWidth: colWidth, setColWidth: setColWidth, resetColWidths: resetColWidths,
     saveView: saveView, deleteSavedView: deleteSavedView,

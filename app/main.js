@@ -5446,6 +5446,7 @@
     h += '<div class="field"><label>' + L('ชื่อฟิลด์') + ' *</label><input id="feName" value="' + R.esc(f.name) + '"></div>';
     h += '<div class="field"><label>' + L('คำอธิบาย') + '</label><textarea id="feDesc" rows="2" placeholder="' +
       L('บอกทีมว่าฟิลด์นี้ใช้กรอกอะไร') + '">' + R.esc(f.desc || '') + '</textarea></div>';
+    h += '<div class="field"><label class="chk"><input type="checkbox" id="feImportant"' + (f.important ? ' checked' : '') + '> ' + L('สำคัญ — แสดงบนการ์ด') + '</label><div class="fld-hint">' + L('แสดงค่าของฟิลด์นี้บนการ์ดบอร์ดและขึ้นก่อนในรายการ แม้ไม่ได้เปิดคอลัมน์ไว้') + '</div></div>';
     if (f.type === 'id') {
       h += '<div class="field"><label>' + L('คำนำหน้ารหัส') + '</label><input id="fePrefix" value="' + R.esc(f.prefix) +
         '" maxlength="8"><div class="fld-hint">' + L('ตัวอักษรอังกฤษหรือตัวเลข เช่น REQ → REQ-12 เลขถัดไปคือ {n}', { n: f.next }) + '</div></div>';
@@ -8915,6 +8916,7 @@
           if (!fePatch.options.length) { toast(L('ใส่ตัวเลือกอย่างน้อย 1 รายการ')); break; }
           fePatch.notify = !!(document.getElementById('feNotify') || {}).checked;
         }
+        if (document.getElementById('feImportant')) fePatch.important = document.getElementById('feImportant').checked;
         if (document.getElementById('fePrefix')) fePatch.prefix = document.getElementById('fePrefix').value;
         if (document.getElementById('nfKind')) fePatch.format = readNumberFormat();
         if (document.getElementById('nfExpr')) {          // 3c — สูตร
@@ -8966,6 +8968,7 @@
           (fmObj && fmObj.type === 'number'
             ? '<button data-act="field-format" data-field="' + R.esc(fid) + '">' +
               I('hash', 14) + ' ' + L('รูปแบบตัวเลข…') + '</button>' : '') +
+          (S.isAdmin() ? '<button data-act="s4b-merge-field" data-field="' + R.esc(fid) + '">' + I('copy', 14) + ' ' + L('รวมกับฟิลด์อื่น…') + '</button>' : '') +
           '<button data-act="drop-field" data-field="' + R.esc(fid) + '">' +
           I('trash', 14) + ' ' + L('ลบ') + '</button>');
         break;

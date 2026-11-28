@@ -995,7 +995,7 @@
     if (size !== 's') {
       var proj = S.project(opts.pid || '') || (S.projectsOfTask(t.id)[0] || {}).project;
       ((proj && proj.fields) || []).forEach(function (f) {
-        if (!show('field:' + f.id)) return;
+        if (!show('field:' + f.id) && !f.important) return;   // 4b — ฟิลด์สำคัญแสดงเสมอ
         var fv = S.fieldValue(t.id, f.id);
         if (fv === null || fv === undefined || fv === '' || (Array.isArray(fv) && !fv.length)) return;
         foot += '<span class="card-fv" title="' + esc(f.name) + '">' + fieldCell(t, f) + '</span>';
@@ -1241,7 +1241,8 @@
         esc(f.id) + '" data-field="' + esc(f.id) + '"' + (f.desc ? ' title="' + esc(f.desc) + '"' : '') + '>' +
         (f.lib ? '<span class="th-lib" title="' + L('ฟิลด์จากคลังขององค์กร') + '">' + I('building', 11) + '</span>' : '') +
         (ft ? I(ft.icon, 13) : '') +
-        '<span class="th-nm">' + esc(f.name) + '</span>' + sortMark(view, 'field:' + f.id) +
+        '<span class="th-nm">' + esc(f.name) + '</span>' + (f.important ? '<span class="fld-imp" title="' + esc(L('ฟิลด์สำคัญ')) + '">★</span>' : '') +
+        (f.desc ? '<span class="fld-info" title="' + esc(f.desc) + '">ⓘ</span>' : '') + sortMark(view, 'field:' + f.id) +
         '<button class="th-menu" data-act="field-menu" data-field="' + esc(f.id) +
         '" title="' + L('เมนู') + '">' + I('chevronDown', 12) + '</button>' + resizer(f.id) + '</div>';
     }
@@ -5034,7 +5035,7 @@
         (sec2 ? '<em>' + esc(sec2.name) + '</em>' : '') + '</div>';
       x.project.fields.forEach(function (f) {
         h += '<div class="fld"><label' + (f.desc ? ' title="' + esc(f.desc) + '"' : '') + '>' + esc(f.name) +
-          (f.desc ? ' <span class="fld-q">?</span>' : '') + '</label>' +
+          (f.desc ? ' <span class="fld-q fld-info">ⓘ</span>' : '') + '</label>' +
           '<div class="val">' + fieldInput(f) + '</div></div>';
       });
       h += '</div>';
@@ -5714,6 +5715,7 @@
     'project.view': 'ได้บันทึกแท็บมุมมองในโปรเจกต์',
     'section.duplicate': 'ได้ทำสำเนาเซกชันในโปรเจกต์',
     'project.baseline': 'ได้ตั้งเส้นฐานของ',
+    'field.merge': 'ได้รวมฟิลด์ใน',
     'project.baselineClear': 'ได้ลบเส้นฐานของ',
     'project.import': 'ได้นำเข้างานเข้าโปรเจกต์',
     'project.type': 'ได้บันทึกชนิดงานในโปรเจกต์',

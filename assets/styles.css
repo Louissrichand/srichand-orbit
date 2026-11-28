@@ -5637,3 +5637,5 @@ span.tb-people.ro { pointer-events: none; }
 .tbl-sec.s4b-drop-a { box-shadow: 0 2px 0 0 var(--accent); }
 .col-head.s4b-drop-b { box-shadow: -3px 0 0 0 var(--accent); }
 .col-head.s4b-drop-a { box-shadow: 3px 0 0 0 var(--accent); }
+.fld-imp { color: var(--warn, #f5a623); font-size: 11px; margin-left: 3px; }
+.fld-info { color: var(--fg-faint); font-size: 12px; margin-left: 4px; cursor: help; }
