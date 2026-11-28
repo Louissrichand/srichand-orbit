@@ -2599,6 +2599,11 @@
     'ประธาน': 'Chair', 'เลขา': 'Secretary',
     'ทบทวนงานค้างจากครั้งที่แล้ว': 'Review open items from last time', 'อัปเดตความคืบหน้าแต่ละฝ่าย': 'Progress updates from each team',
     'สรุปมติและมอบหมายงาน': 'Summarize decisions and assign tasks',
+    'ยกงานค้างไปเซกชัน…': 'Carry open tasks to a section…', 'เซกชันนี้ไม่มีงานค้าง': 'No open tasks in this section',
+    'ยกงานค้างไปเซกชันไหน': 'Carry open tasks to which section?',
+    '{n} งานที่ยังไม่เสร็จจะถูกย้ายไป': '[n|1 open task|{n} open tasks] will be moved',
+    'ย้าย {n} งานไป “{s}” แล้ว': 'Moved [n|1 task|{n} tasks] to “{s}”',
+    'แชร์ให้ทีม (ไม่บังคับ)': 'Share with a team (optional)', 'ไม่แชร์ให้ทีม': 'Don’t share with a team',
     /* Sprint 3 — อภิธานศัพท์ */
     'ศัพท์ที่ใช้ใน Orbit': 'Orbit glossary',
     'กลุ่มงานที่ทำเรื่องเดียวกัน มีเซกชัน สมาชิก และมุมมองของตัวเอง': 'A group of work on one topic, with its own sections, members and views',

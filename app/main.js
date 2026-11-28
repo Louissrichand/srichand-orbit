@@ -2092,6 +2092,12 @@
       h += '<div class="field"><label>' + L('ใครเห็นโปรเจกต์นี้') + '</label><select id="pVis">' +
         '<option value="org">' + L('เปิดให้ทั้งองค์กร') + '</option>' +
         '<option value="private">' + L('ปิด เห็นเฉพาะคนที่เชิญ') + '</option></select></div>';
+      /* Sprint 3 — แชร์ให้ทีมตั้งแต่สร้าง (ไม่บังคับ) ทีมได้สิทธิ์แก้ไขงาน เปลี่ยนทีหลังได้ในหน้าต่างสิทธิ์ของโปรเจกต์ */
+      var npTeams = S.teams();
+      if (npTeams.length) {
+        h += '<div class="field"><label>' + L('แชร์ให้ทีม (ไม่บังคับ)') + '</label><select id="pTeam"><option value="">' + L('ไม่แชร์ให้ทีม') + '</option>' +
+          npTeams.map(function (t) { return '<option value="' + R.esc(t.id) + '">' + R.esc(t.name) + '</option>'; }).join('') + '</select></div>';
+      }
     }
     h += '<div class="field"><label>' + L('สี') + '</label><div class="swatch-pick" id="pColors">';
     S.PALETTE.forEach(function (c) {
@@ -8366,6 +8372,7 @@
      * ส่วนตัวกรอง เรียง จัดกลุ่ม คอลัมน์ การ์ด และปฏิทินเป็นมุมมองของแต่ละคน จำลง db.personal */
     put('structure', ['sv-rename', 'sv-move', 'sv-update', 'sv-delete', 'tab-default',
       'dup-section', 'do-dup-section']);
+    put('write', ['carry-over']);        // Sprint 3 — ย้ายงานระหว่างเซกชัน = แก้งาน ไม่ใช่แก้โครงสร้าง
     put('write:task', ['set-cover', 'clear-cover', 'cell-set-priority']);
     put('create', ['tl-new']);
     put('self', [
@@ -9292,9 +9299,28 @@
         }
         if (smSec && S.can('write') && S.canInProject(state.route.id, 'edit')) {
           smh += '<div class="pop-sep"></div><button data-act="tt-pick" data-section="' + esc(smSec) + '">' + I('star', 14) + ' ' +
-            L('เพิ่มงานจากเทมเพลต…') + '</button>';
+            L('เพิ่มงานจากเทมเพลต…') + '</button>' +
+            '<button data-act="carry-over" data-section="' + esc(smSec) + '">' + I('arrowRight', 14) + ' ' + L('ยกงานค้างไปเซกชัน…') + '</button>';
         }
         openPop(el, smh);
+        break;
+      }
+      /* Sprint 3 — ยกงานค้าง: ย้ายงานที่ยังไม่เสร็จในเซกชันนี้ไปเซกชันอื่นรวดเดียว (เช่น ประชุมครั้งก่อน → ครั้งนี้)
+       * ย้อนกลับได้ในครั้งเดียว ใช้ตัวเดียวกับย้ายหลายงาน (bulkMoveSection) */
+      case 'carry-over': {
+        closePops();
+        var coPid = state.route.id, coFrom = sectionId, coP = S.project(coPid);
+        var coOpen = S.tasksInSection(coPid, coFrom).filter(function (x) { return !x.task.completed; })
+          .map(function (x) { return x.task.id; });
+        if (!coP) break;
+        if (!coOpen.length) { toast(L('เซกชันนี้ไม่มีงานค้าง')); break; }
+        askChoice(L('ยกงานค้างไปเซกชันไหน'), L('{n} งานที่ยังไม่เสร็จจะถูกย้ายไป', { n: coOpen.length }),
+          coP.sections.filter(function (x) { return x.id !== coFrom; }).map(function (x) {
+            return { label: x.name, run: function () {
+              var moved = S.bulkMoveSection(coOpen, coPid, x.id);
+              if (moved) toast(L('ย้าย {n} งานไป “{s}” แล้ว', { n: moved, s: x.name }), L('ย้อนกลับ'), 'undo');
+            } };
+          }));
         break;
       }
       case 'dup-section':
@@ -10781,6 +10807,8 @@
         });
         var vSel = document.getElementById('pVis');
         if (vSel && vSel.value === 'private') S.setProjectVisibility(np.id, 'private');   // Sprint 3 — คนสร้างเป็นผู้ดูแลอัตโนมัติ (อยู่ใน setProjectVisibility)
+        var tSel = document.getElementById('pTeam');
+        if (tSel && tSel.value) S.shareProjectWithTeam(np.id, tSel.value, 'edit');   // Sprint 3 — ถ้าไม่มีสิทธิ์แชร์ ฟังก์ชันคืน false เงียบ ๆ โปรเจกต์ยังถูกสร้าง
         closeModal();
         npToPortfolio(np); goProject(np.id);
         toast(L('สร้างโปรเจกต์แล้ว'));
