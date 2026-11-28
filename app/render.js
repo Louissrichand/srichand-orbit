@@ -1753,7 +1753,11 @@
     } else {
       h += '<div class="ovw-roles">';
       roles.forEach(function (x) {
-        h += '<div class="ovw-role">' + avatar(x.user, 'sm') + '<b>' + esc(x.user.name) + '</b><em>' + esc(x.role) + '</em></div>';
+        /* คนที่ไม่มีสิทธิ์เห็นโปรเจกต์นี้แล้ว (ถูกถอดจากโปรเจกต์ปิด) — ข้อมูลเก่าที่ยังค้างบทบาทไว้ บอกให้รู้ ไม่ใช่ทำเหมือนยังอยู่
+         * (ถอดสมาชิกตั้งแต่นี้ไป removeProjectMember ลบบทบาทให้เองแล้ว) */
+        var gone = !S.projectAccess(p.id, x.user.id);
+        h += '<div class="ovw-role' + (gone ? ' gone' : '') + '">' + avatar(x.user, 'sm') + '<b>' + esc(x.user.name) + '</b><em>' + esc(x.role) +
+          (gone ? ' · ' + esc(L('ไม่ได้เป็นสมาชิกแล้ว')) : '') + '</em></div>';
       });
       h += '</div>';
     }
@@ -3007,9 +3011,11 @@
     return h;
   }
 
+  /* ชื่อซ้ำกับ accessLabel ด้านบน (ตัวนี้ชนะเพราะประกาศทีหลัง) — เดิมไม่แปล ภาพรวมภาษาอังกฤษจึงขึ้น "ผู้ดูแลโปรเจกต์"
+   * แปลที่นี่ ผู้เรียกที่ครอบ L() ซ้ำไม่เป็นไร (ข้อความที่แปลแล้วไม่มีในพจนานุกรม คืนค่าเดิม) */
   function accessLabel(id) {
     var a = S.PROJECT_ACCESS.filter(function (x) { return x.id === id; })[0];
-    return a ? a.label : '—';
+    return a ? L(a.label) : '—';
   }
 
   /** งานทั้งหมดของทีม จัดกลุ่มตามโปรเจกต์ ui.tdone = แสดงงานที่เสร็จแล้วด้วย */
@@ -4227,7 +4233,17 @@
   function bulkbar(sel) {
     var ids = Object.keys(sel);
     if (!ids.length) return '';
-    var h = '<div class="bulkbar"><span class="n">' + L('เลือก') + ' ' + ids.length + ' ' + L('งาน') + '</span>';
+    /* ภาษาอังกฤษเดิมต่อคำเป็น "Select 3 tasks" — ใช้ข้อความเดียวมีตัวแปร แปลเป็น "3 selected" ได้ */
+    var h = '<div class="bulkbar"><span class="n">' + esc(L('เลือกแล้ว {n} งาน', { n: ids.length })) + '</span>';
+    /* งานที่เลือกมีงานที่แก้ไม่ได้ (แสดงความเห็นได้/ดูอย่างเดียว) — ทุกคำสั่งแก้หลายงานจะโดนปฏิเสธทั้งชุด
+     * (ด่าน allowed ใน main.js) ไม่ต้องโชว์ปุ่มเหล่านั้น เหลือคัดลอกลิงก์กับยกเลิกการเลือก */
+    var canAll = ids.every(function (id) { return S.can('write', id); });
+    if (!canAll) {
+      h += '<span class="bulk-ro">' + I('lock', 12) + ' ' + esc(L('มีงานที่คุณแก้ไม่ได้อยู่ในที่เลือก')) + '</span>';
+      h += '<button data-act="bulk-links">' + L('คัดลอกลิงก์') + '</button>';
+      h += '<button data-act="bulk-clear">' + L('ยกเลิก') + '</button>';
+      return h + '</div>';
+    }
     h += '<button data-act="bulk-complete">' + L('ทำเสร็จ') + '</button>';
     h += '<button data-act="bulk-reopen">' + L('เปิดใหม่') + '</button>';
     h += '<select data-act="bulk-assignee"><option value="">' + L('มอบหมายให้…') + '</option>';
@@ -4340,8 +4356,11 @@
 
     var h = '';
     h += '<div class="dw-head">' + (canW ? checkbox(t) : checkbox(t).replace('<button ', '<button disabled ')) +
-      '<span style="font-size:13px;color:var(--fg-soft)">' +
-      (t.completed ? L('ทำเสร็จแล้ว') : L('ทำเครื่องหมายว่าเสร็จ')) + '</span>' +
+      /* ข้อความข้างวงกลมกดได้เหมือนวงกลม (เดิมเป็นข้อความเฉย ๆ คนกดที่คำแล้วไม่เกิดอะไร) — แก้ไม่ได้ = ข้อความธรรมดา */
+      (canW
+        ? '<button class="dw-done-lbl" data-act="toggle" data-id="' + esc(t.id) + '">'
+        : '<span class="dw-done-lbl ro">') +
+      (t.completed ? L('ทำเสร็จแล้ว') : L('ทำเครื่องหมายว่าเสร็จ')) + (canW ? '</button>' : '</span>') +
       '<div style="flex:1"></div>' +
       '<button class="btn btn-sm btn-ghost" data-act="toggle-like" data-id="' + esc(t.id) +
       '" title="' + L('ถูกใจ') + '" style="' + (liked ? 'color:var(--danger)' : '') + '"' + (canC ? '' : ' disabled') + '>' + I('heart') + ' ' +

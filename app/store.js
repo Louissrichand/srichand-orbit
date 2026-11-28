@@ -698,6 +698,13 @@
       p.accessRequests.forEach(function (r) { if (!('note' in r)) r.note = null; });
     });
     prunePersonal(d);
+    /* Sprint 1C ตั้งกำหนดส่งรอบแรกให้ตอนตั้งทำซ้ำ (firstRecurDate) แต่งานทำซ้ำจากข้อมูลเก่าที่ไม่มีกำหนดส่ง
+     * ยังไม่โผล่ในปฏิทินจนกว่าจะมีคนไปแก้ — ให้วันครบกำหนดรอบแรกตอนโหลด เฉพาะงานที่ยังไม่เสร็จ (ทำครั้งเดียว มีวันแล้วไม่แตะอีก) */
+    d.tasks.forEach(function (t) {
+      if (t && t.recur && t.recur.freq && !t.dueOn && !t.completed) {
+        try { t.dueOn = firstRecurDate(t.recur, t.startOn); } catch (e) { /* รูปแบบทำซ้ำเพี้ยน ปล่อยไว้เหมือนเดิม */ }
+      }
+    });
     if (!d.users.some(function (u) { return u.role === 'admin'; })) {
       var firstUser = d.users.filter(function (u) { return u.id === d.currentUserId; })[0] || d.users[0];
       if (firstUser) firstUser.role = 'admin';
@@ -3824,6 +3831,18 @@
     return copy;
   }
 
+  function undoKeyOf(patch) {
+    if ('approval' in patch) return 'เปลี่ยนผลอนุมัติของ “{t}”';     // ก่อน completed — ผลอนุมัติพาสถานะเสร็จมาด้วย
+    if ('completed' in patch) return patch.completed ? 'ทำ “{t}” เสร็จ' : 'เปิด “{t}” ใหม่';
+    if ('assigneeId' in patch) return 'เปลี่ยนผู้รับผิดชอบของ “{t}”';
+    if ('name' in patch) return 'เปลี่ยนชื่องาน “{t}”';
+    if ('dueOn' in patch || 'startOn' in patch || 'dueTime' in patch || 'startTime' in patch) return 'เปลี่ยนวันของ “{t}”';
+    if ('priority' in patch) return 'เปลี่ยนความสำคัญของ “{t}”';
+    if ('tags' in patch) return 'เปลี่ยนแท็กของ “{t}”';
+    if ('notes' in patch) return 'แก้รายละเอียดของ “{t}”';
+    return 'แก้ไขงาน “{t}”';
+  }
+
   function updateTask(id, patch, opts) {
     var t = task(id);
     if (!t) return null;
@@ -3853,7 +3872,9 @@
       }
       if (!Object.keys(patch).length) return t;      // ไม่เหลืออะไรให้แก้ ไม่ต้องมีจุดย้อนกลับเปล่า ๆ
     }
-    if (!opts || !opts.quiet) snapshot('แก้ไขงาน');
+    /* ป้ายจุดย้อนกลับบอกว่าแก้อะไรของงานไหน — ข้อความหลังกดย้อนกลับเดิมขึ้นแค่ "ย้อนกลับแล้ว: แก้ไขงาน"
+     * ไม่รู้ว่าอะไรถูกคืนค่า (เลือกจากช่องที่แก้ ช่องที่คนสังเกตก่อน) */
+    if (!opts || !opts.quiet) snapshot(undoKeyOf(patch), { t: String(t.name || '').slice(0, 60) });
 
     /* 3b — เปลี่ยนเป็นชนิดในตัวแล้ว ชนิดกำหนดเองหลุดออก (ยกเว้นตอน setTypeRaw ตั้งชนิดพื้นฐานให้เอง) */
     if ('type' in patch && t.ctype && !(opts && opts.keepCtype)) { patch.ctype = null; patch.cstatus = null; }
@@ -5259,6 +5280,9 @@
       copy.parentId = parentNew || null;
       copy.completed = false;
       copy.completedAt = null;
+      /* งานขออนุมัติ ผลอนุมัติเป็นตัวเปิด/ปิดงาน (Sprint 1B) — สำเนาเริ่มใหม่ยังไม่เสร็จ ต้องกลับไปรออนุมัติด้วย
+       * เดิมคงผลเดิมไว้ สำเนาจึงโชว์ ✕ "ไม่อนุมัติ" / ✓ "อนุมัติแล้ว" บนงานที่ยังไม่เสร็จ */
+      if (copy.type === 'approval') copy.approval = 'pending';
       copy.likes = [];
       copy.dependsOn = [];
       copy.startOn = mv(copy.startOn);
@@ -5908,6 +5932,10 @@
     db.projectMembers = db.projectMembers.filter(function (m) {
       return !(m.projectId === projectId && m.userId === userId);
     });
+    /* ถอดแล้วเข้าโปรเจกต์ไม่ได้อีก (โปรเจกต์ปิด/บุคคลภายนอก) — บทบาทในโปรเจกต์ของเขาไม่มีความหมายแล้ว
+     * เดิมภาพรวมยังโชว์ "Piti – ทีมขาย" เหมือนยังอยู่ ลบในจุดย้อนกลับเดียวกัน (ย้อนกลับแล้วบทบาทกลับมา) */
+    dropIndex();
+    if (p && p.roles && p.roles[userId] && !projectAccess(projectId, userId)) delete p.roles[userId];
     var u = user(userId);
     audit('project.member-remove', (p ? p.name : projectId), u ? u.name : userId);
     commit();

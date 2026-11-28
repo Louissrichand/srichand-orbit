@@ -138,6 +138,10 @@
     if (bar && html) bar.outerHTML = html;
     else if (bar) bar.parentNode.removeChild(bar);
     else if (html) $view.insertAdjacentHTML('beforeend', html);
+    /* แถบโผล่/หายระหว่างที่ข้อความแจ้งยังค้างอยู่ — ยกหรือลดข้อความตามแถบ (ดู toast) */
+    var nb = $view.querySelector('.bulkbar');
+    $toast.classList.toggle('above-bulk', !!nb);
+    if (nb) $toast.style.setProperty('--bulk-h', nb.getBoundingClientRect().height + 'px');
   }
 
   /** ล้างการเลือกแล้วเก็บกวาดหน้าจอโดยไม่ต้อง re-render ทั้งหน้า */
@@ -177,6 +181,11 @@
     $toast.innerHTML = '<span class="toast-msg">' + R.esc(msg) + '</span>' +
       (actionLabel ? ' <button data-act="' + actionAttr + '">' + R.esc(actionLabel) + '</button>' + kbd : '');
     $toast.classList.toggle('has-act', !!actionLabel);
+    /* แถบแก้หลายงานอยู่ตำแหน่งเดียวกับกล่องข้อความ (ล่างกลางจอ) — ข้อความ "ทำไม่ได้เพราะ…" ทับปุ่มในแถบ
+     * มีแถบอยู่ = ยกกล่องข้อความขึ้นไปเหนือแถบ (styles.css .toast.above-bulk) */
+    var bb = document.querySelector('.bulkbar');
+    $toast.classList.toggle('above-bulk', !!bb);
+    if (bb) $toast.style.setProperty('--bulk-h', bb.getBoundingClientRect().height + 'px');
     $toast.classList.add('show');
     armToast(actionLabel ? 9000 : 4500);
   }
@@ -1233,6 +1242,16 @@
    * ถ้าช่องเสียโฟกัสตอนกดเมาส์ลง แถบเครื่องมือหุบ กล่องเตี้ยลง ปุ่มเลื่อนหนีจากใต้เมาส์/นิ้วก่อนปล่อย
    * คลิกแรกจึงหาย (มือถือแป้นพิมพ์ยังหุบด้วย ยิ่งเลื่อนมาก) ห้ามการย้ายโฟกัสไว้ คลิกจึงถึงปุ่มเสมอ */
   var SEND_ACTS = ['send-comment', 'send-reply', 'comment-save', 'post-message', 'msg-reply'];
+
+  /* ประกาศ/ตอบในหน้าประกาศแล้ว ช่องพิมพ์ที่เพิ่งส่งยังโฟกัสอยู่และแถบเครื่องมือยังกาง (rte-on)
+   * พอผู้ใช้ไปคลิกช่อง "ตอบ" ของประกาศใหม่ ช่องบนค่อยหุบตามหลัง หน้าเลื่อนขึ้น ~38px ระหว่างพิมพ์
+   * ปุ่ม "ตอบ" ที่เล็งไว้จึงขยับหนี คลิกแรกหาย — หลังส่งสำเร็จให้ช่องนั้นหุบทันทีเลย ไม่มีอะไรค้างให้หุบทีหลัง */
+  function settleComposer(ed) {
+    if (!ed) return;
+    if (document.activeElement === ed && ed.blur) ed.blur();
+    var w = ed.closest && ed.closest('.rte-wrap');
+    if (w) w.classList.remove('rte-on');
+  }
   document.addEventListener('mousedown', function (e) {
     var b = e.target.closest && e.target.closest('[data-act]');
     if (!b || SEND_ACTS.indexOf(b.dataset.act) < 0) return;
@@ -1550,11 +1569,30 @@
       dgFire(el);
       return true;
     }
-    el.value = el._dgOk || '';
+    /* ช่องในหน้าต่าง (กำหนดส่งหลายงาน ฯลฯ) — เดิมคืนค่าเดิม (ค่าตั้งต้นคือวันนี้) Enter ครั้งที่สองจึงบันทึก "วันนี้"
+     * ทั้งที่ผู้ใช้ไม่ได้ตั้งใจ ช่องในหน้าต่างให้ว่างและติดธง _dgBad ไว้ ปุ่มหลักของหน้าต่างไม่ทำงานจนกว่าจะแก้ปี
+     * (ว่างเฉย ๆ ไม่ได้ เพราะบางหน้าต่าง "ว่าง" แปลว่าลบวัน) · ช่องนอกหน้าต่างไม่มีปุ่มบันทึก คืนค่าเดิมเหมือนเดิม */
+    if (el.closest && el.closest('#modal, .modal')) {
+      el.value = '';
+      el._dgBad = true;
+      el.classList.add('inp-bad');
+    } else {
+      el.value = el._dgOk || '';
+    }
     toast(L('ปี {y} ไม่ถูกต้อง ใช้ปี ค.ศ. {a}–{z} (หรือ พ.ศ.) — ยังไม่ได้บันทึกวันที่นี้',
       { y: y === null ? '?' : y, a: DATE_Y_MIN, z: DATE_Y_MAX }));
     return false;
   }
+  /** ช่องวันที่ที่เพิ่งถูกปฏิเสธและยังไม่ได้แก้ — หน้าต่างอย่าเพิ่งบันทึก */
+  function dgBlocked(root) {
+    var bad = root && root.querySelector && Array.prototype.filter.call(root.querySelectorAll('input[type="date"]'),
+      function (x) { return x._dgBad; })[0];
+    if (!bad) return false;
+    toast(L('แก้ปีในช่องวันที่ก่อน (หรือเลือกจากปฏิทิน)'));
+    bad.focus();
+    return true;
+  }
+  function dgClearBad(el) { if (el && el._dgBad) { el._dgBad = false; el.classList.remove('inp-bad'); } }
   global.addEventListener('focusin', function (e) {
     var el = e.target;
     if (dgIsDate(el) && !el._dgPend) el._dgOk = dgOk(el.value) ? el.value : '';
@@ -1562,7 +1600,11 @@
   function dgGuard(e) {
     var el = e.target;
     if (!dgIsDate(el)) return;
-    if (dgOk(el.value) && !el._dgKey) { el._dgOk = el.value; el._dgPend = false; return; }
+    if (dgOk(el.value) && !el._dgKey) {
+      el._dgOk = el.value; el._dgPend = false;
+      if (el.value) dgClearBad(el);          // เลือกวันจากปฏิทินของเบราว์เซอร์แล้ว
+      return;
+    }
     if (!('_dgOk' in el)) el._dgOk = dgOk(el.defaultValue) ? el.defaultValue : '';
     el._dgPend = true;
     e.stopImmediatePropagation();            // ยังพิมพ์ไม่จบ — แอปยังไม่ต้องเห็น
@@ -1575,10 +1617,18 @@
     if (!dgIsDate(el)) return;
     if (e.key !== 'Enter') {
       /* ตัวเลข ลบ หรือลูกศรขึ้นลง = กำลังพิมพ์/แก้ค่าเอง (Tab กับลูกศรซ้ายขวาแค่ย้ายช่อง) */
-      if (/^\d$/.test(e.key) || e.key === 'Backspace' || e.key === 'Delete' || e.key === 'ArrowUp' || e.key === 'ArrowDown') el._dgKey = true;
+      if (/^\d$/.test(e.key) || e.key === 'Backspace' || e.key === 'Delete' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        el._dgKey = true;
+        dgClearBad(el);                       // เริ่มแก้แล้ว — ให้ตัดสินค่าใหม่ตอนออกจากช่อง/กด Enter
+      }
       return;
     }
-    if (!el._dgPend) { el._dgKey = false; return; }
+    if (!el._dgPend) {
+      el._dgKey = false;
+      /* ยังไม่ได้แก้ช่องที่เพิ่งถูกปฏิเสธ — Enter อย่าไปกดบันทึกของหน้าต่าง */
+      if (el._dgBad) { e.preventDefault(); e.stopImmediatePropagation(); dgBlocked(el.parentNode || el); }
+      return;
+    }
     if (!dgSettle(el)) { e.preventDefault(); e.stopImmediatePropagation(); }
   }, true);
 
@@ -1586,6 +1636,9 @@
 
   function openModal(html, wide) {
     closeSidebar();
+    /* เมนูลอยที่เปิดหน้าต่างนี้ (เมนูโปรเจกต์ เมนูอวาตาร์ เมนูงาน …) ต้องปิดไปด้วย
+     * เดิมแต่ละคำสั่งต้องจำเรียก closePops เอง ที่ลืมไว้เมนูจึงลอยค้างอยู่หลังหน้าต่าง — ปิดที่จุดเดียวตรงนี้ */
+    closePops();
     askBack = null;           // หน้าต่างใหม่มาแทนหน้าต่างถาม — ทางกลับเดิมไม่ใช้แล้ว
     $modal.className = 'modal' + (wide ? ' wide' : '');
     $modal.innerHTML = html;
@@ -4113,6 +4166,19 @@
     return st.edit ? autoEditModal() : autoListModal();
   }
 
+  /** โปรเจกต์ปลายทางของ "เพิ่มเข้าโปรเจกต์อื่น" ที่เปิดให้ทั้งองค์กร — เฉพาะเมื่อกฎอยู่ในโปรเจกต์ปิด */
+  function autoOrgTargets(pid, a) {
+    var p = S.project(pid);
+    if (!p || p.visibility !== 'private') return [];
+    var out = [];
+    (a.paths || []).reduce(function (acc, pt) { return acc.concat(pt.acts || []); }, []).concat(a.els || [])
+      .forEach(function (x) {
+        var q = x && x.type === 'addproj' ? S.project(x.pid) : null;
+        if (q && q.id !== pid && q.visibility !== 'private' && out.indexOf(q) < 0) out.push(q);
+      });
+    return out;
+  }
+
   /** คนที่อัตโนมัตินี้จะมอบงาน สร้างงานให้ หรือเพิ่มเป็นผู้ติดตาม แบบระบุชื่อตายตัว (รวมรายการหมุนเวียน)
    *  ใช้เตือนตอนบันทึกถ้าคนเหล่านั้นไม่ได้เป็นสมาชิกโปรเจกต์ปิด — ตัวแปร (คนสร้างงาน ฯลฯ) รู้ตอนรันเท่านั้น */
   function autoPeople(a) {
@@ -5534,8 +5600,9 @@
         (!ok && !now ? ' title="' + L('บัญชีนี้มีสิทธิ์สูงกว่าคุณ') + '"' : '') + '>' +
         R.avatar(u) + ' <span class="grow" style="text-align:left">' + R.esc(u.name) +
         '</span><span style="font-size:12px;color:var(--fg-soft)">' +
+        /* บัญชีที่ปิดไปแล้วบอกตรง ๆ — เดิมขึ้นบทบาท ("สมาชิก") เหมือนบัญชีที่ใช้งานได้ */
         (now ? L('ใช้อยู่') : (u.id === origin ? L('กลับบัญชีนี้')
-                                              : R.roleLabel(u.role))) + '</span></button>';
+          : u.active === false ? L('ปิดใช้งานแล้ว') : R.roleLabel(u.role))) + '</span></button>';
     });
     h += '</div><div class="modal-acts">' +
       '<button class="btn" data-act="close-modal">' + L('ปิด') + '</button></div>';
@@ -6512,6 +6579,7 @@
           state.msgFiles['new'] = [];
           state.msgTitle = '';
           renderAll();
+          settleComposer($view.querySelector('.rte-msg[data-key="mn:' + id + '"]'));    // หุบทันที ไม่หุบทีหลังตอนคลิกช่องตอบ
           toast(L('ประกาศแล้ว'), L('ย้อนกลับ'), 'undo');
         } else {
           setDraft('mn:' + id, md);
@@ -6529,6 +6597,7 @@
         if (S.addMessageReply(id, msg, rmd, state.msgFiles['r:' + msg] || [])) {
           state.msgFiles['r:' + msg] = [];
           renderAll();
+          settleComposer($view.querySelector('.rte-msg[data-key="mr:' + msg + '"]'));
           toast(L('ส่งแล้ว'));      // Sprint 1A — บอกให้รู้ว่าคำตอบส่งไปแล้ว
         } else {
           setDraft('mr:' + msg, rmd);
@@ -6791,7 +6860,8 @@
     return '<h2>' + L('บันทึกเวลา') + '</h2>' +
       '<div class="field"><label>' + L('วันที่') + '</label><input id="teDate" type="date" value="' + S.today() + '"></div>' +
       '<div class="field"><label>' + L('ระยะเวลา') + ' *</label><input id="teDur" placeholder="' + esc(L('เช่น 1h 30m, 1:30 หรือ 45m')) + '"></div>' +
-      '<div class="field"><label>' + L('บันทึก') + '</label><input id="teNote" maxlength="500" placeholder="' + esc(L('ทำอะไรไป (ไม่บังคับ)')) + '"></div>' +
+      /* คีย์แยกจาก "บันทึก" (ปุ่มบันทึก = Save) ภาษาอังกฤษเดิมป้ายช่องนี้จึงขึ้นว่า "Save" */
+      '<div class="field"><label>' + L('บันทึกสั้น ๆ') + '</label><input id="teNote" maxlength="500" placeholder="' + esc(L('ทำอะไรไป (ไม่บังคับ)')) + '"></div>' +
       /* 4b — ไทม์ชีต: เก็บเงินลูกค้าได้ไหม และหมวดของเวลา */
       '<div class="prj-2col"><div class="field"><label>' + L('หมวดเวลา') + '</label><select id="teCat"><option value="">' + L('ไม่ระบุ') + '</option>' +
       S.timeCats().map(function (c) { return '<option value="' + esc(c) + '">' + esc(L(c)) + '</option>'; }).join('') + '</select></div>' +
@@ -8421,6 +8491,8 @@
     if (e.target === $dwBack) { closeDrawer(); return; }
     if (e.target === $optBack) { closeOpts(); return; }
     if (!el) return;
+    /* ปุ่มหลักของหน้าต่างที่มีช่องวันที่ซึ่งเพิ่งถูกปฏิเสธปี (ดู dgSettle) — ยังไม่บันทึกจนกว่าจะแก้ */
+    if (el.classList && el.classList.contains('btn-primary') && $modal.contains(el) && dgBlocked($modal)) return;
 
     var act = el.dataset.act;
     var id = el.dataset.id;
@@ -11059,9 +11131,17 @@
         /* อัตโนมัติที่มอบงาน/เพิ่มผู้ติดตาม/สร้างงานให้คนที่ระบุชื่อไว้ ในโปรเจกต์ปิดที่คนนั้นไม่ได้เป็นสมาชิก
          * = เขาจะเห็นทุกงานที่อัตโนมัติไปแตะ เตือนตอนบันทึก (ยกเลิก = กลับไปหน้าแก้อัตโนมัติ ไม่บันทึก)
          * คนจากตัวแปร (คนสร้างงาน คนที่ทำให้ทำงาน) รู้ตอนรันเท่านั้น ตรวจล่วงหน้าไม่ได้ */
-        confirmFutureReveal(es.pid, autoPeople(es.a), L('อัตโนมัตินี้'), aeSave, function () {
-          if (state.auto.edit === es) openModal(autoModalHtml(), true);
-        });
+        var aeBack = function () { if (state.auto.edit === es) openModal(autoModalHtml(), true); };
+        var aePeople = function () { confirmFutureReveal(es.pid, autoPeople(es.a), L('อัตโนมัตินี้'), aeSave, aeBack); };
+        /* กฎในโปรเจกต์ปิดที่ "เพิ่มเข้าโปรเจกต์อื่น" ซึ่งเปิดให้ทั้งองค์กร = งาน (และความเห็นทุกอัน) ในโปรเจกต์ปิด
+         * จะโผล่ให้ทุกคนเห็น เตือนก่อนบันทึก ยกเลิก = กลับไปหน้าแก้กฎ */
+        var aeOrg = autoOrgTargets(es.pid, es.a);
+        if (aeOrg.length) {
+          askChoice(L('กฎนี้จะเอางานออกไปให้ทั้งองค์กรเห็น'),
+            L('“{p}” เป็นโปรเจกต์ปิด แต่กฎนี้เพิ่มงานเข้า {q} ซึ่งเปิดให้ทุกคนในองค์กร งานที่ถูกเพิ่มรวมถึงความเห็นและไฟล์แนบจะเห็นได้ทั้งองค์กร',
+              { p: (S.project(es.pid) || {}).name || '', q: aeOrg.map(function (q) { return '“' + q.name + '”'; }).join(', ') }),
+            [{ label: L('บันทึกต่อ'), primary: true, run: aePeople }], { back: aeBack });
+        } else aePeople();
         break;
       }
       case 'ae-path-add':
@@ -11668,7 +11748,14 @@
           if (failed) { S.undo(); toast(alsoOff ? L('ปิดบัญชีนี้ไม่ได้') : L('ต้องมีผู้ดูแลอย่างน้อยหนึ่งคน')); return; }
           closeModal();
           renderAll();
-          var msg = alsoOff ? L('โอนงาน {n} งาน และปิดบัญชีแล้ว', { n: moved })
+          /* เลือก "ไม่โอน ปล่อยว่างไว้" ไม่ใช่การโอน — เดิมขึ้น "โอนงาน 11 งาน และปิดบัญชีแล้ว" ทั้งที่งานไม่มีเจ้าของ */
+          var msg = !moved && (alsoOff || newRole)
+            ? (alsoOff ? L('ปิดใช้งานบัญชีแล้ว') : L('เปลี่ยนบทบาทแล้ว'))
+            : !to
+            ? (alsoOff ? L('ปิดบัญชีแล้ว งาน {n} งานไม่มีผู้รับผิดชอบ', { n: moved })
+              : newRole ? L('เปลี่ยนบทบาทแล้ว งาน {n} งานไม่มีผู้รับผิดชอบ', { n: moved })
+              : L('ปล่อยงาน {n} งานไว้โดยไม่มีผู้รับผิดชอบ', { n: moved }))
+            : alsoOff ? L('โอนงาน {n} งาน และปิดบัญชีแล้ว', { n: moved })
             : newRole ? L('โอนงาน {n} งาน และเปลี่ยนบทบาทแล้ว', { n: moved })
             : L('โอนงาน {n} งานแล้ว', { n: moved });
           if (projN) msg += ' · ' + L('โอนผู้ดูแล {n} โปรเจกต์', { n: projN });
@@ -12388,6 +12475,9 @@
     /* Sprint 1A — clearSelUI ไม่ใช่ clearSel: บันทึกวาดจอไปแล้วตอนยังเลือกอยู่ ต้องล้างไฮไลต์บนจอด้วย */
     if (act === 'bulk-assignee' && el.value) {
       var baIds = selectedIds(), baU = el.value;
+      /* คืนช่องเป็น "มอบหมายให้…" ทันที — ถ้ากดยกเลิกในหน้าต่างถาม ช่องเดิมค้างที่ชื่อคนนั้น
+       * เลือกคนเดิมซ้ำจึงไม่เกิด change อะไรเลย (ยืนยันแล้วแถบวาดใหม่อยู่ดี) */
+      el.value = '';
       confirmReveal(baIds, [baU], function () {          // Sprint 1B
         S.bulkUpdate(baIds, { assigneeId: baU });
         clearSelUI();
