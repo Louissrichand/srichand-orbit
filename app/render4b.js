@@ -458,7 +458,7 @@
 
   /* ====================== ผู้ดูแลระบบ ====================== */
   function adminExt() {
-    var users = S.db.users.filter(function (u) { return u.active !== false; });
+    var users = S.orgPeople();
     var h = '<section class="admin-sec" id="adminCapacity"><h3>' + L('ความจุงานและช่วงไม่อยู่') + '</h3>' +
       '<p class="prj-note">' + L('ความจุต่อวันทำงาน ใช้ในหน้าภาระงาน แต่ละคนแก้ของตัวเองได้ ผู้ดูแลแก้ให้ทุกคนได้') + '</p>' +
       '<div class="cap-table"><div class="cap-row head"><span class="grow">' + L('คน') + '</span><span>' + L('ชม./วัน') + '</span><span>' + L('งาน/วัน') + '</span><span>' +
@@ -466,7 +466,7 @@
     users.forEach(function (u) {
       var c = S.capacityOf(u.id), aw = S.awayRanges(u.id).filter(function (r) { return r.to >= S.today(); }).length;
       var inp = function (k) {
-        return '<span><input class="opt-select cap-in" type="number" min="0" max="1000" step="0.5" data-act="cap-set" data-uid="' + esc(u.id) + '" data-k="' + k + '" value="' + c[k] + '"></span>';
+        return '<span><input class="opt-select cap-in" type="number" min="0" max="1000" step="0.5" data-act="cap-set" aria-label="' + esc(L('ชั่วโมงทำงาน')) + '" data-uid="' + esc(u.id) + '" data-k="' + k + '" value="' + c[k] + '"></span>';
       };
       h += '<div class="cap-row">' + '<span class="grow">' + avatar(u, 'sm') + ' ' + esc(u.name) + '</span>' + inp('h') + inp('count') + inp('pt') +
         '<span><button class="btn btn-sm" data-act="set-away" data-uid="' + esc(u.id) + '">' + (aw ? esc(L('{n} ช่วง', { n: aw })) : L('ตั้ง')) + '</button></span></div>';

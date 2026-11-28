@@ -466,7 +466,7 @@
       ['underline', '<u>U</u>', L('ขีดเส้นใต้'), 'Ctrl+U'],
       ['strike', '<s>S</s>', L('ขีดฆ่า'), 'Ctrl+Shift+X'],
       ['code', '&lt;/&gt;', L('โค้ด'), 'Ctrl+Shift+M'],
-      ['ul', '•&#8201;≡', L('หัวข้อย่อย'), 'Ctrl+Shift+8'],
+      ['ul', '•&#8201;≡', L('รายการแบบจุด'), 'Ctrl+Shift+8'],
       ['ol', '1.≡', L('ลำดับเลข'), 'Ctrl+Shift+7'],
       ['h', 'H', L('หัวข้อ'), ''],
       ['link', icon('link', 13), L('ลิงก์'), 'Ctrl+K'],
@@ -779,7 +779,7 @@
   function candidates(q) {
     var ql = q.toLowerCase().trim();
     var out = [];
-    (S.db.users || []).forEach(function (u) {
+    S.orgPeople().forEach(function (u) {
       if (u.active === false) return;
       if (!ql || u.name.toLowerCase().indexOf(ql) >= 0 ||
           (u.email || '').toLowerCase().indexOf(ql) === 0) out.push({ kind: 'user', id: u.id, name: u.name });

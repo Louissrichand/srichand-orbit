@@ -372,7 +372,7 @@
       if (!pgl) return null;
       return { route: pgl.project ? { type: 'project', id: pgl.project.id, view: 'pages', page: seg[1] } : { type: 'pages', page: seg[1] }, taskId: taskId };
     }
-    if (['home', 'mytasks', 'inbox', 'calendar', 'admin', 'projects', 'trash'].indexOf(type) >= 0) {
+    if (['home', 'mytasks', 'inbox', 'calendar', 'admin', 'projects', 'trash', 'portfolios'].indexOf(type) >= 0) {
       return { route: { type: type }, taskId: taskId };
     }
     return null;
@@ -1449,7 +1449,7 @@
       if (popIsOpenFor(cell)) { closePops(); return; }
       var ah = '<button data-act="cell-set-assignee" data-id="' + R.esc(tid) +
         '" data-user="">' + R.avatar(null) + ' ' + L('ยังไม่มอบหมาย') + '</button>';
-      S.db.users.forEach(function (u) {
+      S.orgPeople().forEach(function (u) {
         ah += '<button data-act="cell-set-assignee" data-id="' + R.esc(tid) +
           '" data-user="' + R.esc(u.id) + '">' + R.avatar(u) + ' ' + R.esc(u.name) + '</button>';
       });
@@ -1501,7 +1501,7 @@
       if (popIsOpenFor(cell)) { closePops(); return; }
       var ph2 = '<button data-act="cell-set-option" data-id="' + R.esc(tid) + '" data-field="' +
         R.esc(fid) + '" data-v="">' + L('ไม่ระบุ') + '</button>';
-      S.db.users.forEach(function (u) {
+      S.orgPeople().forEach(function (u) {
         ph2 += '<button data-act="cell-set-option" data-id="' + R.esc(tid) + '" data-field="' +
           R.esc(fid) + '" data-v="' + R.esc(u.id) + '">' + R.avatar(u) + ' ' +
           R.esc(u.name) + '</button>';
@@ -2150,7 +2150,7 @@
   /* Sprint 3 — ช่องค้นหาในรายชื่อคน (ผู้รับผิดชอบ ผู้ติดตาม) เมื่อมีคนเกิน 6 คน หาชื่อไทย/อังกฤษได้โดยไม่ต้องไล่เลื่อน
    * กรองด้วยการซ่อนปุ่ม ไม่สร้างรายการใหม่ จึงไม่กระทบการทำงานของปุ่มเดิม ปุ่ม "ยังไม่มอบหมาย" (data-user="") อยู่เสมอ */
   function peopleFilterHtml() {
-    return S.db.users.length > 6
+    return S.orgPeople().length > 6
       ? '<input class="pop-filter" type="search" autocomplete="off" placeholder="' + R.esc(L('ค้นหาชื่อ')) + '" aria-label="' + R.esc(L('ค้นหาชื่อ')) + '">'
       : '';
   }
@@ -2301,7 +2301,7 @@
       } else if (canManage) {
         h += '<div class="field" style="margin-top:12px"><label>' + L('เพิ่มสมาชิกใหม่') + '</label>' +
           '<select id="paUser">';
-        S.db.users.filter(function (u) {
+        S.orgPeople().filter(function (u) {
           return u.active !== false &&
                  !members.some(function (m) { return m.userId === u.id; });
         }).forEach(function (u) {
@@ -2700,7 +2700,7 @@
         '<input id="psName" data-pid="' + R.esc(projectId) + '" value="' + R.esc(pv.name) + '"></div>';
       h += '<div class="field"><label>' + L('เจ้าของโปรเจกต์') + '</label><select id="psOwner">' +
         '<option value="">' + L('ยังไม่ระบุ') + '</option>';
-      S.db.users.forEach(function (u) {
+      S.orgPeople().forEach(function (u) {
         h += '<option value="' + R.esc(u.id) + '"' + (pv.owner === u.id ? ' selected' : '') +
           '>' + R.esc(u.name) + '</option>';
       });
@@ -3385,7 +3385,7 @@
       '<p class="prj-note">' + (t.assigneeId
         ? L('ทุกคนที่เลือกจะได้งาน “{t}” เป็นของตัวเองคนละชิ้น งานเดิมยังอยู่กับผู้รับผิดชอบคนเดิม', { t: t.name })
         : L('คนแรกที่เลือกได้งานนี้ไป คนที่เหลือได้สำเนาคนละชิ้น')) + '</p><div class="dup-grid people">';
-    S.db.users.forEach(function (u) {
+    S.orgPeople().forEach(function (u) {
       if (u.active === false || u.id === t.assigneeId) return;
       h += '<label class="chk"><input type="checkbox" class="ac-user" value="' + R.esc(u.id) + '"> ' +
         R.avatar(u, 'sm') + ' ' + R.esc(u.name) + '</label>';
@@ -3670,11 +3670,11 @@
         '<div class="grow"><b>' + esc(f.name) + '</b><div class="sub">' +
         esc(L('{q} คำถาม · {n} คำตอบ', { q: nq, n: f.n || 0 })) + (f.last ? ' · ' + esc(L('ล่าสุด')) + ' ' + esc(R.fmtWhen(f.last)) : '') +
         '</div></div><span class="au-row-acts">' +
-        '<button class="btn btn-sm btn-ghost" data-act="fm-go"' + fd + ' title="' + esc(L('เปิดหน้าส่งฟอร์ม')) + '">' + I('arrowRight', 13) + '</button>' +
-        '<button class="btn btn-sm btn-ghost" data-act="fm-link"' + fd + ' title="' + esc(L('คัดลอกลิงก์ฟอร์ม')) + '">' + I('link', 13) + '</button>' +
-        (canEdit ? '<button class="btn btn-sm btn-ghost" data-act="fm-edit"' + fd + ' title="' + esc(L('แก้ไข')) + '">' + I('pencil', 13) + '</button>' +
-          '<button class="btn btn-sm btn-ghost" data-act="fm-dup"' + fd + ' title="' + esc(L('ทำสำเนา')) + '">' + I('copy', 13) + '</button>' +
-          '<button class="btn btn-sm btn-ghost btn-danger" data-act="fm-del"' + fd + ' title="' + esc(L('ลบ')) + '">' + I('trash', 13) + '</button>' : '') +
+        '<button class="btn btn-sm btn-ghost" data-act="fm-go"' + fd + ' title="' + esc(L('เปิดหน้าส่งฟอร์ม')) + '" aria-label="' + esc(L('เปิดหน้าส่งฟอร์ม')) + '">' + I('arrowRight', 13) + '</button>' +
+        '<button class="btn btn-sm btn-ghost" data-act="fm-link"' + fd + ' title="' + esc(L('คัดลอกลิงก์ฟอร์ม')) + '" aria-label="' + esc(L('คัดลอกลิงก์ฟอร์ม')) + '">' + I('link', 13) + '</button>' +
+        (canEdit ? '<button class="btn btn-sm btn-ghost" data-act="fm-edit"' + fd + ' title="' + esc(L('แก้ไข')) + '" aria-label="' + esc(L('แก้ไข')) + '">' + I('pencil', 13) + '</button>' +
+          '<button class="btn btn-sm btn-ghost" data-act="fm-dup"' + fd + ' title="' + esc(L('ทำสำเนา')) + '" aria-label="' + esc(L('ทำสำเนา')) + '">' + I('copy', 13) + '</button>' +
+          '<button class="btn btn-sm btn-ghost btn-danger" data-act="fm-del"' + fd + ' title="' + esc(L('ลบ')) + '" aria-label="' + esc(L('ลบ')) + '">' + I('trash', 13) + '</button>' : '') +
         '</span></div>';
     });
     h += '</div>';
@@ -3710,9 +3710,9 @@
       h += '<div class="au-block fe-q' + (it.cond ? ' fe-branch' : '') + '"' + (it.cond ? ' style="--depth:' + S.formDepth(f, it) + '"' : '') + '>' +
         '<div class="flt-line"><span class="au-n">' + (i + 1) + '</span>' +
         auSel('fe-q', S.FORM_KINDS.map(function (k) { return [k.id, L(k.label)]; }), it.kind, d + ' data-k="kind"') +
-        (i > 0 ? '<button class="flt-del" data-act="fe-q-up"' + d + ' title="' + esc(L('ย้ายขึ้น')) + '">' + I('arrowUp', 13) + '</button>' : '') +
-        (i < f.items.length - 1 ? '<button class="flt-del" data-act="fe-q-down"' + d + ' title="' + esc(L('ย้ายลง')) + '">' + I('arrowDown', 13) + '</button>' : '') +
-        '<button class="flt-del" data-act="fe-q-del"' + d + ' title="' + esc(L('ลบคำถามนี้')) + '">' + I('close', 13) + '</button></div>' +
+        (i > 0 ? '<button class="flt-del" data-act="fe-q-up"' + d + ' title="' + esc(L('ย้ายขึ้น')) + '" aria-label="' + esc(L('ย้ายขึ้น')) + '">' + I('arrowUp', 13) + '</button>' : '') +
+        (i < f.items.length - 1 ? '<button class="flt-del" data-act="fe-q-down"' + d + ' title="' + esc(L('ย้ายลง')) + '" aria-label="' + esc(L('ย้ายลง')) + '">' + I('arrowDown', 13) + '</button>' : '') +
+        '<button class="flt-del" data-act="fe-q-del"' + d + ' title="' + esc(L('ลบคำถามนี้')) + '" aria-label="' + esc(L('ลบคำถามนี้')) + '">' + I('close', 13) + '</button></div>' +
         '<div class="au-params">' +
         '<input class="opt-select" data-act="fe-q"' + d + ' data-k="label" maxlength="300" value="' + esc(it.label) + '" placeholder="' +
           esc(it.kind === 'heading' ? L('หัวข้อ') : L('คำถาม')) + '">' +
@@ -4013,7 +4013,7 @@
     h += '</div>';
     var have = {};
     people.forEach(function (pp) { have[pp[0]] = true; });
-    var rest = S.db.users.filter(function (u) { return u.active !== false && !have[u.id]; });
+    var rest = S.orgPeople().filter(function (u) { return u.active !== false && !have[u.id]; });
     if (rest.length) {
       h += '<div class="flt-line" style="margin-top:12px"><select class="opt-select" id="ptsUser">' +
         rest.map(function (u) { return '<option value="' + esc(u.id) + '">' + esc(u.name) + '</option>'; }).join('') + '</select>' +
@@ -4107,7 +4107,7 @@
       (t.type !== 'milestone' ? '<label class="opt-lbl">' + L('วันเริ่ม') + '</label>' + relInputs('t.start', t.start) : '') +
       '<label class="opt-lbl">' + L('แท็ก (คั่นด้วยจุลภาค)') + '</label><input class="opt-select" data-act="tte" data-k="tags" value="' + esc(t.tags.join(', ')) + '">' +
       '<label class="opt-lbl">' + L('ผู้ติดตาม') + '</label><div class="flt-chips">' +
-      S.db.users.filter(function (u) { return u.active !== false; }).map(function (u) {
+      S.orgPeople().map(function (u) {
         return '<button class="flt-chip' + (t.followers.indexOf(u.id) >= 0 ? ' on' : '') + '" data-act="tte-fol" data-v="' + esc(u.id) + '">' + esc(u.name) + '</button>';
       }).join('') + '</div>';
     var fs = ((p && p.fields) || []).filter(function (f) { return ['select', 'text', 'number', 'person'].indexOf(f.type) >= 0; });
@@ -4208,7 +4208,7 @@
     return ((p && p.fields) || []).filter(function (f) { return f.id === fid; })[0] || null;
   }
   var AU_FREQ = [['daily', 'ทุกวัน'], ['weekly', 'ทุกสัปดาห์'], ['monthly', 'ทุกเดือน']];
-  var AU_VARS_USER = [['creator', 'คนสร้างงาน'], ['triggerer', 'คนที่ทำให้อัตโนมัติทำงาน'], ['assignee', 'ผู้รับผิดชอบเดิม']];
+  var AU_VARS_USER = [['creator', 'คนสร้างงาน'], ['triggerer', 'คนที่ทำให้อัตโนมัติทำงาน'], ['assignee', 'ผู้รับผิดชอบเดิม'], ['owner', 'เจ้าของโปรเจกต์']];
   var AU_VAR_LABEL = { task: 'ชื่องาน', link: 'ลิงก์งาน', assignee: 'ผู้รับผิดชอบ', creator: 'คนสร้าง',
     triggerer: 'คนที่ทำให้ทำงาน', due: 'กำหนดส่ง', start: 'วันเริ่ม', created: 'วันที่สร้าง',
     project: 'โปรเจกต์', section: 'เซกชัน' };
@@ -4216,6 +4216,8 @@
   /** ทริกเกอร์เป็นประโยคเดียว */
   function trigText(pid, tr) {
     var dd = trigDefOf(tr.type);
+    var x2 = global.Auto2 && global.Auto2.trigText(pid, tr);   // QA-B
+    if (x2) return x2;
     switch (tr.type) {
       case 'moved': return tr.sec ? L('ย้ายเข้า “{s}”', { s: auSecName(pid, tr.sec) }) : L('ย้ายเซกชัน');
       case 'completed': return tr.v === false ? L('งานถูกเปิดใหม่') : L('งานทำเสร็จ');
@@ -4279,6 +4281,8 @@
 
   /** การกระทำเป็นวลีสั้น */
   function actText(pid, a) {
+    var x2 = global.Auto2 && global.Auto2.actText(pid, a);   // QA-B
+    if (x2) return x2;
     switch (a.type) {
       case 'section': return L('ย้ายไป “{s}”', { s: auSecName(pid, a.sec) });
       case 'complete': return a.v === false ? L('เปิดงานใหม่') : L('ทำเครื่องหมายเสร็จ');
@@ -4378,8 +4382,11 @@
       '<button class="' + (st.tab === 'list' ? 'on' : '') + '" data-act="auto-tab" data-v="list">' +
         L('รายการ') + ' <span>' + all.length + '</span></button>' +
       '<button class="' + (st.tab === 'runs' ? 'on' : '') + '" data-act="auto-tab" data-v="runs">' +
-        L('ประวัติการรัน') + ' <span>' + S.autoRuns(pid).length + '</span></button></div>';
-    if (st.tab === 'runs') {
+        L('ประวัติการรัน') + ' <span>' + S.autoRuns(pid).length + '</span></button>' +
+      '<button class="' + (st.tab === 'gallery' ? 'on' : '') + '" data-act="auto-tab" data-v="gallery">' + L('เทมเพลต') + '</button></div>';
+    if (st.tab === 'gallery') {
+      h += global.Auto2.galleryHtml(pid, canEdit);
+    } else if (st.tab === 'runs') {
       h += autoRunsHtml(pid);
     } else {
       var list = st.sec ? all.filter(function (a) { return a.trigger.type === 'moved' && a.trigger.sec === st.sec; }) : all;
@@ -4444,6 +4451,7 @@
         '<div class="sub">' + esc(R.fmtExact(r.at)) +
         (by ? ' · ' + esc(by.name) : '') + ' · ' + L('{n} การกระทำ', { n: r.n || 0 }) +
         (r.p === -1 ? ' · ' + L('เส้นทาง “อื่น ๆ”') : r.p > 0 ? ' · ' + L('เส้นทาง {n}', { n: r.p + 1 }) : '') + '</div>' +
+        (global.Auto2 ? global.Auto2.runExtra(pid, r) : '') +
         (r.e ? '<div class="au-err">' + esc(L(r.e, r.ep || undefined)) + '</div>' : '') +
         '</div></div>';
     });
@@ -4478,7 +4486,7 @@
 
   function autoNewAct(pid, type) {
     var mk = AUTO_ACT_DEFAULT[type];
-    var a = mk ? mk(pid) : {};
+    var a = mk ? mk(pid) : (global.Auto2 && global.Auto2.newAct(pid, type)) || {};
     a.type = type;
     return a;
   }
@@ -4509,7 +4517,7 @@
 
   function auSel(act, options, cur, d) { return optSelect(act, options, cur == null ? '' : String(cur), d); }
   function auUsers(withNone) {
-    return S.db.users.filter(function (u) { return u.active !== false; })
+    return S.orgPeople()
       .map(function (u) { return [u.id, u.name + (S.isAway(u.id) ? ' · ' + L('ไม่อยู่') : '')]; });
   }
   function auSecOpts(pid, anyLabel) {
@@ -4529,6 +4537,15 @@
   function auDateFields(pid) {
     var p = S.project(pid);
     return ((p && p.fields) || []).filter(function (f) { return f.type === 'date'; });
+  }
+
+  /* QA-B — ส่วนขยายตัวสร้างกฎ (app/autos2.js) ใช้ตัวช่วยชุดเดียวกับตัวแก้ไขเดิม */
+  if (global.Auto2) {
+    global.Auto2.init({
+      L: L, esc: esc, auSel: auSel, auUsers: auUsers, auSecOpts: auSecOpts, auSecName: auSecName, auUserName: auUserName,
+      auUserSpec: auUserSpec, auDateSpec: auDateSpec, auVarChips: auVarChips,
+      trigText: trigText, actText: actText, trigDefOf: trigDefOf, actDefOf: actDefOf
+    });
   }
 
   /** ช่องของทริกเกอร์ (data-act="ae-tp" data-k) */
@@ -4611,7 +4628,7 @@
     h += '</div>';
     if (mode === 'rr') {
       var cur = s.list || [];
-      h += '<div class="flt-chips">' + S.db.users.filter(function (u) { return u.active !== false; }).map(function (u) {
+      h += '<div class="flt-chips">' + S.orgPeople().map(function (u) {
         var on = cur.indexOf(u.id) >= 0;
         return '<button class="flt-chip' + (on ? ' on' : '') + '" data-act="ae-ap-chip"' + d + ' data-k="' + pre + 'list" data-v="' + esc(u.id) + '">' +
           esc(u.name) + (S.isAway(u.id) ? ' <em class="au-away">' + L('ไม่อยู่') + '</em>' : '') + '</button>';
@@ -4693,7 +4710,7 @@
         var us = a.users || [], vs = a.vars || [];
         return '<div class="flt-chips">' + AU_VARS_USER.map(function (x) {
           return '<button class="flt-chip' + (vs.indexOf(x[0]) >= 0 ? ' on' : '') + '" data-act="ae-ap-chip"' + k('vars') + ' data-v="' + x[0] + '">' + esc(L(x[1])) + '</button>';
-        }).join('') + S.db.users.filter(function (u) { return u.active !== false; }).map(function (u) {
+        }).join('') + S.orgPeople().map(function (u) {
           return '<button class="flt-chip' + (us.indexOf(u.id) >= 0 ? ' on' : '') + '" data-act="ae-ap-chip"' + k('users') + ' data-v="' + esc(u.id) + '">' + esc(u.name) + '</button>';
         }).join('') + '</div>';
       }
@@ -4727,7 +4744,7 @@
         return h4;
       }
     }
-    return '';
+    return global.Auto2 ? global.Auto2.actParams(pid, a, d) : '';
   }
 
   function autoActsHtml(pid, acts, pi) {
@@ -4754,10 +4771,11 @@
     var h = '<h2 class="au-h">' + I('bolt', 17) + ' ' + (e.isNew ? L('สร้างอัตโนมัติ') : L('แก้อัตโนมัติ')) + '</h2>';
     h += '<div class="field"><label>' + L('ชื่อ (ไม่บังคับ)') + '</label><input class="opt-select" data-act="ae-name" maxlength="120" value="' +
       esc(a.name || '') + '" placeholder="' + esc(autoTitle(pid, { trigger: a.trigger, paths: a.paths })) + '"></div>';
+    if (global.Auto2) h += global.Auto2.previewHtml(pid, a);   // QA-B — สรุปเป็นประโยค
 
     h += '<div class="au-block"><div class="au-bh">' + L('เมื่อ') + '</div><div class="flt-line">' +
       auSel('ae-trig', S.AUTO_TRIGGERS.map(function (x) { return [x.id, L(x.label)]; }), a.trigger.type, '') + '</div>' +
-      '<div class="au-params">' + autoTrigParams(pid, a.trigger) + '</div>' +
+      '<div class="au-params">' + autoTrigParams(pid, a.trigger) + (global.Auto2 ? global.Auto2.trigParams(pid, a.trigger) : '') + '</div>' +
       (td.time ? '<p class="opt-note au-hint">' + I('alert', 12) + ' ' + L(AU_TIME_NOTE) + '</p>' : '') +
       (a.trigger.type === 'manual' ? '<p class="opt-note au-hint">' + L('กดรันได้จากเมนู ⋯ ของงาน หรือเลือกได้ถึง 50 งานแล้วกด “เพิ่มเติม → รันอัตโนมัติ”') + '</p>' : '') +
       '</div>';
@@ -4801,6 +4819,7 @@
       L('ปิดไว้ = ทำงานเฉพาะเมื่อคนทำ ถ้าเปิด การกระทำของอัตโนมัติอื่นก็ปลุกได้ ลึกได้ไม่เกิน {n} ชั้น และตัวเดิมรันกับงานเดิมได้ครั้งเดียวต่อหนึ่งการกด', { n: S.AUTO_MAX_DEPTH }));
     h += '<p class="opt-note">' + L('ทำได้สูงสุด {a} การกระทำต่อเส้นทาง {p} เส้นทาง เส้นทางแรกที่ตรงเงื่อนไขครบได้ทำ การกระทำใช้ไม่ได้ (เช่น เซกชันถูกลบ) จะลงประวัติการรันเป็นผิดพลาด',
       { a: S.AUTO_MAX_ACTS, p: S.AUTO_MAX_PATHS }) + '</p>';
+    if (global.Auto2 && a.trigger.type !== 'scheduled') h += global.Auto2.dryBlock(pid, e);   // QA-B — ทดลองกับงานนี้
     h += '<div class="modal-acts"><button class="btn" data-act="auto-back">' + L('ยกเลิก') + '</button>' +
       '<button class="btn btn-primary" data-act="ae-save">' + L('บันทึก') + '</button></div>';
     return h;
@@ -5075,6 +5094,7 @@
       ['/', L('ไปที่ช่องค้นหา')],
       ['Esc', L('ปิดหน้าต่าง / แผงรายละเอียด')],
       ['Ctrl + Z', L('ย้อนกลับการกระทำล่าสุด')],
+      ['Ctrl + Shift + Z', L('ทำซ้ำสิ่งที่เพิ่งย้อนกลับ')],
       ['Ctrl + Enter', L('ส่งความเห็น / ประกาศ (เมื่อเคอร์เซอร์อยู่ในช่องพิมพ์)')],
       ['? / Ctrl + /', L('เปิดหน้าคีย์ลัดนี้')],
       ['Tab + H', L('ไปหน้าแรก')],
@@ -5599,7 +5619,7 @@
     Object.keys(p.roles || {}).forEach(add);
     /* โปรเจกต์เปิดทั้งองค์กรไม่มีรายชื่อสมาชิก — ให้เลือกจากคนที่ถืองานในโปรเจกต์ แล้วค่อยทุกคน */
     S.tasksInProject(projectId).forEach(function (x) { add(x.task.assigneeId); });
-    if (ids.length < 3) S.db.users.forEach(function (u) { add(u.id); });
+    if (ids.length < 3) S.orgPeople().forEach(function (u) { add(u.id); });
     var h = '<h2>' + L('บทบาทในโปรเจกต์') + '</h2><p class="prj-note">' +
       L('พิมพ์บทบาทของแต่ละคน เช่น ผู้อนุมัติ ผู้ประสานงาน ฝ่ายออกแบบ แสดงที่หน้าภาพรวม ไม่เกี่ยวกับสิทธิ์') + '</p>';
     h += '<div class="roles-grid">';
@@ -5622,6 +5642,13 @@
     function item(act, icon, label, extra) {
       return '<button data-act="' + act + '"' + (extra || '') + '>' + I(icon, 14) + '<span class="grow">' + label + '</span></button>';
     }
+    /* QA-A — มือถือ: ปุ่มที่ซ่อนจากแถบหลัก (.bulk-desk) ย้ายมารวมในเมนูนี้ */
+    h += '<div class="qa-mob-only">' + item('bulk-due', 'calendar', L('ตั้งกำหนดส่ง')) + item('bulk-reopen', 'repeat', L('เปิดใหม่')) +
+      '<select data-act="bulk-assignee" aria-label="' + R.esc(L('มอบหมายให้…')) + '"><option value="">' + L('มอบหมายให้…') + '</option>' +
+      S.orgPeople().map(function (u) { return '<option value="' + R.esc(u.id) + '">' + R.esc(u.name) + '</option>'; }).join('') + '</select>' +
+      '<select data-act="bulk-priority" aria-label="' + R.esc(L('ความสำคัญ…')) + '"><option value="">' + L('ความสำคัญ…') + '</option>' +
+      S.PRIORITIES.map(function (p) { return '<option value="' + p.id + '">' + R.esc(L(p.label)) + '</option>'; }).join('') + '</select>' +
+      '<div class="pop-sep"></div></div>';
     if (r.type === 'project' && S.project(r.id)) h += item('bulk-section', 'grid', L('ย้ายไปเซกชัน…'));
     h += item('bulk-project', 'plus', L('เพิ่มเข้าโปรเจกต์…'));
     h += item('bulk-field', 'hash', L('ตั้งค่าฟิลด์…'));
@@ -5685,7 +5712,7 @@
       }).join('') + '</div>';
     }
     if (f.type === 'person') {
-      return '<select id="bfVal" class="inp"><option value="">—</option>' + S.db.users.filter(function (u) {
+      return '<select id="bfVal" class="inp"><option value="">—</option>' + S.orgPeople().filter(function (u) {
         return u.active !== false;
       }).map(function (u) { return '<option value="' + R.esc(u.id) + '">' + R.esc(u.name) + '</option>'; }).join('') + '</select>';
     }
@@ -5714,7 +5741,7 @@
 
   function bulkFollowersModal() {
     var h = '<h2>' + L('เพิ่มผู้ติดตามให้ {n} งาน', { n: selCount() }) + '</h2><div class="dup-grid people">';
-    S.db.users.forEach(function (u) {
+    S.orgPeople().forEach(function (u) {
       if (u.active === false) return;
       h += '<label class="chk"><input type="checkbox" class="bf-user" value="' + R.esc(u.id) + '"> ' +
         R.avatar(u, 'sm') + ' ' + R.esc(u.name) + '</label>';
@@ -6073,7 +6100,7 @@
         '<em style="font-style:normal;font-size:12.5px;color:var(--fg-faint)">' +
         L('ผู้ดูแลระบบเท่านั้นที่เปลี่ยนได้') + '</em></div>';
 
-      h += '<div class="prj-warn">' + I('alert', 15) + '<span>' +
+      if (team) h += '<div class="prj-warn">' + I('alert', 15) + '<span>' +
         L('เข้าระบบด้วยบัญชี Microsoft ของบริษัท เปลี่ยนรหัสผ่านหรือตั้งการยืนยันสองชั้นได้ที่บัญชี Microsoft ของคุณ') +   // Sprint 1A
         '</span></div>';
 
@@ -6166,7 +6193,7 @@
     /* Sprint 1B — บุคคลภายนอก (เอเจนซี ฟรีแลนซ์) ไม่ใช่คนรับช่วงงานในองค์กร
      * เดิมอยู่ในรายชื่อปะปนกับพนักงาน เลือกผิดคนเดียวงานภายในทั้งหมดไปถึงคนนอกพร้อมความเห็นทุกอัน
      * จึงซ่อนไว้เป็นค่าเริ่มต้น ติ๊ก "แสดงบุคคลภายนอก" ก่อนถึงจะเลือกได้ และมีคำเตือนกำกับ */
-    var others = S.db.users.filter(function (x) {
+    var others = S.orgPeople().filter(function (x) {
       return x.id !== userId && x.active !== false && x.role !== 'viewer';
     });
     var staff = others.filter(function (x) { return x.role !== 'guest'; });
@@ -6455,6 +6482,15 @@
     toast(L('ย้อนกลับแล้ว:') + ' ' + L(u.label, u.params || undefined));
   }
 
+  function doRedo() {
+    if (!S.canRedo()) { toast(L('ไม่มีอะไรให้ทำซ้ำ')); return; }
+    clearSel();
+    S.redo();
+    var u = S.undoLabel();
+    if (state.openTaskId && !S.task(state.openTaskId)) state.openTaskId = null;
+    toast(L('ทำซ้ำแล้ว:') + ' ' + L(u.label, u.params || undefined));
+  }
+
   /* ---------- click delegation ---------- */
 
   // เวลาที่ลากแท่งไทม์ไลน์เสร็จล่าสุด
@@ -6497,6 +6533,16 @@
     return R.fmtDate(s) + ' – ' + R.fmtDate(d);
   }
   function setDates(taskId, patch, done) {
+    /* QA-A — วันเริ่มต้องไม่เกินวันกำหนดส่ง: ถ้าชนกัน ปรับค่าที่เพิ่งแก้ให้เท่ากับอีกฝั่งแล้วบอกผู้ใช้ */
+    var qt = S.task(taskId);
+    if (qt) {
+      var qs = 'startOn' in patch ? patch.startOn : qt.startOn, qd = 'dueOn' in patch ? patch.dueOn : qt.dueOn;
+      if (qs && qd && qs > qd) {
+        if ('startOn' in patch) patch.startOn = qd; else patch.dueOn = qs;
+        toast(L('วันเริ่มต้องไม่เกินวันกำหนดส่ง — ปรับให้เป็นวันเดียวกันแล้ว'));
+        setTimeout(renderAll, 0);
+      }
+    }
     var list = S.task(taskId) ? S.previewDates(taskId, patch) : [];
     if (!list.length) {
       S.updateTask(taskId, patch);
@@ -7610,7 +7656,7 @@
   function teamAddMemberHtml(tid) {
     var t = S.team(tid);
     var h = '<h2>' + L('เพิ่มสมาชิกเข้า {t}', { t: t.name }) + '</h2><div class="pf-pick">';
-    var rest = S.db.users.filter(function (u) { return u.active !== false && !t.members.some(function (m) { return m.u === u.id; }); });
+    var rest = S.orgPeople().filter(function (u) { return u.active !== false && !t.members.some(function (m) { return m.u === u.id; }); });
     if (!rest.length) h += '<p class="prj-note">' + L('ทุกคนอยู่ในทีมนี้แล้ว') + '</p>';
     rest.forEach(function (u) {
       h += '<button class="pf-pick-row" data-act="team-add-pick" data-id="' + esc(tid) + '" data-u="' + esc(u.id) + '">' + R.avatar(u, 'sm') +
@@ -7951,7 +7997,7 @@
         var setV = function (v) { if (S.setPfValue(cf.id, it.id, cfd.id, v)) { renderAll(); toast(L('บันทึกแล้ว'), L('ย้อนกลับ'), 'undo'); } };
         if (cfd.type === 'select' || cfd.type === 'person') {
           var ch = (cfd.type === 'select' ? cfd.options.map(function (o) { return { label: o.name, v: o.name }; })
-            : S.db.users.filter(function (u) { return u.active !== false; }).map(function (u) { return { label: u.name, v: u.id }; }))
+            : S.orgPeople().map(function (u) { return { label: u.name, v: u.id }; }))
             .map(function (o) { return { label: o.label, primary: o.v === curV, run: function () { setV(o.v); } }; });
           ch.push({ label: L('ล้างค่า'), run: function () { setV(null); } });
           askChoice(cfd.name + ' · ' + it.o.name, '', ch);
@@ -8060,7 +8106,7 @@
   function goGoal(id) { state.route = { type: 'goal', id: id }; state.goalUi = { gtab: 'comments' }; clearSel(); renderAll(); }
 
   function userOpts(cur, blank) {
-    return (blank ? '<option value="">' + esc(blank) + '</option>' : '') + S.db.users.filter(function (u) { return u.active !== false; }).map(function (u) {
+    return (blank ? '<option value="">' + esc(blank) + '</option>' : '') + S.orgPeople().map(function (u) {
       return '<option value="' + esc(u.id) + '"' + (u.id === cur ? ' selected' : '') + '>' + esc(u.name) + '</option>';
     }).join('');
   }
@@ -8090,7 +8136,7 @@
     h += '<div class="field"><label>' + L('เป้าหมายแม่') + '</label><select id="gParent" class="inp"><option value="">' + L('ไม่มี') + '</option>' +
       S.visibleGoals().filter(function (x) { return x.id !== id && !bad[x.id]; }).map(function (x) {
         return '<option value="' + esc(x.id) + '"' + (cur.parent === x.id ? ' selected' : '') + '>' + esc(x.name) + '</option>'; }).join('') + '</select></div></div>';
-    h += '<label class="opt-lbl">' + L('สมาชิก') + '</label><div class="g-mem">' + S.db.users.filter(function (u) { return u.active !== false; }).map(function (u) {
+    h += '<label class="opt-lbl">' + L('สมาชิก') + '</label><div class="g-mem">' + S.orgPeople().map(function (u) {
       return '<label><input type="checkbox" class="gMem" value="' + esc(u.id) + '"' + (cur.members.indexOf(u.id) >= 0 ? ' checked' : '') + '> ' + esc(u.name) + '</label>'; }).join('') + '</div>';
     h += '<div class="field"><label>' + L('คำอธิบาย') + '</label><textarea id="gDesc" class="inp" rows="3">' + esc(cur.desc) + '</textarea></div>';
     h += '<div class="modal-acts"><button class="btn" data-act="close-modal">' + L('ยกเลิก') + '</button><button class="btn btn-primary" data-act="goal-save"' +
@@ -8475,7 +8521,7 @@
       'manage-fields', 'add-field', 'delete-field', 'create-field', 'rename-field',
       'drop-field', 'add-field-picker', 'pick-ftype', 'add-option', 'remove-option',
       'opt-color', 'set-opt-color',
-      'auto-new', 'auto-edit', 'auto-toggle', 'auto-dup', 'auto-del', 'ae-save',
+      'auto-new', 'auto-tpl', 'auto-edit', 'auto-toggle', 'auto-dup', 'auto-del', 'ae-save',
       'pick-status', 'clear-status', 'toggle-view',
       'new-portfolio', 'pf-rename', 'pf-desc', 'pf-look', 'save-pf-look', 'pf-delete',
       'pf-add', 'pf-pick', 'pf-pick-multi', 'pf-remove', 'pf-pick-status', 'pf-clear-status',
@@ -8688,7 +8734,7 @@
   /* Pre-pilot B — คำสั่งแก้โครงสร้างโปรเจกต์ ทำได้เฉพาะเจ้าของ/ผู้ดูแลโปรเจกต์/ผู้ดูแลระบบ (สมาชิกทั่วไปยังเพิ่ม/เปลี่ยนชื่อเซกชันได้) */
   var PSTRUCT = {};
   ['toggle-archive', 'manage-fields', 'add-field', 'delete-field', 'create-field', 'rename-field', 'drop-field',
-    'add-field-picker', 'pick-ftype', 'auto-new', 'auto-edit', 'auto-toggle', 'auto-dup', 'auto-del', 'ae-save',
+    'add-field-picker', 'pick-ftype', 'auto-new', 'auto-tpl', 'auto-edit', 'auto-toggle', 'auto-dup', 'auto-del', 'ae-save',
     'save-project-details', 'set-depmode', 'set-depscope', 'set-workdays', 'import-csv', 'field-format', 'do-field-format',
     'required-fields', 'save-required-fields', 'stale-days', 'project-settings', 'auto-open', 'types-open'
   ].forEach(function (a) { PSTRUCT[a] = true; });
@@ -9490,7 +9536,7 @@
             '<button data-act="move-section" data-delta="1" data-section="' + esc(smSec) + '">' + I('arrowDown', 14) + ' ' + L('เลื่อนลง') + '</button>' +
             '<button data-act="s4b-bulk-sec">' + I('plus', 14) + ' ' + L('เพิ่มหลายเซกชัน…') + '</button>' +
             '<button data-act="dup-section" data-section="' + esc(smSec) + '">' + I('copy', 14) + ' ' + L('ทำสำเนาเซกชัน…') + '</button>' +
-            '<button data-act="delete-section" data-section="' + esc(smSec) + '">' + I('trash', 14) + ' ' + L('ลบคอลัมน์') + '</button>';
+            '<button data-act="delete-section" data-section="' + esc(smSec) + '">' + I('trash', 14) + ' ' + (smBoard ? L('ลบคอลัมน์') : L('ลบเซกชัน')) + '</button>';
         }
         if (smSec && S.can('write') && S.canInProject(state.route.id, 'edit')) {
           smh += '<div class="pop-sep"></div><button data-act="tt-pick" data-section="' + esc(smSec) + '">' + I('star', 14) + ' ' +
@@ -10008,7 +10054,7 @@
         if (popIsOpenFor(el)) { closePops(); break; }
         var ph = peopleFilterHtml() + '<button data-act="set-assignee" data-id="' + R.esc(state.openTaskId) +
           '" data-user="">' + R.avatar(null) + ' ' + L('ยังไม่มอบหมาย') + '</button>';
-        S.db.users.forEach(function (u) {
+        S.orgPeople().forEach(function (u) {
           ph += '<button data-act="set-assignee" data-id="' + R.esc(state.openTaskId) +
             '" data-user="' + R.esc(u.id) + '">' + R.avatar(u) + ' ' + R.esc(u.name) + '</button>';
         });
@@ -10059,7 +10105,7 @@
       case 'pick-follower': {
         if (popIsOpenFor(el)) { closePops(); break; }
         var fh = peopleFilterHtml();
-        S.db.users.forEach(function (u) {
+        S.orgPeople().forEach(function (u) {
           fh += '<button data-act="do-follow" data-id="' + R.esc(id) + '" data-user="' +
             R.esc(u.id) + '">' + R.avatar(u) + ' ' + R.esc(u.name) + '</button>';
         });
@@ -10143,7 +10189,7 @@
         if (popIsOpenFor(el)) { closePops(); break; }
         var ah = '<button data-act="set-sub-assignee" data-id="' + R.esc(id) +
           '" data-user="">' + R.avatar(null) + ' ' + L('ยังไม่มอบหมาย') + '</button>';
-        S.db.users.forEach(function (u) {
+        S.orgPeople().forEach(function (u) {
           ah += '<button data-act="set-sub-assignee" data-id="' + R.esc(id) +
             '" data-user="' + R.esc(u.id) + '">' + R.avatar(u, 'sm') + ' ' +
             R.esc(u.name) + '</button>';
@@ -11555,7 +11601,12 @@
         break;
       }
       case 'auto-sec-clear': state.auto.sec = null; refreshAuto(); break;
-      case 'auto-tab': state.auto.tab = el.dataset.v === 'runs' ? 'runs' : 'list'; refreshAuto(); break;
+      case 'auto-tab': state.auto.tab = el.dataset.v === 'runs' ? 'runs' : el.dataset.v === 'gallery' ? 'gallery' : 'list'; refreshAuto(); break;
+      case 'auto-tpl': {   // QA-B — เริ่มกฎใหม่จากเทมเพลต (ยังไม่บันทึก ตรวจและแก้ก่อนได้)
+        var tplA = global.Auto2.build(state.auto.pid, el.dataset.v);
+        if (tplA) autoEditStart(state.auto.pid, tplA, true);
+        break;
+      }
       case 'auto-new': {
         var anPid = state.auto.pid;
         autoEditStart(anPid, { name: '', on: true, chain: false,
@@ -12162,6 +12213,30 @@
         toast(L('เพิ่ม “{name}” เข้ารายชื่อแล้ว', { name: un }));
         break;
       }
+      /* QA-D — ล้างข้อมูลตัวอย่างจากตอนเริ่มระบบ (ผู้ดูแลเท่านั้น) */
+      case 'clear-sample': {
+        if (!S.isAdmin()) { toast(L('ต้องเป็นผู้ดูแลระบบ')); break; }
+        var cs = S.sampleSummary();
+        if (!cs.users.length && !cs.removable.length) { toast(L('ไม่มีข้อมูลตัวอย่างให้ล้าง')); break; }
+        var csTasks = 0;
+        cs.removable.forEach(function (p) { csTasks += S.tasksInProject(p.id).length; });
+        var csBody = [];
+        var csUsers = cs.users.filter(function (u) { return u.id !== S.db.currentUserId; });
+        if (csUsers.length) csBody.push(L('ผู้ใช้ตัวอย่างที่จะลบ ({n} คน)', { n: csUsers.length }) + ': ' +
+          csUsers.map(function (u) { return u.name; }).join(', '));
+        if (cs.removable.length) csBody.push(L('โปรเจกต์ตัวอย่างที่จะลบ ({n} โปรเจกต์ พร้อมงานราว {t} งาน)', { n: cs.removable.length, t: csTasks }) + ': ' +
+          cs.removable.map(function (p) { return p.name; }).join(', '));
+        if (cs.skipped.length) csBody.push(L('มีงานจริงอยู่ ข้าม') + ': ' +
+          cs.skipped.map(function (p) { return p.name; }).join(', ') + ' — ' + L('จะถอดเฉพาะผู้ใช้ตัวอย่างออกจากโปรเจกต์นี้'));
+        csBody.push(L('ความเห็นและประวัติเก่าของผู้ใช้ตัวอย่างยังอ่านได้ (แสดงเป็น “ผู้ใช้ตัวอย่าง (ลบแล้ว)”) และย้อนกลับได้ทั้งชุด'));
+        askConfirm(L('ล้างข้อมูลตัวอย่าง'), csBody.join('\n\n'), function () {
+          var res = S.clearSampleData();
+          if (!res) { toast(L('ไม่มีข้อมูลตัวอย่างให้ล้าง')); return; }
+          renderAll();
+          toast(L('ล้างข้อมูลตัวอย่างแล้ว'), L('ย้อนกลับ'), 'undo');
+        }, { ok: L('ล้างข้อมูลตัวอย่าง') });
+        break;
+      }
       case 'remove-user': {
         var ru = S.user(id);
         if (!ru) break;
@@ -12294,7 +12369,7 @@
       case 'set-manager': {        // Sprint 4 — ผู้ดูแลระบบตั้งหัวหน้าของสมาชิก
         var smU = S.user(id), smId = id;
         if (!smU) break;
-        var smChoices = S.db.users.filter(function (x) { return x.id !== smId && x.active !== false && x.role !== 'viewer' && x.role !== 'guest'; }).slice(0, 14).map(function (x) {
+        var smChoices = S.orgPeople().filter(function (x) { return x.id !== smId && x.active !== false && x.role !== 'viewer' && x.role !== 'guest'; }).slice(0, 14).map(function (x) {
           return { label: x.name, run: function () { if (S.setManager(smId, x.id)) toast(L('ตั้งหัวหน้าแล้ว')); } };
         });
         smChoices.push({ label: L('ไม่มีหัวหน้า'), run: function () { if (S.setManager(smId, null)) toast(L('ตั้งหัวหน้าแล้ว')); } });
@@ -12706,6 +12781,12 @@
     if (/^(ae-|aec-)/.test(act) && state.auto && state.auto.edit) {
       var ea = state.auto.edit.a, epid = state.auto.edit.pid;
       if (act === 'ae-name') { ea.name = el.value; return; }        // ไม่ต้องวาดใหม่
+      if (act === 'ae-dry') {                                       // QA-B — ทดลองกับงานที่เลือก
+        global.Auto2.runDry(epid, state.auto.edit, el.value);
+        refreshAuto();
+        return;
+      }
+      if (state.auto.edit.dry) state.auto.edit.dry.stale = true;
       if (act === 'ae-trig') {
         ea.trigger = autoNewTrig(epid, el.value, ea.trigger.sec);
       } else if (act === 'ae-tp') {
@@ -13324,6 +13405,12 @@
 
     /* แป้นภาษาไทย: ดูตำแหน่งปุ่ม (e.code) ไม่ใช่ตัวอักษรที่ได้ — Ctrl+Z / Ctrl+/ ด้วย */
     var kc = keyOf(e);
+    if (e.ctrlKey && ((kc === 'z' && e.shiftKey) || kc === 'y') && !typing) {     // QA-A — ทำซ้ำ
+      e.preventDefault();
+      if (!S.can('write')) { denyToast(); return; }
+      doRedo();
+      return;
+    }
     if (e.ctrlKey && kc === 'z' && !typing) {
       e.preventDefault();
       if (!S.can('write')) { denyToast(); return; }
@@ -14263,7 +14350,7 @@
         S.snoozeChoices().forEach(function (c) {
           var d = new Date(c.at);
           /* Pre-pilot A — หนึ่งบรรทัดต่อหนึ่งตัวเลือก "อีก 1 ชั่วโมง · 15:35" (ไม่ซ้ำเวลา 9:00/09:00) */
-          var sbase = String(L(c.label)).replace(/\s*\([^)]*\d{1,2}:\d{2}\)\s*$/, '').replace(/\s*\d{1,2}:\d{2}\s*$/, '');
+          var sbase = String(L(c.label)).replace(/\s*\([^)]*\d{1,2}:\d{2}\)\s*$/, '').replace(/\s*\d{1,2}:\d{2}\s*$/, '').replace(/[,，\s]+$/, '');
           var sday = S.iso(d) === S.today() ? '' : (R.fmtDate(S.iso(d)) + ' ');
           sh += '<button data-act="notif-snooze-set" data-ids="' + R.esc(ids) + '" data-at="' + R.esc(c.at) + '">' +
             I('clock', 14) + '<span class="grow">' + R.esc(sbase + ' · ' + (c.id === 'week' ? sday : '') + R.fmtTime(d)) + '</span></button>';
@@ -14483,5 +14570,24 @@
       toast(L('โหมดทดลอง — ข้อมูลจะหายเมื่อรีเฟรช กด “ดาวน์โหลดสำรอง” เพื่อเก็บงานไว้'));
     }, 700);
   }
+
+
+  /* QA-A — ปุ่มไอคอนล้วนที่มี title แต่ไม่มี aria-label: คัดลอกข้อความ title เป็น aria-label ให้โปรแกรมอ่านจอ
+   * (ทำครั้งเดียวทั้งหน้าและทุกครั้งที่ DOM เปลี่ยน — title ผ่าน L() มาแล้ว จึงเป็นข้อความเดียวกัน) */
+  (function () {
+    function label(root) {
+      if (!root || root.nodeType !== 1) return;
+      var list = root.matches && root.matches('button[title],[role=button][title],a[title],select[title]') ? [root] : [];
+      Array.prototype.forEach.call(root.querySelectorAll('button[title],[role=button][title],a[title],select[title]'), function (b) { list.push(b); });
+      list.forEach(function (b) {
+        if (!b.hasAttribute('aria-label') && !(b.textContent || '').trim()) b.setAttribute('aria-label', b.getAttribute('title'));
+      });
+    }
+    var pend = false;
+    function run() { pend = false; label(document.body); }
+    label(document.body);
+    new MutationObserver(function () { if (!pend) { pend = true; setTimeout(run, 60); } })
+      .observe(document.body, { childList: true, subtree: true });
+  })();
 
 })(window);

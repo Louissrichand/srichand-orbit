@@ -308,7 +308,7 @@
       var n = S.tasksInProject(p.id).filter(function (x) { return !x.task.completed; }).length;
       return item(route.type === 'project' && route.id === p.id,
         'data-act="go" data-route="project" data-id="' + esc(p.id) + '"',
-        '<span class="emoji">' + esc(p.icon) + '</span><span class="swatch" style="background:' + esc(p.color) + '"></span>',
+        '<span class="swatch" style="background:' + esc(p.color) + '"></span>',   // แถบข้างโชว์แค่สีโปรเจกต์ ไม่ต้องมีไอคอน
         esc(p.name),
         (p.visibility === 'private' ? '<span class="lockmark" title="' + L('โปรเจกต์ปิด') + '">' + I('shield', 12) + '</span>' : '') +
         (n ? '<span class="count">' + n + '</span>' : ''));
@@ -1869,7 +1869,7 @@
     var p = S.project(projectId);
     return S.projectMembers(projectId).map(function (m) {
       return { user: S.user(m.userId), access: m.access };
-    }).filter(function (x) { return x.user && x.user.active !== false; })
+    }).filter(function (x) { return x.user && x.user.active !== false && (!S.isTeamMode() || S.isRealMember(x.user)); })
       .sort(function (a, b) {
         if (a.user.id === p.owner) return -1;
         if (b.user.id === p.owner) return 1;
@@ -2040,7 +2040,7 @@
       }
       case 'person':
         h += '<select class="inp" data-act="ff-ans"' + d + '><option value="">' + L('เลือกคน') + '</option>' +
-          S.db.users.filter(function (u) { return u.active !== false; }).map(function (u) {
+          S.orgPeople().map(function (u) {
             return '<option value="' + esc(u.id) + '"' + (a === u.id ? ' selected' : '') + '>' + esc(u.name) + '</option>';
           }).join('') + '</select>';
         break;
@@ -2246,7 +2246,7 @@
     // ตามผู้รับผิดชอบ
     h += '<div class="panel"><h3>' + L('ตามผู้รับผิดชอบ') + '</h3>';
     var anyA = false;
-    S.db.users.forEach(function (u) {
+    S.orgPeople().forEach(function (u) {
       var a = s.byAssignee[u.id];
       if (!a) return;
       anyA = true;
@@ -2878,7 +2878,7 @@
       var act = x.kind === 'task' ? ' data-act="open-task" data-id="' + esc(x.id) + '"' : ' data-act="go" data-route="' + x.kind + '" data-id="' + esc(x.id) + '"';
       return '<span class="mchip ' + (x.kind === 'task' ? 'mchip-task' : 'mchip-proj') + (x.done ? ' done' : '') + '"' + act + '>' +
         (x.kind === 'task' ? '<span class="mi">' + (x.done ? '✓' : '○') + '</span>' : '<span class="mi sw" style="background:' + esc(x.color || 'var(--accent)') + '"></span>') +
-        esc(x.name) + (removable ? '<button class="x" data-act="goal-rel" data-id="' + esc(gid) + '" data-item="' + esc(x.id) + '">✕</button>' : '') + '</span>';
+        esc(x.name) + (removable ? '<button class="x" data-act="goal-rel" data-id="' + esc(gid) + '" data-item="' + esc(x.id) + '" title="' + L('เอาออก') + '" aria-label="' + L('เอาออก') + '">✕</button>' : '') + '</span>';
     }).join('');
   }
 
@@ -3470,12 +3470,13 @@
         '<button data-act="home-w-top" data-i="' + i + '"' + (i === 0 ? ' disabled' : '') +
         ' title="' + L('ย้ายไปบนสุด') + '" aria-label="' + L('ย้ายไปบนสุด') + '">' + I('toTop', 13) + '</button>' +
         '<button data-act="home-w-move" data-i="' + i + '" data-d="-1"' + (i === 0 ? ' disabled' : '') +
-        ' title="' + L('ย้ายขึ้น') + '">' + I('arrowUp', 13) + '</button>' +
+        ' title="' + L('ย้ายขึ้น') + '" aria-label="' + L('ย้ายขึ้น') + '">' + I('arrowUp', 13) + '</button>' +
         '<button data-act="home-w-move" data-i="' + i + '" data-d="1"' + (i === n - 1 ? ' disabled' : '') +
-        ' title="' + L('ย้ายลง') + '">' + I('arrowDown', 13) + '</button>' +
+        ' title="' + L('ย้ายลง') + '" aria-label="' + L('ย้ายลง') + '">' + I('arrowDown', 13) + '</button>' +
         '<button data-act="home-w-size" data-i="' + i + '" title="' +
+        (x.full ? L('ครึ่งแถว') : L('เต็มแถว')) + '" aria-label="' +
         (x.full ? L('ครึ่งแถว') : L('เต็มแถว')) + '">' + I(x.full ? 'shrink' : 'expand', 13) + '</button>' +
-        '<button data-act="home-w-remove" data-i="' + i + '" title="' + L('เอาออก') + '">' + I('close', 13) + '</button>' +
+        '<button data-act="home-w-remove" data-i="' + i + '" title="' + L('เอาออก') + '" aria-label="' + L('เอาออก') + '">' + I('close', 13) + '</button>' +
         '</div>';
     }
     return hcard(o);
@@ -4610,18 +4611,18 @@
     h += '<div class="bulk-acts">';
     if (global.Render.bulkExt) h += global.Render.bulkExt(ids) || '';     // Sprint 2A — ย้ายไปเซกชัน/คอลัมน์
     h += '<button data-act="bulk-complete">' + L('ทำเสร็จ') + '</button>';
-    h += '<button data-act="bulk-reopen">' + L('เปิดใหม่') + '</button>';
-    h += '<select data-act="bulk-assignee"><option value="">' + L('มอบหมายให้…') + '</option>';
-    S.db.users.forEach(function (u) {
+    h += '<button class="bulk-desk" data-act="bulk-reopen">' + L('เปิดใหม่') + '</button>';
+    h += '<select class="bulk-desk" data-act="bulk-assignee" aria-label="' + esc(L('มอบหมายให้…')) + '"><option value="">' + L('มอบหมายให้…') + '</option>';
+    S.orgPeople().forEach(function (u) {
       h += '<option value="' + esc(u.id) + '">' + esc(u.name) + '</option>';
     });
     h += '</select>';
-    h += '<select data-act="bulk-priority"><option value="">' + L('ความสำคัญ…') + '</option>';
+    h += '<select class="bulk-desk" data-act="bulk-priority" aria-label="' + esc(L('ความสำคัญ…')) + '"><option value="">' + L('ความสำคัญ…') + '</option>';
     S.PRIORITIES.forEach(function (p) {
       h += '<option value="' + p.id + '">' + esc(L(p.label)) + '</option>';
     });
     h += '</select>';
-    h += '<button data-act="bulk-due">' + L('ตั้งกำหนดส่ง') + '</button>';
+    h += '<button class="bulk-desk" data-act="bulk-due">' + L('ตั้งกำหนดส่ง') + '</button>';
     h += '<button data-act="bulk-more">' + L('เพิ่มเติม') + ' ' + I('chevronDown', 12) + '</button>';
     h += '<button data-act="bulk-delete">' + L('ลบ') + '</button>';
     /* ผลรวมของฟิลด์ตัวเลขในงานที่เลือก (ฟิลด์ของโปรเจกต์ที่งานอยู่) */
@@ -5053,7 +5054,7 @@
       } else if (f.type === 'person') {
         s += '<select class="inp" data-act="edit-field" data-field="' + esc(f.id) +
           '"><option value="">—</option>';
-        S.db.users.forEach(function (usr) {
+        S.orgPeople().forEach(function (usr) {
           s += '<option value="' + esc(usr.id) + '"' + (v === usr.id ? ' selected' : '') +
             '>' + esc(usr.name) + '</option>';
         });
@@ -5748,6 +5749,7 @@
     'auth.denied': 'ถูกปฏิเสธการเข้าถึง',
     'user.add': 'ได้เพิ่มสมาชิก',
     'user.remove': 'ได้ลบสมาชิก',
+    'sample.clear': 'ได้ล้างข้อมูลตัวอย่าง',
     'user.role': 'ได้เปลี่ยนบทบาทของ',
     'user.disable': 'ได้ปิดใช้งานบัญชีของ',
     'user.enable': 'ได้เปิดใช้งานบัญชีของ',
@@ -5885,6 +5887,16 @@
           'ต้องเพิ่มหรือเอาออกจากไซต์ SharePoint ควบคู่กันเสมอ') + '</div></div>';
     }
 
+    /* QA-D — ข้อมูลตัวอย่างจากตอนเริ่มระบบ (ผู้ใช้/โปรเจกต์สมมติ) ที่ปนอยู่ในไฟล์กลางของทีม */
+    var smp = team ? S.sampleSummary() : null;
+    if (smp && (smp.users.length || smp.removable.length)) {
+      h += '<div class="admin-demo smp-card">' + I('alert', 15) + '<div><b>' +
+        esc(L('พบข้อมูลตัวอย่างจากตอนเริ่มระบบ: ผู้ใช้ {u} คน, โปรเจกต์ {p} โปรเจกต์',
+          { u: smp.users.length, p: smp.removable.length + smp.skipped.length })) + '</b><br>' +
+        esc(L('คนและงานสมมติเหล่านี้ไม่ใช่ข้อมูลจริงขององค์กร ล้างออกแล้วย้อนกลับได้')) + '</div>' +
+        '<button class="btn btn-sm btn-danger" data-act="clear-sample">' + esc(L('ล้างข้อมูลตัวอย่าง…')) + '</button></div>';
+    }
+
     /* Sprint 4 — ชื่อที่เป็นอีเมล (มักมาจากบัญชีองค์กรที่ไม่มีชื่อที่แสดง) ขึ้นเต็มตามงาน ความเห็น และการ์ด เตือนให้ผู้ดูแลแก้ */
     var emailNamed = db.users.filter(function (u) { return u.active !== false && /@/.test(String(u.name || '')); });
     if (emailNamed.length) {
@@ -5904,7 +5916,8 @@
 
       h += '<span class="admin-who">' + avatar(u) +
         '<span><b>' + esc(u.name) + (isMe ? ' <i>' + L('(คุณ)') + '</i>' : '') +
-        (off ? '<span class="pill-off">' + L('ปิดใช้งาน') + '</span>' : '') + '</b>' +
+        (off ? '<span class="pill-off">' + L('ปิดใช้งาน') + '</span>' : '') +
+        (u.sample ? '<span class="pill-off smp-pill">' + L('ตัวอย่าง') + '</span>' : '') + '</b>' +
         '<em>' + esc(u.email || '—') + authTag(u) + '</em>' +
         /* Sprint 4 — หัวหน้า (ใช้เลือกผู้รับโอนงานตอนปิดบัญชีให้อัตโนมัติ) */
         '<em><button class="as-link" data-act="set-manager" data-id="' + esc(u.id) + '">' +
@@ -6000,7 +6013,7 @@
           '" data-act="audit-group" data-g="' + esc(g) + '">' + L(auditGroupLabel(g)) + '</button>';
       });
       h += '<input class="audit-q" id="auditQ" data-act="audit-q" placeholder="' +
-        L('ค้นหาในบันทึก…') + '" value="' + esc(f.q || '') + '">';
+        L('ค้นหาในบันทึก…') + '" aria-label="' + L('ค้นหาในบันทึก…') + '" value="' + esc(f.q || '') + '">';
       h += '</div>';
     }
 

@@ -253,6 +253,15 @@
 
   /* ---------- seed ---------- */
 
+  /** QA-D — ฐานข้อมูลองค์กรเปล่า (ไม่มีคน/โปรเจกต์/งานตัวอย่าง) ใช้ตั้งต้นไฟล์กลางตอนยังไม่เคยมี */
+  function emptyOrgDb() {
+    return migrate({
+      version: SCHEMA, currentUserId: null, settings: { theme: 'auto', lang: null },
+      users: [], projects: [], tasks: [], memberships: [], stories: [], fieldValues: [],
+      notifications: [], taskTemplates: []
+    });
+  }
+
   function seed() {
     var t = today();
 
@@ -328,6 +337,9 @@
     };
 
     var projects = [pLaunch, pContent, pOps];
+    /* QA-D — ทุกอย่างที่ seed() สร้างเป็นข้อมูลตัวอย่าง ไม่ใช่คนหรืองานจริงขององค์กร */
+    users.forEach(function (u) { u.sample = true; });
+    projects.forEach(function (p) { p.sample = true; });
 
     // [name, project, section, assignee, dueOffset, priority, notes, tags, type, startOffset]
     var raw = [
@@ -730,6 +742,15 @@
       var firstUser = d.users.filter(function (u) { return u.id === d.currentUserId; })[0] || d.users[0];
       if (firstUser) firstUser.role = 'admin';
     }
+    /* QA-D — ไฟล์เก่าที่มาจาก seed() ยังไม่มีธง sample: จับจากรหัสตัวอย่าง และต้องไม่เคยล็อกอินจริง
+     * (คนที่ล็อกอินแล้วไม่ถูกธงเด็ดขาด) ไม่เพิ่ม SCHEMA ธงเป็นช่องไม่บังคับ */
+    var SEED_USERS = ['u_me', 'u_nan', 'u_ploy', 'u_tor'], SEED_PROJECTS = ['p_launch', 'p_content', 'p_ops'];
+    d.users.forEach(function (u) {
+      if (u && SEED_USERS.indexOf(u.id) >= 0 && !u.lastSeenAt && !u.authBy) u.sample = true;
+    });
+    d.projects.forEach(function (p) {
+      if (p && SEED_PROJECTS.indexOf(p.id) >= 0) p.sample = true;
+    });
     d.version = SCHEMA;
     return d;
   }
@@ -807,6 +828,7 @@
    * ประวัติย้อนกลับก็ถือข้อมูลชุดเดียวกันไว้ ต้องล้างด้วย */
   function wipeLocal() {
     undoStack.length = 0;
+    redoStack.length = 0;
     suppressRemote = true;
     db = migrate(seed());
     dropIndex();
@@ -1071,18 +1093,35 @@
     if (batchDepth) return;            // ชุดคำสั่งเดียวกันย้อนกลับได้ในครั้งเดียว
     undoStack.push({ label: label, params: params || null, data: JSON.stringify(db) });
     if (undoStack.length > 25) undoStack.shift();
+    redoStack.length = 0;              // QA-A — ทำอะไรใหม่หลังย้อนกลับ = ล้างประวัติทำซ้ำ
   }
 
   function undo() {
     var s = undoStack.pop();
     if (!s) return null;
     autoQueue.length = 0;
+    redoStack.push({ label: s.label, params: s.params, data: JSON.stringify(db) });   // QA-A
     db = JSON.parse(s.data);
     dropIndex();
     commit();
     lastUndo = { label: s.label, params: s.params };
     return s.label;
   }
+
+  /* QA-A — ทำซ้ำ (Ctrl+Shift+Z / Ctrl+Y): คืนสถานะก่อนที่จะกดย้อนกลับ */
+  var redoStack = [];
+  function redo() {
+    var s = redoStack.pop();
+    if (!s) return null;
+    autoQueue.length = 0;
+    undoStack.push({ label: s.label, params: s.params, data: JSON.stringify(db) });
+    db = JSON.parse(s.data);
+    dropIndex();
+    commit();
+    lastUndo = { label: s.label, params: s.params };
+    return s.label;
+  }
+  function canRedo() { return redoStack.length > 0; }
 
   /* คีย์กับค่าแทนที่ของการย้อนกลับครั้งล่าสุด ให้ฝั่งหน้าจอเอาไปแปลเอง */
   var lastUndo = null;
@@ -1109,7 +1148,8 @@
   function indexSig() {
     return db.tasks.length + '/' + db.memberships.length + '/' + db.projects.length +
            '/' + db.users.length + '/' + db.stories.length +
-           '/' + (db.fieldValues || []).length + '/' + (db.projectMembers || []).length;
+           '/' + (db.fieldValues || []).length + '/' + (db.projectMembers || []).length +
+           '/' + (db.removedUsers || []).length;
   }
 
   function index() {
@@ -1121,6 +1161,11 @@
       pmByProject: {}, access: {}, types: {}, statuses: {}, teamMem: {}
     };
     db.users.forEach(function (u) { i.user[u.id] = u; });
+    /* QA-D — ผู้ใช้ตัวอย่างที่ล้างออกแล้ว: ความเห็น/ประวัติเก่ายังอ่านออกว่าใครทำ */
+    (db.removedUsers || []).forEach(function (r) {
+      if (!i.user[r.id]) i.user[r.id] = { id: r.id, name: L('ผู้ใช้ตัวอย่าง (ลบแล้ว)'), email: '', color: '#9ca0a8',
+        role: null, active: false, removed: true };
+    });
     /* 4a — สมาชิกทีม { teamId: { userId: 'admin'|'member' } } ใช้คำนวณสิทธิ์ที่ได้ผ่านทีม */
     (db.teams || []).forEach(function (tm) {
       var mm = i.teamMem[tm.id] = {};
@@ -2368,8 +2413,8 @@
 
   /** คนที่ควรได้ยินเรื่องนี้ของโปรเจกต์ — ต้องเห็นโปรเจกต์ได้และเปิดหัวข้อนี้ไว้ */
   function projectWatchers(projectId, key) {
-    return db.users.filter(function (u) {
-      return u.id !== db.currentUserId && u.active !== false &&
+    return orgPeople().filter(function (u) {
+      return u.id !== db.currentUserId &&
         !!projectAccess(projectId, u.id) && projNotifyOf(projectId, u.id)[key];
     }).map(function (u) { return u.id; });
   }
@@ -2767,7 +2812,7 @@
     var p = project(projectId);
     if (!def) return [];
     if (def.kind === 'person' || fid === 'followers') {
-      return [[ME, 'ฉัน', null]].concat(db.users.filter(function (u) { return u.active !== false; })
+      return [[ME, 'ฉัน', null]].concat(orgPeople()
         .map(function (u) { return [u.id, u.name, u.color]; }));
     }
     if (fid === 'project') {
@@ -3035,8 +3080,8 @@
     var mem = projectMembers(projectId).map(function (m) { return m.userId; });
     var p = project(projectId);
     if (p && p.owner && mem.indexOf(p.owner) < 0) mem.push(p.owner);
-    return db.users.filter(function (u) {
-      return u.active !== false && (!mem.length || mem.indexOf(u.id) >= 0);
+    return orgPeople().filter(function (u) {
+      return (!mem.length || mem.indexOf(u.id) >= 0);
     });
   }
 
@@ -3361,13 +3406,14 @@
       if (empty) logQuiet(taskId, 'ล้างค่า {f} (เดิม {a})', { f: def.name, a: fvShown(def, fv.value) });
       else logQuiet(taskId, 'เปลี่ยน {f} จาก {a} เป็น {b}', { f: def.name, a: fvShown(def, fv.value), b: fvShown(def, value) });
     }
+    var prevV = fv ? fv.value : null;   // QA-B — ค่าเดิม ไว้ให้ทริกเกอร์ "จาก → เป็น"
     if (fv) {
       if (empty) db.fieldValues = db.fieldValues.filter(function (v) { return v !== fv; });
       else fv.value = value;
     } else if (!empty) {
       db.fieldValues.push({ taskId: taskId, fieldId: fieldId, value: value });
     }
-    autoFire('field', taskId, { field: fieldId, value: empty ? null : value });
+    autoFire('field', taskId, { field: fieldId, value: empty ? null : value, old: prevV === undefined ? null : prevV });
     return true;
   }
 
@@ -3622,7 +3668,7 @@
   /** หา @ชื่อ ในข้อความ แล้วคืน id ของคนที่ถูกพูดถึง */
   function parseMentions(text) {
     var found = [];
-    db.users.forEach(function (u) {
+    orgPeople().forEach(function (u) {
       if (text.indexOf('@' + u.name) >= 0) found.push(u.id);
     });
     return found;
@@ -3806,8 +3852,8 @@
     var am = rest.match(/\s@(\S+)/);
     if (am) {
       var q = am[1].toLowerCase();
-      var hits = (db.users || []).filter(function (u) {
-        return u && u.name && !u.disabled && u.active !== false && u.name.toLowerCase().indexOf(q) === 0 &&
+      var hits = orgPeople().filter(function (u) {
+        return u && u.name && u.name.toLowerCase().indexOf(q) === 0 &&
           (!projectId || !!projectAccess(projectId, u.id));
       });
       if (hits.length === 1) { assignee = hits[0].id; rest = rest.replace(am[0], ' '); }
@@ -4129,6 +4175,11 @@
       patch.completedBy = patch.completed ? (db.currentUserId || null) : null;   // Sprint 3 — ระบบอัตโนมัติ/ไล่ตามคนที่ปลุกกฎ ซึ่งเป็นคนที่เห็นในบันทึกเดียวกัน
       log(id, patch.completed ? 'ทำงานนี้เสร็จแล้ว' : 'เปิดงานนี้อีกครั้ง');
       autoFire('completed', id, { v: !!patch.completed });
+      /* QA-B — งานย่อยตัวสุดท้ายเสร็จ → ปลุก "งานย่อยครบทุกอัน" ของงานหลัก */
+      if (patch.completed && t.parentId && task(t.parentId) &&
+          (subtasks(t.parentId) || []).every(function (x) { return x.id === t.id || x.completed; })) {
+        autoFire('subsdone', t.parentId, {});
+      }
       /* Sprint 4 — งานย่อยตัวสุดท้ายของงานหลักเสร็จ → แจ้งผู้รับผิดชอบงานหลักว่าปิดงานหลักได้ (แจ้งครั้งเดียวต่องานหลัก) */
       if (patch.completed && t.parentId) {
         var par = task(t.parentId);
@@ -4256,9 +4307,9 @@
     if ('tags' in patch) {
       var was = t.tags || [], now = patch.tags || [];
       now.filter(function (x) { return was.indexOf(x) < 0; })
-        .forEach(function (x) { log(id, 'เพิ่มแท็ก {t}', { t: x }); });
+        .forEach(function (x) { log(id, 'เพิ่มแท็ก {t}', { t: x }); autoFire('tagadd', id, { tag: x }); });
       was.filter(function (x) { return now.indexOf(x) < 0; })
-        .forEach(function (x) { log(id, 'เอาแท็ก {t} ออก', { t: x }); });
+        .forEach(function (x) { log(id, 'เอาแท็ก {t} ออก', { t: x }); autoFire('tagdel', id, { tag: x }); });
     }
     if ('recur' in patch) {
       var rw = t.recur && t.recur.freq, rn2 = patch.recur && patch.recur.freq;
@@ -4801,6 +4852,7 @@
     m.sectionId = sectionId;
     if (position != null) m.position = position;
     if (moved) autoFire('moved', m.taskId, { projectId: m.projectId, sec: sectionId, from: from });
+    if (moved && from) autoFire('movedout', m.taskId, { projectId: m.projectId, sec: from, to: sectionId });   // QA-B
     return moved;
   }
 
@@ -5675,7 +5727,7 @@
   function deleteSection(projectId, sectionId) {
     var p = project(projectId);
     if (p.sections.length <= 1) return false;
-    snapshot('ลบคอลัมน์');
+    snapshot('ลบเซกชัน');
     var fallback = p.sections.filter(function (s) { return s.id !== sectionId; })[0];
     db.memberships.forEach(function (m) {
       if (m.projectId === projectId && m.sectionId === sectionId) {
@@ -6877,6 +6929,126 @@
     return db.users.filter(function (u) { return !!u.lastSeenAt; });
   }
 
+  /* ---------- QA-D · ผู้ใช้จริงเท่านั้น ----------
+   * โหมดทีม (ล็อกอินแล้ว): ตัวเลือกคนทุกที่ต้องมีแต่สมาชิกจริงขององค์กร ไม่มีคน/งานตัวอย่างหรืออีเมลทดสอบ
+   * โหมดบนเครื่อง ("ลองบนเครื่องนี้"): เห็นคนตัวอย่างตามเดิม เดโมยังใช้ได้ */
+  function isTeamMode() {
+    return !!(global.OrbitSync && global.OrbitSync.state && global.OrbitSync.state.mode === 'team');
+  }
+  var TEST_MAIL_RE = /@example\.(com|org)\s*$/i;
+  /** สมาชิกจริง: ใช้งานอยู่ ไม่ถูกปิด ไม่ใช่ตัวอย่าง อีเมลไม่ใช่โดเมนทดสอบ
+   *  และล็อกอินด้วย Microsoft แล้ว หรือผู้ดูแลเพิ่มไว้พร้อมอีเมล */
+  function isRealMember(u) {
+    if (!u || u.active === false || u.disabled || u.sample || u.removed) return false;
+    var em = String(u.email || '').trim();
+    if (TEST_MAIL_RE.test(em)) return false;
+    return u.authBy === 'microsoft' || !!u.lastSeenAt || !!em;
+  }
+  /** รายชื่อที่ใช้ในตัวเลือกคนทุกจุด (ผู้รับผิดชอบ ผู้อนุมัติ ผู้ติดตาม @ ฯลฯ) */
+  function orgPeople() {
+    if (isTeamMode()) return db.users.filter(isRealMember);
+    return db.users.filter(function (u) { return u.active !== false && !u.disabled; });
+  }
+  /** id นี้เลือกเป็นคนได้ไหม (ใช้กับตัวเลือกที่ไม่ได้ไล่ทั้งลิสต์) */
+  function isPickable(id) { return orgPeople().some(function (u) { return u.id === id; }); }
+
+  /** ข้อมูลตัวอย่างที่ยังค้างอยู่ และแยกว่าอันไหนล้างได้/ข้าม (มีงานจริงอยู่) */
+  function realUserIds() {
+    var m = {};
+    db.users.forEach(function (u) { if (!u.sample) m[u.id] = true; });
+    return m;
+  }
+  function sampleSummary() {
+    var real = realUserIds();
+    var users = db.users.filter(function (u) { return u.sample; });
+    var removable = [], skipped = [];
+    db.projects.filter(function (p) { return p.sample; }).forEach(function (p) {
+      var tids = {};
+      db.memberships.forEach(function (m) { if (m.projectId === p.id) tids[m.taskId] = true; });
+      var hasReal = db.tasks.some(function (t) {
+        if (!tids[t.id] && !(t.parentId && tids[t.parentId])) return false;
+        return real[t.createdBy] || real[t.assigneeId] || real[t.assignedBy];
+      }) || db.stories.some(function (s) { return tids[s.taskId] && real[s.actorId]; });
+      (hasReal ? skipped : removable).push(p);
+    });
+    return { users: users, removable: removable, skipped: skipped,
+             any: !!(users.length || removable.length || skipped.length) };
+  }
+
+  /** ล้างข้อมูลตัวอย่างจากตอนเริ่มระบบ (ผู้ดูแลเท่านั้น · ย้อนกลับครั้งเดียว · มีบันทึกผู้ดูแล) */
+  function clearSampleData() {
+    if (!isAdmin()) { denied('manage'); return null; }
+    var sum = sampleSummary();
+    if (!sum.users.length && !sum.removable.length) return null;
+    var userIds = {}, projIds = {};
+    sum.users.forEach(function (u) { if (u.id !== db.currentUserId) userIds[u.id] = u; });
+    sum.removable.forEach(function (p) { projIds[p.id] = p; });
+    var nTasks = 0;
+    batch('ล้างข้อมูลตัวอย่าง', null, function () {
+      /* งาน: ที่อยู่เฉพาะโปรเจกต์ตัวอย่างลบทิ้งพร้อมงานย่อย ที่อยู่โปรเจกต์อื่นด้วยแค่หลุดออก */
+      var gone = {};
+      db.tasks.forEach(function (t) {
+        var ms = db.memberships.filter(function (m) { return m.taskId === t.id; });
+        if (ms.length && ms.every(function (m) { return projIds[m.projectId]; })) gone[t.id] = true;
+      });
+      var more = true;
+      while (more) {
+        more = false;
+        db.tasks.forEach(function (t) {
+          if (!gone[t.id] && t.parentId && gone[t.parentId]) { gone[t.id] = true; more = true; }
+        });
+      }
+      nTasks = Object.keys(gone).length;
+      db.tasks = db.tasks.filter(function (t) { return !gone[t.id]; });
+      db.memberships = db.memberships.filter(function (m) { return !gone[m.taskId] && !projIds[m.projectId]; });
+      db.stories = db.stories.filter(function (s) { return !gone[s.taskId]; });
+      db.fieldValues = (db.fieldValues || []).filter(function (v) { return !gone[v.taskId]; });
+      db.notifications = (db.notifications || []).filter(function (n) { return !gone[n.taskId]; });
+      db.tasks.forEach(function (t) {
+        t.dependsOn = (t.dependsOn || []).filter(function (d) { return !gone[d.id]; });
+      });
+      db.projects = db.projects.filter(function (p) { return !projIds[p.id]; });
+      db.projectMembers = (db.projectMembers || []).filter(function (m) { return !projIds[m.projectId]; });
+      (db.portfolios || []).forEach(function (f) {
+        f.projectIds = (f.projectIds || []).filter(function (id) { return !projIds[id]; });
+      });
+      /* คน: ถอดออกจากทุกที่ที่อ้างถึง */
+      var cur = db.currentUserId;
+      function not(id) { return !userIds[id]; }
+      db.tasks.forEach(function (t) {
+        if (userIds[t.assigneeId]) { t.assigneeId = null; t.assignedAt = null; t.assignedBy = null; }
+        if (userIds[t.assignedBy]) t.assignedBy = null;
+        t.followers = (t.followers || []).filter(not);
+        t.likes = (t.likes || []).filter(not);
+        if (t.approvers) {
+          t.approvers = t.approvers.filter(not);
+          if (t.approvers.length < 2) t.approvers = null;
+        }
+        if (t.approvalVotes) Object.keys(t.approvalVotes).forEach(function (k) { if (userIds[k]) delete t.approvalVotes[k]; });
+      });
+      db.projectMembers = db.projectMembers.filter(function (m) { return not(m.userId); });
+      db.projects.forEach(function (p) { if (userIds[p.owner]) p.owner = cur; });
+      (db.portfolios || []).forEach(function (f) {
+        if (userIds[f.owner]) f.owner = cur;
+        if (f.members) f.members = f.members.filter(function (m) { return not(m.u || m.userId || m); });
+      });
+      (db.teams || []).forEach(function (t) {
+        t.members = (t.members || []).filter(function (m) { return not(m.u); });
+      });
+      db.notifications = db.notifications.filter(function (n) { return not(n.userId); });
+      if (db.personal) Object.keys(userIds).forEach(function (id) { delete db.personal[id]; });
+      db.removedUsers = db.removedUsers || [];
+      Object.keys(userIds).forEach(function (id) {
+        db.removedUsers.push({ id: id });
+        db.users = db.users.filter(function (u) { return u.id !== id; });
+      });
+      audit('sample.clear', null, 'ล้างข้อมูลตัวอย่าง: ผู้ใช้ {u} คน, โปรเจกต์ {p} โปรเจกต์, งาน {t} งาน',
+        { u: Object.keys(userIds).length, p: Object.keys(projIds).length, t: nTasks });
+    });
+    return { users: Object.keys(userIds).length, projects: Object.keys(projIds).length, tasks: nTasks,
+             skipped: sum.skipped.length };
+  }
+
   /** กิจกรรมล่าสุด ใช้ทั้งหน้าแรกและหน้าผู้ดูแล
    *
    * กรองสิทธิ์ก่อนตัดจำนวน ไม่งั้นคนที่เห็นงานไม่กี่งานจะได้ลิสต์ว่างเปล่า
@@ -7660,7 +7832,7 @@
   function csvDate(v) {
     var s = String(v || '').trim();
     var m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-    if (m) return m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
+    if (m) return (+m[1] > 2400 ? +m[1] - 543 : m[1]) + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
     m = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/);
     if (m) {
       var y = +m[3];
@@ -8298,6 +8470,7 @@
       match: function (tr, ev) { return (tr.v !== false) === !!ev.info.v; } },
     { id: 'assignee',    label: 'ผู้รับผิดชอบเปลี่ยน',
       match: function (tr, ev) {
+        if (tr.from && (tr.from === '@none' ? ev.info.old : ev.info.old !== tr.from)) return false;   // QA-B — จากคนนี้
         return !tr.user || (tr.user === '@none' ? !ev.info.user : ev.info.user === tr.user);
       } },
     { id: 'due',         label: 'กำหนดส่งเปลี่ยน', match: dateIs },
@@ -8305,11 +8478,28 @@
     { id: 'field',       label: 'ค่าฟิลด์เปลี่ยน',
       match: function (tr, ev) {
         if (!tr.field || ev.info.field !== tr.field) return false;
+        /* QA-B — "จากค่านี้" (tr.from) เป็นค่าเดิมก่อนเปลี่ยน */
+        if (tr.from != null && tr.from !== '') {
+          var ov = ev.info.old;
+          if (!(Array.isArray(ov) ? ov.indexOf(tr.from) >= 0 : String(ov) === String(tr.from))) return false;
+        }
         if (tr.val == null || tr.val === '') return true;
         var v = ev.info.value;
         return Array.isArray(v) ? v.indexOf(tr.val) >= 0 : String(v) === String(tr.val);
       } },
-    { id: 'comment',     label: 'มีความเห็นใหม่', match: always },
+    { id: 'comment',     label: 'มีความเห็นใหม่',
+      match: function (tr, ev) {   // QA-B — เฉพาะความเห็นที่มีข้อความนี้
+        if (!tr.text) return true;
+        var s = story(ev.info.story);
+        return !!s && String(s.text || '').toLowerCase().indexOf(String(tr.text).toLowerCase()) >= 0;
+      } },
+    { id: 'tagadd',      label: 'มีแท็กถูกเพิ่ม',
+      match: function (tr, ev) { return !tr.tag || ev.info.tag === tr.tag; } },
+    { id: 'tagdel',      label: 'มีแท็กถูกเอาออก',
+      match: function (tr, ev) { return !tr.tag || ev.info.tag === tr.tag; } },
+    { id: 'subsdone',    label: 'งานย่อยเสร็จครบทุกอัน', match: always },
+    { id: 'movedout',    label: 'งานถูกย้ายออกจากเซกชัน',
+      match: function (tr, ev) { return !tr.sec || ev.info.sec === tr.sec; } },
     { id: 'attachment',  label: 'มีไฟล์แนบใหม่', match: always },
     { id: 'follower',    label: 'มีผู้ติดตามเพิ่ม', match: always },
     { id: 'unblocked',   label: 'งานไม่ถูกบล็อกแล้ว', match: always },
@@ -8432,6 +8622,10 @@
       if (v === 'creator') id = t && t.createdBy;
       else if (v === 'triggerer') id = ctx.ev && ctx.ev.by;
       else if (v === 'assignee') id = t && t.assigneeId;
+      else if (v === 'owner') {                             // QA-B — เจ้าของโปรเจกต์
+        id = ctx.p && ctx.p.owner;
+        if (!id) throw autoErr('โปรเจกต์นี้ยังไม่ได้ตั้งเจ้าของ');
+      }
       else if (v.indexOf('field:') === 0 && t) id = fieldValue(t.id, v.slice(6));
     } else id = spec.user;
     var u = id ? user(id) : null;
@@ -8508,7 +8702,8 @@
     { id: 'followers', label: 'เพิ่มผู้ติดตาม', task: true, run: function (a, ctx) {
       var t = needTask(ctx), people = (a.users || []).slice(), skipped = null;
       (a.vars || []).forEach(function (v) {
-        var id = v === 'creator' ? t.createdBy : v === 'triggerer' ? ctx.ev.by : v === 'assignee' ? t.assigneeId : null;
+        var id = v === 'creator' ? t.createdBy : v === 'triggerer' ? ctx.ev.by : v === 'assignee' ? t.assigneeId
+          : v === 'owner' ? (ctx.p && ctx.p.owner) : null;
         if (!id) return;
         /* คนจากตัวแปรที่ไม่ได้เป็นสมาชิกโปรเจกต์ (ปิด) — ไม่เพิ่ม คนอื่นยังเพิ่มตามปกติ แล้วบอกในประวัติการรัน */
         var r = revealOutsiders([t.id], [id]);
@@ -8589,6 +8784,56 @@
       if (seen === undefined) delete st.mt.seen[t.id]; else st.mt.seen[t.id] = seen;
     } }
   ];
+
+  /* QA-B — การกระทำเพิ่ม: แจ้งเตือนเฉพาะคน, สร้างงานย่อยหลายอัน, งานติดตามผลจากเทมเพลต, ตั้งผู้อนุมัติ */
+  function autoPeopleList(a, ctx) {
+    var t = ctx.t, out = (a.users || []).slice();
+    (a.vars || []).forEach(function (v) {
+      var id = v === 'creator' ? t && t.createdBy : v === 'triggerer' ? ctx.ev && ctx.ev.by
+        : v === 'assignee' ? t && t.assigneeId : v === 'owner' ? ctx.p && ctx.p.owner : null;
+      if (id) out.push(id);
+    });
+    return out.filter(function (u, i) { return u && user(u) && user(u).active !== false && out.indexOf(u) === i; });
+  }
+  AUTO_ACTIONS.push(
+    { id: 'notify', label: 'แจ้งเตือนคนที่ระบุ', task: true, run: function (a, ctx) {
+      var t = needTask(ctx), ids = autoPeopleList(a, ctx);
+      if (!ids.length) throw autoErr('ยังไม่ได้เลือกคนที่จะแจ้ง');
+      var txt = autoVars(a.text, ctx).replace(/\s+/g, ' ').trim().slice(0, 300) ||
+        fill('งาน “{t}” ต้องการความสนใจจากคุณ', { t: t.name });
+      /* คนที่ไม่ได้เป็นสมาชิกโปรเจกต์ปิดจะไม่ได้รับ (ไม่เปิดให้เห็นงานเงียบ ๆ) */
+      var r = revealOutsiders([t.id], ids), skip = r.users.map(function (u) { return u.id; });
+      var ok = ids.filter(function (u) { return skip.indexOf(u) < 0; });
+      if (ok.length) notifyOnly(t.id, ok, '{m}', 'activity', { m: txt }, true);
+      if (skip.length) throw autoErr('ไม่ได้แจ้ง {who}: ไม่ได้เป็นสมาชิกของ “{p}”',
+        { who: r.users[0].name, p: r.projects[0] ? r.projects[0].name : '' });
+    } },
+    { id: 'subtasks', label: 'สร้างงานย่อยหลายอัน (เช็กลิสต์)', task: true, run: function (a, ctx) {
+      var t = needTask(ctx);
+      var lines = String(a.lines || '').split(/\r?\n/).map(function (x) { return x.replace(/^\s*[-*•\d.)]+\s*/, '').trim(); })
+        .filter(Boolean).slice(0, 30);
+      if (!lines.length) throw autoErr('ยังไม่ได้ใส่รายการงานย่อย');
+      var who = a.assign && a.assign.mode && a.assign.mode !== 'none' ? autoUser(a.assign, ctx) : null;
+      var due = a.due && a.due.on ? autoDate(a.due, ctx) : null;
+      lines.forEach(function (ln) {
+        var c = createTaskRaw({ name: autoVars(ln, ctx).slice(0, 300), parentId: t.id, assigneeId: who, dueOn: due }, null, null);
+        if (who && c.followers.indexOf(who) < 0) c.followers.push(who);
+      });
+    } },
+    { id: 'followup', label: 'สร้างงานติดตามผลจากเทมเพลตงาน', task: false, run: function (a, ctx) {
+      var p = ctx.p;
+      if (!p) throw autoErr('ไม่มีโปรเจกต์ให้สร้างงาน');
+      if (!a.tpl || !findTaskTemplate(a.tpl)) throw autoErr('เทมเพลตงานถูกลบไปแล้ว');
+      var sec = section(p.id, a.sec) ? a.sec : (ctx.m && section(p.id, ctx.m.sectionId) ? ctx.m.sectionId : null);
+      if (!applyTaskTemplate(a.tpl, p.id, sec)) throw autoErr('สร้างงานจากเทมเพลตไม่ได้');
+    } },
+    { id: 'approvers', label: 'ตั้งเป็นงานขออนุมัติ + ผู้อนุมัติ', task: true, run: function (a, ctx) {
+      var t = needTask(ctx), ids = autoPeopleList(a, ctx);
+      if (!ids.length) throw autoErr('ยังไม่ได้เลือกผู้อนุมัติ');
+      if (t.type !== 'approval') updateTask(t.id, { type: 'approval' }, { quiet: true });
+      if (!setApprovers(t.id, ids, a.mode === 'any' ? 'any' : 'all')) throw autoErr('ตั้งผู้อนุมัติไม่ได้');
+    } }
+  );
 
   /** ลงทะเบียนทริกเกอร์หรือการกระทำใหม่ (ชิ้นงานถัดไป) — id ซ้ำ = แทนของเดิม */
   function autoRegister(kind, def) {
@@ -8690,7 +8935,7 @@
     if (!acts) return false;                       // ไม่ตรงเงื่อนไข ไม่ถือเป็นการรัน
     var prev = autoCtx;
     autoCtx = { depth: ev.depth, a: a, p: p, t: t, m: m, ev: ev };
-    var done = 0, err = null;
+    var done = 0, err = null, trace = [];
     acts.slice(0, AUTO_MAX_ACTS).forEach(function (act) {
       try {
         var def = actDef(act.type);
@@ -8699,20 +8944,78 @@
         if (!p && !def.personal) throw autoErr('การกระทำนี้ใช้ในงานของฉันไม่ได้');
         def.run(act, autoCtx);
         done++;
+        trace.push(act.type);
       } catch (e) {
+        trace.push(act.type + '!');
         if (!err) err = e && e.autoKey ? e : autoErr('ทำไม่สำเร็จ: {m}', { m: String((e && e.message) || e).slice(0, 80) });
         if (!(e && e.autoKey)) console.error('อัตโนมัติทำไม่สำเร็จ', e);
       }
     });
     autoCtx = prev;
-    autoLog(p, a, t, ev, err ? 'err' : 'ok', done, err, pathIdx);
+    autoLog(p, a, t, ev, err ? 'err' : 'ok', done, err, pathIdx, trace);
     return true;
   }
 
+  /* QA-B — ทดลองรันกับงานที่เลือกโดยไม่บันทึก: รันจริงบนข้อมูลแล้วคืนข้อมูลกลับ สรุปสิ่งที่จะเปลี่ยน */
+  function autoDryRun(pid, input, taskId) {
+    var p = project(pid), t = task(taskId);
+    if (!p || !t || !input) return null;
+    var a = normalizeAuto(clone(input));
+    a.on = true;
+    var before = JSON.stringify(db), snapDb = db, res = { matched: false, path: null, acts: [], tasks: [], created: [], counts: {} };
+    var oldTasks = {};
+    db.tasks.forEach(function (x) { oldTasks[x.id] = JSON.stringify(x); });
+    var oldCounts = {};
+    Object.keys(db).forEach(function (k) { if (Array.isArray(db[k])) oldCounts[k] = db[k].length; });
+    var oldQueue = autoQueue.slice(), oldMem = {}, oldFv = {};
+    db.memberships.forEach(function (x) { oldMem[x.taskId + '|' + x.projectId] = x.sectionId; });
+    db.fieldValues.forEach(function (x) { oldFv[x.taskId + '|' + x.fieldId] = JSON.stringify(x.value); });
+    res.moves = []; res.fvs = [];
+    batchDepth++;
+    try {
+      var ev = { type: a.trigger.type, taskId: t.id, info: {}, depth: 0, by: db.currentUserId };
+      res.matched = !!autoRun(a, p, t, ev);
+      var last = (p.autoRuns || [])[(p.autoRuns || []).length - 1];
+      if (res.matched && last) { res.path = last.p; res.acts = (last.ac || []).slice(); res.err = last.e ? fill(last.e, last.ep || undefined) : null; }
+      db.tasks.forEach(function (x) {
+        if (!(x.id in oldTasks)) { res.created.push({ id: x.id, name: x.name, type: x.type, sub: !!x.parentId }); return; }
+        var o = JSON.parse(oldTasks[x.id]), keys = [];
+        Object.keys(x).forEach(function (k) { if (JSON.stringify(x[k]) !== JSON.stringify(o[k])) keys.push(k); });
+        if (keys.length) res.tasks.push({ id: x.id, name: x.name, keys: keys, from: o, to: JSON.parse(JSON.stringify(x)) });
+      });
+      Object.keys(db).forEach(function (k) {
+        if (Array.isArray(db[k]) && oldCounts[k] !== undefined && db[k].length !== oldCounts[k]) res.counts[k] = db[k].length - oldCounts[k];
+      });
+      db.memberships.forEach(function (x) {
+        var k = x.taskId + '|' + x.projectId;
+        if (!(k in oldMem)) res.moves.push({ t: x.taskId, p: x.projectId, to: x.sectionId, added: true });
+        else if (oldMem[k] !== x.sectionId) res.moves.push({ t: x.taskId, p: x.projectId, from: oldMem[k], to: x.sectionId });
+      });
+      var seenFv = {};
+      db.fieldValues.forEach(function (x) {
+        var k = x.taskId + '|' + x.fieldId; seenFv[k] = 1;
+        var nv = JSON.stringify(x.value);
+        if (oldFv[k] !== nv) res.fvs.push({ t: x.taskId, f: x.fieldId, from: oldFv[k] === undefined ? null : JSON.parse(oldFv[k]), to: x.value });
+      });
+      Object.keys(oldFv).forEach(function (k) {
+        if (!seenFv[k]) res.fvs.push({ t: k.split('|')[0], f: k.split('|')[1], from: JSON.parse(oldFv[k]), to: null });
+      });
+    } finally {
+      batchDepth--;
+      autoCtx = null;
+      db = JSON.parse(before);
+      autoQueue.length = 0;
+      oldQueue.forEach(function (q) { autoQueue.push(q); });
+      dropIndex();
+    }
+    return res;
+  }
+
   /** ประวัติการรัน — สั้นที่สุดเท่าที่อ่านรู้เรื่อง เก็บ 200 ครั้งล่าสุดต่อโปรเจกต์ (งานของฉัน 50) */
-  function autoLog(p, a, t, ev, s, n, err, path) {
+  function autoLog(p, a, t, ev, s, n, err, path, trace) {
     var list = p ? (p.autoRuns = p.autoRuns || []) : personalOf().autoRuns;
     list.push({
+      ac: trace || [],   // QA-B — การกระทำที่ทำ (type) ต่อท้าย ! = ทำไม่สำเร็จ
       at: new Date().toISOString(), a: a.id, an: (a.name || '').slice(0, 60),
       t: t ? t.id : null, tn: t ? String(t.name).slice(0, 60) : null,
       s: s, n: n, e: err ? err.autoKey : null, ep: err ? err.params : null,
@@ -11326,7 +11629,7 @@
    * และถ้าบรรทัดมี @ชื่อ ที่ตรงกับคนในระบบ มอบงานนั้นให้คนนั้นเลย (เอา @ชื่อ ออกจากชื่องาน) */
   var PG_BULLET = /^(?:[-*•·▪◦‣–—+]\s+|\d{1,3}[.)]\s+|\[[ xX✓]?\]\s*|[☐☑✅]\s*)+/;
   function pageTaskLines(raw) {
-    var people = db.users.filter(function (u) { return u.active !== false && u.name; })
+    var people = orgPeople().filter(function (u) { return u.name; })
       .sort(function (a, b) { return b.name.length - a.name.length; });     // ชื่อยาวก่อน "@มานี" ไม่โดน "@มา" แย่ง
     return String(raw || '').split(/\r?\n/).map(function (line) {
       var src = line.trim();
@@ -12348,10 +12651,10 @@
     var f = portfolio(pfId);
     if (fid === 'status') return PROJECT_STATES.map(function (x) { return [x.id, x.label, x.color]; });
     if (fid === 'kind') return [['project', 'โปรเจกต์', null], ['portfolio', 'พอร์ตโฟลิโอ', null]];
-    if (fid === 'owner') return [[ME, 'ฉัน', null]].concat(db.users.filter(function (u) { return u.active !== false; })
+    if (fid === 'owner') return [[ME, 'ฉัน', null]].concat(orgPeople()
       .map(function (u) { return [u.id, u.name, u.color]; }));
     var fd = f && fid.indexOf('pff:') === 0 ? pfField(f, fid.slice(4)) : null;
-    if (fd && fd.type === 'person') return [[ME, 'ฉัน', null]].concat(db.users.map(function (u) { return [u.id, u.name, u.color]; }));
+    if (fd && fd.type === 'person') return [[ME, 'ฉัน', null]].concat(orgPeople().map(function (u) { return [u.id, u.name, u.color]; }));
     if (fd && fd.type === 'select') return fd.options.map(function (o) { return [o.name, o.name, o.color]; });
     return [];
   }
@@ -12956,7 +13259,7 @@
     setRemoteSave: setRemoteSave, replaceDb: replaceDb, snapshotJSON: snapshotJSON,
     wipeLocal: wipeLocal,
     onChange: onChange, commit: commit,
-    snapshot: snapshot, undo: undo, canUndo: canUndo, undoLabel: undoLabel,
+    snapshot: snapshot, undo: undo, canUndo: canUndo, redo: redo, canRedo: canRedo, undoLabel: undoLabel,
     saveError: saveError_,
 
     uid: uid, today: today, addDays: addDays, addMonths: addMonths,
@@ -13083,6 +13386,8 @@
     setActive: setActive, isActive: isActive,
     audit: audit, auditLog: auditLog, auditGroups: auditGroups, auditCsv: auditCsv,
     signedInUsers: signedInUsers, recentActivity: recentActivity,
+    emptyOrgDb: emptyOrgDb, isTeamMode: isTeamMode, isRealMember: isRealMember, orgPeople: orgPeople, isPickable: isPickable,
+    sampleSummary: sampleSummary, clearSampleData: clearSampleData,
     setSetting: setSetting,
 
     /* 2c — ค้นหา ฟิลด์ แท็ก นำเข้า/ส่งออก และงานดูแลโปรเจกต์ */
@@ -13115,7 +13420,7 @@
     saveAutomation: saveAutomation, setAutomationOn: setAutomationOn,
     duplicateAutomation: duplicateAutomation, deleteAutomation: deleteAutomation,
     manualAutomationsFor: manualAutomationsFor, runAutomation: runAutomation,
-    autoRuns: autoRuns, autoForSection: autoForSection, autoTick: autoTick,
+    autoRuns: autoRuns, autoForSection: autoForSection, autoTick: autoTick, autoDryRun: autoDryRun,
     autoFire: autoFire, autoRegister: autoRegister, shiftDate: shiftDate, quietBatch: quietBatch,
 
     /* 3b — ชนิดงาน ฟอร์ม เทมเพลต รายงานสถานะ */
@@ -13462,7 +13767,7 @@
   /** คนที่แสดงเป็นแถว — ผู้รับผิดชอบงานในขอบเขต + สมาชิก (โปรเจกต์ที่มีรายชื่อ / ทีม) */
   function wlPeople(scope, tasks) {
     var seen = {}, out = [];
-    var add = function (u) { if (u && !seen[u] && user(u) && user(u).active !== false) { seen[u] = true; out.push(u); } };
+    var add = function (u) { if (u && !seen[u] && user(u) && user(u).active !== false && (!isTeamMode() || isRealMember(user(u)))) { seen[u] = true; out.push(u); } };
     if (scope.kind === 'project') projectMembers(scope.id).forEach(function (m) { add(m.userId); });
     var tid = scope.kind === 'all' ? scope.team : null;
     if (tid && team(tid)) team(tid).members.forEach(function (m) { add(m.u); });
@@ -14738,8 +15043,8 @@
   }
 
   function projFollowers(projectId) {
-    return db.users.filter(function (u) {
-      return u.active !== false && !!projectAccess(projectId, u.id) && projFollowing(projectId, u.id);
+    return orgPeople().filter(function (u) {
+      return !!projectAccess(projectId, u.id) && projFollowing(projectId, u.id);
     });
   }
 
@@ -14762,8 +15067,8 @@
   }
 
   function pfFollowers(pfId) {
-    return db.users.filter(function (u) {
-      return u.active !== false && u.role !== 'guest' && pfFollowing(pfId, u.id);
+    return orgPeople().filter(function (u) {
+      return u.role !== 'guest' && pfFollowing(pfId, u.id);
     });
   }
 
