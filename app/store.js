@@ -4115,7 +4115,10 @@
     }
     if ('priority' in patch && patch.priority !== t.priority) {
       var pn = PRIORITIES.filter(function (x) { return x.id === patch.priority; })[0];
-      log(id, 'ตั้งความสำคัญเป็น {p}', { p: pn ? pn.label : patch.priority });
+      /* Sprint 3 — บันทึกค่าเก่า→ใหม่ ("จาก สูง เป็น ด่วน") เดิมเห็นแค่ค่าใหม่ ไม่รู้ว่าเปลี่ยนจากอะไร ข้อมูลเก่ายังใช้คีย์เดิมอ่านได้ */
+      var po = PRIORITIES.filter(function (x) { return x.id === t.priority; })[0];
+      if (po && t.priority && t.priority !== 'none') log(id, 'เปลี่ยนความสำคัญจาก {a} เป็น {b}', { a: po.label, b: pn ? pn.label : patch.priority });
+      else log(id, 'ตั้งความสำคัญเป็น {p}', { p: pn ? pn.label : patch.priority });
     }
     if ('type' in patch && (patch.type !== t.type || (t.ctype && patch.ctype === null)) && !(opts && opts.noTypeLog)) {
       var tn = TASK_TYPES.filter(function (x) { return x.id === patch.type; })[0];

@@ -132,13 +132,14 @@
   }
   /* Sprint 2B — บันทึกบางคีย์เก็บ "ป้าย" ภาษาไทยเป็นค่าแทนที่ (สถานะอนุมัติ ความสำคัญ ชนิดงาน การทำซ้ำ)
    * แปลค่านั้นตอนแสดงด้วย ไม่งั้นภาษาอังกฤษขึ้น "set the approval to “อนุมัติแล้ว”" */
-  var LABEL_PARAMS = { 'เปลี่ยนสถานะอนุมัติเป็น “{s}”': 's', 'ตั้งความสำคัญเป็น {p}': 'p',
+  var LABEL_PARAMS = { 'เปลี่ยนสถานะอนุมัติเป็น “{s}”': 's', 'ตั้งความสำคัญเป็น {p}': 'p', 'เปลี่ยนความสำคัญจาก {a} เป็น {b}': 'a,b',
                        'เปลี่ยนชนิดงานเป็น {p}': 'p', 'ตั้งให้ทำซ้ำ {f}': 'f' };
   function labelParams(key, p) {
     var k = LABEL_PARAMS[key];
-    if (!p || !k || typeof p[k] !== 'string') return p;
+    if (!p || !k) return p;
+    var ks = k.split(',');                                   // Sprint 3 — หลายค่าในประโยคเดียว ("จาก {a} เป็น {b}")
     var out = {};
-    Object.keys(p).forEach(function (x) { out[x] = x === k ? L(p[x]) : p[x]; });
+    Object.keys(p).forEach(function (x) { out[x] = ks.indexOf(x) >= 0 && typeof p[x] === 'string' ? L(p[x]) : p[x]; });
     return out;
   }
   /* Sprint 2B — ข้อมูลเก่าที่เก็บเป็นประโยคไทยสำเร็จรูป ("สมชาย แสดงความเห็น") ลองแปลส่วนหลังชื่อคน
@@ -5408,7 +5409,7 @@
         h += commentHtml(s, false);
       } else {
         h += '<div class="story log">' + avatar(actor, 'sm') +
-          '<div class="txt">' + esc(actor ? actor.name : '?') + ' ' + esc(storyText(s)) +
+          '<div class="txt">' + esc(actor ? actor.name : L('ระบบ')) + ' ' + esc(storyText(s)) +
           (s.auto ? ' <span class="auto-tag" title="' + esc(L('ทำโดยอัตโนมัติ')) + '">' + I('bolt', 11) + L('โดยอัตโนมัติ') + '</span>' : '') +
           whenTag(s.createdAt) + '</div></div>';
       }

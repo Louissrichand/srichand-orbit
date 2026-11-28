@@ -1964,10 +1964,24 @@
     btn.parentNode.insertBefore(input, btn);
     input.focus();
 
+    /* Sprint 3 — ตัวอย่างก่อนกด Enter: พิมพ์ "ส่งสไลด์ @สมชาย ศุกร์" แล้วเห็นว่าระบบจะใส่ใครและวันไหน (ไม่เจอ = ไม่โชว์อะไร) */
+    var hint = document.createElement('div');
+    hint.className = 'inline-add-hint';
+    hint.hidden = true;
+    input.parentNode.insertBefore(hint, btn);
+    input.addEventListener('input', function () {
+      var q = S.quickAdd(input.value.trim(), projectId), bits = [];
+      if (q.assigneeId) { var qu = S.user(q.assigneeId); if (qu) bits.push(L('มอบให้ {who}', { who: qu.name })); }
+      if (q.dueOn) bits.push(L('ส่ง {d}', { d: R.fmtDate(q.dueOn) }));
+      hint.hidden = !bits.length;
+      hint.textContent = bits.length ? '→ ' + q.name + ' · ' + bits.join(' · ') : '';
+    });
+
     function done() {
       var v = input.value.trim();
       input.value = '';
       input.remove();
+      hint.remove();
       btn.style.display = '';
       if (v) S.createTask(S.quickAdd(v, projectId), projectId, sectionId);
     }
