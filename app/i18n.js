@@ -2764,6 +2764,10 @@
     'เพิ่มที่เลือก': 'Add selected',
     'เลือกโปรเจกต์อย่างน้อยหนึ่งโปรเจกต์': 'Select at least one project',
     'เพิ่มแล้ว {n} โปรเจกต์': 'Added [n|{n} project|{n} projects]',
+    'จะย้ายค่า {m} รายการไปที่ “{b}” และจะทิ้งค่า {d} รายการ เพราะงานนั้นมีค่าใน “{b}” อยู่แล้ว': 'Will move {m} values into “{b}” and drop {d} values because those tasks already have a value in “{b}”',
+    'เช่น': 'e.g.',
+    'รวม “{a}” เข้า “{b}”?': 'Merge “{a}” into “{b}”?',
+    'รวมฟิลด์': 'Merge fields',
     //@@B
   };
 

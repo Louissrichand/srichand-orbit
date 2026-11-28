@@ -5664,3 +5664,4 @@ label.pf-pick-row { cursor: pointer; }
 .pf-multi-bar { display: flex; justify-content: flex-end; margin: 8px 0 12px; }
 .xo-pf-empty { margin-top: 6px; }
 .xo-pf-empty .as-link { margin-left: 4px; }
+.ask-body { white-space: pre-line; }

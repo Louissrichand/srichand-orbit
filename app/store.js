@@ -5875,6 +5875,21 @@
   }
 
   /* Sprint 4b — รวมฟิลด์ซ้ำ: ย้ายค่าของ A ไป B เฉพาะงานที่ B ยังว่าง แล้วลบ A (เฉพาะผู้ดูแล, ชนิดเดียวกัน, ไม่ใช่ฟิลด์คลัง) */
+  /** Pre-pilot B — ดูก่อนรวมฟิลด์: ค่าที่จะย้าย กับค่าที่จะหายเพราะฟิลด์ปลายทางมีค่าอยู่แล้ว (ไม่เปลี่ยนข้อมูล) */
+  function mergeFieldsPreview(projectId, fromId, intoId) {
+    var isEmpty = function (v) { return v === null || v === undefined || v === '' || (Array.isArray(v) && !v.length); };
+    var out = { move: 0, drop: 0, dropNames: [] };
+    db.fieldValues.forEach(function (v) {
+      if (v.fieldId !== fromId || isEmpty(v.value)) return;
+      var tgt = db.fieldValues.filter(function (x) { return x.taskId === v.taskId && x.fieldId === intoId; })[0];
+      if (!tgt || isEmpty(tgt.value)) { out.move++; return; }
+      out.drop++;
+      var t = task(v.taskId);
+      if (t && out.dropNames.length < 5) out.dropNames.push(t.name);
+    });
+    return out;
+  }
+
   function mergeFields(projectId, fromId, intoId) {
     var p = project(projectId);
     if (!p || !isAdmin(db.currentUserId) || fromId === intoId) return false;
@@ -12966,7 +12981,7 @@
     deleteProject: deleteProject, duplicateProject: duplicateProject, projectFirstDate: projectFirstDate,
     setProjectStatus: setProjectStatus, statusLog: statusLog, archiveProject: archiveProject,
     addSection: addSection, renameSection: renameSection,
-    setStaleMoveTo: setStaleMoveTo, mergeFields: mergeFields, deleteSection: deleteSection, moveSection: moveSection, addSections: addSections, reorderSection: reorderSection,
+    setStaleMoveTo: setStaleMoveTo, mergeFields: mergeFields, mergeFieldsPreview: mergeFieldsPreview, deleteSection: deleteSection, moveSection: moveSection, addSections: addSections, reorderSection: reorderSection,
     addField: addField, renameField: renameField, deleteField: deleteField,
     colWidth: colWidth, setColWidth: setColWidth, resetColWidths: resetColWidths,
     saveView: saveView, deleteSavedView: deleteSavedView,

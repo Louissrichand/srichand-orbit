@@ -241,11 +241,19 @@
           L('ค่าของ “{a}” จะย้ายไปฟิลด์ที่เลือกเฉพาะงานที่ฟิลด์นั้นยังว่าง แล้วฟิลด์ “{a}” จะถูกลบ', { a: fa.name }),
           cands.map(function (c) {
             return { label: c.name, run: function () {
-              api.closeModal();
-              var n = S.mergeFields(mpid, fa.id, c.id);
-              if (n === false) { api.denyToast(); return; }
-              api.renderAll();
-              api.toast(L('รวมฟิลด์แล้ว ย้ายค่า {n} รายการ', { n: n }), L('ย้อนกลับ'), 'undo');
+              /* Pre-pilot B — บอกก่อนว่าค่าไหนย้าย ค่าไหนหาย แล้วค่อยยืนยัน */
+              var pv = S.mergeFieldsPreview(mpid, fa.id, c.id);
+              var msg = L('จะย้ายค่า {m} รายการไปที่ “{b}” และจะทิ้งค่า {d} รายการ เพราะงานนั้นมีค่าใน “{b}” อยู่แล้ว', { m: pv.move, d: pv.drop, b: c.name });
+              if (pv.dropNames.length) msg += '\n' + L('เช่น') + ' ' + pv.dropNames.join(', ') + (pv.drop > pv.dropNames.length ? ' …' : '');
+              api.askChoice(L('รวม “{a}” เข้า “{b}”?', { a: fa.name, b: c.name }), msg, [
+                { label: L('รวมฟิลด์'), run: function () {
+                  api.closeModal();
+                  var n = S.mergeFields(mpid, fa.id, c.id);
+                  if (n === false) { api.denyToast(); return; }
+                  api.renderAll();
+                  api.toast(L('รวมฟิลด์แล้ว ย้ายค่า {n} รายการ', { n: n }), L('ย้อนกลับ'), 'undo');
+                } }
+              ]);
             } };
           }));
         return true;
