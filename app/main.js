@@ -206,7 +206,8 @@
    * ธีมกับภาษาเป็นค่าของแต่ละคน ไม่ใช่ของฐานข้อมูล
    * ในโหมดทีมทุกคนใช้ข้อมูลก้อนเดียวกัน ถ้าเก็บรวมจะเปลี่ยนตามกันหมด */
   function applyLang() {
-    global.I18N.setLang(S.pref('lang') || global.I18N.detect());
+    /* ลำดับ: ที่ตัวเองเลือก > ที่เลือกไว้ที่หน้าเข้าสู่ระบบ > ค่าเริ่มต้นขององค์กร (ผู้ดูแลตั้ง) > ไทย */
+    global.I18N.setLang(S.pref('lang') || global.I18N.gateLang() || (S.db.settings && S.db.settings.orgLang) || global.I18N.detect());
   }
 
   function applyTheme() {
@@ -5979,6 +5980,10 @@
                                 ['dark', L('มืด')]], S.pref('theme')) + '</div>';
       h += '<div><label class="opt-lbl">' + L('ภาษา') + '</label>' +
         segmented('set-lang', [['th', 'ไทย'], ['en', 'English']], global.I18N.getLang()) + '</div>';
+      if (S.isAdmin()) {      // Sprint 3 — ผู้ดูแลระบบตั้งภาษาเริ่มต้นของทั้งองค์กรได้ (คนที่เลือกเองแล้วไม่โดนเปลี่ยน)
+        h += '<div><label class="opt-lbl">' + L('ภาษาเริ่มต้นขององค์กร') + '</label>' +
+          segmented('set-org-lang', [['th', 'ไทย'], ['en', 'English']], (S.db.settings && S.db.settings.orgLang) || 'th') + '</div>';
+      }
       h += '</div>';
       h += '<label class="opt-lbl">' + L('วันแรกของสัปดาห์') + '</label>' +
         segmented('set-firstday', [['auto', L('อัตโนมัติ')], ['sun', L('อาทิตย์')],
@@ -8408,7 +8413,8 @@
      * ส่วนตัวกรอง เรียง จัดกลุ่ม คอลัมน์ การ์ด และปฏิทินเป็นมุมมองของแต่ละคน จำลง db.personal */
     put('structure', ['sv-rename', 'sv-move', 'sv-update', 'sv-delete', 'tab-default',
       'dup-section', 'do-dup-section']);
-    put('write', ['carry-over', 'slip-overdue']);        // Sprint 3 — ย้ายงานระหว่างเซกชัน = แก้งาน ไม่ใช่แก้โครงสร้าง
+    put('write', ['carry-over', 'slip-overdue']);
+    put('manage', ['set-org-lang']);       // Sprint 3 — เฉพาะผู้ดูแลระบบ        // Sprint 3 — ย้ายงานระหว่างเซกชัน = แก้งาน ไม่ใช่แก้โครงสร้าง
     put('write:task', ['set-cover', 'clear-cover', 'cell-set-priority']);
     put('create', ['tl-new']);
     put('self', [
@@ -12212,6 +12218,9 @@
         closePops();
         state.setTab = el.dataset.tab || state.setTab || 'general';
         openModal(settingsModal(state.setTab), true);
+        break;
+      case 'set-org-lang':
+        if (S.setOrgLang(el.dataset.v)) { toast(L('ตั้งภาษาเริ่มต้นขององค์กรแล้ว')); openModal(settingsModal(state.setTab), true); }
         break;
       case 'set-lang':
         S.setPref('lang', el.dataset.v);

@@ -2613,6 +2613,10 @@
     'ค้นหาชื่อ': 'Search people',
     'เปลี่ยนความสำคัญจาก {a} เป็น {b}': 'changed priority from {a} to {b}',
     'มอบให้ {who}': 'assign to {who}', 'ส่ง {d}': 'due {d}',
+    'เปลี่ยนผู้รับผิดชอบจาก {a} เป็น {b}': 'changed the assignee from {a} to {b}',
+    'ย้ายจากเซกชัน {a} ไป {c} (โปรเจกต์ {p})': 'moved it from {a} to {c} (project {p})',
+    'ภาษาเริ่มต้นขององค์กร': 'Organization default language', 'ตั้งภาษาเริ่มต้นขององค์กรแล้ว': 'Organization default language set',
+    'ได้ตั้งภาษาเริ่มต้นขององค์กรเป็น': 'set the organization default language to',
     /* Sprint 3 — อภิธานศัพท์ */
     'ศัพท์ที่ใช้ใน Orbit': 'Orbit glossary',
     'กลุ่มงานที่ทำเรื่องเดียวกัน มีเซกชัน สมาชิก และมุมมองของตัวเอง': 'A group of work on one topic, with its own sections, members and views',
@@ -2688,6 +2692,10 @@
 
   function setLang(l) { lang = (l === 'en') ? 'en' : 'th'; }
   function getLang() { return lang; }
+  /** ภาษาที่เลือกไว้ที่หน้าเข้าสู่ระบบ (ยังไม่มีค่า = null) */
+  function gateLang() {
+    try { var g = global.localStorage.getItem('orbit.gateLang'); return g === 'en' || g === 'th' ? g : null; } catch (e) { return null; }
+  }
 
   /** ภาษาเริ่มต้นเมื่อยังไม่เคยตั้งค่า — เดาจากเบราว์เซอร์ */
   /* Sprint 3 — ค่าเริ่มต้นขององค์กรคือภาษาไทย ไม่เดาจากเบราว์เซอร์อีกแล้ว
@@ -2721,7 +2729,7 @@
   function yearShort(y) { return String(year(y)).slice(2); }
 
   global.I18N = {
-    t: t, setLang: setLang, getLang: getLang, detect: detect, rememberGateLang: rememberGateLang,
+    t: t, setLang: setLang, getLang: getLang, detect: detect, gateLang: gateLang, rememberGateLang: rememberGateLang,
     monthsShort: monthsShort, monthsFull: monthsFull, dow: dow, dowFull: dowFull,
     year: year, yearShort: yearShort
   };

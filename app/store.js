@@ -4059,8 +4059,14 @@
       /* คนที่เพิ่งได้รับงานไม่ต้องได้บรรทัด "มอบหมายให้ X" ซ้ำอีก
        * เพราะจะได้บรรทัดเจาะจงว่า "มอบหมายงาน … ให้คุณ" อยู่แล้ว
        * ถ้าไม่กัน คนที่เคยติดตามงานนี้อยู่แล้วจะเห็นสองบรรทัดสำหรับเรื่องเดียวกัน */
-      log(id, u ? (asAppr ? 'ขออนุมัติจาก {who}' : 'มอบหมายให้ {who}') : 'ยกเลิกผู้รับผิดชอบ', u ? { who: u.name } : null,
-        patch.assigneeId ? [patch.assigneeId] : null);
+      /* Sprint 3 — เปลี่ยนมือบันทึกค่าเก่า→ใหม่ ("จาก สมชาย เป็น มานี") ไม่ใช่แค่ "มอบหมายให้ มานี" */
+      var prevU = t.assigneeId ? user(t.assigneeId) : null;
+      if (u && prevU && !asAppr) {
+        log(id, 'เปลี่ยนผู้รับผิดชอบจาก {a} เป็น {b}', { a: prevU.name, b: u.name }, patch.assigneeId ? [patch.assigneeId] : null);
+      } else {
+        log(id, u ? (asAppr ? 'ขออนุมัติจาก {who}' : 'มอบหมายให้ {who}') : 'ยกเลิกผู้รับผิดชอบ', u ? { who: u.name } : null,
+          patch.assigneeId ? [patch.assigneeId] : null);
+      }
       if (patch.assigneeId && t.followers.indexOf(patch.assigneeId) < 0) {
         t.followers.push(patch.assigneeId);
       }
@@ -4666,7 +4672,10 @@
     var from = m.sectionId;
     if (moved) {
       var s = section(m.projectId, sectionId);
-      if (s) log(m.taskId, 'ย้ายไปเซกชัน {c}', { c: s.name });
+      /* Sprint 3 — บันทึกค่าเก่า→ใหม่ พร้อมชื่อโปรเจกต์ (งานอยู่ได้หลายโปรเจกต์ "ย้ายไป X" เฉย ๆ ไม่รู้ว่าโปรเจกต์ไหน) */
+      var fromSec = from ? section(m.projectId, from) : null, secProj = project(m.projectId);
+      if (s && fromSec && secProj) log(m.taskId, 'ย้ายจากเซกชัน {a} ไป {c} (โปรเจกต์ {p})', { a: fromSec.name, c: s.name, p: secProj.name });
+      else if (s) log(m.taskId, 'ย้ายไปเซกชัน {c}', { c: s.name });
     }
     m.sectionId = sectionId;
     if (position != null) m.position = position;
@@ -6046,6 +6055,17 @@
     }
     audit('project.visibility', p.name,
       p.visibility === 'private' ? 'เปลี่ยนเป็นโปรเจกต์ปิด' : 'เปลี่ยนเป็นเปิดให้ทั้งองค์กร');
+    commit();
+    return true;
+  }
+
+  /* Sprint 3 — ภาษาเริ่มต้นขององค์กร (ผู้ดูแลระบบตั้ง) ใช้กับคนที่ยังไม่เคยเลือกภาษาเอง ค่าของแต่ละคนยังชนะเสมอ */
+  function setOrgLang(lang) {
+    if (!isAdmin() || (lang !== 'th' && lang !== 'en')) return false;
+    snapshot('ตั้งภาษาเริ่มต้น');
+    db.settings = db.settings || {};
+    db.settings.orgLang = lang;
+    audit('settings.orgLang', lang === 'en' ? 'English' : 'ไทย');
     commit();
     return true;
   }
@@ -12652,7 +12672,7 @@
     accessRequestFor: accessRequestFor,
     canAnswerAccess: canAnswerAccess, answerAccess: answerAccess, accessOwner: accessOwner,
     convertToProject: convertToProject,
-    slipOverdue: slipOverdue, bulkAddToProject: bulkAddToProject, bulkMoveSection: bulkMoveSection, bulkSetField: bulkSetField,
+    setOrgLang: setOrgLang, slipOverdue: slipOverdue, bulkAddToProject: bulkAddToProject, bulkMoveSection: bulkMoveSection, bulkSetField: bulkSetField,
     bulkAddFollowers: bulkAddFollowers, bulkAddTag: bulkAddTag, bulkDependOn: bulkDependOn,
     bulkMerge: bulkMerge,
 
