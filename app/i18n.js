@@ -2698,6 +2698,8 @@
     'ดูแลทั้งองค์กร: สมาชิก สิทธิ์ การลบโปรเจกต์ และบันทึกการทำงาน': 'Looks after the whole organization: members, access, deleting projects and the audit log',
     'ใครเห็นโปรเจกต์นี้': 'Who can see this project',
     // Sprint 4c
+    'หน้า ข้อความ และรายงานสถานะ': 'Pages, messages and status updates', 
+    'ประชุมครั้งถัดไป {d}': 'Next meeting {d}',
     'ทุกคนต้องอนุมัติ': 'Everyone must approve', 'คนใดคนหนึ่งอนุมัติก็พอ': 'Any one approver is enough',
     'แก้ผู้อนุมัติ': 'Edit approvers', 'ให้หลายคนอนุมัติ': 'Add more approvers',
     'ประวัติการอนุมัติ': 'Approval history',

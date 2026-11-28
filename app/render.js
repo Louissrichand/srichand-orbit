@@ -596,6 +596,10 @@
       if (VIEWS_WITH_TOOLBAR.indexOf(route.view) < 0 && S.canCreateTask(route.id)) {   // Sprint 1B
         h += '<button class="btn btn-primary" data-act="quick-add">' + L('+ เพิ่มงาน') + '</button>';
       }
+      var nmP = S.project(route.id);
+      if (nmP && nmP.nextMeeting && nmP.nextMeeting >= S.today()) {        // Sprint 4c - วันประชุมถัดไปบนหัวโปรเจกต์ (กดเพื่อแก้)
+        h += '<button class="btn btn-ghost nm4c" data-act="set-next-meeting" title="' + esc(L('ตั้งวันประชุมถัดไป…')) + '">' + I('calendar', 13) + '<span class="hide-sm"> ' + esc(L('ประชุมครั้งถัดไป {d}', { d: fmtDate(nmP.nextMeeting) })) + '</span></button>';
+      }
       h += followBtn('project', route.id);            // Sprint 2B — ติดตามโปรเจกต์ (เดิมซ่อนอยู่ใน ⋯)
       h += '<button class="btn btn-ghost" data-act="project-menu" data-id="' +
            esc(route.id) + '" title="' + L('เมนูโปรเจกต์') + '">' + I('more') + '</button>';
@@ -4462,12 +4466,12 @@
   /* Sprint 3 — ผลค้นหาที่ไม่ใช่งาน: หน้าเอกสารและข้อความโปรเจกต์ (ลิงก์ตรงไปที่หน้า/แท็บข้อความ) */
   function searchDocsBlock(docs) {
     if (!docs.length) return '';
-    var h = '<div class="list-wrap sdocs"><div class="bucket-head">' + L('หน้าและข้อความ') + ' <span class="n">' + docs.length + '</span></div>';
+    var h = '<div class="list-wrap sdocs"><div class="bucket-head">' + L('หน้า ข้อความ และรายงานสถานะ') + ' <span class="n">' + docs.length + '</span></div>';
     docs.forEach(function (d) {
-      var href = d.kind === 'page' ? '#/page/' + d.id : '#/project/' + d.project.id + '/messages';
-      h += '<a class="sdoc" href="' + esc(href) + '">' + I(d.kind === 'page' ? 'note' : 'send', 15) +
-        '<span class="nm">' + esc(d.title || L('ไม่มีชื่อ')) + '</span><span class="sub">' +
-        (d.kind === 'page' ? L('หน้าเอกสาร') : L('ข้อความโปรเจกต์')) + (d.project ? ' · ' + esc(d.project.name) : '') + '</span>' +
+      var href = d.kind === 'page' ? '#/page/' + d.id : '#/project/' + d.project.id + (d.kind === 'status' ? '/overview' : '/messages');
+      h += '<a class="sdoc" href="' + esc(href) + '">' + I(d.kind === 'page' ? 'note' : d.kind === 'status' ? 'flag' : 'send', 15) +
+        '<span class="nm">' + esc(d.title || (d.kind === 'status' ? L('อัปเดตสถานะ') : L('ไม่มีชื่อ'))) + '</span><span class="sub">' +
+        (d.kind === 'page' ? L('หน้าเอกสาร') : d.kind === 'status' ? L('รายงานสถานะ') : L('ข้อความโปรเจกต์')) + (d.project ? ' · ' + esc(d.project.name) : '') + '</span>' +
         (d.snip ? '<span class="snip">' + esc(d.snip) + '</span>' : '') + '</a>';
     });
     return h + '</div>';
@@ -6247,7 +6251,8 @@
     var by = S.user(x.editedBy || x.by);
     var open = x.comments.filter(function (c) { return !c.resolved; });
     var done = x.comments.filter(function (c) { return c.resolved; });
-    var h = '<div class="pg' + (S.pref('pgFull') ? ' nosd' : '') + '" data-page="' + esc(id) + '"><div class="pg-main">';
+    var pgPref = S.pref('pgFull'), pgHide = pgPref == null ? !open.length : !!pgPref;       // Sprint 4c - ค่าเริ่มต้น: หุบแผงความเห็นถ้ายังไม่มีความเห็นค้าง
+    var h = '<div class="pg' + (pgHide ? ' nosd' : '') + '" data-page="' + esc(id) + '"><div class="pg-main">';
     h += '<div class="pg-head"><span class="pg-icon">' + esc(x.icon || '📄') + '</span>' +
       (canEdit && !x.notepad ? '<input class="pg-title" data-act="pg-title" data-id="' + esc(id) + '" value="' + esc(x.title) +
         '" placeholder="' + esc(L('ไม่มีชื่อ')) + '" maxlength="200">'
@@ -6256,7 +6261,7 @@
       (l.project ? '<span class="chip"><span class="swatch" style="background:' + esc(l.project.color) + '"></span>' + esc(l.project.name) + '</span>' : '') +
       '<em>' + esc(L('แก้ล่าสุดโดย {u} · {w}', { u: by ? by.name : '—', w: fmtWhen(x.editedAt || x.at) })) + '</em>' +
       '<span class="grow"></span>';
-    h += '<button class="btn btn-sm btn-ghost" data-act="pg-side-toggle" title="' + esc(L('ซ่อน/แสดงแผงความเห็น (เขียนเต็มความกว้าง)')) + '">' + I(S.pref('pgFull') ? 'expand' : 'shrink', 13) + '</button>';   // Sprint 3
+    h += '<button class="btn btn-sm btn-ghost" data-act="pg-side-toggle" title="' + esc(L('ซ่อน/แสดงแผงความเห็น (เขียนเต็มความกว้าง)')) + '">' + I(pgHide ? 'expand' : 'shrink', 13) + '</button>';   // Sprint 3
     if (canC) {
       h += '<button class="btn btn-sm btn-ghost" data-act="pg-comment" data-id="' + esc(id) + '" title="' +
         esc(L('เลือกข้อความในหน้าแล้วกดเพื่อแสดงความเห็น')) + '">' + I('send', 13) + '<span class="hide-sm"> ' + L('ความเห็น') + '</span></button>';

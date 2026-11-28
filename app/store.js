@@ -1482,6 +1482,10 @@
       (p.pages || []).forEach(function (pg) {
         if (hit(pg.title) || hit(pg.body)) out.push({ kind: 'page', id: pg.id, title: pg.title || '', project: p, snip: snip(pg.body) });
       });
+      (p.statusLog || []).slice().reverse().forEach(function (s) {       // Sprint 4c - ค้นเจอจากรายงานสถานะของโปรเจกต์
+        var body = (s.blocks || []).map(function (b) { return (b.title || '') + ' ' + (b.text || ''); }).join(' ') || s.text || '';
+        if (hit(s.title) || hit(body)) out.push({ kind: "status", id: s.id, title: s.title || "", project: p, snip: snip(body), at: s.at });
+      });
       (p.messages || []).forEach(function (m) {
         if (hit(m.title) || hit(m.body)) out.push({ kind: 'message', id: m.id, title: m.title || String(m.body || '').split('\n')[0].slice(0, 60), project: p, snip: snip(m.body) });
       });

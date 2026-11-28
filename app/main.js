@@ -7148,7 +7148,7 @@
         return true;
       }
       case 'pg-open': pageRoute(el.dataset.project || '', id); return true;
-      case 'pg-side-toggle': S.setPref('pgFull', !S.pref('pgFull')); return true;      // Sprint 3 — ค่าส่วนตัว ไม่แก้ข้อมูลร่วม
+      case 'pg-side-toggle': S.setPref('pgFull', !document.querySelector('.pg.nosd')); return true;      // Sprint 3 — ค่าส่วนตัว ไม่แก้ข้อมูลร่วม
       case 'pg-del':
         askConfirm(L('ลบหน้านี้?'), L('ความเห็นและประวัติเวอร์ชันของหน้านี้หายไปด้วย ย้อนกลับได้ทันทีหลังลบ'), function () {
           var l = S.pageLoc(id);
