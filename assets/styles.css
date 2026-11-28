@@ -5990,3 +5990,13 @@ button.ms-date { cursor: pointer; }
 .modal, .pop, .menu, .popover { border: 1px solid var(--line); box-shadow: var(--shadow-lg); }
 .menu, .pop { border-radius: 6px; }
 input[type="text"], input[type="search"], input[type="date"], input[type="number"], select { border-radius: 6px; }
+
+/* Asana look (รอบ 2) — หัวหมวดไม่มีแถบพื้น, ป้ายชนิดเส้นเชื่อมเป็นข้อความจาง, ป้ายชื่อแท่ง Gantt อ่านง่าย */
+.tbl-sec { background: transparent; box-shadow: 0 1px 0 0 var(--line); }
+.tbl-sec .sec-nm { font-size: 15px; font-weight: 600; }
+.g-depchip { background: var(--bg-inset); border: 1px solid var(--line); color: var(--fg-soft); }
+.g-depchip:hover { background: var(--bg-inset); color: var(--fg); border-color: var(--line-strong); }
+.g-deptag, .dep-type { background: transparent; color: var(--fg-faint); font-size: 11px; font-weight: 500; letter-spacing: 0; padding: 0; }
+.g-dep { z-index: 1; }
+.g-barlabel { z-index: 3; background: var(--bg); padding: 0 4px; margin-left: -4px; border-radius: 3px; }
+.pop { border-radius: 8px; }
