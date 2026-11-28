@@ -2141,7 +2141,7 @@
       h += '<div class="pjx-table" role="table">';
       h += '<div class="pjx-tr pjx-th" role="row">' +
         '<span role="columnheader">' + L('ชื่อ') + '</span>' +
-        '<span role="columnheader">' + L('สถานะ') + '</span>' +
+        '<span role="columnheader" title="' + esc(L('สถานะล่าสุดที่เจ้าของโปรเจกต์รายงาน ไม่ใช่ความคืบหน้าอัตโนมัติ')) + '">' + L('สถานะ') + ' <span class="fld-info">ⓘ</span></span>' +
         '<span role="columnheader" class="c-prog">' + L('ความคืบหน้า') + '</span>' +
         '<span role="columnheader" class="c-due">' + L('กำหนดส่ง') + '</span>' +
         '<span role="columnheader" class="c-owner">' + L('เจ้าของ') + '</span>' +
@@ -3637,7 +3637,7 @@
     }
     /* 3a — อัตโนมัติของงานของฉัน (ย้ายเซกชันเมื่อใกล้ครบกำหนด เลยกำหนด ทำเสร็จ) */
     var na = S.automations('@me').filter(function (a) { return a.on; }).length;
-    h += '<button class="vtb-btn' + (na ? ' on' : '') + '" data-act="mt-auto" title="' + L('ระบบอัตโนมัติ') + '">' +
+    h += '<button class="vtb-btn' + (na ? ' on' : '') + '" data-act="mt-auto" title="' + L('กฎที่ทำงานให้เอง เช่น ย้ายงานเมื่อเปลี่ยนสถานะ หรือมอบหมายงานใหม่ให้คนที่กำหนด') + '">' +
       I('bolt', 14) + '<span>' + L('ระบบอัตโนมัติ') + '</span>' + (na ? '<span class="vtb-n">' + na + '</span>' : '') + '</button>';
     if (v.mode === 'list' || v.mode === 'board') h += selectModeBtn();     // Sprint 2A
     return h + '</div>';
@@ -4789,7 +4789,7 @@
       var apName = '<b>' + esc(apU ? apU.name : '?') + '</b>';
       var ACTS = [['approved', 'อนุมัติ', 'check'], ['changes', 'ขอให้แก้ไข', 'pencil'],   // ปุ่มเป็นคำกริยา (อังกฤษ "Request changes") ต่างจากชื่อสถานะ "ขอแก้ไข" = Changes requested
                   ['rejected', 'ปฏิเสธ', 'close']];
-      h += '<div class="fld"><label>' + L('การอนุมัติ') + '</label><div class="val">' +
+      h += '<div class="fld"><label title="' + esc(L('สถานะรออนุมัติ / อนุมัติ / ไม่อนุมัติ ของงานนี้ ผู้อนุมัติเป็นคนเปลี่ยน')) + '">' + L('การอนุมัติ') + ' <span class="fld-info">ⓘ</span></label><div class="val">' +
         '<div class="fld-inline appr-row"><span class="approval-pill" style="background:' + a.color +
         '22;color:' + a.color + '">' + esc(L(a.label)) + '</span>';
       if (mayApprove) {

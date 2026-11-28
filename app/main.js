@@ -2065,7 +2065,7 @@
     h += '<div class="field"><label>' + L('ชื่อฟิลด์') + ' *</label>' +
       '<input id="nfName" placeholder="' + L('เช่น สถานะ, ผู้อนุมัติ, งบ') + '"></div>';
 
-    h += '<div class="field"><label>' + L('ชนิด') + '</label><select id="nfType" data-act="nf-type">';
+    h += '<div class="field"><label title="' + R.esc(L('ชนิดกำหนดรูปแบบค่าที่กรอก เช่น ข้อความ ตัวเลข ตัวเลือก วันที่ — เปลี่ยนภายหลังไม่ได้')) + '">' + L('ชนิด') + ' <span class="fld-info">ⓘ</span></label><select id="nfType" data-act="nf-type">';
     types.forEach(function (x) {
       h += '<option value="' + x.id + '"' + (x.id === ft.id ? ' selected' : '') +
         '>' + L(x.label) + '</option>';
@@ -9853,12 +9853,25 @@
       case 'quick-add': {
         var qp = S.project(state.route.id);
         if (!qp) break;
+        var qaCtx = { projectId: qp.id, sectionId: qp.sections[0].id };
         askText(L('ชื่องานใหม่'), '', function (v) {
           if (!v) return;
-          var nt = S.createTask({ name: v }, qp.id, qp.sections[0].id);
+          var qsel = document.getElementById('qaSec');
+          var nt = S.createTask({ name: v }, qp.id, (qsel && qsel.value) || qaCtx.sectionId);
           if (nt) openTask(nt.id);          // Sprint 1B — ถูกด่านสร้างงานปฏิเสธ = null (ขึ้นข้อความแล้ว)
-        }, { ok: L('เพิ่มงาน'), pasteCtx: { projectId: qp.id, sectionId: qp.sections[0].id },
+        }, { ok: L('เพิ่มงาน'), pasteCtx: qaCtx,
              note: L('วางข้อความหลายบรรทัดเพื่อสร้างหลายงานพร้อมกัน') });
+        /* Sprint 4b — เลือกเซกชันก่อนเพิ่ม (ค่าเริ่มต้น = เซกชันแรก) */
+        var qaIn = document.getElementById('askInput');
+        if (qaIn && qp.sections.length > 1) {
+          var qaBox = document.createElement('div');
+          qaBox.className = 'field';
+          qaBox.innerHTML = '<label>' + L('เซกชัน') + '</label><select id="qaSec">' + qp.sections.map(function (s) {
+            return '<option value="' + R.esc(s.id) + '">' + R.esc(s.name) + '</option>';
+          }).join('') + '</select>';
+          qaIn.parentNode.parentNode.insertBefore(qaBox, qaIn.parentNode.nextSibling);
+          document.getElementById('qaSec').addEventListener('change', function (ev) { qaCtx.sectionId = ev.target.value; });
+        }
         break;
       }
       case 'inline-add': inlineAdd(el, sectionId); break;

@@ -2722,6 +2722,11 @@
     'ย้ายงานเงียบ 30 วันไปเซกชัน…': 'Move tasks quiet for 30 days to a section…', 'ย้ายงานที่เงียบเกิน 30 วันไปเซกชัน': 'Move tasks quiet for over 30 days to a section',
     'ต้องเปิดเตือนงานเงียบไว้ด้วย งานจะถูกย้ายครั้งเดียวและมีบันทึกในประวัติงาน ปัจจุบัน: {s}': 'Quiet-task reminders must be on. Each task moves once and it is logged on the task. Current: {s}',
     'ไม่ย้าย': 'Don\'t move', 'เงียบนานกว่า 30 วัน — ย้ายไปเซกชัน “{s}” อัตโนมัติ': 'Quiet for over 30 days — moved to section “{s}” automatically',
+    '{n} วันตามปฏิทิน': '{n} calendar days',
+    'กฎที่ทำงานให้เอง เช่น ย้ายงานเมื่อเปลี่ยนสถานะ หรือมอบหมายงานใหม่ให้คนที่กำหนด': 'Rules that run on their own, e.g. move a task when its status changes or assign new tasks to someone',
+    'สถานะรออนุมัติ / อนุมัติ / ไม่อนุมัติ ของงานนี้ ผู้อนุมัติเป็นคนเปลี่ยน': 'Pending / approved / rejected state of this task; the approver changes it',
+    'ชนิดกำหนดรูปแบบค่าที่กรอก เช่น ข้อความ ตัวเลข ตัวเลือก วันที่ — เปลี่ยนภายหลังไม่ได้': 'The type sets what can be entered (text, number, options, date…) — it cannot be changed later',
+    'สถานะล่าสุดที่เจ้าของโปรเจกต์รายงาน ไม่ใช่ความคืบหน้าอัตโนมัติ': 'The status last reported by the project owner, not automatic progress',
   };
 
   /* ข้อความที่เก็บไว้ในบันทึก/การแจ้งเตือนเก่าเป็นคีย์ไทยเดิมที่เรียกเซกชันว่า "คอลัมน์"

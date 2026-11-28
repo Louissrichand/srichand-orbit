@@ -292,7 +292,7 @@
           h += '<span class="g-c-due' + R.dueClass(t.dueOn, t.completed) + '">' + due + '</span>';
         } else if (c.id === 'duration') {
           h += '<span class="g-c-duration">' +
-            (dur ? '<span title="' + esc(L('{n} วันทำการ', { n: wdur })) + '">' + L('{n} วัน', { n: dur }) + '</span>' : '<span class="g-muted">—</span>') + '</span>';
+            (dur ? '<span title="' + esc(L('{n} วันตามปฏิทิน', { n: dur })) + '">' + L('{n} วันทำการ', { n: wdur == null ? dur : wdur }) + '</span>' : '<span class="g-muted">—</span>') + '</span>';
         } else if (c.id === 'blockedBy') {
           h += '<span class="g-c-blockedBy g-c-dep">' + depChips(t.dependsOn.map(function (dp) {
             return { task: S.task(dp.id), type: dp.type, id: dp.id };
