@@ -308,7 +308,7 @@
       var n = S.tasksInProject(p.id).filter(function (x) { return !x.task.completed; }).length;
       return item(route.type === 'project' && route.id === p.id,
         'data-act="go" data-route="project" data-id="' + esc(p.id) + '"',
-        '<span class="emoji">' + esc(p.icon) + '</span><span class="swatch" style="background:' + esc(p.color) + '"></span>',
+        '<span class="swatch" style="background:' + esc(p.color) + '"></span>',   // แถบข้างโชว์แค่สีโปรเจกต์ ไม่ต้องมีไอคอน
         esc(p.name),
         (p.visibility === 'private' ? '<span class="lockmark" title="' + L('โปรเจกต์ปิด') + '">' + I('shield', 12) + '</span>' : '') +
         (n ? '<span class="count">' + n + '</span>' : ''));
